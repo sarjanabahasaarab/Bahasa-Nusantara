@@ -119,6 +119,34 @@ export class ResolverModul {
         daftarKandidat.push(this.pembaca.gabungJalur(basis, namaBersih));
         daftarKandidat.push(this.pembaca.gabungJalur(basis, namaBersih, 'modul.nusantara'));
         daftarKandidat.push(this.pembaca.gabungJalur(basis, namaBersih, 'index.nusantara'));
+        daftarKandidat.push(this.pembaca.gabungJalur(basis, namaBersih, 'src', `${namaBersih}.nusantara`));
+        daftarKandidat.push(this.pembaca.gabungJalur(basis, namaBersih, 'src', 'utama.nusantara'));
+
+        // Integrasi Paket Terpasang NUSANTARA (Phase 16: .nusantara/paket/ & paket/)
+        daftarKandidat.push(
+          this.pembaca.gabungJalur(basis, '.nusantara', 'paket', namaBersih, 'src', `${namaBersih}.nusantara`)
+        );
+        daftarKandidat.push(
+          this.pembaca.gabungJalur(basis, '.nusantara', 'paket', namaBersih, `${namaBersih}.nusantara`)
+        );
+        daftarKandidat.push(
+          this.pembaca.gabungJalur(basis, '.nusantara', 'paket', namaBersih, 'modul.nusantara')
+        );
+        daftarKandidat.push(
+          this.pembaca.gabungJalur(basis, '.nusantara', 'paket', namaBersih, 'src', 'utama.nusantara')
+        );
+        daftarKandidat.push(
+          this.pembaca.gabungJalur(basis, 'paket', namaBersih, 'src', `${namaBersih}.nusantara`)
+        );
+        daftarKandidat.push(
+          this.pembaca.gabungJalur(basis, 'paket', namaBersih, `${namaBersih}.nusantara`)
+        );
+        daftarKandidat.push(
+          this.pembaca.gabungJalur(basis, 'packages', namaBersih, 'src', `${namaBersih}.nusantara`)
+        );
+        daftarKandidat.push(
+          this.pembaca.gabungJalur(basis, 'packages', namaBersih, `${namaBersih}.nusantara`)
+        );
       }
     }
 

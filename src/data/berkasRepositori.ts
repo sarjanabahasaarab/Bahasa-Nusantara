@@ -8,6 +8,47 @@ export interface BerkasRepo {
 }
 
 export const BERKAS_REPOSITORI: BerkasRepo[] = [
+  // --- FASE 16: PACKAGE MANAGER NUSANTARA ---
+  {
+    jalur: 'docs/referensi/package-manager.md',
+    nama: 'package-manager.md',
+    kategori: 'Referensi Pengguna Package Manager',
+    bahasa: 'markdown',
+    ukuran: 5470,
+    konten: `# Referensi Pengguna: Package Manager NUSANTARA (nusantara) — Phase 16\n\nPanduan resmi pembuatan paket, manajemen dependensi nusantara.toml, kunci versi nusantara.lock, dan perintah CLI.`
+  },
+  {
+    jalur: 'docs/pengembang/package-manager.md',
+    nama: 'package-manager.md (Pengembang)',
+    kategori: 'Arsitektur Teknis Package Manager',
+    bahasa: 'markdown',
+    ukuran: 6240,
+    konten: `# Arsitektur & Dokumentasi Teknis Package Manager NUSANTARA (Phase 16)\n\nArsitektur graf dependensi, deteksi siklus (DFS), resolusi semver, abstraksi registry, dan integrasi resolver modul.`
+  },
+  {
+    jalur: 'pengujian/paket/uji_paket.ts',
+    nama: 'uji_paket.ts',
+    kategori: '31 Pengujian Package Manager',
+    bahasa: 'javascript',
+    ukuran: 27800,
+    konten: `// Rangkaian 31 Uji Komprehensif Package Manager Bahasa NUSANTARA (Phase 16)`
+  },
+  {
+    jalur: 'nusantara.toml',
+    nama: 'nusantara.toml',
+    kategori: 'Manifest Paket Resmi',
+    bahasa: 'teks',
+    ukuran: 380,
+    konten: `[nusantara]\nnama = "nusantara"\nversi = "0.16.0"\ndeskripsi = "Bahasa Pemrograman Indonesia"\nlisensi = "Apache-2.0"\npenulis = "Tim Pengembang Nusantara"\n\n[dependensi]\n`
+  },
+  {
+    jalur: 'nusantara.lock',
+    nama: 'nusantara.lock',
+    kategori: 'Berkas Kunci Dependensi',
+    bahasa: 'teks',
+    ukuran: 250,
+    konten: `# Berkas Kunci Dependensi NUSANTARA (nusantara.lock)\n# Dihasilkan secara otomatis oleh Package Manager. JANGAN EDIT MANUAL.\n\nversi_format = 1\npaket = []\n`
+  },
   // --- FASE 15: SISTEM MODUL NUSANTARA ---
   {
     jalur: 'docs/referensi/modul.md',
@@ -432,8 +473,8 @@ export const DAFTAR_FASE_ROADMAP = [
   { fase: 12, nama: 'Perulangan Lanjutan', versi: 'v0.12.0', kategori: 'Mesin Inti', status: 'Selesai' },
   { fase: 13, nama: 'Fungsi Lanjutan', versi: 'v0.13.0', kategori: 'Mesin Inti', status: 'Selesai' },
   { fase: 14, nama: 'Struktur Data (Daftar & Peta)', versi: 'v0.14.0', kategori: 'Fitur Lanjut', status: 'Selesai' },
-  { fase: 15, nama: 'Modul & Ruang Nama', versi: 'v0.15.0', kategori: 'Fitur Lanjut', status: 'Berikutnya' },
-  { fase: 16, nama: 'Kelas & Objek (OOP)', versi: 'v0.16.0', kategori: 'Fitur Lanjut', status: 'Rencana' },
+  { fase: 15, nama: 'Sistem Modul', versi: 'v0.15.0', kategori: 'Fitur Lanjut', status: 'Selesai' },
+  { fase: 16, nama: 'Package Manager (nusantara)', versi: 'v0.16.0', kategori: 'Ekosistem', status: 'Selesai' },
   { fase: 17, nama: 'Pewarisan & Antarmuka', versi: 'v0.17.0', kategori: 'Fitur Lanjut', status: 'Rencana' },
   { fase: 18, nama: 'Penanganan Kesalahan', versi: 'v0.18.0', kategori: 'Fitur Lanjut', status: 'Rencana' },
   { fase: 19, nama: 'Generik', versi: 'v0.19.0', kategori: 'Fitur Lanjut', status: 'Rencana' },

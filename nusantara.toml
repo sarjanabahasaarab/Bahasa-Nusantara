@@ -1,0 +1,12 @@
+# Manifest Resmi Paket NUSANTARA
+[nusantara]
+nama = "nusantara"
+versi = "0.16.0"
+deskripsi = "Bahasa Pemrograman Terbuka Berbasis Bahasa Indonesia"
+lisensi = "Apache-2.0"
+penulis = "Tim Pengembang NUSANTARA"
+repository = "https://github.com/nusantara-lang/nusantara"
+homepage = "https://nusantara.lang"
+kata_kunci = ["nusantara", "bahasa-pemrograman", "indonesia", "kompilator", "paket"]
+
+[dependensi]

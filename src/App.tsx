@@ -25,7 +25,8 @@ import {
   Repeat,
   Split,
   Workflow,
-  Boxes
+  Boxes,
+  Package,
 } from 'lucide-react';
 import {
   BERKAS_REPOSITORI,
@@ -42,9 +43,11 @@ import { ASTPrinter } from './parser/astPrinter';
 import { Interpreter } from './interpreter/interpreter';
 import { PenulisOutputBuffer } from './interpreter/outputWriter';
 import { PemeriksaTipe } from './tipe/pemeriksaTipe';
+import { PembacaBerkasMemori, ResolverModul, PemuatModul } from './modul';
+import { PengelolaPaket, NusantaraCLI, LocalRegistry } from './paket';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'struktur-data' | 'fungsi' | 'perulangan' | 'percabangan' | 'operator' | 'tipe' | 'ast' | 'token' | 'panduan' | 'berkas' | 'roadmap' | 'git'>('struktur-data');
+  const [activeTab, setActiveTab] = useState<'paket' | 'struktur-data' | 'fungsi' | 'perulangan' | 'percabangan' | 'operator' | 'tipe' | 'ast' | 'token' | 'panduan' | 'berkas' | 'roadmap' | 'git'>('paket');
   const [selectedFile, setSelectedFile] = useState<BerkasRepo>(BERKAS_REPOSITORI[0]);
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [playgroundCode, setPlaygroundCode] = useState<string>(
@@ -86,6 +89,107 @@ selesai`
   );
   const [activeFilterCategory, setActiveFilterCategory] = useState<string>('Semua');
 
+  // Virtual in-memory filesystem untuk Package Manager & Module Playground
+  const virtualFS = useMemo(() => {
+    const fs = new PembacaBerkasMemori();
+    fs.tulisBerkas(
+      '/proyek/nusantara.toml',
+      `[nusantara]\nnama = "aplikasi_contoh"\nversi = "1.0.0"\ndeskripsi = "Proyek percontohan ekosistem package manager NUSANTARA"\nlisensi = "Apache-2.0"\npenulis = "Tim Nusantara"\n\n[dependensi]\nmatematika = "^1.2.0"\ngeometri = "0.5.0"\n`
+    );
+    fs.tulisBerkas(
+      '/katalog/matematika/nusantara.toml',
+      `[nusantara]\nnama = "matematika"\nversi = "1.2.3"\ndeskripsi = "Pustaka fungsi matematika dasar dan aljabar"\nlisensi = "MIT"\n\n[dependensi]\n`
+    );
+    fs.tulisBerkas(
+      '/katalog/matematika/src/matematika.nusantara',
+      `modul matematika\n\nekspor fungsi tambah(a: bilangan, b: bilangan): bilangan\nmulai\n    kembalikan a + b\nselesai\n\nekspor fungsi kali(a: bilangan, b: bilangan): bilangan\nmulai\n    kembalikan a * b\nselesai\n\nekspor fungsi kuadrat(n: bilangan): bilangan\nmulai\n    kembalikan n * n\nselesai\n`
+    );
+    fs.tulisBerkas(
+      '/katalog/geometri/nusantara.toml',
+      `[nusantara]\nnama = "geometri"\nversi = "0.5.0"\ndeskripsi = "Pustaka geometri bidang datar"\nlisensi = "MIT"\n\n[dependensi]\n`
+    );
+    fs.tulisBerkas(
+      '/katalog/geometri/src/geometri.nusantara',
+      `modul geometri\n\nekspor fungsi luasPersegi(sisi: bilangan): bilangan\nmulai\n    kembalikan sisi * sisi\nselesai\n`
+    );
+
+    const reg = new LocalRegistry(fs, ['/katalog']);
+    const pengelola = new PengelolaPaket({
+      pembacaBerkas: fs,
+      direktoriProyek: '/proyek',
+      registry: reg,
+    });
+    pengelola.pasang();
+
+    return fs;
+  }, []);
+
+  // State Riwayat CLI Nusantara
+  const [cliHistory, setCliHistory] = useState<Array<{ cmd: string; out: string[]; success: boolean }>>([
+    {
+      cmd: 'nusantara info',
+      out: [
+        'Informasi Paket NUSANTARA:',
+        '',
+        '  Nama             : aplikasi_contoh',
+        '  Versi            : 1.0.0',
+        '  Deskripsi        : Proyek percontohan ekosistem package manager NUSANTARA',
+        '  Lisensi          : Apache-2.0',
+        '  Jml Dependensi   : 2',
+        '  Lokasi Proyek    : /proyek',
+      ],
+      success: true,
+    },
+    {
+      cmd: 'nusantara daftar',
+      out: [
+        'Dependency proyek:',
+        '',
+        '  matematika       ^1.2.0     (terpasang: 1.2.3)',
+        '  geometri         0.5.0      (terpasang: 0.5.0)',
+      ],
+      success: true,
+    },
+  ]);
+  const [cliInput, setCliInput] = useState<string>('');
+
+  const handleRunCli = (commandString: string) => {
+    const bersih = commandString.trim();
+    if (!bersih) return;
+
+    const parts = bersih.split(/\s+/);
+    const args = parts[0]?.toLowerCase() === 'nusantara' ? parts.slice(1) : parts;
+
+    const outLines: string[] = [];
+    const errLines: string[] = [];
+
+    const reg = new LocalRegistry(virtualFS, ['/katalog']);
+    const pengelola = new PengelolaPaket({
+      pembacaBerkas: virtualFS,
+      direktoriProyek: '/proyek',
+      registry: reg,
+    });
+
+    const cli = new NusantaraCLI({
+      pengelola,
+      penulisLog: m => outLines.push(m),
+      penulisGalat: m => errLines.push(m),
+    });
+
+    const kode = cli.jalankan(args);
+    const combined = errLines.length > 0 ? errLines : outLines;
+
+    setCliHistory(prev => [
+      ...prev,
+      {
+        cmd: bersih.startsWith('nusantara') ? bersih : `nusantara ${bersih}`,
+        out: combined,
+        success: kode === 0,
+      },
+    ]);
+    setCliInput('');
+  };
+
   // 1. Eksekusi Lexer
   const { tokens } = useMemo(() => {
     const l = new Lexer(playgroundCode, { sertakanBarisBaru: false });
@@ -93,7 +197,7 @@ selesai`
     return { tokens: token };
   }, [playgroundCode]);
 
-  // 2. Eksekusi Parser (Phase 7-14)
+  // 2. Eksekusi Parser (Phase 7-16)
   const { ast, astString, parserErrors } = useMemo(() => {
     try {
       const p = new Parser(playgroundCode);
@@ -113,19 +217,30 @@ selesai`
     }
   }, [playgroundCode]);
 
-  // 3. Eksekusi Type Checker (Phase 9-14)
+  // 3. Eksekusi Type Checker (Phase 9-16)
   const { typeErrors } = useMemo(() => {
     if (!ast) return { typeErrors: [] };
-    const checker = new PemeriksaTipe();
-    return { typeErrors: checker.periksa(ast) };
-  }, [ast]);
+    try {
+      const resolver = new ResolverModul(virtualFS, { direktoriAkarProyek: '/proyek' });
+      const pemuat = new PemuatModul(resolver, virtualFS);
+      const checker = new PemeriksaTipe(pemuat);
+      return { typeErrors: checker.periksa(ast) };
+    } catch (e: any) {
+      return { typeErrors: [e] };
+    }
+  }, [ast, virtualFS]);
 
-  // 4. Eksekusi Interpreter (Phase 8-14)
+  // 4. Eksekusi Interpreter (Phase 8-16 dengan Resolver & Pemuat Modul)
   const { runOutput, runtimeError } = useMemo(() => {
     try {
       const buffer = new PenulisOutputBuffer();
-      const interp = new Interpreter(buffer);
-      interp.jalankanKode(playgroundCode);
+      const resolver = new ResolverModul(virtualFS, { direktoriAkarProyek: '/proyek' });
+      const pemuat = new PemuatModul(resolver, virtualFS);
+      const interp = new Interpreter(buffer, {
+        pemuatModul: pemuat,
+        direktoriBasis: '/proyek',
+      });
+      interp.jalankanKode(playgroundCode, '/proyek');
       return {
         runOutput: buffer.dapatkanSeluruhTeks(),
         runtimeError: null,
@@ -136,7 +251,7 @@ selesai`
         runtimeError: e.message || String(e),
       };
     }
-  }, [playgroundCode]);
+  }, [playgroundCode, virtualFS]);
 
   const handleCopy = (teks: string, label: string) => {
     navigator.clipboard.writeText(teks);
@@ -166,8 +281,8 @@ selesai`
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-extrabold tracking-wider text-white text-base">NUSANTARA</span>
-                <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                  Phase 14
+                <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  Phase 16
                 </span>
               </div>
               <p className="text-xs text-slate-400">Bahasa Pemrograman Indonesia</p>
@@ -175,6 +290,15 @@ selesai`
           </div>
 
           <nav className="hidden md:flex items-center gap-6 text-sm">
+            <button
+              onClick={() => setActiveTab('paket')}
+              className={`hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'paket' ? 'text-amber-400 font-semibold' : 'text-slate-400'
+              }`}
+            >
+              <Package className="w-4 h-4" />
+              Paket (Phase 16)
+            </button>
             <button
               onClick={() => setActiveTab('struktur-data')}
               className={`hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 ${
@@ -269,14 +393,14 @@ selesai`
 
           <div className="flex items-center gap-3">
             <button
-              onClick={() => handleCopy('git commit -m "feat: implement nusantara data structures"', 'commit-p14')}
+              onClick={() => handleCopy('git commit -m "feat: implement nusantara package manager"', 'commit-p16')}
               className="px-3.5 py-1.5 text-xs font-medium text-slate-200 bg-slate-900 border border-slate-700/80 rounded-lg hover:bg-slate-800 hover:text-white transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer"
             >
-              {copiedText === 'commit-p14' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Terminal className="w-3.5 h-3.5 text-slate-400" />}
-              <span>{copiedText === 'commit-p14' ? 'Tersalin' : 'Salin Pesan Komit'}</span>
+              {copiedText === 'commit-p16' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Terminal className="w-3.5 h-3.5 text-slate-400" />}
+              <span>{copiedText === 'commit-p16' ? 'Tersalin' : 'Salin Pesan Komit'}</span>
             </button>
-            <span className="px-3 py-1 text-xs font-semibold text-white bg-rose-700/80 rounded-lg whitespace-nowrap border border-rose-500/40">
-              v0.14.0
+            <span className="px-3 py-1 text-xs font-semibold text-white bg-amber-700/80 rounded-lg whitespace-nowrap border border-amber-500/40">
+              v0.16.0
             </span>
           </div>
         </div>
@@ -286,27 +410,27 @@ selesai`
       <section className="border-b border-slate-800/60 bg-gradient-to-b from-slate-950 via-slate-900/60 to-slate-950 py-10 px-4 sm:px-6">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mb-4 tracking-wide font-mono">
-            <span className="text-rose-400 font-bold bg-rose-950/80 px-2 py-0.5 rounded border border-rose-800">Milestone v0.14.0</span>
+            <span className="text-amber-400 font-bold bg-amber-950/80 px-2 py-0.5 rounded border border-amber-800">Milestone v0.16.0</span>
             <span aria-hidden="true">·</span>
-            <span className="text-white font-medium">Phase 14: Struktur Data (Daftar &amp; Peta) NUSANTARA</span>
+            <span className="text-white font-medium">Phase 16: Package Manager NUSANTARA (`nusantara`)</span>
             <span aria-hidden="true">·</span>
-            <span className="text-rose-300 font-mono">daftar · peta · indeks [0] · mutasi · panjang · kesetaraan ==</span>
+            <span className="text-amber-300 font-mono">nusantara.toml · nusantara.lock · SemVer · Graf Dependensi · CLI</span>
             <span aria-hidden="true">·</span>
-            <span className="text-emerald-400 font-semibold">154 Berkas Valid (216 Uji Lulus 100%)</span>
+            <span className="text-emerald-400 font-semibold">154+ Berkas Valid (247 Uji Lulus 100%)</span>
           </div>
 
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white max-w-4xl leading-tight">
-            Struktur Data Dasar: Koleksi <span className="text-rose-400 font-mono">daftar</span> &amp; <span className="text-amber-400 font-mono">peta</span> Terintegrasi.
+            Package Manager NUSANTARA: Fondasi Ekosistem Paket &amp; Dependensi Mandiri.
           </h1>
 
           <p className="mt-4 text-base sm:text-lg text-slate-300 max-w-3xl leading-relaxed">
-            Bahasa pemrograman NUSANTARA kini mendukung koleksi data berurutan terindeks (<code className="text-rose-300 font-mono font-semibold">daftar</code>) berbasis 0, koleksi pasangan kunci-nilai (<code className="text-amber-300 font-mono font-semibold">peta</code>), mutasi elemen, perlindungan mutabilitas konstanta <code className="text-emerald-300 font-mono font-semibold">tetap</code>, fungsi bawaan <code className="text-cyan-300 font-mono font-semibold">panjang()</code>, serta kesetaraan struktural mendalam (<code className="text-indigo-300 font-mono font-semibold">==</code>).
+            Bahasa pemrograman NUSANTARA kini dilengkapi package manager resmi (<code className="text-amber-300 font-mono font-semibold">nusantara</code>) dengan manifest standar <code className="text-rose-300 font-mono font-semibold">nusantara.toml</code>, berkas kunci reproduktif <code className="text-emerald-300 font-mono font-semibold">nusantara.lock</code>, validasi SemVer ketat, pendeteksi siklus melingkar DFS, dan integrasi modul langsung.
           </p>
 
           <div className="mt-6 p-4 rounded-xl bg-slate-900/90 border border-slate-800 max-w-3xl flex items-start gap-3">
-            <ShieldCheck className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+            <ShieldCheck className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
             <div className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              <span className="font-semibold text-rose-300">Pipa Kompilasi Lengkap:</span> Kode sumber NUSANTARA melewati tahapan Lexer ➔ Parser (AST NodeLiteralDaftar, NodeLiteralPeta, NodeAksesIndeks, NodePenugasanIndeks) ➔ Pemeriksa Tipe (Validasi indeks bulat, kunci teks, perlindungan tetap) ➔ Interpreter dengan semantik referensi, batas indeks aman, dan rekursi deep equality.
+              <span className="font-semibold text-amber-300">Pipa Ekosistem Paket:</span> CLI <code className="text-white">nusantara</code> mengelola lifecycle paket (buat, pasang, hapus, perbarui, daftar, info) ➔ Resolusi graf dependensi &amp; pencegahan siklus (A → B → C → A) ➔ Pemasangan aman ke <code className="text-white">.nusantara/paket/</code> ➔ Otomatis dimuat oleh <code className="text-white">ResolverModul</code> tanpa modul loader kedua.
             </div>
           </div>
         </div>
@@ -316,6 +440,15 @@ selesai`
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 flex-1 w-full">
         {/* Navigation Sub-Tabs */}
         <div className="flex items-center gap-2 border-b border-slate-800 pb-4 mb-6 overflow-x-auto text-sm">
+          <button
+            onClick={() => setActiveTab('paket')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap cursor-pointer flex items-center gap-2 ${
+              activeTab === 'paket' ? 'bg-amber-950 text-amber-200 border border-amber-700/60 font-semibold' : 'text-slate-400 hover:text-white hover:bg-slate-900'
+            }`}
+          >
+            <Package className="w-4 h-4 text-amber-400" />
+            <span>Package Manager (Phase 16)</span>
+          </button>
           <button
             onClick={() => setActiveTab('struktur-data')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap cursor-pointer flex items-center gap-2 ${
@@ -417,6 +550,335 @@ selesai`
           </button>
         </div>
 
+        {/* TAB 0: PACKAGE MANAGER NUSANTARA (PHASE 16) */}
+        {activeTab === 'paket' && (
+          <div className="space-y-6">
+            {/* Header Ringkasan Paket */}
+            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center font-bold text-xl shadow-inner">
+                    <Package className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-xl font-bold text-white tracking-wide">
+                        Package Manager NUSANTARA (<code className="text-amber-400 font-mono">nusantara</code>)
+                      </h2>
+                      <span className="px-2.5 py-0.5 text-[11px] font-bold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        v0.16.0 Resmi
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Fondasi manajemen dependensi, manifest <code className="text-rose-300">nusantara.toml</code>, berkas kunci reproduktif <code className="text-emerald-300">nusantara.lock</code>, dan integrasi modul langsung.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => setActiveTab('struktur-data')}
+                    className="px-3.5 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 hover:text-white rounded-lg transition-colors cursor-pointer flex items-center gap-2"
+                  >
+                    <Code2 className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Buka Editor Kode</span>
+                  </button>
+                  <button
+                    onClick={() => handleCopy('nusantara pasang', 'cli-pasang')}
+                    className="px-3.5 py-1.5 text-xs font-medium text-amber-300 bg-amber-950/80 border border-amber-800 hover:bg-amber-900 rounded-lg transition-colors cursor-pointer flex items-center gap-2"
+                  >
+                    {copiedText === 'cli-pasang' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Terminal className="w-3.5 h-3.5 text-amber-400" />}
+                    <span>nusantara pasang</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Status Keamanan & Fondasi */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 text-xs">
+                <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3">
+                  <div className="text-slate-400 text-[11px]">Siklus Dependensi</div>
+                  <div className="text-emerald-400 font-bold mt-1 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Bebas Siklus (DFS)
+                  </div>
+                </div>
+                <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3">
+                  <div className="text-slate-400 text-[11px]">Resolusi Versi</div>
+                  <div className="text-emerald-400 font-bold mt-1 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    SemVer 2.0.0 Terpenuhi
+                  </div>
+                </div>
+                <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3">
+                  <div className="text-slate-400 text-[11px]">Integritas Paket</div>
+                  <div className="text-emerald-400 font-bold mt-1 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    SHA-256 Checksum
+                  </div>
+                </div>
+                <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3">
+                  <div className="text-slate-400 text-[11px]">Keamanan Jalur</div>
+                  <div className="text-emerald-400 font-bold mt-1 flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    Anti-Path Traversal
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Terminal CLI Interaktif */}
+            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl">
+              <div className="flex flex-wrap items-center justify-between pb-3 mb-3 border-b border-slate-800 gap-2">
+                <div className="flex items-center gap-2">
+                  <Terminal className="w-4 h-4 text-amber-400" />
+                  <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                    Simulator Terminal Baris Perintah: <code className="text-amber-400 font-mono">nusantara</code>
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                  <span className="text-slate-400 text-[11px] mr-1 hidden sm:inline">Perintah Cepat:</span>
+                  <button
+                    onClick={() => handleRunCli('info')}
+                    className="px-2.5 py-1 text-[11px] font-mono bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700 transition-colors cursor-pointer"
+                  >
+                    nusantara info
+                  </button>
+                  <button
+                    onClick={() => handleRunCli('daftar')}
+                    className="px-2.5 py-1 text-[11px] font-mono bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700 transition-colors cursor-pointer"
+                  >
+                    nusantara daftar
+                  </button>
+                  <button
+                    onClick={() => handleRunCli('pasang')}
+                    className="px-2.5 py-1 text-[11px] font-mono bg-amber-950/70 hover:bg-amber-900 text-amber-300 rounded border border-amber-800 transition-colors cursor-pointer"
+                  >
+                    nusantara pasang
+                  </button>
+                  <button
+                    onClick={() => handleRunCli('pasang --terkunci')}
+                    className="px-2.5 py-1 text-[11px] font-mono bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700 transition-colors cursor-pointer"
+                  >
+                    --terkunci
+                  </button>
+                  <button
+                    onClick={() => handleRunCli('perbarui')}
+                    className="px-2.5 py-1 text-[11px] font-mono bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700 transition-colors cursor-pointer"
+                  >
+                    nusantara perbarui
+                  </button>
+                  <button
+                    onClick={() => handleRunCli('buat projek_baru')}
+                    className="px-2.5 py-1 text-[11px] font-mono bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700 transition-colors cursor-pointer"
+                  >
+                    nusantara buat
+                  </button>
+                  <button
+                    onClick={() => handleRunCli('bantuan')}
+                    className="px-2.5 py-1 text-[11px] font-mono bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700 transition-colors cursor-pointer"
+                  >
+                    nusantara bantuan
+                  </button>
+                </div>
+              </div>
+
+              {/* Layar Terminal */}
+              <div className="bg-slate-950 rounded-xl p-4 font-mono text-xs text-slate-200 h-64 overflow-y-auto border border-slate-800/80 space-y-3 shadow-inner">
+                {cliHistory.map((item, idx) => (
+                  <div key={idx} className="space-y-1">
+                    <div className="text-amber-400 flex items-center gap-1 font-semibold">
+                      <span>$</span>
+                      <span>{item.cmd}</span>
+                    </div>
+                    <div
+                      className={`whitespace-pre-wrap pl-3 leading-relaxed ${
+                        item.success ? 'text-slate-300' : 'text-rose-400 font-semibold'
+                      }`}
+                    >
+                      {item.out.join('\n')}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Input Baris Perintah */}
+              <form
+                onSubmit={e => {
+                  e.preventDefault();
+                  handleRunCli(cliInput);
+                }}
+                className="mt-3 flex items-center gap-2"
+              >
+                <div className="relative flex-1">
+                  <span className="absolute left-3 top-2.5 text-amber-400 font-mono text-xs font-bold">$ nusantara</span>
+                  <input
+                    type="text"
+                    value={cliInput}
+                    onChange={e => setCliInput(e.target.value)}
+                    placeholder="pasang | daftar | info | buat <nama> | hapus <nama> | perbarui | bantuan"
+                    className="w-full pl-28 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl font-mono text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-amber-500/60 focus:ring-1 focus:ring-amber-500/40"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-semibold tracking-wide transition-colors cursor-pointer shadow-md"
+                >
+                  Jalankan
+                </button>
+              </form>
+            </div>
+
+            {/* Kartu Berkas: nusantara.toml & nusantara.lock */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Manifest nusantara.toml */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col">
+                <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-rose-400" />
+                    <span className="text-xs font-bold text-slate-200 font-mono">nusantara.toml</span>
+                    <span className="text-[10px] bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded font-semibold border border-rose-500/30">
+                      Manifest Resmi
+                    </span>
+                  </div>
+                  <button
+                    onClick={() =>
+                      handleCopy(
+                        `[nusantara]\nnama = "aplikasi_contoh"\nversi = "1.0.0"\ndeskripsi = "Proyek percontohan ekosistem package manager NUSANTARA"\nlisensi = "Apache-2.0"\npenulis = "Tim Nusantara"\n\n[dependensi]\nmatematika = "^1.2.0"\ngeometri = "0.5.0"`,
+                        'toml-code'
+                      )
+                    }
+                    className="text-slate-400 hover:text-white p-1 transition-colors cursor-pointer"
+                    title="Salin TOML"
+                  >
+                    {copiedText === 'toml-code' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+
+                <div className="bg-slate-950 rounded-xl p-4 font-mono text-xs text-slate-300 overflow-x-auto flex-1 border border-slate-800/80 leading-relaxed">
+                  <span className="text-amber-400 font-bold">[nusantara]</span><br />
+                  <span className="text-slate-400">nama</span> = <span className="text-emerald-300">"aplikasi_contoh"</span><br />
+                  <span className="text-slate-400">versi</span> = <span className="text-emerald-300">"1.0.0"</span><br />
+                  <span className="text-slate-400">deskripsi</span> = <span className="text-emerald-300">"Proyek percontohan ekosistem package manager NUSANTARA"</span><br />
+                  <span className="text-slate-400">lisensi</span> = <span className="text-emerald-300">"Apache-2.0"</span><br />
+                  <span className="text-slate-400">penulis</span> = <span className="text-emerald-300">"Tim Nusantara"</span><br /><br />
+                  <span className="text-amber-400 font-bold">[dependensi]</span><br />
+                  <span className="text-slate-400">matematika</span> = <span className="text-cyan-300">"^1.2.0"</span><br />
+                  <span className="text-slate-400">geometri</span> = <span className="text-cyan-300">"0.5.0"</span>
+                </div>
+              </div>
+
+              {/* Lockfile nusantara.lock */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col">
+                <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    <span className="text-xs font-bold text-slate-200 font-mono">nusantara.lock</span>
+                    <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-semibold border border-emerald-500/30">
+                      Berkas Kunci
+                    </span>
+                  </div>
+                  <button
+                    onClick={() =>
+                      handleCopy(
+                        `# Berkas Kunci Dependensi NUSANTARA (nusantara.lock)\nversi_format = 1\n\n[[paket]]\nnama = "matematika"\nversi = "1.2.3"\nsumber = "registri:matematika@1.2.3"\nintegritas = "sha256-4b2a8f..."\n\n[[paket]]\nnama = "geometri"\nversi = "0.5.0"\nsumber = "registri:geometri@0.5.0"\nintegritas = "sha256-9e1c3d..."`,
+                        'lock-code'
+                      )
+                    }
+                    className="text-slate-400 hover:text-white p-1 transition-colors cursor-pointer"
+                    title="Salin Lockfile"
+                  >
+                    {copiedText === 'lock-code' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+
+                <div className="bg-slate-950 rounded-xl p-4 font-mono text-xs text-slate-300 overflow-x-auto flex-1 border border-slate-800/80 leading-relaxed">
+                  <span className="text-slate-500"># Berkas Kunci Dependensi NUSANTARA</span><br />
+                  <span className="text-slate-500"># Dihasilkan otomatis oleh 'nusantara pasang'</span><br /><br />
+                  <span className="text-slate-400">versi_format</span> = <span className="text-amber-300">1</span><br /><br />
+                  <span className="text-purple-400 font-bold">[[paket]]</span><br />
+                  <span className="text-slate-400">nama</span> = <span className="text-emerald-300">"matematika"</span><br />
+                  <span className="text-slate-400">versi</span> = <span className="text-emerald-300">"1.2.3"</span><br />
+                  <span className="text-slate-400">sumber</span> = <span className="text-cyan-300">"registri:matematika@1.2.3"</span><br />
+                  <span className="text-slate-400">integritas</span> = <span className="text-amber-200">"sha256-4b2a8f90c..."</span><br /><br />
+                  <span className="text-purple-400 font-bold">[[paket]]</span><br />
+                  <span className="text-slate-400">nama</span> = <span className="text-emerald-300">"geometri"</span><br />
+                  <span className="text-slate-400">versi</span> = <span className="text-emerald-300">"0.5.0"</span><br />
+                  <span className="text-slate-400">sumber</span> = <span className="text-cyan-300">"registri:geometri@0.5.0"</span><br />
+                  <span className="text-slate-400">integritas</span> = <span className="text-amber-200">"sha256-9e1c3d11b..."</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Pohon Graf Dependensi & Verifikasi Uji */}
+            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl">
+              <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <Network className="w-4 h-4 text-cyan-400" />
+                  <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                    Graf Dependensi &amp; Rekapitulasi Rangkaian Uji (Phase 16)
+                  </span>
+                </div>
+                <span className="text-xs text-emerald-400 font-bold flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  31 Pengujian LULUS 100%
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
+                  <div className="font-semibold text-slate-300 mb-2 flex items-center gap-1.5">
+                    <Folder className="w-4 h-4 text-amber-400" />
+                    Struktur Dependensi Fisik
+                  </div>
+                  <pre className="font-mono text-[11px] text-slate-400 leading-relaxed">
+{`proyek/
+├── nusantara.toml
+├── nusantara.lock
+├── src/
+│   └── utama.nusantara
+└── .nusantara/
+    └── paket/
+        ├── matematika/ (1.2.3)
+        └── geometri/   (0.5.0)`}
+                  </pre>
+                </div>
+
+                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
+                  <div className="font-semibold text-slate-300 mb-2 flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    Validasi Keamanan &amp; Siklus
+                  </div>
+                  <ul className="space-y-1.5 text-slate-400">
+                    <li className="flex items-center gap-1.5 text-emerald-300">
+                      <Check className="w-3.5 h-3.5" /> Deteksi Siklus Melingkar (DFS)
+                    </li>
+                    <li className="flex items-center gap-1.5 text-emerald-300">
+                      <Check className="w-3.5 h-3.5" /> Validasi Konflik Versi (SemVer)
+                    </li>
+                    <li className="flex items-center gap-1.5 text-emerald-300">
+                      <Check className="w-3.5 h-3.5" /> Isolasi Path Traversal (..)
+                    </li>
+                    <li className="flex items-center gap-1.5 text-emerald-300">
+                      <Check className="w-3.5 h-3.5" /> Tanpa Script Instalasi Sembarangan
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
+                  <div className="font-semibold text-slate-300 mb-2 flex items-center gap-1.5">
+                    <Layers className="w-4 h-4 text-purple-400" />
+                    Integrasi Modul (Phase 15 + 16)
+                  </div>
+                  <p className="text-slate-400 leading-relaxed text-[11px]">
+                    Setelah paket dipasang, <code className="text-slate-200">ResolverModul</code> secara otomatis menemukan berkas di <code className="text-amber-300">.nusantara/paket/</code> tanpa modul loader kedua. Kode program dapat langsung menggunakan instruksi <code className="text-cyan-300">gunakan &lt;paket&gt;</code>.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* TAB 1: PLAYGROUND INTERAKTIF (STRUKTUR DATA, FUNGSI, PERULANGAN, PERCABANGAN, TIPE) */}
         {(activeTab === 'struktur-data' || activeTab === 'fungsi' || activeTab === 'perulangan' || activeTab === 'percabangan' || activeTab === 'tipe') && (
           <div className="space-y-6">
@@ -475,6 +937,17 @@ selesai`
                       className="px-2 py-1 text-[11px] font-medium bg-purple-950/70 text-purple-300 hover:text-white border border-purple-800/60 rounded transition-colors cursor-pointer"
                     >
                       Rekursi
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        setPlaygroundCode(
+                          `program DemonstrasiPaketModul\n\n// Menggunakan dependensi paket yang terpasang di .nusantara/paket/\ngunakan matematika\ngunakan geometri\n\nvariabel luas : bilangan = geometri.luasPersegi(15)\nvariabel kali : bilangan = matematika.kali(10, 20)\nvariabel kuadrat : bilangan = matematika.kuadrat(8)\n\nmulai\n    tampilkan("Luas Persegi (geometri):", luas)\n    tampilkan("Hasil Kali (matematika):", kali)\n    tampilkan("Hasil Kuadrat (matematika):", kuadrat)\n    tampilkan("Status: Paket berhasil dimuat dari .nusantara/paket/!")\nselesai`
+                        )
+                      }
+                      className="px-2 py-1 text-[11px] font-medium bg-amber-950/70 text-amber-300 hover:text-white border border-amber-800/60 rounded transition-colors cursor-pointer"
+                    >
+                      Paket &amp; Modul (P16)
                     </button>
                   </div>
                 </div>
@@ -916,8 +1389,8 @@ tetap konstan : daftar = [1, 2]
       <footer className="border-t border-slate-800 bg-slate-950 py-6 px-4 sm:px-6 mt-auto">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-rose-500" />
-            <span>NUSANTARA Programming Language · Phase 14 (v0.14.0)</span>
+            <span className="w-2 h-2 rounded-full bg-amber-500" />
+            <span>NUSANTARA Programming Language · Phase 16 (v0.16.0)</span>
           </div>
           <div>Dilindungi di bawah Lisensi Apache 2.0</div>
         </div>
