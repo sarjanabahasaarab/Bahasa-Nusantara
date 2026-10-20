@@ -1,0 +1,26 @@
+program UjiKonstitusi
+
+mulai
+    // 1. Deklarasi variabel dengan tipe eksplisit
+    namaPengembang : teks = "Komunitas Nusantara"
+    versiFase : bilangan = 2
+    skorKelayakan : desimal = 98.5
+    fondasiSah : logika = benar
+
+    // 2. Deklarasi konstanta tetap
+    tetap BATAS_MINIMAL : bilangan = 70
+
+    tampilkan("Nama Proyek: " + namaPengembang)
+
+    // 3. Percabangan kondisional sesuai konstitusi
+    jika skorKelayakan >= BATAS_MINIMAL maka
+        tampilkan("Status Konstitusi: Disahkan")
+    selain
+        tampilkan("Status Konstitusi: Perlu Peninjauan")
+    akhir
+
+    // 4. Perulangan berpenghitung rentang
+    untuk hitungan dari 1 sampai 3 lakukan
+        tampilkan(hitungan)
+    akhir
+selesai

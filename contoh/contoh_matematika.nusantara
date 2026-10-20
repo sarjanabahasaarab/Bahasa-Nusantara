@@ -1,0 +1,22 @@
+// Modul Pengujian Matematika Nusantara
+modul contoh_matematika
+
+ekspor fungsi tambah(a : bilangan, b : bilangan) : bilangan
+mulai
+    kembalikan a + b
+selesai
+
+ekspor fungsi kali(a : bilangan, b : bilangan) : bilangan
+mulai
+    kembalikan a * b
+selesai
+
+ekspor fungsi bagi(a : bilangan, b : bilangan) : bilangan
+mulai
+    kembalikan a / b
+selesai
+
+fungsi rahasiaInternal() : bilangan
+mulai
+    kembalikan 999
+selesai

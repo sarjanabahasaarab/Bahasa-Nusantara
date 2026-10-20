@@ -1,0 +1,11 @@
+program Data
+
+mulai
+    nama : teks = "Muhammad"
+    umur : bilangan = 30
+    tinggi : desimal = 170.5
+    aktif : logika = benar
+
+    tampilkan(nama)
+    tampilkan(umur)
+selesai

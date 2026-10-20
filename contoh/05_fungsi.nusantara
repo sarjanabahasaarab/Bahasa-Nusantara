@@ -1,0 +1,5 @@
+fungsi tambah(a : bilangan, b : bilangan) : bilangan
+
+mulai
+    kembalikan a + b
+selesai

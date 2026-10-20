@@ -1,0 +1,5 @@
+program Halo
+
+mulai
+    tampilkan("Halo Dunia!")
+selesai

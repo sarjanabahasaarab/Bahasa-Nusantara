@@ -1,0 +1,12 @@
+program ProgramUtamaModul
+
+gunakan contoh_matematika
+gunakan contoh_teks
+
+mulai
+    hasilTambah : bilangan = contoh_matematika.tambah(15, 25)
+    tampilkan("Hasil tambah:", hasilTambah)
+
+    pesan : teks = contoh_teks.beriSambutan("Nusantara")
+    tampilkan(pesan)
+selesai

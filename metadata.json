@@ -1,0 +1,6 @@
+{
+  "name": "NUSANTARA - Bahasa Pemrograman Indonesia",
+  "description": "Repositori resmi, spesifikasi, dan portal fondasi Phase 1 bahasa pemrograman NUSANTARA.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

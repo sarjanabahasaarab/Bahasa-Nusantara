@@ -1,0 +1,12 @@
+// Modul Pengujian Pemrosesan Teks Nusantara
+modul contoh_teks
+
+ekspor fungsi gabungDua(a : teks, b : teks) : teks
+mulai
+    kembalikan a + " " + b
+selesai
+
+ekspor fungsi beriSambutan(nama : teks) : teks
+mulai
+    kembalikan "Halo, " + nama + "!"
+selesai

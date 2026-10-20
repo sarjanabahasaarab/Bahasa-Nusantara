@@ -1,0 +1,11 @@
+program Kondisi
+
+mulai
+    nilai : bilangan = 80
+
+    jika nilai >= 75 maka
+        tampilkan("Lulus")
+    selain
+        tampilkan("Belum lulus")
+    akhir
+selesai

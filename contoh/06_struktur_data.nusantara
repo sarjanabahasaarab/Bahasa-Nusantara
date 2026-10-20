@@ -1,0 +1,24 @@
+program StrukturDataNusantara
+
+mulai
+    // 1. Koleksi Daftar (List / Array)
+    angka : daftar = [10, 20, 30, 40]
+    tampilkan("Elemen pertama:", angka[0])
+    tampilkan("Elemen terakhir:", angka[3])
+    tampilkan("Panjang daftar:", panjang(angka))
+
+    // Mutasi elemen daftar
+    angka[0] = 99
+    tampilkan("Daftar setelah mutasi:", angka)
+
+    // 2. Koleksi Peta (Map / Dictionary)
+    siswa : peta = {"nama": "Ayu", "umur": 20, "jurusan": "Informatika"}
+    tampilkan("Nama siswa:", siswa["nama"])
+    tampilkan("Umur siswa:", siswa["umur"])
+
+    // Mutasi dan penambahan pasangan peta
+    siswa["umur"] = 21
+    siswa["asal"] = "Nusantara"
+    tampilkan("Peta setelah diperbarui:", siswa)
+    tampilkan("Jumlah entri peta:", panjang(siswa))
+selesai

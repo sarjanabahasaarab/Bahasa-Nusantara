@@ -1,0 +1,7 @@
+program Perulangan
+
+mulai
+    untuk angka dari 1 sampai 10 lakukan
+        tampilkan(angka)
+    akhir
+selesai
