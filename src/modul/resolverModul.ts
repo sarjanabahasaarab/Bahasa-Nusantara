@@ -141,12 +141,10 @@ export class ResolverModul {
         daftarKandidat.push(
           this.pembaca.gabungJalur(basis, 'paket', namaBersih, `${namaBersih}.nusantara`)
         );
-        daftarKandidat.push(
-          this.pembaca.gabungJalur(basis, 'packages', namaBersih, 'src', `${namaBersih}.nusantara`)
-        );
-        daftarKandidat.push(
-          this.pembaca.gabungJalur(basis, 'packages', namaBersih, `${namaBersih}.nusantara`)
-        );
+        // Integrasi Standard Library NUSANTARA (Phase 17: stdlib/)
+        daftarKandidat.push(this.pembaca.gabungJalur(basis, 'stdlib', `${namaBersih}.nusantara`));
+        daftarKandidat.push(this.pembaca.gabungJalur(basis, 'stdlib', namaBersih, `${namaBersih}.nusantara`));
+        daftarKandidat.push(this.pembaca.gabungJalur(basis, 'stdlib', namaBersih, 'modul.nusantara'));
       }
     }
 

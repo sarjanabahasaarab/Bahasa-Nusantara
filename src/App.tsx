@@ -27,6 +27,7 @@ import {
   Workflow,
   Boxes,
   Package,
+  Library,
 } from 'lucide-react';
 import {
   BERKAS_REPOSITORI,
@@ -45,9 +46,10 @@ import { PenulisOutputBuffer } from './interpreter/outputWriter';
 import { PemeriksaTipe } from './tipe/pemeriksaTipe';
 import { PembacaBerkasMemori, ResolverModul, PemuatModul } from './modul';
 import { PengelolaPaket, NusantaraCLI, LocalRegistry } from './paket';
+import { KATALOG_MODUL_STANDAR, dapatkanDaftarNamaModulStandar } from './stdlib';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'paket' | 'struktur-data' | 'fungsi' | 'perulangan' | 'percabangan' | 'operator' | 'tipe' | 'ast' | 'token' | 'panduan' | 'berkas' | 'roadmap' | 'git'>('paket');
+  const [activeTab, setActiveTab] = useState<'stdlib' | 'paket' | 'struktur-data' | 'fungsi' | 'perulangan' | 'percabangan' | 'operator' | 'tipe' | 'ast' | 'token' | 'panduan' | 'berkas' | 'roadmap' | 'git'>('stdlib');
   const [selectedFile, setSelectedFile] = useState<BerkasRepo>(BERKAS_REPOSITORI[0]);
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [playgroundCode, setPlaygroundCode] = useState<string>(
@@ -291,6 +293,15 @@ selesai`
 
           <nav className="hidden md:flex items-center gap-6 text-sm">
             <button
+              onClick={() => setActiveTab('stdlib')}
+              className={`hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'stdlib' ? 'text-cyan-400 font-semibold' : 'text-slate-400'
+              }`}
+            >
+              <Library className="w-4 h-4" />
+              Stdlib (Phase 17)
+            </button>
+            <button
               onClick={() => setActiveTab('paket')}
               className={`hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'paket' ? 'text-amber-400 font-semibold' : 'text-slate-400'
@@ -441,6 +452,15 @@ selesai`
         {/* Navigation Sub-Tabs */}
         <div className="flex items-center gap-2 border-b border-slate-800 pb-4 mb-6 overflow-x-auto text-sm">
           <button
+            onClick={() => setActiveTab('stdlib')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap cursor-pointer flex items-center gap-2 ${
+              activeTab === 'stdlib' ? 'bg-cyan-950 text-cyan-200 border border-cyan-700/60 font-semibold' : 'text-slate-400 hover:text-white hover:bg-slate-900'
+            }`}
+          >
+            <Library className="w-4 h-4 text-cyan-400" />
+            <span>Standard Library (Phase 17)</span>
+          </button>
+          <button
             onClick={() => setActiveTab('paket')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap cursor-pointer flex items-center gap-2 ${
               activeTab === 'paket' ? 'bg-amber-950 text-amber-200 border border-amber-700/60 font-semibold' : 'text-slate-400 hover:text-white hover:bg-slate-900'
@@ -549,6 +569,366 @@ selesai`
             <span>Peta Jalan 36 Fase</span>
           </button>
         </div>
+
+        {/* TAB 0: STANDARD LIBRARY NUSANTARA (PHASE 17) */}
+        {activeTab === 'stdlib' && (
+          <div className="space-y-6">
+            {/* Header Ringkasan Standard Library */}
+            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 flex items-center justify-center font-bold text-xl shadow-inner">
+                    <Library className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-xl font-bold text-white tracking-wide">
+                        Standard Library NUSANTARA (<code className="text-cyan-400 font-mono">stdlib</code>)
+                      </h2>
+                      <span className="px-2.5 py-0.5 text-[11px] font-bold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        v0.17.0 Resmi
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Kumpulan 8 modul resmi bawaan bahasa NUSANTARA: <code className="text-cyan-300">teks</code>, <code className="text-cyan-300">matematika</code>, <code className="text-cyan-300">konversi</code>, <code className="text-cyan-300">waktu</code>, <code className="text-cyan-300">acak</code>, <code className="text-cyan-300">koleksi</code>, <code className="text-cyan-300">berkas</code> (Sandbox), dan <code className="text-cyan-300">sistem</code>.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setPlaygroundCode(
+                        `program UjiPustakaStandar\n\ngunakan "teks" sebagai teks\ngunakan "matematika" sebagai mtk\ngunakan "waktu" sebagai waktu\ngunakan "acak" sebagai acak\ngunakan "koleksi" sebagai kol\ngunakan "sistem" sebagai sys\n\nmulai\n    tampilkan("=== PUSTAKA STANDAR NUSANTARA (v0.17.0) ===")\n    tampilkan("Versi Sistem:", sys.versi())\n    tampilkan("Waktu Sekarang:", waktu.sekarang())\n    tampilkan("PI:", mtk.PI)\n    tampilkan("Teks Kapital:", teks.kapital("nusantara"))\n    tampilkan("Acak 1..100:", acak.bilangan(1, 100))\n    daftarUrut : daftar = kol.urutkan([40, 10, 30, 20])\n    tampilkan("Koleksi Terurut:", daftarUrut)\nselesai`
+                      );
+                    }}
+                    className="px-3.5 py-1.5 text-xs font-medium text-cyan-300 bg-cyan-950/80 border border-cyan-800 hover:bg-cyan-900 rounded-lg transition-colors cursor-pointer flex items-center gap-2 shadow-sm"
+                  >
+                    <Play className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Muat Kode Demo di Editor</span>
+                  </button>
+                  <button
+                    onClick={() => handleCopy('gunakan "matematika" sebagai mtk', 'copy-mtk')}
+                    className="px-3.5 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 hover:text-white rounded-lg transition-colors cursor-pointer flex items-center gap-2"
+                  >
+                    {copiedText === 'copy-mtk' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
+                    <span>Salin Sintaks Impor</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Ringkasan 4 Pilar Standard Library */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5 text-xs">
+                <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
+                  <div className="text-slate-400 font-medium">Jumlah Modul Resmi</div>
+                  <div className="text-xl font-bold text-cyan-400 mt-1">8 Modul</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">teks, mtk, konv, wkt, acak, kol, berkas, sys</div>
+                </div>
+                <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
+                  <div className="text-slate-400 font-medium">Dukungan Sistem Tipe</div>
+                  <div className="text-xl font-bold text-emerald-400 mt-1">100% Statis</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">Validasi parameter &amp; kembalian</div>
+                </div>
+                <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
+                  <div className="text-slate-400 font-medium">Keamanan I/O Berkas</div>
+                  <div className="text-xl font-bold text-amber-400 mt-1">Sandbox Penuh</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">Isolasi direktori &amp; anti-traversal</div>
+                </div>
+                <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
+                  <div className="text-slate-400 font-medium">Target Versi Bahasa</div>
+                  <div className="text-xl font-bold text-indigo-400 mt-1">v0.17.0</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">22/22 Uji Lulus Otomatis</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Grid 8 Modul Standar Resmi */}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                  <Boxes className="w-4 h-4 text-cyan-400" />
+                  Katalog 8 Modul Standar Resmi NUSANTARA
+                </h3>
+                <span className="text-xs text-slate-400 font-mono">Dapat diimpor langsung tanpa instalasi paket</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* 1. TEKS */}
+                <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col justify-between hover:border-cyan-500/40 transition-colors">
+                  <div>
+                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800">
+                      <span className="font-mono font-bold text-sm text-cyan-300">teks</span>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">9 Fungsi</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mb-3 leading-relaxed">
+                      Manipulasi string: panjang, potong, gabung, cari, kapital, kecil, pangkas, berisi, ganti.
+                    </p>
+                    <div className="space-y-1 mb-4 text-[11px] font-mono text-slate-300 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/60">
+                      <div><span className="text-cyan-400">teks.kapital</span>(s: teks) : teks</div>
+                      <div><span className="text-cyan-400">teks.potong</span>(s, mulai, akhir)</div>
+                      <div><span className="text-cyan-400">teks.cari</span>(s, target) : bilangan</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setPlaygroundCode(
+                        `program UjiModulTeks\ngunakan "teks" sebagai teks\n\nmulai\n    s : teks = "nusantara jaya"\n    tampilkan("Asli:", s)\n    tampilkan("Kapital:", teks.kapital(s))\n    tampilkan("Panjang:", teks.panjang(s))\n    tampilkan("Potongan (0..9):", teks.potong(s, 0, 9))\n    tampilkan("Berisi 'jaya':", teks.berisi(s, "jaya"))\nselesai`
+                      );
+                    }}
+                    className="w-full py-1.5 text-xs font-medium text-cyan-300 bg-cyan-950/60 hover:bg-cyan-900 border border-cyan-800/60 rounded-lg transition-colors cursor-pointer text-center"
+                  >
+                    Buka Contoh Teks
+                  </button>
+                </div>
+
+                {/* 2. MATEMATIKA */}
+                <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col justify-between hover:border-emerald-500/40 transition-colors">
+                  <div>
+                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800">
+                      <span className="font-mono font-bold text-sm text-emerald-300">matematika</span>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">8 Fn + PI/E</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mb-3 leading-relaxed">
+                      Kalkulasi numerik: PI, E, absolut, bulat, lantai, plafon, pangkat, akar, min, maks.
+                    </p>
+                    <div className="space-y-1 mb-4 text-[11px] font-mono text-slate-300 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/60">
+                      <div><span className="text-emerald-400">mtk.PI</span> : desimal</div>
+                      <div><span className="text-emerald-400">mtk.pangkat</span>(a, b) : bilangan</div>
+                      <div><span className="text-emerald-400">mtk.maksimum</span>(a, b) : numerik</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setPlaygroundCode(
+                        `program UjiModulMatematika\ngunakan "matematika" sebagai mtk\n\nmulai\n    tampilkan("Konstanta PI:", mtk.PI)\n    tampilkan("Konstanta E:", mtk.E)\n    tampilkan("Maksimum (45, 90):", mtk.maksimum(45, 90))\n    tampilkan("Pangkat 3^4:", mtk.pangkat(3, 4))\n    tampilkan("Akar 144:", mtk.akar(144))\nselesai`
+                      );
+                    }}
+                    className="w-full py-1.5 text-xs font-medium text-emerald-300 bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-800/60 rounded-lg transition-colors cursor-pointer text-center"
+                  >
+                    Buka Contoh Matematika
+                  </button>
+                </div>
+
+                {/* 3. KONVERSI */}
+                <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col justify-between hover:border-amber-500/40 transition-colors">
+                  <div>
+                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800">
+                      <span className="font-mono font-bold text-sm text-amber-300">konversi</span>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">5 Fungsi</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mb-3 leading-relaxed">
+                      Konversi tipe data eksplisit dan aman: keTeks, keBilangan, keDesimal, keBulat, keLogika.
+                    </p>
+                    <div className="space-y-1 mb-4 text-[11px] font-mono text-slate-300 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/60">
+                      <div><span className="text-amber-400">konv.keTeks</span>(val) : teks</div>
+                      <div><span className="text-amber-400">konv.keBilangan</span>(s) : bilangan</div>
+                      <div><span className="text-amber-400">konv.keBulat</span>(x) : bilangan</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setPlaygroundCode(
+                        `program UjiModulKonversi\nimpor { keTeks, keBilangan, keDesimal } dari "konversi"\n\nmulai\n    angka : bilangan = keBilangan("456")\n    des : desimal = keDesimal("3.14159")\n    tulisan : teks = keTeks(angka + 10)\n    tampilkan("Hasil konversi:", tulisan)\n    tampilkan("Desimal:", des)\nselesai`
+                      );
+                    }}
+                    className="w-full py-1.5 text-xs font-medium text-amber-300 bg-amber-950/60 hover:bg-amber-900 border border-amber-800/60 rounded-lg transition-colors cursor-pointer text-center"
+                  >
+                    Buka Contoh Konversi
+                  </button>
+                </div>
+
+                {/* 4. WAKTU */}
+                <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col justify-between hover:border-indigo-500/40 transition-colors">
+                  <div>
+                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800">
+                      <span className="font-mono font-bold text-sm text-indigo-300">waktu</span>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">7 Fungsi</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mb-3 leading-relaxed">
+                      Akses waktu host: sekarang, tanggal, jam, menit, detik, timestamp ms, format.
+                    </p>
+                    <div className="space-y-1 mb-4 text-[11px] font-mono text-slate-300 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/60">
+                      <div><span className="text-indigo-400">waktu.sekarang</span>() : teks</div>
+                      <div><span className="text-indigo-400">waktu.tanggal</span>() : teks</div>
+                      <div><span className="text-indigo-400">waktu.timestamp</span>() : bilangan</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setPlaygroundCode(
+                        `program UjiModulWaktu\ngunakan "waktu" sebagai wkt\n\nmulai\n    tampilkan("Waktu Sekarang:", wkt.sekarang())\n    tampilkan("Tanggal Sekarang:", wkt.tanggal())\n    tampilkan("Jam:", wkt.jam())\n    tampilkan("Timestamp (ms):", wkt.timestamp())\nselesai`
+                      );
+                    }}
+                    className="w-full py-1.5 text-xs font-medium text-indigo-300 bg-indigo-950/60 hover:bg-indigo-900 border border-indigo-800/60 rounded-lg transition-colors cursor-pointer text-center"
+                  >
+                    Buka Contoh Waktu
+                  </button>
+                </div>
+
+                {/* 5. ACAK */}
+                <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col justify-between hover:border-purple-500/40 transition-colors">
+                  <div>
+                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800">
+                      <span className="font-mono font-bold text-sm text-purple-300">acak</span>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">3 Fungsi</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mb-3 leading-relaxed">
+                      Pembangkit pseudorandom: desimal [0..1), bilangan rentang [min..maks], pilih acak daftar.
+                    </p>
+                    <div className="space-y-1 mb-4 text-[11px] font-mono text-slate-300 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/60">
+                      <div><span className="text-purple-400">acak.desimal</span>() : desimal</div>
+                      <div><span className="text-purple-400">acak.bilangan</span>(min, maks)</div>
+                      <div><span className="text-purple-400">acak.pilih</span>(daftar) : apapun</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setPlaygroundCode(
+                        `program UjiModulAcak\ngunakan "acak" sebagai acak\n\nmulai\n    dadu : bilangan = acak.bilangan(1, 6)\n    tampilkan("Lemparan Dadu (1..6):", dadu)\n    warnaPilihan : teks = acak.pilih(["Merah", "Putih", "Emas"])\n    tampilkan("Warna Terpilih:", warnaPilihan)\nselesai`
+                      );
+                    }}
+                    className="w-full py-1.5 text-xs font-medium text-purple-300 bg-purple-950/60 hover:bg-purple-900 border border-purple-800/60 rounded-lg transition-colors cursor-pointer text-center"
+                  >
+                    Buka Contoh Acak
+                  </button>
+                </div>
+
+                {/* 6. KOLEKSI */}
+                <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col justify-between hover:border-rose-500/40 transition-colors">
+                  <div>
+                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800">
+                      <span className="font-mono font-bold text-sm text-rose-300">koleksi</span>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">8 Fungsi</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mb-3 leading-relaxed">
+                      Operasi tingkat lanjut daftar &amp; peta: panjang, kosong, berisi, cari, balik, urutkan, gabung, iris.
+                    </p>
+                    <div className="space-y-1 mb-4 text-[11px] font-mono text-slate-300 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/60">
+                      <div><span className="text-rose-400">kol.urutkan</span>(d: daftar) : daftar</div>
+                      <div><span className="text-rose-400">kol.balik</span>(d: daftar) : daftar</div>
+                      <div><span className="text-rose-400">kol.berisi</span>(d, item) : logika</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setPlaygroundCode(
+                        `program UjiModulKoleksi\ngunakan "koleksi" sebagai kol\n\nmulai\n    daftarAwal : daftar = [50, 10, 40, 20]\n    tampilkan("Asli:", daftarAwal)\n    tampilkan("Terurut:", kol.urutkan(daftarAwal))\n    tampilkan("Terbalik:", kol.balik(daftarAwal))\n    tampilkan("Ada 40?:", kol.berisi(daftarAwal, 40))\nselesai`
+                      );
+                    }}
+                    className="w-full py-1.5 text-xs font-medium text-rose-300 bg-rose-950/60 hover:bg-rose-900 border border-rose-800/60 rounded-lg transition-colors cursor-pointer text-center"
+                  >
+                    Buka Contoh Koleksi
+                  </button>
+                </div>
+
+                {/* 7. BERKAS (SANDBOX) */}
+                <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col justify-between hover:border-yellow-500/40 transition-colors">
+                  <div>
+                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800">
+                      <span className="font-mono font-bold text-sm text-yellow-300">berkas</span>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">Sandbox 8 Fn</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mb-3 leading-relaxed">
+                      I/O teks terisolasi sandbox: ada, baca, tulis, tambah, ukuran, buatDirektori, daftarDirektori.
+                    </p>
+                    <div className="space-y-1 mb-4 text-[11px] font-mono text-slate-300 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/60">
+                      <div><span className="text-yellow-400">file.tulis</span>(jalur, isi) : logika</div>
+                      <div><span className="text-yellow-400">file.baca</span>(jalur) : teks</div>
+                      <div><span className="text-yellow-400">file.ukuran</span>(jalur) : bilangan</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setPlaygroundCode(
+                        `program UjiModulBerkas\ngunakan "berkas" sebagai file\n\nmulai\n    file.tulis("catatan.txt", "Pustaka Standar NUSANTARA Berhasil Terpasang")\n    file.tambah("catatan.txt", "\\nStatus: Stabil dan Aman")\n    tampilkan("Isi berkas:", file.baca("catatan.txt"))\n    tampilkan("Ukuran (byte):", file.ukuran("catatan.txt"))\nselesai`
+                      );
+                    }}
+                    className="w-full py-1.5 text-xs font-medium text-yellow-300 bg-yellow-950/60 hover:bg-yellow-900 border border-yellow-800/60 rounded-lg transition-colors cursor-pointer text-center"
+                  >
+                    Buka Contoh Berkas
+                  </button>
+                </div>
+
+                {/* 8. SISTEM */}
+                <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col justify-between hover:border-blue-500/40 transition-colors">
+                  <div>
+                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800">
+                      <span className="font-mono font-bold text-sm text-blue-300">sistem</span>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">7 Fn + VERSI</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mb-3 leading-relaxed">
+                      Lingkungan runtime: VERSI, versi, platform, arsitektur, argumen, ambilEnv, waktuOperasi, keluar.
+                    </p>
+                    <div className="space-y-1 mb-4 text-[11px] font-mono text-slate-300 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/60">
+                      <div><span className="text-blue-400">sys.VERSI</span> : teks</div>
+                      <div><span className="text-blue-400">sys.platform</span>() : teks</div>
+                      <div><span className="text-blue-400">sys.argumen</span>() : daftar</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setPlaygroundCode(
+                        `program UjiModulSistem\ngunakan "sistem" sebagai sys\n\nmulai\n    tampilkan("Versi Resmi:", sys.versi())\n    tampilkan("Platform Host:", sys.platform())\n    tampilkan("Arsitektur CPU:", sys.arsitektur())\n    tampilkan("Waktu Operasi (detik):", sys.waktuOperasi())\nselesai`
+                      );
+                    }}
+                    className="w-full py-1.5 text-xs font-medium text-blue-300 bg-blue-950/60 hover:bg-blue-900 border border-blue-800/60 rounded-lg transition-colors cursor-pointer text-center"
+                  >
+                    Buka Contoh Sistem
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Arsitektur Sandbox & Keamanan Filesystem */}
+            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-9 h-9 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white tracking-wide">
+                    Arsitektur Keamanan Filesystem Sandbox NUSANTARA
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Modul berkas dirancang aman dengan perlindungan isolasi jalur dan pencegahan path traversal.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800">
+                  <div className="font-semibold text-slate-200 mb-1 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Pembatasan Direktori Basis</span>
+                  </div>
+                  <p className="text-slate-400 leading-relaxed">
+                    Setiap operasi berkas dikunci ke direktori proyek lokal. Akses di luar batas proyek secara otomatis dinormalisasi atau ditolak.
+                  </p>
+                </div>
+
+                <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800">
+                  <div className="font-semibold text-slate-200 mb-1 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Pencegahan Serangan Traversal</span>
+                  </div>
+                  <p className="text-slate-400 leading-relaxed">
+                    Eskalasi jalur melalui segmen berulang <code className="text-rose-400">../</code> dibatasi ketat dan memicu galat runtime keamanan.
+                  </p>
+                </div>
+
+                <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800">
+                  <div className="font-semibold text-slate-200 mb-1 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Proteksi Berkas Kritis Host</span>
+                  </div>
+                  <p className="text-slate-400 leading-relaxed">
+                    Daftar hitam berkas sensitif (<code className="text-amber-300">/etc/shadow</code>, <code className="text-amber-300">.env</code>, konfigurasi OS) diblokir secara preventif.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* TAB 0: PACKAGE MANAGER NUSANTARA (PHASE 16) */}
         {activeTab === 'paket' && (
@@ -948,6 +1328,17 @@ selesai`
                       className="px-2 py-1 text-[11px] font-medium bg-amber-950/70 text-amber-300 hover:text-white border border-amber-800/60 rounded transition-colors cursor-pointer"
                     >
                       Paket &amp; Modul (P16)
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        setPlaygroundCode(
+                          `program DemonstrasiStandardLibrary\n\n// Memuat modul pustaka standar resmi NUSANTARA (Phase 17)\ngunakan "teks" sebagai teks\ngunakan "matematika" sebagai mtk\ngunakan "waktu" sebagai waktu\ngunakan "acak" sebagai acak\ngunakan "koleksi" sebagai kol\ngunakan "sistem" sebagai sys\n\nmulai\n    tampilkan("=== STANDARD LIBRARY NUSANTARA (v0.17.0) ===")\n    \n    // 1. Modul teks\n    kata : teks = teks.kapital("nusantara")\n    tampilkan("Modul teks (kapital):", kata)\n    tampilkan("Modul teks (potong):", teks.potong(kata, 0, 4))\n    \n    // 2. Modul matematika\n    tampilkan("Modul mtk (PI):", mtk.PI)\n    tampilkan("Modul mtk (maksimum 42, 100):", mtk.maksimum(42, 100))\n    tampilkan("Modul mtk (pangkat 2^8):", mtk.pangkat(2, 8))\n    \n    // 3. Modul waktu & sistem\n    tampilkan("Waktu Sekarang:", waktu.sekarang())\n    tampilkan("Versi Bahasa:", sys.versi())\n    tampilkan("Platform Host:", sys.platform())\n    \n    // 4. Modul koleksi & acak\n    daftarAngka : daftar = [50, 10, 40, 20]\n    tampilkan("Koleksi Terurut:", kol.urutkan(daftarAngka))\n    tampilkan("Bilangan Acak (1-100):", acak.bilangan(1, 100))\nselesai`
+                        )
+                      }
+                      className="px-2 py-1 text-[11px] font-medium bg-cyan-950/70 text-cyan-300 hover:text-white border border-cyan-800/60 rounded transition-colors cursor-pointer"
+                    >
+                      Stdlib (P17)
                     </button>
                   </div>
                 </div>

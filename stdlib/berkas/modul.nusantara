@@ -1,0 +1,43 @@
+// Modul Standar: berkas
+// Standard Library Bahasa Pemrograman NUSANTARA
+modul berkas
+
+ekspor fungsi ada(jalur : teks) : logika
+mulai
+    kembalikan salah
+selesai
+
+ekspor fungsi baca(jalur : teks) : teks
+mulai
+    kembalikan ""
+selesai
+
+ekspor fungsi tulis(jalur : teks, isi : teks) : logika
+mulai
+    kembalikan benar
+selesai
+
+ekspor fungsi tambah(jalur : teks, isi : teks) : logika
+mulai
+    kembalikan benar
+selesai
+
+ekspor fungsi ukuran(jalur : teks) : bilangan
+mulai
+    kembalikan 0
+selesai
+
+ekspor fungsi buatDirektori(jalur : teks) : logika
+mulai
+    kembalikan benar
+selesai
+
+ekspor fungsi daftarDirektori(jalur : teks) : daftar
+mulai
+    kembalikan []
+selesai
+
+ekspor fungsi dapatkanJalurBasis() : teks
+mulai
+    kembalikan ""
+selesai

@@ -1,0 +1,39 @@
+// Modul Standar: sistem
+// Standard Library Bahasa Pemrograman NUSANTARA
+modul sistem
+
+ekspor tetap VERSI : teks = "0.17.0"
+
+ekspor fungsi versi() : teks
+mulai
+    kembalikan VERSI
+selesai
+
+ekspor fungsi platform() : teks
+mulai
+    kembalikan "nusantara"
+selesai
+
+ekspor fungsi arsitektur() : teks
+mulai
+    kembalikan "arsitektur"
+selesai
+
+ekspor fungsi argumen() : daftar
+mulai
+    kembalikan []
+selesai
+
+ekspor fungsi ambilEnv(kunci : teks) : apapun
+mulai
+    kembalikan ""
+selesai
+
+ekspor fungsi waktuOperasi() : bilangan
+mulai
+    kembalikan 0
+selesai
+
+ekspor fungsi keluar(kode : bilangan) : kosong
+mulai
+selesai

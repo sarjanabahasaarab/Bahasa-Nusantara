@@ -1,0 +1,28 @@
+// Modul Standar: konversi
+// Standard Library Bahasa Pemrograman NUSANTARA
+modul konversi
+
+ekspor fungsi keTeks(nilai : apapun) : teks
+mulai
+    kembalikan ""
+selesai
+
+ekspor fungsi keBilangan(s : teks) : bilangan
+mulai
+    kembalikan 0
+selesai
+
+ekspor fungsi keDesimal(s : apapun) : desimal
+mulai
+    kembalikan 0.0
+selesai
+
+ekspor fungsi keBulat(x : desimal) : bilangan
+mulai
+    kembalikan 0
+selesai
+
+ekspor fungsi keLogika(nilai : apapun) : logika
+mulai
+    kembalikan benar
+selesai

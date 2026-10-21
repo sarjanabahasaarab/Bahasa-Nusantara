@@ -1,0 +1,48 @@
+// Modul Standar: teks
+// Standard Library Bahasa Pemrograman NUSANTARA
+modul teks
+
+ekspor fungsi panjang(s : teks) : bilangan
+mulai
+    kembalikan s.panjang()
+selesai
+
+ekspor fungsi gabung(daftarTeks : daftar, pemisah : teks) : teks
+mulai
+    kembalikan ""
+selesai
+
+ekspor fungsi potong(s : teks, mulaiIndeks : bilangan, akhirIndeks : bilangan) : teks
+mulai
+    kembalikan ""
+selesai
+
+ekspor fungsi cari(s : teks, target : teks) : bilangan
+mulai
+    kembalikan 0
+selesai
+
+ekspor fungsi kapital(s : teks) : teks
+mulai
+    kembalikan ""
+selesai
+
+ekspor fungsi kecil(s : teks) : teks
+mulai
+    kembalikan ""
+selesai
+
+ekspor fungsi pangkas(s : teks) : teks
+mulai
+    kembalikan ""
+selesai
+
+ekspor fungsi berisi(s : teks, target : teks) : logika
+mulai
+    kembalikan benar
+selesai
+
+ekspor fungsi ganti(s : teks, target : teks, pengganti : teks) : teks
+mulai
+    kembalikan ""
+selesai

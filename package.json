@@ -20,7 +20,8 @@
     "test:struktur-data": "tsx pengujian/struktur_data/uji_struktur_data.ts",
     "test:modul": "tsx pengujian/modul/uji_modul.ts",
     "test:paket": "tsx pengujian/paket/uji_paket.ts",
-    "test": "node skrip/periksa_fondasi.js && tsx pengujian/lexer/uji_lexer.ts && tsx pengujian/parser/uji_parser.ts && tsx pengujian/interpreter/uji_interpreter.ts && tsx pengujian/tipe/uji_tipe.ts && tsx pengujian/operator/uji_operator.ts && tsx pengujian/percabangan/uji_percabangan.ts && tsx pengujian/perulangan/uji_perulangan.ts && tsx pengujian/fungsi/uji_fungsi.ts && tsx pengujian/struktur_data/uji_struktur_data.ts && tsx pengujian/modul/uji_modul.ts && tsx pengujian/paket/uji_paket.ts"
+    "test:stdlib": "tsx pengujian/stdlib/uji_stdlib.ts",
+    "test": "node skrip/periksa_fondasi.js && tsx pengujian/lexer/uji_lexer.ts && tsx pengujian/parser/uji_parser.ts && tsx pengujian/interpreter/uji_interpreter.ts && tsx pengujian/tipe/uji_tipe.ts && tsx pengujian/operator/uji_operator.ts && tsx pengujian/percabangan/uji_percabangan.ts && tsx pengujian/perulangan/uji_perulangan.ts && tsx pengujian/fungsi/uji_fungsi.ts && tsx pengujian/struktur_data/uji_struktur_data.ts && tsx pengujian/modul/uji_modul.ts && tsx pengujian/paket/uji_paket.ts && tsx pengujian/stdlib/uji_stdlib.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

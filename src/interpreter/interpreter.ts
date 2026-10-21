@@ -64,6 +64,7 @@ import {
   PembacaBerkasMemori,
   CatatanModul,
 } from '../modul';
+import { SandboxBerkas } from '../stdlib';
 
 export interface OpsiInterpreter {
   maksimalIterasiPerulangan?: number;
@@ -71,10 +72,13 @@ export interface OpsiInterpreter {
   resolverModul?: ResolverModul;
   pembacaBerkas?: PembacaBerkas;
   direktoriBasis?: string;
+  sandboxBerkas?: SandboxBerkas;
+  argumenCLI?: string[];
+  envOverrides?: Record<string, string>;
 }
 
 /**
- * Mesin Interpreter Resmi Bahasa NUSANTARA (Phase 8 & 15).
+ * Mesin Interpreter Resmi Bahasa NUSANTARA (Phase 8, 15, & 17).
  * Mengevaluasi dan mengeksekusi pohon sintaksis abstrak (AST) hasil Parser.
  */
 export class Interpreter {
@@ -104,7 +108,13 @@ export class Interpreter {
       const resolver =
         opsi?.resolverModul ||
         new ResolverModul(pembaca, { direktoriAkarProyek: opsi?.direktoriBasis });
-      this.pemuatModul = new PemuatModul(resolver, pembaca);
+      const sandboxBerkas =
+        opsi?.sandboxBerkas || new SandboxBerkas(pembaca, opsi?.direktoriBasis);
+      this.pemuatModul = new PemuatModul(resolver, pembaca, {
+        sandboxBerkas,
+        argumenCLI: opsi?.argumenCLI,
+        envOverrides: opsi?.envOverrides,
+      });
     }
 
     // Registrasi fungsi bawaan resmi

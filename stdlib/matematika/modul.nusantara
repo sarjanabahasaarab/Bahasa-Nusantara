@@ -1,0 +1,54 @@
+// Modul Standar: matematika
+// Standard Library Bahasa Pemrograman NUSANTARA
+modul matematika
+
+ekspor tetap PI : desimal = 3.141592653589793
+ekspor tetap E : desimal = 2.718281828459045
+
+ekspor fungsi absolut(x : bilangan) : bilangan
+mulai
+    kembalikan x
+selesai
+
+ekspor fungsi bulat(x : desimal) : bilangan
+mulai
+    kembalikan 0
+selesai
+
+ekspor fungsi lantai(x : desimal) : bilangan
+mulai
+    kembalikan 0
+selesai
+
+ekspor fungsi plafon(x : desimal) : bilangan
+mulai
+    kembalikan 0
+selesai
+
+ekspor fungsi pangkat(basis : bilangan, eksponen : bilangan) : bilangan
+mulai
+    kembalikan 1
+selesai
+
+ekspor fungsi akar(x : desimal) : desimal
+mulai
+    kembalikan 0.0
+selesai
+
+ekspor fungsi minimum(a : bilangan, b : bilangan) : bilangan
+mulai
+    jika a < b maka
+        kembalikan a
+    selain itu
+        kembalikan b
+    selesai
+selesai
+
+ekspor fungsi maksimum(a : bilangan, b : bilangan) : bilangan
+mulai
+    jika a > b maka
+        kembalikan a
+    selain itu
+        kembalikan b
+    selesai
+selesai

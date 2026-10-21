@@ -1,0 +1,18 @@
+// Modul Standar: acak
+// Standard Library Bahasa Pemrograman NUSANTARA
+modul acak
+
+ekspor fungsi desimal() : desimal
+mulai
+    kembalikan 0.5
+selesai
+
+ekspor fungsi bilangan(min : bilangan, maks : bilangan) : bilangan
+mulai
+    kembalikan min
+selesai
+
+ekspor fungsi pilih(d : daftar) : apapun
+mulai
+    kembalikan d[0]
+selesai

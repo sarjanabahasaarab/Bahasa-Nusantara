@@ -38,6 +38,10 @@ export class PembacaBerkasMemori implements PembacaBerkas {
     this.berkas.delete(absolut);
   }
 
+  public dapatkanSemuaBerkas(): Map<string, string> {
+    return new Map(this.berkas);
+  }
+
   public apakahAda(jalur: string): boolean {
     const absolut = this.jalurAbsolut(jalur);
     return this.berkas.has(absolut);

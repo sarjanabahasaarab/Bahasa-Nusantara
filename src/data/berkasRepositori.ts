@@ -8,6 +8,39 @@ export interface BerkasRepo {
 }
 
 export const BERKAS_REPOSITORI: BerkasRepo[] = [
+  // --- FASE 17: STANDARD LIBRARY NUSANTARA ---
+  {
+    jalur: 'docs/referensi/standard-library.md',
+    nama: 'standard-library.md',
+    kategori: 'Referensi Pengguna Standard Library',
+    bahasa: 'markdown',
+    ukuran: 7200,
+    konten: `# Referensi Pengguna: Standard Library Bahasa NUSANTARA (Phase 17)\n\nPanduan referensi 8 modul standar resmi: teks, matematika, konversi, waktu, acak, koleksi, berkas, dan sistem beserta kebijakan Sandbox Filesystem.`
+  },
+  {
+    jalur: 'docs/pengembang/standard-library.md',
+    nama: 'standard-library.md (Pengembang)',
+    kategori: 'Arsitektur Teknis Standard Library',
+    bahasa: 'markdown',
+    ukuran: 5800,
+    konten: `# Panduan Pengembang: Standard Library Bahasa NUSANTARA (Phase 17)\n\nArsitektur registrasi simbol ekspor modul, pabrik runtime, resolusi modul presedensi, dan SandboxBerkas.`
+  },
+  {
+    jalur: 'pengujian/stdlib/uji_stdlib.ts',
+    nama: 'uji_stdlib.ts',
+    kategori: '22 Pengujian Standard Library',
+    bahasa: 'javascript',
+    ukuran: 21000,
+    konten: `// Rangkaian 22 Uji Komprehensif Standard Library Bahasa NUSANTARA (Phase 17)`
+  },
+  {
+    jalur: 'src/stdlib/index.ts',
+    nama: 'index.ts (stdlib)',
+    kategori: 'Katalog Modul Standar',
+    bahasa: 'javascript',
+    ukuran: 4800,
+    konten: `// Registri dan normalisasi nama modul standar resmi NUSANTARA`
+  },
   // --- FASE 16: PACKAGE MANAGER NUSANTARA ---
   {
     jalur: 'docs/referensi/package-manager.md',
@@ -475,7 +508,7 @@ export const DAFTAR_FASE_ROADMAP = [
   { fase: 14, nama: 'Struktur Data (Daftar & Peta)', versi: 'v0.14.0', kategori: 'Fitur Lanjut', status: 'Selesai' },
   { fase: 15, nama: 'Sistem Modul', versi: 'v0.15.0', kategori: 'Fitur Lanjut', status: 'Selesai' },
   { fase: 16, nama: 'Package Manager (nusantara)', versi: 'v0.16.0', kategori: 'Ekosistem', status: 'Selesai' },
-  { fase: 17, nama: 'Pewarisan & Antarmuka', versi: 'v0.17.0', kategori: 'Fitur Lanjut', status: 'Rencana' },
+  { fase: 17, nama: 'Standard Library (stdlib)', versi: 'v0.17.0', kategori: 'Ekosistem', status: 'Selesai' },
   { fase: 18, nama: 'Penanganan Kesalahan', versi: 'v0.18.0', kategori: 'Fitur Lanjut', status: 'Rencana' },
   { fase: 19, nama: 'Generik', versi: 'v0.19.0', kategori: 'Fitur Lanjut', status: 'Rencana' },
   { fase: 20, nama: 'Pemrograman Asinkron', versi: 'v0.20.0', kategori: 'Fitur Lanjut', status: 'Rencana' },

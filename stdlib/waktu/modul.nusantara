@@ -1,0 +1,38 @@
+// Modul Standar: waktu
+// Standard Library Bahasa Pemrograman NUSANTARA
+modul waktu
+
+ekspor fungsi sekarang() : teks
+mulai
+    kembalikan ""
+selesai
+
+ekspor fungsi tanggal() : teks
+mulai
+    kembalikan ""
+selesai
+
+ekspor fungsi jam() : bilangan
+mulai
+    kembalikan 0
+selesai
+
+ekspor fungsi menit() : bilangan
+mulai
+    kembalikan 0
+selesai
+
+ekspor fungsi detik() : bilangan
+mulai
+    kembalikan 0
+selesai
+
+ekspor fungsi timestamp() : bilangan
+mulai
+    kembalikan 0
+selesai
+
+ekspor fungsi format(ts : bilangan, pola : teks) : teks
+mulai
+    kembalikan ""
+selesai

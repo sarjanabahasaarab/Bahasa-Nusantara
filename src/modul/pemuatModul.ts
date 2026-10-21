@@ -30,26 +30,36 @@ import {
 import { GalatRuntime, JenisGalatRuntime } from '../interpreter/galat';
 import { PemeriksaTipe } from '../tipe/pemeriksaTipe';
 import { PosisiSumber } from '../lexer/posisi';
+import { normalisasiNamaModulStandar, buatCatatanModulStandar, SandboxBerkas } from '../stdlib';
 
 export interface OpsiPemuatModul {
   resolver?: ResolverModul;
   pembaca?: PembacaBerkas;
+  sandboxBerkas?: SandboxBerkas;
+  argumenCLI?: string[];
+  envOverrides?: Record<string, string>;
 }
 
 /**
- * Pemuat Modul (Module Loader & Cache) Bahasa NUSANTARA (Phase 15).
+ * Pemuat Modul (Module Loader & Cache) Bahasa NUSANTARA (Phase 15 & 17).
  * Bertanggung jawab atas siklus hidup modul, pencegahan pemuatan ganda,
- * dan deteksi ketergantungan melingkar (*circular dependency*).
+ * integrasi Standard Library resmi, dan deteksi ketergantungan melingkar.
  */
 export class PemuatModul {
   private readonly resolver: ResolverModul;
   private readonly pembaca: PembacaBerkas;
+  private readonly sandboxBerkas?: SandboxBerkas;
+  private readonly argumenCLI?: string[];
+  private readonly envOverrides?: Record<string, string>;
   private readonly cache = new Map<string, CatatanModul>();
   private readonly tumpukanPemuatan: Array<{ id: string; nama: string; posisi?: PosisiSumber }> = [];
 
-  constructor(resolver: ResolverModul, pembaca: PembacaBerkas) {
+  constructor(resolver: ResolverModul, pembaca: PembacaBerkas, opsi?: OpsiPemuatModul) {
     this.resolver = resolver;
     this.pembaca = pembaca;
+    this.sandboxBerkas = opsi?.sandboxBerkas;
+    this.argumenCLI = opsi?.argumenCLI;
+    this.envOverrides = opsi?.envOverrides;
   }
 
   /**
@@ -74,6 +84,21 @@ export class PemuatModul {
     this.tumpukanPemuatan.length = 0;
   }
 
+  public dapatkanAtauBuatModulStandar(namaStd: string): CatatanModul {
+    const idStd = `stdlib:${namaStd}`;
+    if (this.cache.has(idStd)) {
+      return this.cache.get(idStd)!;
+    }
+    const catatanStd = buatCatatanModulStandar(namaStd, {
+      sandboxBerkas: this.sandboxBerkas,
+      argumenCLI: this.argumenCLI,
+      envOverrides: this.envOverrides,
+    });
+    this.cache.set(idStd, catatanStd);
+    this.cache.set(namaStd, catatanStd);
+    return catatanStd;
+  }
+
   /**
    * Memuat modul secara utuh, menangani parsing, type checking, isolasi scope, dan ekstraksi ekspor.
    */
@@ -82,8 +107,35 @@ export class PemuatModul {
     direktoriPemanggil?: string,
     posisi?: PosisiSumber
   ): CatatanModul {
+    const bersih = namaAtauJalur.trim().replace(/^["']|["']$/g, '');
+
+    // 0. Jika terdapat prefix resmi std:, langsung muat modul standar
+    const prefixDikenal = ['std:', 'stdlib:', 'nusantara:', 'std/', 'stdlib/', 'nusantara/'];
+    if (prefixDikenal.some(p => bersih.startsWith(p))) {
+      const namaStd = normalisasiNamaModulStandar(bersih);
+      if (namaStd) {
+        return this.dapatkanAtauBuatModulStandar(namaStd);
+      }
+    }
+
+    // Periksa cache berdasarkan nama atau jalur langsung
+    if (this.cache.has(namaAtauJalur)) {
+      const c = this.cache.get(namaAtauJalur)!;
+      if (c.status === StatusPemuatanModul.SUDAH_DIMUAT) return c;
+    }
+
     // 1. Selesaikan lokasi berkas fisik secara aman melalui Resolver
-    const jalurKanonikal = this.resolver.selesaikan(namaAtauJalur, direktoriPemanggil, posisi);
+    let jalurKanonikal: string;
+    try {
+      jalurKanonikal = this.resolver.selesaikan(namaAtauJalur, direktoriPemanggil, posisi);
+    } catch (err: any) {
+      // Jika berkas fisik tidak ditemukan, periksa apakah nama modul merupakan Standard Library
+      const namaStd = normalisasiNamaModulStandar(namaAtauJalur);
+      if (namaStd) {
+        return this.dapatkanAtauBuatModulStandar(namaStd);
+      }
+      throw err;
+    }
 
     // Dapatkan nama identitas modul dari nama berkas (tanpa ekstensi .nusantara)
     const namaBerkas = jalurKanonikal.replace(/\\/g, '/').split('/').pop() || namaAtauJalur;

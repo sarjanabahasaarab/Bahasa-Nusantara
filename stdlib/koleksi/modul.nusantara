@@ -1,0 +1,43 @@
+// Modul Standar: koleksi
+// Standard Library Bahasa Pemrograman NUSANTARA
+modul koleksi
+
+ekspor fungsi panjang(k : apapun) : bilangan
+mulai
+    kembalikan 0
+selesai
+
+ekspor fungsi kosong(k : apapun) : logika
+mulai
+    kembalikan benar
+selesai
+
+ekspor fungsi berisi(d : daftar, item : apapun) : logika
+mulai
+    kembalikan salah
+selesai
+
+ekspor fungsi cari(d : daftar, item : apapun) : bilangan
+mulai
+    kembalikan -1
+selesai
+
+ekspor fungsi balik(d : daftar) : daftar
+mulai
+    kembalikan d
+selesai
+
+ekspor fungsi urutkan(d : daftar) : daftar
+mulai
+    kembalikan d
+selesai
+
+ekspor fungsi gabung(d1 : daftar, d2 : daftar) : daftar
+mulai
+    kembalikan d1
+selesai
+
+ekspor fungsi iris(d : daftar, mulaiIndeks : bilangan, akhirIndeks : bilangan) : daftar
+mulai
+    kembalikan d
+selesai
