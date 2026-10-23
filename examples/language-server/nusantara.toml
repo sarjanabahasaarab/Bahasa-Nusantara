@@ -1,0 +1,12 @@
+[nusantara]
+nama = "demo-lsp"
+versi = "0.20.0"
+deskripsi = "Proyek percontohan pengujian Language Server dan integrasi IDE NUSANTARA"
+lisensi = "Apache-2.0"
+penulis = "Tim Pengembang Nusantara"
+
+[dependensi]
+
+[format]
+indentasi = 4
+panjang_baris = 100

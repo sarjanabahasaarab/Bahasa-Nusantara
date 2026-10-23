@@ -8,6 +8,47 @@ export interface BerkasRepo {
 }
 
 export const BERKAS_REPOSITORI: BerkasRepo[] = [
+  // --- FASE 20: LANGUAGE SERVER & DEVELOPER TOOLS NUSANTARA ---
+  {
+    jalur: 'docs/referensi/language-server.md',
+    nama: 'language-server.md',
+    kategori: 'Referensi Pengguna Language Server',
+    bahasa: 'markdown',
+    ukuran: 6500,
+    konten: `# Referensi Pengguna: Language Server Protocol (LSP) NUSANTARA (Phase 20)\n\nDokumen panduan resmi integrasi editor VS Code, Neovim, Emacs dengan NUSANTARA Language Server via stdio JSON-RPC 2.0.`
+  },
+  {
+    jalur: 'docs/pengembang/language-server.md',
+    nama: 'language-server.md (Pengembang)',
+    kategori: 'Arsitektur Teknis Language Server',
+    bahasa: 'markdown',
+    ukuran: 7200,
+    konten: `# Panduan Pengembang: Arsitektur Language Server NUSANTARA (Phase 20)\n\nArsitektur internal LSP, manajemen dokumen in-memory, invalidasi cache bertingkat, dan layanan diagnostik/kompleksi/hover/definisi/simbol.`
+  },
+  {
+    jalur: 'pengujian/lsp/uji_lsp.ts',
+    nama: 'uji_lsp.ts',
+    kategori: '32 Pengujian Language Server',
+    bahasa: 'javascript',
+    ukuran: 26000,
+    konten: `// Rangkaian 32 Uji Komprehensif Language Server Protocol (LSP) dan Developer Tools NUSANTARA (Phase 20)`
+  },
+  {
+    jalur: 'src/language-server/server.ts',
+    nama: 'server.ts (lsp)',
+    kategori: 'Inti Language Server LSP',
+    bahasa: 'javascript',
+    ukuran: 12500,
+    konten: `// Server Bahasa Resmi NUSANTARA (LSP Core): Lifecycle, Request Dispatcher, dan Protokol Stdio Aman`
+  },
+  {
+    jalur: 'editors/vscode/package.json',
+    nama: 'package.json (vscode)',
+    kategori: 'Manifest Ekstensi VS Code',
+    bahasa: 'teks',
+    ukuran: 1500,
+    konten: `// Manifest ekstensi editor VS Code untuk bahasa pemrograman NUSANTARA`
+  },
   // --- FASE 19: TOOLCHAIN & FORMATTER NUSANTARA ---
   {
     jalur: 'docs/referensi/formatter.md',
@@ -609,7 +650,7 @@ export const DAFTAR_FASE_ROADMAP = [
   { fase: 17, nama: 'Standard Library (stdlib)', versi: 'v0.17.0', kategori: 'Ekosistem', status: 'Selesai' },
   { fase: 18, nama: 'Sistem Error & Debugging', versi: 'v0.18.0', kategori: 'Mesin Inti', status: 'Selesai' },
   { fase: 19, nama: 'Toolchain & Formatter', versi: 'v0.19.0', kategori: 'Tooling', status: 'Selesai' },
-  { fase: 20, nama: 'Language Server & Developer Tools', versi: 'v0.20.0', kategori: 'Tooling', status: 'Rencana' },
+  { fase: 20, nama: 'Language Server & Developer Tools', versi: 'v0.20.0', kategori: 'Tooling', status: 'Selesai' },
   { fase: 21, nama: 'Intermediate Representation', versi: 'v0.21.0', kategori: 'Kompilasi Native', status: 'Rencana' },
   { fase: 22, nama: 'Backend Compiler', versi: 'v0.22.0', kategori: 'Kompilasi Native', status: 'Rencana' },
   { fase: 23, nama: 'Executable Native', versi: 'v0.23.0', kategori: 'Kompilasi Native', status: 'Rencana' },

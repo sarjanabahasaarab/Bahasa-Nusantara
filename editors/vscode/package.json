@@ -1,0 +1,69 @@
+{
+  "name": "nusantara-lang",
+  "displayName": "NUSANTARA Programming Language Support",
+  "description": "Dukungan resmi editor VS Code untuk bahasa pemrograman NUSANTARA (LSP, Syntax Highlighting, Real-time Diagnostics, Completion, Hover, Go-to-Definition).",
+  "version": "0.20.0",
+  "publisher": "nusantara",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Snippets"
+  ],
+  "keywords": [
+    "nusantara",
+    "indonesia",
+    "language server",
+    "lsp",
+    "compiler"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:nusantara"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "nusantara",
+        "aliases": [
+          "NUSANTARA",
+          "nusantara"
+        ],
+        "extensions": [
+          ".nusantara"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "nusantara",
+        "scopeName": "source.nusantara",
+        "path": "./syntaxes/nusantara.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "NUSANTARA",
+      "properties": {
+        "nusantara.lsp.path": {
+          "type": "string",
+          "default": "nusantara",
+          "description": "Jalur eksekusi biner CLI nusantara untuk menjalankan LSP server."
+        },
+        "nusantara.lsp.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Tingkat pelacakan komunikasi JSON-RPC LSP."
+        }
+      }
+    }
+  }
+}

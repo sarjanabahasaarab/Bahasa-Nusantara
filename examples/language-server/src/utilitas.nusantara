@@ -1,0 +1,11 @@
+modul utilitas
+
+// Menghitung diskon harga dengan persentase tertentu
+ekspor fungsi hitungDiskon(harga : bilangan, persen : desimal) : bilangan
+mulai
+    potongan : desimal = harga * persen
+    kembalikan harga - potongan
+selesai
+
+// Konstanta tarif pajak standar
+ekspor tetap TARIF_PAJAK : desimal = 0.11

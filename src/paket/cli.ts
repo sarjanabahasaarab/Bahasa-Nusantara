@@ -16,6 +16,7 @@ import {
   muatKonfigurasiFormatDariTOML,
   PemeriksaProyek,
 } from '../toolchain';
+import { jalankanServerBahasaStdio } from '../language-server';
 
 export interface OpsiCLI {
   pengelola?: PengelolaPaket;
@@ -99,6 +100,9 @@ export class NusantaraCLI {
             'check',
             'cek',
             'format',
+            'bahasa-server',
+            'lsp',
+            'server',
           ].includes(perintah) &&
             this.pembaca.apakahAda(perintah)))
       ) {
@@ -110,6 +114,18 @@ export class NusantaraCLI {
       }
 
       switch (perintah) {
+        case 'bahasa-server':
+        case 'lsp':
+        case 'server': {
+          // Menjalankan Language Server Protocol via stdio
+          if (typeof process !== 'undefined' && process.stdin && process.stdout) {
+            jalankanServerBahasaStdio();
+            return 0;
+          }
+          this.log('NUSANTARA Language Server v0.20.0 (LSP) siap digunakan.');
+          return 0;
+        }
+
         case 'format': {
           const target = argumenTambahan[0];
           return this.eksekusiFormat(target, {
@@ -220,7 +236,7 @@ export class NusantaraCLI {
         case 'versi':
         case '--version':
         case '-v': {
-          this.log('NUSANTARA Toolchain & Package Manager (nusantara) v0.19.0');
+          this.log('NUSANTARA Language Server, Toolchain & Package Manager (nusantara) v0.20.0 (fondasi v0.19.0)');
           return 0;
         }
 
@@ -543,17 +559,18 @@ export class NusantaraCLI {
 
   private cetakBantuan(): void {
     this.log(`
-Bahasa Pemrograman NUSANTARA (v0.19.0)
-Antarmuka Baris Perintah (CLI) & Toolchain
+Bahasa Pemrograman NUSANTARA (v0.20.0)
+Antarmuka Baris Perintah (CLI), Toolchain & Language Server
 
 Penggunaan:
   nusantara <perintah> [argumen...]
   nusantara <berkas.nusantara> [argumen...]
 
-Perintah Eksekusi & Toolchain:
+Perintah Eksekusi, Toolchain & Developer Tools:
   jalankan <berkas>      Eksekusi program NUSANTARA
   format [<berkas>|.]    Format kode sumber NUSANTARA sesuai standar resmi
   cek [<berkas>|.]       Pemeriksaan sintaksis, sistem tipe, dan linter tanpa eksekusi
+  bahasa-server, lsp     Menjalankan Language Server Protocol (LSP) via stdio untuk IDE/Editor
 
 Perintah Manajemen Paket:
   buat <nama>            Membuat paket atau proyek baru dengan nusantara.toml

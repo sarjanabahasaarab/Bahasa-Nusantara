@@ -1,6 +1,6 @@
 {
   "name": "NUSANTARA - Bahasa Pemrograman Indonesia",
-  "description": "Toolchain, formatter AST deterministik, sistem pemeriksaan, dan portal ekosistem bahasa pemrograman NUSANTARA v0.19.0.",
+  "description": "Language Server Protocol (LSP), developer tools, real-time diagnostics, autokompleksi, dan ekosistem bahasa pemrograman NUSANTARA v0.20.0.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

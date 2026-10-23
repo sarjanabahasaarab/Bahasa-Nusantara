@@ -1,0 +1,21 @@
+program UtamaLSP
+
+gunakan "matematika" sebagai mtk
+gunakan "utilitas" sebagai util
+
+fungsi sapaPengguna(nama : teks) : teks
+mulai
+    kembalikan "Halo, " + nama
+selesai
+
+mulai
+    hargaAwal : bilangan = 100000
+    hargaDiskon : bilangan = util.hitungDiskon(hargaAwal, 0.20)
+    pajak : desimal = util.TARIF_PAJAK
+    radius : desimal = 14.0
+    luas : desimal = mtk.PI * radius * radius
+
+    tampilkan(sapaPengguna("Programmer"))
+    tampilkan("Harga setelah diskon:", hargaDiskon)
+    tampilkan("Luas lingkaran:", luas)
+selesai
