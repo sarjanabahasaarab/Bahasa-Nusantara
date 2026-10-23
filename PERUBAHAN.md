@@ -4,6 +4,55 @@ Seluruh perubahan penting pada proyek bahasa pemrograman NUSANTARA dicatat dalam
 
 Format penomoran versi mengacu pada **Semantic Versioning** (`vMAJOR.MINOR.PATCH`). Pada masa pengembangan awal, versi minor mencerminkan tahapan fase roadmap (misal `v0.1.0` untuk Phase 1, `v0.2.0` untuk Phase 2, `v0.3.0` untuk Phase 3, `v0.4.0` untuk Phase 4, `v0.5.0` untuk Phase 5, `v0.6.0` untuk Phase 6, `v0.7.0` untuk Phase 7, `v0.8.0` untuk Phase 8, `v0.9.0` untuk Phase 9, `v0.10.0` untuk Phase 10).
 
+## [v0.19.0] — 2026-10-22
+### Phase 19: Toolchain & Formatter NUSANTARA
+
+Fase ini mengimplementasikan toolchain terpadu bahasa pemrograman NUSANTARA yang mencakup formatter resmi berbasis AST (*Abstract Syntax Tree*), protokol keselamatan *safety check* (re-parsing), linter statis dengan rule ID stabil (`NUS-W001`..`NUS-W004`), konfigurasi berkas `nusantara.toml` (`[format]`), dan pemeriksa proyek/berkas (`nusantara cek`).
+
+#### Ditambahkan:
+- **Subsistem Toolchain (`src/toolchain/`):**
+  - `src/toolchain/konfigurasi.ts`: Antarmuka `KonfigurasiFormat`, nilai baku (`indentasi: 4`, `panjangBaris: 100`, `pertahankanKomentar: benar`), dan parser konfigurasi dari manifest `nusantara.toml`.
+  - `src/toolchain/formatter.ts`: Implementasi `FormatterNUSANTARA`, `formatKode()`, `formatAman()`, serta AST pretty-printer untuk seluruh simpul program, fungsi, percabangan, perulangan, koleksi, dan modul.
+  - `src/toolchain/linter.ts`: Mesin `LinterNUSANTARA` dengan aturan diagnostik peringatan:
+    - `NUS-W001`: Variabel tidak pernah digunakan (mendukung pengecualian awalan `_`).
+    - `NUS-W002`: Kode yang tidak pernah dieksekusi (*unreachable code*).
+    - `NUS-W003`: Perbandingan variabel dengan dirinya sendiri.
+    - `NUS-W004`: Simbol impor tidak pernah digunakan.
+  - `src/toolchain/pemeriksa.ts`: Mesin `PemeriksaProyek` untuk validasi berkas tunggal (`periksaBerkas`) dan validasi menyeluruh struktur proyek (`periksaProyek`) yang memeriksa manifes, lockfile, sintaksis parser, tipe statis, dan linter.
+- **Perintah CLI Baru (`src/paket/cli.ts`):**
+  - `nusantara format <berkas|direktori>`: Menghasilkan kode terformat ke terminal.
+  - `nusantara format --tulis <berkas|direktori>` (atau `-w`): Menulis perubahan ke berkas secara aman setelah lolos *safety check*.
+  - `nusantara format --cek <berkas|direktori>`: Memeriksa apakah berkas sudah rapi tanpa mengubahnya.
+  - `nusantara cek [<berkas|direktori>]`: Memeriksa keabsahan kode dan manifes tanpa menjalankan program.
+  - Opsi `--json`: Format diagnostik terstruktur untuk integrasi pihak ketiga.
+- **Preservasi String & Komentar:**
+  - `src/lexer/lexer.ts`: Dukungan pencatatan `KomentarSumber` dan fungsi `dapatkanDaftarKomentar()`.
+  - Penenunan komentar baris penuh dan inline pada hasil pretty-printer.
+- **Dokumentasi & Pengujian:**
+  - `docs/referensi/formatter.md`, `docs/referensi/toolchain.md`, `docs/pengembang/formatter.md`.
+  - `examples/toolchain/format-before.nusantara`, `examples/toolchain/format-after.nusantara`, `examples/toolchain/checker-example.nusantara`.
+  - `pengujian/toolchain/uji_toolchain.ts`: 54 uji komprehensif (100% Lulus).
+
+---
+
+## [v0.18.0] — 2026-10-21
+### Phase 18: Sistem Error & Debugging NUSANTARA
+Implementasi sistem diagnostik ramah manusia dengan 12 kategori terstruktur, visual caret `^^^^`, saran saltik Levenshtein, dan pelacakan tumpukan (*stack trace*).
+
+---
+
+## [v0.17.0] — 2026-10-20
+### Phase 17: Standard Library NUSANTARA
+Implementasi 8 modul standar resmi (`teks`, `matematika`, `konversi`, `waktu`, `acak`, `koleksi`, `berkas`, `sistem`) dengan isolasi keamanan Sandbox Filesystem.
+
+---
+
+## [v0.16.0] — 2026-10-20
+### Phase 16: Package Manager NUSANTARA (`nusantara`)
+Implementasi pengelola paket resmi dengan manifest `nusantara.toml`, berkas kunci `nusantara.lock`, pencegahan siklus DFS, dan validasi SemVer.
+
+---
+
 ## [v0.15.0] — 2026-10-19
 ### Phase 15: Sistem Modul NUSANTARA
 

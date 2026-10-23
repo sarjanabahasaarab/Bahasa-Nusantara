@@ -1,0 +1,21 @@
+// Contoh kode sumber sebelum diformat oleh toolchain NUSANTARA
+fungsi hitungDiskon(harga:bilangan,persen:desimal):bilangan
+mulai
+// Hitung nilai potongan
+variabel potongan:desimal=harga*persen
+kembalikan harga-potongan
+selesai
+
+program TokoNusantara
+mulai
+variabel  namaBarang:teks="Buku Tata Bahasa" // barang dagangan
+variabel  hargaAwal:bilangan=150000
+variabel diskon:desimal=0.15
+
+variabel hargaBersih:bilangan=hitungDiskon(hargaAwal,diskon)
+jika hargaBersih<100000 maka
+tampilkan("Dapat Kupon Spesial")
+selain
+tampilkan("Harga Normal")
+akhir
+selesai

@@ -24,21 +24,21 @@ Setiap fase merupakan pencapaian rekayasa piranti lunak (*engineering milestone*
 | **Phase 12** | Perulangan Iteratif Lanjutan | `v0.12.0` | **Selesai** |
 | **Phase 13** | Fungsi & Prosedur Lanjutan | `v0.13.0` | **Selesai** |
 | **Phase 14** | Struktur Data (Daftar & Peta) | `v0.14.0` | **Selesai** |
-| **Phase 15** | **Modul & Ruang Nama (*Namespace*)** | `v0.15.0` | **Selesai (Fase Saat Ini)** |
-| **Phase 16** | Sistem Paket / Package Manager NUSANTARA | `v0.16.0` | Direncanakan Berikutnya |
-| **Phase 17** | Kelas & Objek (OOP) | `v0.17.0` | Direncanakan |
-| **Phase 18** | Penanganan Kesalahan (*Error Handling*) | `v0.18.0` | Direncanakan |
-| **Phase 19** | Generik (*Generics & Parametric Polymorphism*) | `v0.19.0` | Direncanakan |
-| **Phase 20** | Pemrograman Asinkron (*Async/Await*) | `v0.20.0` | Direncanakan |
+| **Phase 15** | Modul & Ruang Nama (*Namespace*) | `v0.15.0` | **Selesai** |
+| **Phase 16** | Sistem Paket / Package Manager NUSANTARA | `v0.16.0` | **Selesai** |
+| **Phase 17** | Standard Library (8 Modul Bawaan & Sandbox I/O) | `v0.17.0` | **Selesai** |
+| **Phase 18** | Sistem Error & Debugging (12 Kategori, Caret ^^^^, Typo) | `v0.18.0` | **Selesai** |
+| **Phase 19** | **Toolchain & Formatter (AST Pretty-Printer & Validator)** | `v0.19.0` | **Selesai (Fase Saat Ini)** |
+| **Phase 20** | Language Server & Developer Tools (LSP & IDE Foundation) | `v0.20.0` | Direncanakan Berikutnya |
 | **Phase 21** | Intermediate Representation (IR Nusantara) | `v0.21.0` | Direncanakan |
 | **Phase 22** | Backend Compiler (LLVM / Pembangkit Kode) | `v0.22.0` | Direncanakan |
 | **Phase 23** | Executable Native (Biner Mesin Mandiri) | `v0.23.0` | Direncanakan |
 | **Phase 24** | Optimasi Compiler (DCE, Inlining, Loop Unrolling) | `v0.24.0` | Direncanakan |
-| **Phase 25** | Sistem Build (*Build System & Toolchain*) | `v0.25.0` | Direncanakan |
-| **Phase 26** | CLI Bahasa Nusantara (`nusantara`) | `v0.26.0` | Direncanakan |
+| **Phase 25** | Sistem Build (*Build System & Toolchain Lanjut*) | `v0.25.0` | Direncanakan |
+| **Phase 26** | CLI Ekosistem Terpadu | `v0.26.0` | Direncanakan |
 | **Phase 27** | Package Manager Lanjutan (`nusantara-paket`) | `v0.27.0` | Direncanakan |
 | **Phase 28** | Package Registry (Layanan Registri Paket Terpusat) | `v0.28.0` | Direncanakan |
-| **Phase 29** | Standard Library (Pustaka Standar Lengkap) | `v0.29.0` | Direncanakan |
+| **Phase 29** | Standard Library Lanjutan (Jaringan, Kriptografi, HTTP) | `v0.29.0` | Direncanakan |
 | **Phase 30** | Format Berkas NUSANTARA (`.gambar`, `.video`, `.suara`, dll.) | `v0.30.0` | Direncanakan |
 | **Phase 31** | Extension Editor (LSP, VS Code, Neovim) | `v0.31.0` | Direncanakan |
 | **Phase 32** | NUSANTARA IDE (Lingkungan Pengembangan Terintegrasi) | `v0.32.0` | Direncanakan |

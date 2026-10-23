@@ -1,0 +1,14 @@
+// Contoh berkas untuk pengujian validasi 'nusantara cek'
+fungsi kuadrat(x: bilangan): bilangan
+mulai
+    kembalikan x * x
+selesai
+
+program UjiPemeriksa
+mulai
+    variabel batas: bilangan = 5
+    untuk i dari 1 sampai batas lakukan
+        variabel hasil: bilangan = kuadrat(i)
+        tampilkan(hasil)
+    akhir
+selesai

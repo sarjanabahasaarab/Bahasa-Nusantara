@@ -8,6 +8,63 @@ export interface BerkasRepo {
 }
 
 export const BERKAS_REPOSITORI: BerkasRepo[] = [
+  // --- FASE 19: TOOLCHAIN & FORMATTER NUSANTARA ---
+  {
+    jalur: 'docs/referensi/formatter.md',
+    nama: 'formatter.md',
+    kategori: 'Referensi Pengguna Formatter',
+    bahasa: 'markdown',
+    ukuran: 6200,
+    konten: `# Referensi Pemformat Kode Resmi (Formatter) NUSANTARA (Phase 19)\n\nPanduan penggunaan 'nusantara format', opsi --cek, --tulis, konfigurasi nusantara.toml, preservasi komentar, string, dan aturan tata letak resmi.`
+  },
+  {
+    jalur: 'docs/referensi/toolchain.md',
+    nama: 'toolchain.md',
+    kategori: 'Referensi Pengguna Toolchain',
+    bahasa: 'markdown',
+    ukuran: 6800,
+    konten: `# Referensi Toolchain Resmi NUSANTARA (Phase 19)\n\nUtilitas baris perintah CLI, pipeline pemeriksaan 'nusantara cek', aturan linter dasar (NUS-W001 s/d NUS-W004), konvensi exit code, dan format JSON.`
+  },
+  {
+    jalur: 'docs/pengembang/formatter.md',
+    nama: 'formatter.md (Pengembang)',
+    kategori: 'Arsitektur Teknis Formatter',
+    bahasa: 'markdown',
+    ukuran: 5900,
+    konten: `# Panduan Pengembang: Arsitektur Formatter & Toolchain NUSANTARA (Phase 19)\n\nSiklus kerja pretty printer AST, algoritma pelestarian komentar KomentarSumber, protokol keamanan tulis (formatAman), dan pedoman aturan linter.`
+  },
+  {
+    jalur: 'pengujian/toolchain/uji_toolchain.ts',
+    nama: 'uji_toolchain.ts',
+    kategori: '54 Pengujian Toolchain & Formatter',
+    bahasa: 'javascript',
+    ukuran: 16500,
+    konten: `// Rangkaian 54 Uji Komprehensif Toolchain, Formatter, Linter, dan Project Validator NUSANTARA (Phase 19)`
+  },
+  {
+    jalur: 'src/toolchain/formatter.ts',
+    nama: 'formatter.ts',
+    kategori: 'Pemformat Kode AST',
+    bahasa: 'javascript',
+    ukuran: 15800,
+    konten: `// Pretty printer AST, pemformatan aman, preservasi komentar dan string`
+  },
+  {
+    jalur: 'src/toolchain/linter.ts',
+    nama: 'linter.ts',
+    kategori: 'Linter Analisis Statis',
+    bahasa: 'javascript',
+    ukuran: 16000,
+    konten: `// Penganalisis statis aturan peringatan NUS-W001 s/d NUS-W004`
+  },
+  {
+    jalur: 'src/toolchain/pemeriksa.ts',
+    nama: 'pemeriksa.ts',
+    kategori: 'Validator Berkas & Proyek',
+    bahasa: 'javascript',
+    ukuran: 9200,
+    konten: `// Pemeriksa kode dan validator proyek nusantara.toml, lockfile, dan kode sumber`
+  },
   // --- FASE 18: SISTEM ERROR & DEBUGGING NUSANTARA ---
   {
     jalur: 'docs/referensi/sistem-error.md',
@@ -551,8 +608,8 @@ export const DAFTAR_FASE_ROADMAP = [
   { fase: 16, nama: 'Package Manager (nusantara)', versi: 'v0.16.0', kategori: 'Ekosistem', status: 'Selesai' },
   { fase: 17, nama: 'Standard Library (stdlib)', versi: 'v0.17.0', kategori: 'Ekosistem', status: 'Selesai' },
   { fase: 18, nama: 'Sistem Error & Debugging', versi: 'v0.18.0', kategori: 'Mesin Inti', status: 'Selesai' },
-  { fase: 19, nama: 'Generik', versi: 'v0.19.0', kategori: 'Fitur Lanjut', status: 'Rencana' },
-  { fase: 20, nama: 'Pemrograman Asinkron', versi: 'v0.20.0', kategori: 'Fitur Lanjut', status: 'Rencana' },
+  { fase: 19, nama: 'Toolchain & Formatter', versi: 'v0.19.0', kategori: 'Tooling', status: 'Selesai' },
+  { fase: 20, nama: 'Language Server & Developer Tools', versi: 'v0.20.0', kategori: 'Tooling', status: 'Rencana' },
   { fase: 21, nama: 'Intermediate Representation', versi: 'v0.21.0', kategori: 'Kompilasi Native', status: 'Rencana' },
   { fase: 22, nama: 'Backend Compiler', versi: 'v0.22.0', kategori: 'Kompilasi Native', status: 'Rencana' },
   { fase: 23, nama: 'Executable Native', versi: 'v0.23.0', kategori: 'Kompilasi Native', status: 'Rencana' },

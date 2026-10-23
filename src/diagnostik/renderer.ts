@@ -4,7 +4,7 @@
  */
 
 import { Diagnostik, TingkatDiagnostik, BingkaiJejak } from './jenis';
-import { METADATA_KODE_GALAT } from './kode';
+import { KodeGalat, METADATA_KODE_GALAT } from './kode';
 import { formatCuplikanTeks } from './cuplikan';
 
 export interface OpsiRenderer {
@@ -50,12 +50,17 @@ export function formatDiagnostik(
   const barisOutput: string[] = [];
 
   // 1. Header Tingkat & Kode Galat
-  const meta = METADATA_KODE_GALAT[diag.kode];
+  const meta = METADATA_KODE_GALAT[diag.kode as KodeGalat];
   const judulResmi = meta?.judul || diag.kategori;
-  const labelKategori = `Kesalahan ${meta?.kategori.toLowerCase() || diag.kategori.toLowerCase()}`;
+  const kataTingkat = diag.tingkat === TingkatDiagnostik.PERINGATAN ? 'Peringatan' : 'Kesalahan';
+  const labelKategori = `${kataTingkat} ${meta?.kategori.toLowerCase() || diag.kategori.toLowerCase()}`;
 
   const header = `${labelKategori} [${diag.kode}]: ${judulResmi}`;
-  barisOutput.push(pewarna(header, `${ANSI.tebal}${ANSI.merah}`));
+  const warnaHeader =
+    diag.tingkat === TingkatDiagnostik.PERINGATAN
+      ? `${ANSI.tebal}${ANSI.kuning}`
+      : `${ANSI.tebal}${ANSI.merah}`;
+  barisOutput.push(pewarna(header, warnaHeader));
 
   // 2. Lokasi Sumber
   if (diag.lokasi) {

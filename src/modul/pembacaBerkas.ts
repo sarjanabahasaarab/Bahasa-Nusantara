@@ -6,6 +6,9 @@
 export interface PembacaBerkas {
   apakahAda(jalur: string): boolean;
   baca(jalur: string): string;
+  tulis?(jalur: string, konten: string): void;
+  daftarDirektori?(jalur: string): string[];
+  apakahDirektori?(jalur: string): boolean;
   jalurAbsolut(jalur: string): string;
   direktoriDari(jalur: string): string;
   gabungJalur(...bagian: string[]): string;
@@ -28,6 +31,10 @@ export class PembacaBerkasMemori implements PembacaBerkas {
     }
   }
 
+  public tulis(jalur: string, konten: string): void {
+    this.tulisBerkas(jalur, konten);
+  }
+
   public tulisBerkas(jalur: string, konten: string): void {
     const absolut = this.jalurAbsolut(jalur);
     this.berkas.set(absolut, konten);
@@ -45,6 +52,28 @@ export class PembacaBerkasMemori implements PembacaBerkas {
   public apakahAda(jalur: string): boolean {
     const absolut = this.jalurAbsolut(jalur);
     return this.berkas.has(absolut);
+  }
+
+  public apakahDirektori(jalur: string): boolean {
+    const absolut = this.jalurAbsolut(jalur);
+    for (const k of this.berkas.keys()) {
+      if (k.startsWith(absolut.endsWith('/') ? absolut : absolut + '/')) return true;
+    }
+    return false;
+  }
+
+  public daftarDirektori(jalur: string): string[] {
+    const absolut = this.jalurAbsolut(jalur);
+    const prefix = absolut === '/' ? '/' : (absolut.endsWith('/') ? absolut : absolut + '/');
+    const subEntri = new Set<string>();
+    for (const k of this.berkas.keys()) {
+      if (k.startsWith(prefix)) {
+        const sisa = k.slice(prefix.length);
+        const segmenPertama = sisa.split('/')[0];
+        if (segmenPertama) subEntri.add(segmenPertama);
+      }
+    }
+    return Array.from(subEntri);
   }
 
   public baca(jalur: string): string {
@@ -135,6 +164,31 @@ export class PembacaBerkasNode implements PembacaBerkas {
       throw new Error(`Sistem berkas Node.js tidak tersedia pada lingkungan saat ini.`);
     }
     return this.fs.readFileSync(jalur, 'utf-8');
+  }
+
+  public tulis(jalur: string, konten: string): void {
+    if (!this.fs) {
+      throw new Error(`Sistem berkas Node.js tidak tersedia pada lingkungan saat ini.`);
+    }
+    this.fs.writeFileSync(jalur, konten, 'utf-8');
+  }
+
+  public apakahDirektori(jalur: string): boolean {
+    if (!this.fs) return false;
+    try {
+      return this.fs.existsSync(jalur) && this.fs.statSync(jalur).isDirectory();
+    } catch {
+      return false;
+    }
+  }
+
+  public daftarDirektori(jalur: string): string[] {
+    if (!this.fs) return [];
+    try {
+      return this.fs.readdirSync(jalur);
+    } catch {
+      return [];
+    }
   }
 
   public jalurAbsolut(jalur: string): string {

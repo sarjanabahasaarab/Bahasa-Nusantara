@@ -31,6 +31,7 @@ export enum KategoriDiagnostik {
   INDEKS = 'INDEKS',
   KONVERSI = 'KONVERSI',
   INTERNAL = 'INTERNAL',
+  LINTER = 'LINTER',
 }
 
 /**
@@ -86,7 +87,7 @@ export interface KonteksEksekusi {
 export interface Diagnostik {
   tingkat: TingkatDiagnostik;
   kategori: KategoriDiagnostik;
-  kode: KodeGalat;
+  kode: KodeGalat | string;
   pesan: string;
   penyebabRinci?: string;
   lokasi?: LokasiSumberKaya;
@@ -110,7 +111,7 @@ export class GalatNusantara extends Error {
     const lokasiStr = diagnostik.lokasi
       ? ` (${diagnostik.lokasi.berkas ? diagnostik.lokasi.berkas + ':' : ''}${diagnostik.lokasi.baris}:${diagnostik.lokasi.kolom})`
       : '';
-    const judul = METADATA_KODE_GALAT[diagnostik.kode]?.judul || diagnostik.kategori;
+    const judul = METADATA_KODE_GALAT[diagnostik.kode as KodeGalat]?.judul || diagnostik.kategori;
     super(`[${diagnostik.kode}] ${judul}${lokasiStr}: ${diagnostik.pesan}`);
 
     this.name = 'GalatNusantara';
@@ -120,7 +121,7 @@ export class GalatNusantara extends Error {
     Object.setPrototypeOf(this, new.target.prototype);
   }
 
-  public dapatkanKode(): KodeGalat {
+  public dapatkanKode(): KodeGalat | string {
     return this.diagnostik.kode;
   }
 

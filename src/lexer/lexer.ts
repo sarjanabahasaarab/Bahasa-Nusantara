@@ -23,6 +23,24 @@ export interface OpsiLexer {
 }
 
 /**
+ * Representasi komentar kode sumber NUSANTARA (Phase 19).
+ */
+export interface KomentarSumber {
+  /** Isi teks komentar termasuk tanda // */
+  teks: string;
+  /** Nomor baris tempat komentar dimulai (1-indeks) */
+  baris: number;
+  /** Nomor kolom tempat komentar dimulai (1-indeks) */
+  kolom: number;
+  /** Indeks karakter awal komentar di dokumen */
+  indeksAwal: number;
+  /** Indeks karakter akhir komentar di dokumen */
+  indeksAkhir: number;
+  /** Apakah komentar berada sendiri dalam baris penuh (hanya spasi sebelumnya) */
+  apakahKomentarBarisPenuh: boolean;
+}
+
+/**
  * Penganalisis Leksikal (Lexer) Resmi Bahasa NUSANTARA (Phase 6).
  * Membaca kode sumber teks UTF-8 dan mengubahnya menjadi rangkaian token terstruktur.
  */
@@ -33,6 +51,7 @@ export class Lexer {
 
   private posisiSaatIni: PosisiSumber;
   private daftarGalat: GalatLexer[] = [];
+  private daftarKomentar: KomentarSumber[] = [];
 
   constructor(sumber: string, opsi?: OpsiLexer) {
     this.sumber = sumber;
@@ -46,6 +65,13 @@ export class Lexer {
       kolom: 1,
       indeks: 0,
     };
+  }
+
+  /**
+   * Mengambil seluruh daftar komentar yang terekam selama proses tokenisasi (Phase 19).
+   */
+  public dapatkanDaftarKomentar(): ReadonlyArray<KomentarSumber> {
+    return this.daftarKomentar;
   }
 
   /**
@@ -337,17 +363,36 @@ export class Lexer {
         continue;
       }
 
-      // Lewati komentar satu baris //
+      // Rekam dan lewati komentar satu baris // (Phase 19)
       if (c === '/' && this.karakterBerikutnya() === '/') {
-        // Lewati sampai ujung baris atau EOF
+        const posAwal = klonaPosisi(this.posisiSaatIni);
+        let teksKomentar = '';
         while (!this.sudahSelesai() && this.karakterSekarang() !== '\n') {
+          teksKomentar += this.karakterSekarang();
           this.maju();
         }
+        const posAkhir = klonaPosisi(this.posisiSaatIni);
+        const apakahKomentarBarisPenuh = posAwal.kolom === 1 || this.apakahSebelumnyaHanyaSpasiDiBarisIni(posAwal.baris, posAwal.kolom);
+        this.daftarKomentar.push({
+          teks: teksKomentar,
+          baris: posAwal.baris,
+          kolom: posAwal.kolom,
+          indeksAwal: posAwal.indeks,
+          indeksAkhir: posAkhir.indeks,
+          apakahKomentarBarisPenuh,
+        });
         continue;
       }
 
       break;
     }
+  }
+
+  private apakahSebelumnyaHanyaSpasiDiBarisIni(baris: number, kolom: number): boolean {
+    const barisTeks = this.dapatkanBarisTeks(baris);
+    if (!barisTeks) return true;
+    const awalan = barisTeks.slice(0, Math.max(0, kolom - 1));
+    return awalan.trim().length === 0;
   }
 
   private karakterSekarang(): string {

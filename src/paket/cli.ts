@@ -9,7 +9,13 @@ import { PemeriksaTipe } from '../tipe/pemeriksaTipe';
 import { Interpreter } from '../interpreter/interpreter';
 import { PenulisOutputKonsol, PenulisOutputBuffer } from '../interpreter/outputWriter';
 import { PembacaBerkas, PembacaBerkasNode, ResolverModul, PemuatModul } from '../modul';
-import { mesinDiagnostikDefault } from '../diagnostik';
+import { mesinDiagnostikDefault, formatDiagnostikKeJSON, formatDiagnostik } from '../diagnostik';
+import {
+  formatAman,
+  formatKode,
+  muatKonfigurasiFormatDariTOML,
+  PemeriksaProyek,
+} from '../toolchain';
 
 export interface OpsiCLI {
   pengelola?: PengelolaPaket;
@@ -52,18 +58,50 @@ export class NusantaraCLI {
     }
 
     const opsiDebug = args.includes('--debug');
-    const opsiJSON = args.includes('--json');
+    const opsiJSON = args.includes('--json') || args.includes('--format=json') || (args.includes('--format') && args[args.indexOf('--format') + 1] === 'json');
     const opsiTanpaWarna = args.includes('--tanpa-warna') || args.includes('--no-color');
     const opsiWarna = args.includes('--warna') ? true : opsiTanpaWarna ? false : undefined;
+    const opsiTulis = args.includes('--tulis') || args.includes('--write') || args.includes('-w');
+    const opsiCek = args.includes('--cek') || args.includes('--check');
 
     // Bersihkan flags dari argumen posisi
-    const argumenBersih = args.filter(a => !a.startsWith('--'));
+    const argumenBersih = args.filter(a => !a.startsWith('-') && a !== 'json');
     const perintah = argumenBersih[0]?.toLowerCase();
     const argumenTambahan = argumenBersih.slice(1);
 
     try {
       // Jika argumen pertama adalah berkas .nusantara, jalankan langsung
-      if (perintah && (perintah.endsWith('.nusantara') || (!['buat', 'inisialisasi', 'pasang', 'instal', 'hapus', 'buang', 'perbarui', 'update', 'daftar', 'list', 'info', 'versi', '-v', 'bantuan', '-h', 'jalankan', 'run', 'periksa', 'check'].includes(perintah) && this.pembaca.apakahAda(perintah)))) {
+      if (
+        perintah &&
+        (perintah.endsWith('.nusantara') ||
+          (![
+            'buat',
+            'inisialisasi',
+            'pasang',
+            'instal',
+            'hapus',
+            'buang',
+            'perbarui',
+            'update',
+            'daftar',
+            'list',
+            'info',
+            'versi',
+            '-v',
+            '--version',
+            'bantuan',
+            'bantu',
+            '-h',
+            '--help',
+            'jalankan',
+            'run',
+            'periksa',
+            'check',
+            'cek',
+            'format',
+          ].includes(perintah) &&
+            this.pembaca.apakahAda(perintah)))
+      ) {
         return this.jalankanBerkasProgram(perintah, argumenTambahan, {
           debug: opsiDebug,
           json: opsiJSON,
@@ -72,6 +110,28 @@ export class NusantaraCLI {
       }
 
       switch (perintah) {
+        case 'format': {
+          const target = argumenTambahan[0];
+          return this.eksekusiFormat(target, {
+            tulis: opsiTulis,
+            cek: opsiCek,
+            json: opsiJSON,
+            warna: opsiWarna,
+            debug: opsiDebug,
+          });
+        }
+
+        case 'cek':
+        case 'periksa':
+        case 'check': {
+          const berkasTarget = argumenTambahan[0];
+          return this.eksekusiCek(berkasTarget, {
+            debug: opsiDebug,
+            json: opsiJSON,
+            warna: opsiWarna,
+          });
+        }
+
         case 'jalankan':
         case 'run': {
           const berkasTarget = argumenTambahan[0];
@@ -80,26 +140,9 @@ export class NusantaraCLI {
               new Error("Perintah 'nusantara jalankan' memerlukan argumen <berkas.nusantara>.\nContoh: nusantara jalankan utama.nusantara"),
               { json: opsiJSON, warna: opsiWarna }
             );
-            return 1;
+            return 2;
           }
           return this.jalankanBerkasProgram(berkasTarget, argumenTambahan.slice(1), {
-            debug: opsiDebug,
-            json: opsiJSON,
-            warna: opsiWarna,
-          });
-        }
-
-        case 'periksa':
-        case 'check': {
-          const berkasTarget = argumenTambahan[0];
-          if (!berkasTarget) {
-            this.laporkanGalatCLI(
-              new Error("Perintah 'nusantara periksa' memerlukan argumen <berkas.nusantara>.\nContoh: nusantara periksa utama.nusantara"),
-              { json: opsiJSON, warna: opsiWarna }
-            );
-            return 1;
-          }
-          return this.periksaBerkasProgram(berkasTarget, {
             debug: opsiDebug,
             json: opsiJSON,
             warna: opsiWarna,
@@ -177,11 +220,12 @@ export class NusantaraCLI {
         case 'versi':
         case '--version':
         case '-v': {
-          this.log('NUSANTARA Toolchain & Package Manager (nusantara) v0.18.0');
+          this.log('NUSANTARA Toolchain & Package Manager (nusantara) v0.19.0');
           return 0;
         }
 
         case 'bantuan':
+        case 'bantu':
         case '--help':
         case '-h':
         case undefined: {
@@ -264,50 +308,214 @@ export class NusantaraCLI {
   }
 
   /**
-   * Periksa sintaksis dan validitas tipe program NUSANTARA tanpa mengeksekusinya.
+   * Pemformatan kode sumber NUSANTARA (Phase 19).
    */
-  private periksaBerkasProgram(
-    jalurBerkas: string,
+  private eksekusiFormat(
+    target: string | undefined,
+    opsi: { tulis?: boolean; cek?: boolean; json?: boolean; warna?: boolean; debug?: boolean }
+  ): number {
+    const targetPath = target || '.';
+    const pemeriksa = new PemeriksaProyek(this.pembaca);
+
+    let konfigurasiFormat: any = undefined;
+    if (this.pembaca.apakahAda('nusantara.toml')) {
+      try {
+        const tomlStr = this.pembaca.baca('nusantara.toml');
+        konfigurasiFormat = muatKonfigurasiFormatDariTOML(tomlStr);
+      } catch {
+        // Abaikan galat parsing konfigurasi
+      }
+    }
+
+    let daftarBerkas: string[] = [];
+    if (this.pembaca.apakahAda(targetPath) && targetPath.endsWith('.nusantara')) {
+      daftarBerkas = [targetPath];
+    } else {
+      daftarBerkas = pemeriksa.temukanBerkasNusantara(targetPath);
+    }
+
+    if (daftarBerkas.length === 0) {
+      if (targetPath.endsWith('.nusantara')) {
+        this.laporkanGalatCLI(new Error(`Berkas '${targetPath}' tidak ditemukan.`), {
+          json: opsi.json,
+          warna: opsi.warna,
+        });
+        return 1;
+      }
+      this.log(`Tidak ditemukan berkas .nusantara pada direktori '${targetPath}'.`);
+      return 0;
+    }
+
+    // Mode Pemeriksaan: --cek
+    if (opsi.cek) {
+      let semuaTerformat = true;
+      for (const berkas of daftarBerkas) {
+        try {
+          const kodeAsli = this.pembaca.baca(berkas);
+          const hasil = formatKode(kodeAsli, konfigurasiFormat);
+          if (hasil !== kodeAsli) {
+            semuaTerformat = false;
+            this.log(`File belum mengikuti format standar: ${berkas}`);
+          } else {
+            this.log(`File sudah terformat: ${berkas}`);
+          }
+        } catch (err) {
+          semuaTerformat = false;
+          this.laporkanGalatCLI(err, { namaBerkas: berkas, json: opsi.json, warna: opsi.warna });
+        }
+      }
+      return semuaTerformat ? 0 : 1;
+    }
+
+    // Mode Tulis In-Place: --tulis / -w
+    if (opsi.tulis) {
+      let adaKegagalan = false;
+      for (const berkas of daftarBerkas) {
+        try {
+          const kodeAsli = this.pembaca.baca(berkas);
+          const hasilAman = formatAman(kodeAsli, konfigurasiFormat);
+          if (!hasilAman.sukses) {
+            adaKegagalan = true;
+            this.laporkanGalatCLI(hasilAman.galat, {
+              kodeSumber: kodeAsli,
+              namaBerkas: berkas,
+              json: opsi.json,
+              warna: opsi.warna,
+            });
+            continue;
+          }
+
+          if (hasilAman.apakahBerubah && typeof this.pembaca.tulis === 'function') {
+            this.pembaca.tulis(berkas, hasilAman.hasil!);
+            this.log(`[✓ SUKSES] Berkas '${berkas}' berhasil diformat.`);
+          } else {
+            this.log(`Berkas '${berkas}' sudah rapi.`);
+          }
+        } catch (err) {
+          adaKegagalan = true;
+          this.laporkanGalatCLI(err, { namaBerkas: berkas, json: opsi.json, warna: opsi.warna });
+        }
+      }
+      return adaKegagalan ? 1 : 0;
+    }
+
+    // Mode Standar (Cetak ke stdout untuk satu berkas)
+    if (daftarBerkas.length === 1) {
+      const berkas = daftarBerkas[0];
+      try {
+        const kodeAsli = this.pembaca.baca(berkas);
+        const hasilAman = formatAman(kodeAsli, konfigurasiFormat);
+        if (!hasilAman.sukses) {
+          this.laporkanGalatCLI(hasilAman.galat, {
+            kodeSumber: kodeAsli,
+            namaBerkas: berkas,
+            json: opsi.json,
+            warna: opsi.warna,
+          });
+          return 1;
+        }
+        this.log(hasilAman.hasil!);
+        return 0;
+      } catch (err) {
+        this.laporkanGalatCLI(err, { namaBerkas: berkas, json: opsi.json, warna: opsi.warna });
+        return 1;
+      }
+    } else {
+      this.log(
+        `Ditemukan ${daftarBerkas.length} berkas .nusantara.\nGunakan '--tulis' untuk memformat berkas langsung, atau '--cek' untuk memeriksa.`
+      );
+      return 0;
+    }
+  }
+
+  /**
+   * Pemeriksaan sintaksis, sistem tipe, dan linter tanpa eksekusi (Phase 19).
+   */
+  private eksekusiCek(
+    target: string | undefined,
     opsi: { debug?: boolean; json?: boolean; warna?: boolean }
   ): number {
-    let kodeSumber = '';
-    try {
-      if (!this.pembaca.apakahAda(jalurBerkas)) {
-        throw new Error(`Berkas '${jalurBerkas}' tidak ditemukan.`);
-      }
-      kodeSumber = this.pembaca.baca(jalurBerkas);
+    const pemeriksa = new PemeriksaProyek(this.pembaca);
 
-      const parser = new Parser(kodeSumber);
-      const ast = parser.parse();
-      const galatParser = parser.dapatkanDaftarGalat();
-      if (galatParser.length > 0) {
-        throw galatParser[0];
-      }
-
-      const direktoriBerkas = this.pembaca.direktoriDari(jalurBerkas) || '.';
-      const resolver = new ResolverModul(this.pembaca, {
-        direktoriAkarProyek: direktoriBerkas,
-      });
-      const pemuat = new PemuatModul(resolver, this.pembaca);
-
-      const pemeriksaTipe = new PemeriksaTipe(pemuat);
-      const galatTipe = pemeriksaTipe.periksa(ast, direktoriBerkas);
-      if (galatTipe.length > 0) {
-        throw galatTipe[0];
+    // Kasus 1: Berkas tunggal
+    if (target && target.endsWith('.nusantara')) {
+      const hasil = pemeriksa.periksaBerkas(target);
+      if (!hasil.sukses || hasil.galat.length > 0) {
+        if (opsi.json) {
+          this.error(JSON.stringify(hasil.diagnostik, null, 2));
+        } else {
+          for (const d of hasil.galat) {
+            this.error(formatDiagnostik(d, { warna: opsi.warna, modeDebug: opsi.debug }));
+          }
+        }
+        return 1;
       }
 
-      this.log(`[✓ VALID] Sintaks dan tipe berkas '${jalurBerkas}' sah dan valid.`);
+      if (hasil.peringatan.length > 0) {
+        if (opsi.json) {
+          this.log(JSON.stringify(hasil.diagnostik, null, 2));
+        } else {
+          for (const p of hasil.peringatan) {
+            this.log(formatDiagnostik(p, { warna: opsi.warna, modeDebug: opsi.debug }));
+          }
+          this.log(`[✓ VALID] Pemeriksaan selesai dengan ${hasil.peringatan.length} peringatan. Tidak ditemukan kesalahan fatal.`);
+        }
+        return 0;
+      }
+
+      if (opsi.json) {
+        this.log(JSON.stringify({ status: 'sukses', pesan: 'Tidak ditemukan kesalahan.', berkas: target }, null, 2));
+      } else {
+        this.log(`[✓ VALID] Berkas '${target}' sah dan valid. Tidak ditemukan kesalahan.`);
+      }
       return 0;
-    } catch (err: any) {
-      this.laporkanGalatCLI(err, {
-        kodeSumber,
-        namaBerkas: jalurBerkas,
-        debug: opsi.debug,
-        json: opsi.json,
-        warna: opsi.warna,
-      });
+    }
+
+    // Kasus 2: Pemeriksaan proyek
+    const targetDir = target || '.';
+    const hasilProyek = pemeriksa.periksaProyek(targetDir);
+
+    if (!hasilProyek.sukses || hasilProyek.galat.length > 0) {
+      if (opsi.json) {
+        this.error(JSON.stringify(hasilProyek.diagnostik, null, 2));
+      } else {
+        for (const g of hasilProyek.galat) {
+          this.error(formatDiagnostik(g, { warna: opsi.warna, modeDebug: opsi.debug }));
+        }
+      }
       return 1;
     }
+
+    if (hasilProyek.peringatan.length > 0) {
+      if (opsi.json) {
+        this.log(JSON.stringify(hasilProyek.diagnostik, null, 2));
+      } else {
+        for (const p of hasilProyek.peringatan) {
+          this.log(formatDiagnostik(p, { warna: opsi.warna, modeDebug: opsi.debug }));
+        }
+        this.log(
+          `[✓ VALID] Pemeriksaan proyek selesai (${hasilProyek.totalBerkasDiperiksa} berkas) dengan ${hasilProyek.peringatan.length} peringatan. Tidak ditemukan kesalahan fatal.`
+        );
+      }
+      return 0;
+    }
+
+    if (opsi.json) {
+      this.log(
+        JSON.stringify(
+          {
+            status: 'sukses',
+            pesan: 'Tidak ditemukan kesalahan.',
+            totalBerkas: hasilProyek.totalBerkasDiperiksa,
+          },
+          null,
+          2
+        )
+      );
+    } else {
+      this.log('[✓ VALID] Proyek valid. Tidak ditemukan kesalahan.');
+    }
+    return 0;
   }
 
   private laporkanGalatCLI(
@@ -335,33 +543,43 @@ export class NusantaraCLI {
 
   private cetakBantuan(): void {
     this.log(`
-Bahasa Pemrograman NUSANTARA (v0.18.0)
-Antarmuka Baris Perintah (CLI) & Pengelola Paket
+Bahasa Pemrograman NUSANTARA (v0.19.0)
+Antarmuka Baris Perintah (CLI) & Toolchain
 
 Penggunaan:
   nusantara <perintah> [argumen...]
   nusantara <berkas.nusantara> [argumen...]
 
-Perintah Eksekusi & Pemeriksaan:
-  jalankan <berkas> Eksekusi program NUSANTARA
-  periksa <berkas>  Validasi sintaksis dan sistem tipe tanpa eksekusi
+Perintah Eksekusi & Toolchain:
+  jalankan <berkas>      Eksekusi program NUSANTARA
+  format [<berkas>|.]    Format kode sumber NUSANTARA sesuai standar resmi
+  cek [<berkas>|.]       Pemeriksaan sintaksis, sistem tipe, dan linter tanpa eksekusi
 
 Perintah Manajemen Paket:
-  buat <nama>       Membuat paket atau proyek baru dengan nusantara.toml
-  pasang            Memasang dependensi yang tertera dalam nusantara.toml
-  pasang --terkunci Memasang dependensi secara persis mengacu pada nusantara.lock
-  hapus <nama>      Menghapus paket dari dependensi dan sistem lokal
-  perbarui [<nama>] Memperbarui dependensi ke versi kompatibel terbaru
-  daftar            Menampilkan daftar dependensi proyek saat ini
-  info              Menampilkan ringkasan metadata paket proyek
+  buat <nama>            Membuat paket atau proyek baru dengan nusantara.toml
+  pasang                 Memasang dependensi yang tertera dalam nusantara.toml
+  pasang --terkunci      Memasang dependensi secara persis mengacu pada nusantara.lock
+  hapus <nama>           Menghapus paket dari dependensi dan sistem lokal
+  perbarui [<nama>]      Memperbarui dependensi ke versi kompatibel terbaru
+  daftar                 Menampilkan daftar dependensi proyek saat ini
+  info                   Menampilkan ringkasan metadata paket proyek
+
+Opsi Perintah 'format':
+  --tulis, -w            Tulis hasil format langsung ke berkas (in-place) secara aman
+  --cek                  Periksa apakah berkas sudah terformat tanpa melakukan modifikasi
 
 Opsi Global:
-  --debug           Tampilkan jejak tumpukan lengkap dan info diagnostik rinci
-  --json            Keluarkan hasil diagnostik dalam format JSON terstruktur
-  --warna           Aktifkan warna penyorotan ANSI
-  --tanpa-warna     Nonaktifkan pewarnaan terminal (sesuai standar NO_COLOR)
-  --help, -h        Tampilkan petunjuk penggunaan ini
-  --version, -v     Tampilkan versi resmi NUSANTARA
+  --debug                Tampilkan jejak tumpukan lengkap dan info diagnostik rinci
+  --json, --format=json  Keluarkan hasil diagnostik dalam format JSON terstruktur
+  --warna                Aktifkan penyorotan warna terminal ANSI
+  --tanpa-warna          Nonaktifkan pewarnaan terminal (sesuai standar NO_COLOR)
+  --help, -h, bantu      Tampilkan petunjuk penggunaan ini
+  --version, -v, versi   Tampilkan versi resmi NUSANTARA
+
+Kode Status Keluar (Exit Codes):
+  0                      Operasi berhasil tanpa kesalahan
+  1                      Terdapat kesalahan sintaks, tipe, linter, atau runtime
+  2                      Kesalahan sintaksis argumen atau perintah CLI tidak valid
 `);
   }
 }
