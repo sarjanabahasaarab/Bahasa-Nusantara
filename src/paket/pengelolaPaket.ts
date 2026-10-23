@@ -91,6 +91,10 @@ export class PengelolaPaket {
     return this.pembaca.gabungJalur(this.direktoriProyek, 'nusantara.lock');
   }
 
+  public dapatkanPembaca(): PembacaBerkas {
+    return this.pembaca;
+  }
+
   /**
    * Membuat paket proyek baru: nusantara buat <nama>
    */

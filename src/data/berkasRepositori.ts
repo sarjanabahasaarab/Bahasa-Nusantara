@@ -8,6 +8,47 @@ export interface BerkasRepo {
 }
 
 export const BERKAS_REPOSITORI: BerkasRepo[] = [
+  // --- FASE 18: SISTEM ERROR & DEBUGGING NUSANTARA ---
+  {
+    jalur: 'docs/referensi/sistem-error.md',
+    nama: 'sistem-error.md',
+    kategori: 'Referensi Pengguna Sistem Error',
+    bahasa: 'markdown',
+    ukuran: 8900,
+    konten: `# Referensi Pengguna: Sistem Error & Debugging Bahasa NUSANTARA (Phase 18)\n\nPedoman resmi 12 kategori galat, taksonomi kode error NUS-xxx-yyy, cuplikan kode caret (^^^^), saran typo Levenshtein, jejak tumpukan (stack trace), dan format JSON.`
+  },
+  {
+    jalur: 'docs/pengembang/sistem-error.md',
+    nama: 'sistem-error.md (Pengembang)',
+    kategori: 'Arsitektur Teknis Sistem Error',
+    bahasa: 'markdown',
+    ukuran: 6500,
+    konten: `# Panduan Pengembang: Sistem Diagnostik & Error NUSANTARA (Phase 18)\n\nArsitektur MesinDiagnostik terpusat, model data Diagnostik, integrasi frame eksekusi, algoritma saran Levenshtein, dan pedoman kontribusi.`
+  },
+  {
+    jalur: 'pengujian/diagnostik/uji_diagnostik.ts',
+    nama: 'uji_diagnostik.ts',
+    kategori: '20 Pengujian Sistem Error',
+    bahasa: 'javascript',
+    ukuran: 21000,
+    konten: `// Rangkaian 20 Uji Komprehensif Sistem Error & Debugging Bahasa NUSANTARA (Phase 18)`
+  },
+  {
+    jalur: 'src/diagnostik/mesin.ts',
+    nama: 'mesin.ts (diagnostik)',
+    kategori: 'Mesin Diagnostik Terpusat',
+    bahasa: 'javascript',
+    ukuran: 19500,
+    konten: `// Mesin diagnostik, error engine, dan normalisasi galat resmi NUSANTARA`
+  },
+  {
+    jalur: 'src/diagnostik/kode.ts',
+    nama: 'kode.ts (diagnostik)',
+    kategori: 'Taksonomi Kode Galat NUS',
+    bahasa: 'javascript',
+    ukuran: 18000,
+    konten: `// Enumerasi lengkap kode galat NUS-xxx-yyy dan tabel METADATA_KODE_GALAT`
+  },
   // --- FASE 17: STANDARD LIBRARY NUSANTARA ---
   {
     jalur: 'docs/referensi/standard-library.md',
@@ -509,7 +550,7 @@ export const DAFTAR_FASE_ROADMAP = [
   { fase: 15, nama: 'Sistem Modul', versi: 'v0.15.0', kategori: 'Fitur Lanjut', status: 'Selesai' },
   { fase: 16, nama: 'Package Manager (nusantara)', versi: 'v0.16.0', kategori: 'Ekosistem', status: 'Selesai' },
   { fase: 17, nama: 'Standard Library (stdlib)', versi: 'v0.17.0', kategori: 'Ekosistem', status: 'Selesai' },
-  { fase: 18, nama: 'Penanganan Kesalahan', versi: 'v0.18.0', kategori: 'Fitur Lanjut', status: 'Rencana' },
+  { fase: 18, nama: 'Sistem Error & Debugging', versi: 'v0.18.0', kategori: 'Mesin Inti', status: 'Selesai' },
   { fase: 19, nama: 'Generik', versi: 'v0.19.0', kategori: 'Fitur Lanjut', status: 'Rencana' },
   { fase: 20, nama: 'Pemrograman Asinkron', versi: 'v0.20.0', kategori: 'Fitur Lanjut', status: 'Rencana' },
   { fase: 21, nama: 'Intermediate Representation', versi: 'v0.21.0', kategori: 'Kompilasi Native', status: 'Rencana' },

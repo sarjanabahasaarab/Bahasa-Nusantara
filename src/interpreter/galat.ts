@@ -27,6 +27,9 @@ export interface BingkaiTumpukan {
   namaKonteks: string;
   posisi?: PosisiSumber;
   namaModul?: string;
+  berkas?: string;
+  namaPaket?: string;
+  versiPaket?: string;
 }
 
 export class GalatRuntime extends Error {

@@ -28,6 +28,10 @@ import {
   Boxes,
   Package,
   Library,
+  Bug,
+  AlertOctagon,
+  Sparkles,
+  Search,
 } from 'lucide-react';
 import {
   BERKAS_REPOSITORI,
@@ -47,9 +51,18 @@ import { PemeriksaTipe } from './tipe/pemeriksaTipe';
 import { PembacaBerkasMemori, ResolverModul, PemuatModul } from './modul';
 import { PengelolaPaket, NusantaraCLI, LocalRegistry } from './paket';
 import { KATALOG_MODUL_STANDAR, dapatkanDaftarNamaModulStandar } from './stdlib';
+import {
+  MesinDiagnostik,
+  mesinDiagnostikDefault,
+  KodeGalat,
+  METADATA_KODE_GALAT,
+  KategoriDiagnostik,
+  Diagnostik,
+  formatDiagnostikKeJSON,
+} from './diagnostik';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'stdlib' | 'paket' | 'struktur-data' | 'fungsi' | 'perulangan' | 'percabangan' | 'operator' | 'tipe' | 'ast' | 'token' | 'panduan' | 'berkas' | 'roadmap' | 'git'>('stdlib');
+  const [activeTab, setActiveTab] = useState<'diagnostik' | 'stdlib' | 'paket' | 'struktur-data' | 'fungsi' | 'perulangan' | 'percabangan' | 'operator' | 'tipe' | 'ast' | 'token' | 'panduan' | 'berkas' | 'roadmap' | 'git'>('diagnostik');
   const [selectedFile, setSelectedFile] = useState<BerkasRepo>(BERKAS_REPOSITORI[0]);
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [playgroundCode, setPlaygroundCode] = useState<string>(
@@ -271,6 +284,171 @@ selesai`
     return BERKAS_REPOSITORI.filter(b => b.kategori === activeFilterCategory);
   }, [activeFilterCategory]);
 
+  // --- PHASE 18: SISTEM ERROR & DIAGNOSTIK STATE ---
+  const PRESET_ERROR = useMemo(() => [
+    {
+      id: 'syntax_unexpected',
+      nama: '1. Sintaks: Ekspresi Tidak Lengkap (NUS-PAR-002)',
+      kategori: 'Sintaks',
+      kode: `program ContohErrorSintaks
+mulai
+    angka : bilangan = 10 +
+selesai`,
+    },
+    {
+      id: 'type_mismatch',
+      nama: '2. Tipe: Ketidakcocokan Tipe Data (NUS-TYP-001)',
+      kategori: 'Tipe',
+      kode: `program ContohErrorTipe
+mulai
+    jumlah : bilangan = "seratus"
+    tampilkan("Jumlah:", jumlah)
+selesai`,
+    },
+    {
+      id: 'typo_suggestion',
+      nama: '3. Nama: Saltik Fungsi & Saran Cerdas (NUS-NAM-002)',
+      kategori: 'Nama',
+      kode: `program ContohTypo
+mulai
+    // Typo: tampilkann seharusnya tampilkan
+    tampilkann("Halo dari NUSANTARA!")
+selesai`,
+    },
+    {
+      id: 'runtime_divzero',
+      nama: '4. Runtime: Pembagian Nol & Stack Trace (NUS-RUN-001)',
+      kategori: 'Runtime',
+      kode: `fungsi bagi(a : bilangan, b : bilangan) : bilangan
+mulai
+    kembalikan a / b
+selesai
+
+fungsi kalkulasi(n : bilangan) : bilangan
+mulai
+    kembalikan bagi(n, 0)
+selesai
+
+program UjiStackTrace
+mulai
+    hasil : bilangan = kalkulasi(100)
+    tampilkan("Hasil:", hasil)
+selesai`,
+    },
+    {
+      id: 'runtime_recursion',
+      nama: '5. Runtime: Batas Rekursi Terlampaui (NUS-RUN-003)',
+      kategori: 'Runtime',
+      kode: `fungsi rekursi(x : bilangan) : bilangan
+mulai
+    kembalikan rekursi(x + 1)
+selesai
+
+program RekursiBatas
+mulai
+    rekursi(1)
+selesai`,
+    },
+    {
+      id: 'index_out_of_bounds',
+      nama: '6. Indeks: Indeks Daftar di Luar Batas (NUS-IDX-001)',
+      kategori: 'Indeks',
+      kode: `program BatasIndeks
+mulai
+    angka : daftar = [10, 20, 30]
+    tampilkan(angka[99])
+selesai`,
+    },
+    {
+      id: 'valid_code',
+      nama: '7. Kode Valid: Program Tanpa Kesalahan',
+      kategori: 'Valid',
+      kode: `fungsi kuadrat(x : bilangan) : bilangan
+mulai
+    kembalikan x * x
+selesai
+
+program ProgramValid
+mulai
+    angka : bilangan = 12
+    hasil : bilangan = kuadrat(angka)
+    tampilkan("Hasil kuadrat dari 12 adalah:", hasil)
+selesai`,
+    },
+  ], []);
+
+  const [selectedErrorPreset, setSelectedErrorPreset] = useState<string>('syntax_unexpected');
+  const [diagnosticCode, setDiagnosticCode] = useState<string>(PRESET_ERROR[0].kode);
+  const [diagnosticResult, setDiagnosticResult] = useState<{
+    sukses: boolean;
+    diagnostik?: Diagnostik;
+    output?: string[];
+    waktuEksekusi?: number;
+  } | null>(null);
+  const [jsonViewActive, setJsonViewActive] = useState<boolean>(false);
+  const [catalogSearch, setCatalogSearch] = useState<string>('');
+  const [catalogCategoryFilter, setCatalogCategoryFilter] = useState<string>('Semua');
+
+  const jalankanDiagnostik = (hanyaPeriksa: boolean = false) => {
+    const awal = performance.now();
+    try {
+      const parser = new Parser(diagnosticCode);
+      const ast = parser.parse();
+      const galatParser = parser.dapatkanDaftarGalat();
+      if (galatParser.length > 0) {
+        throw galatParser[0];
+      }
+
+      const pemeriksa = new PemeriksaTipe();
+      const galatTipe = pemeriksa.periksa(ast);
+      if (galatTipe.length > 0) {
+        throw galatTipe[0];
+      }
+
+      if (hanyaPeriksa) {
+        setDiagnosticResult({
+          sukses: true,
+          output: ['[✓ VALID] Sintaks dan tipe kode sah dan valid tanpa kesalahan.'],
+          waktuEksekusi: Math.round((performance.now() - awal) * 100) / 100,
+        });
+        return;
+      }
+
+      const buffer = new PenulisOutputBuffer();
+      const interpreter = new Interpreter(buffer);
+      interpreter.interpretasikan(ast);
+
+      setDiagnosticResult({
+        sukses: true,
+        output: buffer.dapatkanSeluruhTeks(),
+        waktuEksekusi: Math.round((performance.now() - awal) * 100) / 100,
+      });
+    } catch (err: any) {
+      const diag = mesinDiagnostikDefault.ubahKeDiagnostik(err, {
+        kodeSumber: diagnosticCode,
+        namaBerkas: 'utama.nusantara',
+        kandidatSimbol: ['tampilkan', 'masukan', 'panjang', 'bagi', 'kalkulasi', 'kuadrat', 'rekursi', 'angka', 'hasil', 'jumlah'],
+      });
+      setDiagnosticResult({
+        sukses: false,
+        diagnostik: diag,
+        waktuEksekusi: Math.round((performance.now() - awal) * 100) / 100,
+      });
+    }
+  };
+
+  const katalogKodeTerfilter = useMemo(() => {
+    const semua = Object.values(METADATA_KODE_GALAT);
+    return semua.filter(item => {
+      const cocokKategori = catalogCategoryFilter === 'Semua' || item.kategori.toLowerCase() === catalogCategoryFilter.toLowerCase();
+      const cocokCari = !catalogSearch.trim() ||
+        item.kode.toLowerCase().includes(catalogSearch.toLowerCase()) ||
+        item.judul.toLowerCase().includes(catalogSearch.toLowerCase()) ||
+        item.penjelasan.toLowerCase().includes(catalogSearch.toLowerCase());
+      return cocokKategori && cocokCari;
+    });
+  }, [catalogCategoryFilter, catalogSearch]);
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-rose-500 selection:text-white">
       {/* 1. TOP HEADER / APP BAR */}
@@ -283,8 +461,8 @@ selesai`
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-extrabold tracking-wider text-white text-base">NUSANTARA</span>
-                <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                  Phase 16
+                <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                  Phase 18 (v0.18.0)
                 </span>
               </div>
               <p className="text-xs text-slate-400">Bahasa Pemrograman Indonesia</p>
@@ -292,6 +470,15 @@ selesai`
           </div>
 
           <nav className="hidden md:flex items-center gap-6 text-sm">
+            <button
+              onClick={() => setActiveTab('diagnostik')}
+              className={`hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'diagnostik' ? 'text-red-400 font-semibold' : 'text-slate-400'
+              }`}
+            >
+              <Bug className="w-4 h-4 text-red-400" />
+              Diagnostik (Phase 18)
+            </button>
             <button
               onClick={() => setActiveTab('stdlib')}
               className={`hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 ${
@@ -452,6 +639,15 @@ selesai`
         {/* Navigation Sub-Tabs */}
         <div className="flex items-center gap-2 border-b border-slate-800 pb-4 mb-6 overflow-x-auto text-sm">
           <button
+            onClick={() => setActiveTab('diagnostik')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap cursor-pointer flex items-center gap-2 ${
+              activeTab === 'diagnostik' ? 'bg-red-950 text-red-200 border border-red-700/60 font-semibold' : 'text-slate-400 hover:text-white hover:bg-slate-900'
+            }`}
+          >
+            <Bug className="w-4 h-4 text-red-400" />
+            <span>Sistem Error &amp; Debugging (Phase 18)</span>
+          </button>
+          <button
             onClick={() => setActiveTab('stdlib')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap cursor-pointer flex items-center gap-2 ${
               activeTab === 'stdlib' ? 'bg-cyan-950 text-cyan-200 border border-cyan-700/60 font-semibold' : 'text-slate-400 hover:text-white hover:bg-slate-900'
@@ -570,7 +766,406 @@ selesai`
           </button>
         </div>
 
-        {/* TAB 0: STANDARD LIBRARY NUSANTARA (PHASE 17) */}
+        {/* TAB 0: SISTEM ERROR & DEBUGGING (PHASE 18) */}
+        {activeTab === 'diagnostik' && (
+          <div className="space-y-6">
+            {/* Header Ringkasan Sistem Error */}
+            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center font-bold text-xl shadow-inner">
+                    <Bug className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-xl font-bold text-white tracking-wide">
+                        Sistem Error &amp; Debugging NUSANTARA
+                      </h2>
+                      <span className="px-2.5 py-0.5 text-[11px] font-bold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        v0.18.0 Resmi
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Arsitektur penanganan kesalahan modern berbahasa Indonesia: 12 kategori terstruktur, kode unik <code className="text-rose-300">NUS-xxx-yyy</code>, cuplikan kode visual caret (<code className="text-rose-300">^^^^</code>), rekomendasi saltik Levenshtein, dan pelacakan tumpukan frame komprehensif.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => jalankanDiagnostik(false)}
+                    className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-500 rounded-xl transition-colors flex items-center gap-2 shadow-lg shadow-rose-950/40 cursor-pointer"
+                  >
+                    <Play className="w-4 h-4 fill-white" />
+                    <span>Jalankan &amp; Analisis</span>
+                  </button>
+                  <button
+                    onClick={() => jalankanDiagnostik(true)}
+                    className="px-3.5 py-2 text-xs font-medium text-slate-200 bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer border border-slate-700"
+                  >
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    <span>Periksa (Check)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Grid 4 Statistik Pilar */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
+                <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5">
+                  <div className="text-[11px] font-medium text-slate-400">Klasifikasi Kategori</div>
+                  <div className="text-xl font-bold text-white mt-1">12 Kategori</div>
+                  <div className="text-[10px] text-rose-400/90 mt-0.5">Lexer, Parser, Tipe, Runtime, Modul, Paket...</div>
+                </div>
+                <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5">
+                  <div className="text-[11px] font-medium text-slate-400">Kode Galat Terdaftar</div>
+                  <div className="text-xl font-bold text-white mt-1">35+ Kode Unik</div>
+                  <div className="text-[10px] text-amber-400/90 mt-0.5">Format standar NUS-xxx-yyy stabil</div>
+                </div>
+                <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5">
+                  <div className="text-[11px] font-medium text-slate-400">Saran Cerdas (Typo)</div>
+                  <div className="text-xl font-bold text-white mt-1">Levenshtein</div>
+                  <div className="text-[10px] text-emerald-400/90 mt-0.5">Inferensi kandidat simbol terdekat</div>
+                </div>
+                <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5">
+                  <div className="text-[11px] font-medium text-slate-400">Format Diagnostik</div>
+                  <div className="text-xl font-bold text-white mt-1">ANSI &amp; JSON</div>
+                  <div className="text-[10px] text-cyan-400/90 mt-0.5">Dukungan penuh tooling CLI &amp; IDE/LSP</div>
+                </div>
+              </div>
+            </div>
+
+            {/* STUDIO DIAGNOSTIK & PLAYGROUND KESALAHAN */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* KOLOM KIRI: EDITOR & PRESET (5 Kolom) */}
+              <div className="lg:col-span-5 space-y-4">
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+                  <div className="flex items-center justify-between mb-3 pb-3 border-b border-slate-800">
+                    <div className="flex items-center gap-2">
+                      <Code2 className="w-4 h-4 text-rose-400" />
+                      <span className="text-sm font-bold text-white">Kode Sumber Program</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-mono">utama.nusantara</span>
+                  </div>
+
+                  {/* Pilihan Preset Skenario Error */}
+                  <div className="mb-3">
+                    <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
+                      Pilih Skenario Kesalahan Percontohan:
+                    </label>
+                    <select
+                      value={selectedErrorPreset}
+                      onChange={(e) => {
+                        const target = PRESET_ERROR.find(p => p.id === e.target.value);
+                        if (target) {
+                          setSelectedErrorPreset(target.id);
+                          setDiagnosticCode(target.kode);
+                          setDiagnosticResult(null);
+                        }
+                      }}
+                      className="w-full bg-slate-950 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-rose-500 font-medium"
+                    >
+                      {PRESET_ERROR.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.nama}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="relative">
+                    <textarea
+                      value={diagnosticCode}
+                      onChange={(e) => setDiagnosticCode(e.target.value)}
+                      rows={14}
+                      className="w-full bg-slate-950 font-mono text-xs text-slate-200 p-3.5 rounded-xl border border-slate-800 focus:outline-none focus:border-rose-500 leading-relaxed resize-y"
+                      placeholder="Tulis kode program NUSANTARA di sini..."
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-800">
+                    <div className="text-[11px] text-slate-400">
+                      Baris: {diagnosticCode.split('\n').length} | Karakter: {diagnosticCode.length}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => jalankanDiagnostik(false)}
+                        className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shadow-md shadow-rose-950/30"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-white" />
+                        <span>Eksekusi</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* KOLOM KANAN: INSPEKSI HASIL DIAGNOSTIK (7 Kolom) */}
+              <div className="lg:col-span-7 space-y-4">
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl min-h-[460px] flex flex-col">
+                  <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-800">
+                    <div className="flex items-center gap-2">
+                      <AlertOctagon className="w-4 h-4 text-rose-400" />
+                      <span className="text-sm font-bold text-white">Inspeksi &amp; Umpan Balik Diagnostik</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setJsonViewActive(prev => !prev)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer border ${
+                          jsonViewActive
+                            ? 'bg-rose-950 text-rose-300 border-rose-700/60'
+                            : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                        }`}
+                      >
+                        {jsonViewActive ? 'Tampilan Format Teks' : 'Tampilan Format JSON (IDE)'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {!diagnosticResult ? (
+                    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-500">
+                      <div className="w-14 h-14 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-center mb-3 text-slate-600">
+                        <Bug className="w-7 h-7" />
+                      </div>
+                      <p className="text-sm font-medium text-slate-400">Belum Ada Analisis Berjalan</p>
+                      <p className="text-xs text-slate-500 max-w-sm mt-1">
+                        Klik tombol &ldquo;Jalankan &amp; Analisis&rdquo; atau &ldquo;Periksa (Check)&rdquo; untuk menguji kode dan melihat visualisasi diagnostik lengkap.
+                      </p>
+                    </div>
+                  ) : jsonViewActive ? (
+                    /* Tampilan JSON */
+                    <div className="flex-1 flex flex-col">
+                      <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+                        <span>Payload JSON Standar Language Server:</span>
+                        <button
+                          onClick={() => handleCopy(
+                            diagnosticResult.diagnostik
+                              ? formatDiagnostikKeJSON(diagnosticResult.diagnostik)
+                              : JSON.stringify({ sukses: true, output: diagnosticResult.output }, null, 2),
+                            'json-diag'
+                          )}
+                          className="hover:text-white flex items-center gap-1 cursor-pointer"
+                        >
+                          {copiedText === 'json-diag' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{copiedText === 'json-diag' ? 'Tersalin' : 'Salin JSON'}</span>
+                        </button>
+                      </div>
+                      <pre className="flex-1 bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs font-mono text-cyan-300 overflow-auto max-h-[420px] leading-relaxed">
+                        {diagnosticResult.diagnostik
+                          ? formatDiagnostikKeJSON(diagnosticResult.diagnostik)
+                          : JSON.stringify({ sukses: true, output: diagnosticResult.output, waktuMs: diagnosticResult.waktuEksekusi }, null, 2)}
+                      </pre>
+                    </div>
+                  ) : diagnosticResult.sukses ? (
+                    /* Hasil Sukses */
+                    <div className="space-y-4 flex-1">
+                      <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-800/80 flex items-center gap-3">
+                        <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0" />
+                        <div>
+                          <div className="text-sm font-bold text-emerald-300">Program Berhasil Dieksekusi Tanpa Galat</div>
+                          <div className="text-xs text-emerald-400/80 mt-0.5">
+                            Sintaks sah, sistem tipe terpenuhi, dan runtime berjalan sukses dalam {diagnosticResult.waktuEksekusi}ms.
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-950 rounded-xl p-4 border border-slate-800">
+                        <div className="text-xs font-semibold text-slate-400 mb-2 font-mono flex items-center gap-1.5">
+                          <Terminal className="w-3.5 h-3.5" />
+                          <span>Keluaran Terminal (Console Output):</span>
+                        </div>
+                        {diagnosticResult.output && diagnosticResult.output.length > 0 ? (
+                          <div className="space-y-1 font-mono text-xs text-slate-200">
+                            {diagnosticResult.output.map((baris, idx) => (
+                              <div key={idx} className="leading-relaxed">{baris}</div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-slate-500 font-mono italic">
+                            (Program selesai tanpa mencetak teks ke layar)
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    /* Hasil Error Terperinci */
+                    <div className="space-y-4 flex-1">
+                      {/* Banner Error Header */}
+                      <div className="p-4 rounded-xl bg-rose-950/50 border border-rose-800/80 shadow-inner">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 rounded text-[11px] font-extrabold bg-rose-500/20 text-rose-300 border border-rose-500/40 font-mono">
+                              {diagnosticResult.diagnostik?.kode}
+                            </span>
+                            <span className="text-xs font-bold text-rose-200">
+                              Kesalahan {diagnosticResult.diagnostik?.kategori}
+                            </span>
+                          </div>
+                          {diagnosticResult.diagnostik?.lokasi && (
+                            <span className="text-xs font-mono text-rose-300 bg-rose-950/80 px-2 py-0.5 rounded border border-rose-800">
+                              {diagnosticResult.diagnostik.lokasi.berkas ? `${diagnosticResult.diagnostik.lokasi.berkas}:` : ''}
+                              {diagnosticResult.diagnostik.lokasi.baris}:{diagnosticResult.diagnostik.lokasi.kolom}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="mt-2 text-sm font-bold text-white">
+                          {diagnosticResult.diagnostik?.pesan}
+                        </div>
+                      </div>
+
+                      {/* Source Snippet dengan Visual Caret (^^^^) */}
+                      {diagnosticResult.diagnostik?.potonganKode && (
+                        <div className="bg-slate-950 rounded-xl p-3.5 border border-slate-800/90 font-mono text-xs">
+                          <div className="text-[10px] text-slate-500 mb-1.5 uppercase tracking-wider font-sans font-semibold">
+                            Cuplikan Lokasi Masalah:
+                          </div>
+                          <div className="text-slate-300 flex items-start gap-2">
+                            <span className="text-slate-500 select-none">{diagnosticResult.diagnostik.potonganKode.nomorBaris} |</span>
+                            <span className="overflow-x-auto">{diagnosticResult.diagnostik.potonganKode.teksBaris}</span>
+                          </div>
+                          <div className="text-rose-400 font-bold flex items-start gap-2 mt-0.5 select-none">
+                            <span className="text-slate-800 select-none">{' '.repeat(String(diagnosticResult.diagnostik.potonganKode.nomorBaris).length)} |</span>
+                            <span className="whitespace-pre overflow-x-auto text-rose-400 font-bold">
+                              {diagnosticResult.diagnostik.potonganKode.teksCaret}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Saran Rekomendasi Cerdas */}
+                      {diagnosticResult.diagnostik?.saran && (
+                        <div className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-800/60 flex items-start gap-2.5">
+                          <Sparkles className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                          <div className="text-xs text-emerald-300 leading-relaxed">
+                            <span className="font-bold text-emerald-200">Saran Perbaikan: </span>
+                            {diagnosticResult.diagnostik.saran}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Jejak Tumpukan Pemanggilan (Stack Trace) */}
+                      {diagnosticResult.diagnostik?.jejakTumpukan && diagnosticResult.diagnostik.jejakTumpukan.length > 0 && (
+                        <div className="bg-slate-950 rounded-xl p-3.5 border border-slate-800">
+                          <div className="text-xs font-bold text-slate-300 mb-2.5 flex items-center gap-1.5">
+                            <Network className="w-3.5 h-3.5 text-blue-400" />
+                            <span>Jejak Pemanggilan Tumpukan (Stack Trace):</span>
+                          </div>
+                          <div className="space-y-1.5">
+                            {diagnosticResult.diagnostik.jejakTumpukan.map((bingkai, bIdx) => (
+                              <div
+                                key={bIdx}
+                                className="flex flex-wrap items-center justify-between text-xs bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-800/80 font-mono"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="text-slate-500 font-bold">{bIdx + 1}.</span>
+                                  <span className="text-blue-300 font-semibold">{bingkai.namaFungsi}()</span>
+                                  {bingkai.namaModul && (
+                                    <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded">
+                                      modul: {bingkai.namaModul}
+                                    </span>
+                                  )}
+                                  {bingkai.namaPaket && (
+                                    <span className="text-[10px] bg-amber-950 text-amber-300 px-1.5 py-0.5 rounded border border-amber-800">
+                                      paket: {bingkai.namaPaket}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-slate-400 text-[11px]">
+                                  {bingkai.lokasi ? `${bingkai.lokasi.berkas || 'program'}:${bingkai.lokasi.baris}:${bingkai.lokasi.kolom}` : 'lokasi tumpukan'}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* KATALOG KODE ERROR RESMI (BROWSABLE REFERENCE) */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4 mb-5">
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-rose-400" />
+                    <span>Katalog &amp; Glosarium Kode Error Resmi NUSANTARA</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Daftar lengkap kode galat standar yang stabil, terdokumentasi, dan dapat diuji.
+                  </p>
+                </div>
+
+                {/* Pencarian Kode */}
+                <div className="relative w-full md:w-64">
+                  <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={catalogSearch}
+                    onChange={(e) => setCatalogSearch(e.target.value)}
+                    placeholder="Cari kode atau kata kunci..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-rose-500"
+                  />
+                </div>
+              </div>
+
+              {/* Filter Kategori */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-3 mb-4 text-xs">
+                {['Semua', 'Lexer', 'Sintaks', 'Tipe', 'Nama', 'Modul', 'Paket', 'Runtime', 'Indeks', 'Berkas', 'Konversi', 'Internal'].map((kat) => (
+                  <button
+                    key={kat}
+                    onClick={() => setCatalogCategoryFilter(kat)}
+                    className={`px-3 py-1 rounded-lg font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                      catalogCategoryFilter === kat
+                        ? 'bg-rose-950 text-rose-200 border border-rose-700/60 font-semibold'
+                        : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-white'
+                    }`}
+                  >
+                    {kat}
+                  </button>
+                ))}
+              </div>
+
+              {/* Grid Kartu Kode Galat */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 max-h-[500px] overflow-y-auto pr-1">
+                {katalogKodeTerfilter.map((item) => (
+                  <div
+                    key={item.kode}
+                    className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3.5 hover:border-slate-700 transition-colors flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <span className="font-mono text-xs font-bold text-rose-400 bg-rose-950/60 px-2 py-0.5 rounded border border-rose-900/50">
+                          {item.kode}
+                        </span>
+                        <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                          {item.kategori}
+                        </span>
+                      </div>
+                      <div className="text-xs font-bold text-white mb-1">
+                        {item.judul}
+                      </div>
+                      <p className="text-[11px] text-slate-400 leading-relaxed mb-2">
+                        {item.penjelasan}
+                      </p>
+                    </div>
+
+                    {item.saranStandar && (
+                      <div className="mt-2 pt-2 border-t border-slate-900 text-[10px] text-emerald-400/90 leading-normal flex items-start gap-1.5">
+                        <Sparkles className="w-3 h-3 text-emerald-400 shrink-0 mt-0.5" />
+                        <span>{item.saranStandar}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 1: STANDARD LIBRARY NUSANTARA (PHASE 17) */}
         {activeTab === 'stdlib' && (
           <div className="space-y-6">
             {/* Header Ringkasan Standard Library */}

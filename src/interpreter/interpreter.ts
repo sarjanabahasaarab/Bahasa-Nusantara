@@ -65,6 +65,7 @@ import {
   CatatanModul,
 } from '../modul';
 import { SandboxBerkas } from '../stdlib';
+import { deteksiKonteksPaket } from '../diagnostik';
 
 export interface OpsiInterpreter {
   maksimalIterasiPerulangan?: number;
@@ -907,10 +908,14 @@ export class Interpreter {
     }
 
     this.lingkunganSaatIni = lingkunganFungsi;
+    const infoPaket = deteksiKonteksPaket(fungsi.jalurBerkas || modulNamaAktif);
     this.tumpukanPanggilan.push({
       namaKonteks: `fungsi ${fnDeklarasi.nama}`,
       posisi: nodePanggil.posisi.awal,
       namaModul: modulNamaAktif,
+      berkas: fungsi.jalurBerkas,
+      namaPaket: infoPaket?.namaPaket,
+      versiPaket: infoPaket?.versiPaket,
     });
 
     try {
