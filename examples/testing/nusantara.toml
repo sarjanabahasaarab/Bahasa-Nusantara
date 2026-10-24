@@ -1,0 +1,15 @@
+[paket]
+nama = "contoh-testing"
+versi = "1.0.0"
+deskripsi = "Contoh proyek resmi pengujian otomatis NUSANTARA Testing Framework"
+lisensi = "MIT"
+titik_masuk = "penjumlahan.uji.nusantara"
+
+[dependensi]
+matematika = "^1.0.0"
+
+[pengujian]
+pola = "*.uji.nusantara"
+batas_waktu_ms = 5000
+laporan = "konsol"
+verbose = true

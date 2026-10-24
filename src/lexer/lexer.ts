@@ -363,8 +363,8 @@ export class Lexer {
         continue;
       }
 
-      // Rekam dan lewati komentar satu baris // (Phase 19)
-      if (c === '/' && this.karakterBerikutnya() === '/') {
+      // Rekam dan lewati komentar satu baris // atau # (Phase 19 & Phase 21)
+      if ((c === '/' && this.karakterBerikutnya() === '/') || c === '#') {
         const posAwal = klonaPosisi(this.posisiSaatIni);
         let teksKomentar = '';
         while (!this.sudahSelesai() && this.karakterSekarang() !== '\n') {

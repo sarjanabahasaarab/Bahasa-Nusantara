@@ -8,6 +8,47 @@ export interface BerkasRepo {
 }
 
 export const BERKAS_REPOSITORI: BerkasRepo[] = [
+  // --- FASE 21: TESTING FRAMEWORK & QUALITY SYSTEM NUSANTARA ---
+  {
+    jalur: 'docs/referensi/testing.md',
+    nama: 'testing.md',
+    kategori: 'Referensi Pengguna Testing Framework',
+    bahasa: 'markdown',
+    ukuran: 5900,
+    konten: `# Spesifikasi Referensi Testing Framework NUSANTARA (v0.21.0)\n\nInfrastruktur pengujian otomatis resmi, fungsi penegasan pastikan/pastikan_sama/pastikan_benar/pastikan_salah, kode galat TST-001..005, pola berkas uji, dan integrasi CLI.`
+  },
+  {
+    jalur: 'docs/pengembang/testing.md',
+    nama: 'testing.md (Pengembang)',
+    kategori: 'Panduan Pengembang Testing Framework',
+    bahasa: 'markdown',
+    ukuran: 4800,
+    konten: `# Panduan Pengembang: Menulis Pengujian Otomatis NUSANTARA\n\nIsolasi direktori sementara DirektoriSementara, siklus pelari uji PelariUji, ambang batas Quality Gate GerbangKualitas, dan eksekusi pra-rilis.`
+  },
+  {
+    jalur: 'pengujian/testing/uji_testing.ts',
+    nama: 'uji_testing.ts',
+    kategori: '35 Pengujian Testing & Quality System',
+    bahasa: 'javascript',
+    ukuran: 19500,
+    konten: `// Rangkaian 35 Uji Komprehensif Testing Framework & Quality System NUSANTARA (Phase 21)`
+  },
+  {
+    jalur: 'src/testing/index.ts',
+    nama: 'index.ts (testing)',
+    kategori: 'Inti Testing Framework',
+    bahasa: 'javascript',
+    ukuran: 8400,
+    konten: `// Modul Utama Testing Framework NUSANTARA: Penegasan, PelariUji, PenemuUji, DirektoriSementara, Pelapor, dan GerbangKualitas`
+  },
+  {
+    jalur: 'examples/testing/penjumlahan.uji.nusantara',
+    nama: 'penjumlahan.uji.nusantara',
+    kategori: 'Contoh Berkas Pengujian',
+    bahasa: 'nusantara',
+    ukuran: 850,
+    konten: `# Contoh Berkas Pengujian Resmi NUSANTARA\npastikan_sama(20 + 15, 35)\npastikan_benar(20 > 15)`
+  },
   // --- FASE 20: LANGUAGE SERVER & DEVELOPER TOOLS NUSANTARA ---
   {
     jalur: 'docs/referensi/language-server.md',
@@ -651,7 +692,7 @@ export const DAFTAR_FASE_ROADMAP = [
   { fase: 18, nama: 'Sistem Error & Debugging', versi: 'v0.18.0', kategori: 'Mesin Inti', status: 'Selesai' },
   { fase: 19, nama: 'Toolchain & Formatter', versi: 'v0.19.0', kategori: 'Tooling', status: 'Selesai' },
   { fase: 20, nama: 'Language Server & Developer Tools', versi: 'v0.20.0', kategori: 'Tooling', status: 'Selesai' },
-  { fase: 21, nama: 'Intermediate Representation', versi: 'v0.21.0', kategori: 'Kompilasi Native', status: 'Rencana' },
+  { fase: 21, nama: 'Testing Framework & Quality System', versi: 'v0.21.0', kategori: 'Tooling', status: 'Selesai' },
   { fase: 22, nama: 'Backend Compiler', versi: 'v0.22.0', kategori: 'Kompilasi Native', status: 'Rencana' },
   { fase: 23, nama: 'Executable Native', versi: 'v0.23.0', kategori: 'Kompilasi Native', status: 'Rencana' },
   { fase: 24, nama: 'Optimasi Compiler', versi: 'v0.24.0', kategori: 'Kompilasi Native', status: 'Rencana' },

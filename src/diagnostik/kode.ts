@@ -79,6 +79,13 @@ export enum KodeGalat {
   // --- KESALAHAN INTERNAL INTERPRETER (NUS-INT-xxx) ---
   INT_KESALAHAN_SISTEM = 'NUS-INT-001',
   INT_AST_TIDAK_VALID = 'NUS-INT-002',
+
+  // --- KESALAHAN PENGUJIAN / TESTING FRAMEWORK (NUS-TST-xxx) ---
+  TST_PENEGASAN_GAGAL = 'NUS-TST-001',
+  TST_TIDAK_SAMA = 'NUS-TST-002',
+  TST_BUKAN_BENAR = 'NUS-TST-003',
+  TST_BUKAN_SALAH = 'NUS-TST-004',
+  TST_BATAS_WAKTU_TERLAMPAUI = 'NUS-TST-005',
 }
 
 /**
@@ -436,5 +443,40 @@ export const METADATA_KODE_GALAT: Record<KodeGalat, MetadataKodeGalat> = {
     kategori: 'Internal',
     judul: 'Pohon AST Tidak Valid',
     penjelasan: 'Pohon sintaksis abstrak dalam status tidak valid atau nodenya tidak dikenali.',
+  },
+
+  // Testing Framework
+  [KodeGalat.TST_PENEGASAN_GAGAL]: {
+    kode: KodeGalat.TST_PENEGASAN_GAGAL,
+    kategori: 'Pengujian',
+    judul: 'Penegasan Uji Gagal',
+    penjelasan: 'Kondisi penegasan (assertion) uji tidak terpenuhi pada saat pengujian dijalankan.',
+    saranStandar: 'Periksa kembali logika kode sumber atau nilai yang diharapkan.',
+  },
+  [KodeGalat.TST_TIDAK_SAMA]: {
+    kode: KodeGalat.TST_TIDAK_SAMA,
+    kategori: 'Pengujian',
+    judul: 'Nilai Tidak Sesuai Harapan',
+    penjelasan: 'Nilai aktual yang ditemukan tidak sama dengan nilai yang diharapkan dalam uji.',
+    saranStandar: 'Pastikan nilai kembalian fungsi atau ekspresi menghasilkan nilai yang tepat.',
+  },
+  [KodeGalat.TST_BUKAN_BENAR]: {
+    kode: KodeGalat.TST_BUKAN_BENAR,
+    kategori: 'Pengujian',
+    judul: 'Penegasan pastikan_benar Gagal',
+    penjelasan: 'Ekspresi yang diuji diharapkan bernilai benar (true), tetapi ditemukan bernilai salah atau kosong.',
+  },
+  [KodeGalat.TST_BUKAN_SALAH]: {
+    kode: KodeGalat.TST_BUKAN_SALAH,
+    kategori: 'Pengujian',
+    judul: 'Penegasan pastikan_salah Gagal',
+    penjelasan: 'Ekspresi yang diuji diharapkan bernilai salah (false), tetapi bernilai benar.',
+  },
+  [KodeGalat.TST_BATAS_WAKTU_TERLAMPAUI]: {
+    kode: KodeGalat.TST_BATAS_WAKTU_TERLAMPAUI,
+    kategori: 'Pengujian',
+    judul: 'Batas Waktu Uji Terlampaui (Timeout)',
+    penjelasan: 'Pengujian melebihi batas waktu maksimal yang ditentukan tanpa menyelesaikan eksekusi.',
+    saranStandar: 'Periksa kemungkinan perulangan tak berakhir (infinite loop) atau proses berat.',
   },
 };

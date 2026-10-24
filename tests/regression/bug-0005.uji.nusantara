@@ -1,0 +1,20 @@
+# ==============================================================================
+# NUSANTARA REGRESSION TEST: BUG-0005
+# Verifikasi: Isolasi cakupan variabel dalam blok percabangan dan fungsi
+# ==============================================================================
+
+definisi nilai_global = 100
+
+fungsi uji_cakupan() {
+    definisi nilai_lokal = 50
+    jika benar {
+        definisi nilai_blok = 25
+        kembalikan nilai_lokal + nilai_blok
+    }
+    kembalikan nilai_lokal
+}
+
+pastikan_sama(nilai_global, 100, "Variabel global tetap 100")
+pastikan_sama(uji_cakupan(), 75, "Hasil fungsi dalam blok percabangan harus 75")
+pastikan_benar(nilai_global > 50, "Variabel global harus lebih besar dari 50")
+pastikan_salah(nilai_global < 50, "Variabel global tidak boleh kurang dari 50")

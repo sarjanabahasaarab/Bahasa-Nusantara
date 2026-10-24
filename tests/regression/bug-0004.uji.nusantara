@@ -1,0 +1,20 @@
+# ==============================================================================
+# NUSANTARA REGRESSION TEST: BUG-0004
+# Verifikasi: Struktur data larik, pemetaan, dan indeks elemen
+# ==============================================================================
+
+definisi daftar_angka = [10, 20, 30, 40]
+definisi profil = {
+    "nama": "NUSANTARA",
+    "versi": 21,
+    "aktif": benar
+}
+
+pastikan_sama(daftar_angka[0], 10, "Indeks pertama harus bernilai 10")
+pastikan_sama(daftar_angka[3], 40, "Indeks terakhir harus bernilai 40")
+pastikan_sama(panjang(daftar_angka), 4, "Panjang larik harus 4")
+
+pastikan_sama(profil["nama"], "NUSANTARA", "Kunci profil.nama harus NUSANTARA")
+pastikan_sama(profil["versi"], 21, "Kunci profil.versi harus 21")
+pastikan_benar(profil["aktif"], "Kunci profil.aktif harus bernilai benar")
+pastikan_tidak_sama(profil["nama"], "Python", "Nama tidak boleh Python")

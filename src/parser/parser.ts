@@ -18,6 +18,7 @@ import {
   NodePerulanganUntuk,
   NodeDeklarasiFungsi,
   NodeParameterFungsi,
+  NodeLiteral,
   NodeLiteralDaftar,
   NodeLiteralPeta,
   PasanganKunciNilaiPeta,
@@ -503,6 +504,35 @@ export class Parser {
         if (setelahId.jenis === JenisToken.TITIK_DUA) {
           const idTok = this.stream.next();
           return this.parseDeklarasiVariabelGayaRingkas(idTok);
+        } else if (
+          idAwal.nilai === 'definisi' &&
+          setelahId.jenis === JenisToken.IDENTIFIER
+        ) {
+          // Sintaks deklarasi variabel: definisi x = 10
+          this.stream.next(); // lewati 'definisi'
+          const namaTok = this.stream.next();
+          let tipeData = 'bilangan';
+          if (this.cocok(JenisToken.TITIK_DUA)) {
+            const tipeTok = this.harapkanNamaTipe();
+            tipeData = tipeTok.nilai;
+          }
+          this.harapkan(JenisToken.OP_SAMA_DENGAN, "tanda '=' setelah nama variabel dalam definisi");
+          const nilaiAwal = this.parseEkspresi();
+          if (nilaiAwal.jenis === JenisNodeAST.LITERAL) {
+            const lit = nilaiAwal as NodeLiteral;
+            if (lit.tipeLiteral === 'bilangan') tipeData = 'bilangan';
+            else if (lit.tipeLiteral === 'desimal') tipeData = 'desimal';
+            else if (lit.tipeLiteral === 'teks') tipeData = 'teks';
+            else if (lit.tipeLiteral === 'logika') tipeData = 'logika';
+            else if (lit.tipeLiteral === 'karakter') tipeData = 'karakter';
+          }
+          return {
+            jenis: JenisNodeAST.DEKLARASI_VARIABEL,
+            nama: namaTok.nilai,
+            tipeData,
+            nilaiAwal,
+            posisi: { awal: idAwal.posisi.awal, akhir: nilaiAwal.posisi.akhir },
+          };
         } else if (
           (idAwal.nilai === 'daftar' || idAwal.nilai === 'peta') &&
           setelahId.jenis === JenisToken.IDENTIFIER &&

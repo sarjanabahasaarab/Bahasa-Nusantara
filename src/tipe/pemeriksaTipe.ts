@@ -107,6 +107,28 @@ export class PemeriksaTipe {
       parameter: [{ nama: 'koleksi', tipe: NamaTipe.APAPUN }],
       tipeKembalian: NamaTipe.BILANGAN,
     });
+
+    // Penegasan (Testing Assertions Phase 21)
+    const fungsiPenegasan = [
+      'pastikan',
+      'pastikan_sama',
+      'pastikanSama',
+      'pastikan_tidak_sama',
+      'pastikanTidakSama',
+      'pastikan_benar',
+      'pastikanBenar',
+      'pastikan_salah',
+      'pastikanSalah',
+      'pastikan_galat',
+      'pastikanGalat',
+    ];
+    for (const namaFn of fungsiPenegasan) {
+      this.tabelFungsi.set(namaFn, {
+        nama: namaFn,
+        parameter: [],
+        tipeKembalian: NamaTipe.LOGIKA,
+      });
+    }
   }
 
   public daftarkanModul(nama: string, modul: CatatanModul): void {
@@ -867,6 +889,26 @@ export class PemeriksaTipe {
             this.periksaEkspresi(arg);
           }
           return NamaTipe.KOSONG;
+        }
+
+        // Khusus fungsi bawaan penegasan testing framework (variadik/bebas tipe argumen)
+        if (
+          c.namaFungsi === 'pastikan' ||
+          c.namaFungsi === 'pastikan_sama' ||
+          c.namaFungsi === 'pastikanSama' ||
+          c.namaFungsi === 'pastikan_tidak_sama' ||
+          c.namaFungsi === 'pastikanTidakSama' ||
+          c.namaFungsi === 'pastikan_benar' ||
+          c.namaFungsi === 'pastikanBenar' ||
+          c.namaFungsi === 'pastikan_salah' ||
+          c.namaFungsi === 'pastikanSalah' ||
+          c.namaFungsi === 'pastikan_galat' ||
+          c.namaFungsi === 'pastikanGalat'
+        ) {
+          for (const arg of c.argumen) {
+            this.periksaEkspresi(arg);
+          }
+          return NamaTipe.LOGIKA;
         }
 
         // Khusus fungsi bawaan panjang(...)

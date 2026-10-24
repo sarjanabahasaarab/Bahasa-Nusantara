@@ -1,0 +1,29 @@
+# ==============================================================================
+# NUSANTARA REGRESSION TEST: BUG-0003
+# Verifikasi: Rekursi mendalam dan perulangan akumulasi nilai
+# ==============================================================================
+
+fungsi faktorial(n) {
+    jika n <= 1 {
+        kembalikan 1
+    }
+    kembalikan n * faktorial(n - 1)
+}
+
+fungsi jumlahkan_deret(batas) {
+    definisi total = 0
+    definisi i = 1
+    selama i <= batas {
+        total = total + i
+        i = i + 1
+    }
+    kembalikan total
+}
+
+pastikan_sama(faktorial(1), 1, "Faktorial 1 harus 1")
+pastikan_sama(faktorial(5), 120, "Faktorial 5 harus 120")
+pastikan_sama(faktorial(6), 720, "Faktorial 6 harus 720")
+
+pastikan_sama(jumlahkan_deret(5), 15, "Jumlah deret 1..5 harus 15")
+pastikan_sama(jumlahkan_deret(10), 55, "Jumlah deret 1..10 harus 55")
+pastikan_benar(jumlahkan_deret(10) > 50, "Jumlah deret 10 harus melebihi 50")

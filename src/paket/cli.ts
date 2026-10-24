@@ -17,12 +17,15 @@ import {
   PemeriksaProyek,
 } from '../toolchain';
 import { jalankanServerBahasaStdio } from '../language-server';
+import { PelariUji, PenemuUji, PelaporKonsol, PelaporJSON, GerbangKualitas } from '../testing';
 
 export interface OpsiCLI {
   pengelola?: PengelolaPaket;
   penulisLog?: (pesan: string) => void;
   penulisGalat?: (pesan: string) => void;
   pembaca?: PembacaBerkas;
+  log?: (pesan: string) => void;
+  error?: (pesan: string) => void;
 }
 
 /**
@@ -34,12 +37,21 @@ export class NusantaraCLI {
   private readonly error: (pesan: string) => void;
   private readonly pembaca: PembacaBerkas;
 
-  constructor(opsi?: OpsiCLI & OpsiPengelolaPaket) {
-    this.pengelola = opsi?.pengelola || new PengelolaPaket(opsi);
-    this.log = opsi?.penulisLog || (typeof console !== 'undefined' ? console.log : () => {});
-    this.error = opsi?.penulisGalat || (typeof console !== 'undefined' ? console.error : () => {});
+  constructor(
+    opsiAtauPembaca?: PembacaBerkas | (OpsiCLI & OpsiPengelolaPaket),
+    opsiKedua?: OpsiCLI & OpsiPengelolaPaket
+  ) {
+    let opsiFinal: any = {};
+    if (opsiAtauPembaca && typeof (opsiAtauPembaca as any).apakahAda === 'function') {
+      opsiFinal = { pembaca: opsiAtauPembaca, ...opsiKedua };
+    } else {
+      opsiFinal = { ...opsiAtauPembaca, ...opsiKedua };
+    }
+    this.pengelola = opsiFinal.pengelola || new PengelolaPaket(opsiFinal);
+    this.log = opsiFinal.log || opsiFinal.penulisLog || (typeof console !== 'undefined' ? console.log : () => {});
+    this.error = opsiFinal.error || opsiFinal.penulisGalat || (typeof console !== 'undefined' ? console.error : () => {});
     this.pembaca =
-      opsi?.pembaca ||
+      opsiFinal.pembaca ||
       (typeof this.pengelola.dapatkanPembaca === 'function' ? this.pengelola.dapatkanPembaca() : (this.pengelola as any).pembaca) ||
       new PembacaBerkasNode();
   }
@@ -64,9 +76,29 @@ export class NusantaraCLI {
     const opsiWarna = args.includes('--warna') ? true : opsiTanpaWarna ? false : undefined;
     const opsiTulis = args.includes('--tulis') || args.includes('--write') || args.includes('-w');
     const opsiCek = args.includes('--cek') || args.includes('--check');
+    const opsiVerbose = args.includes('--verbose');
+
+    let opsiCari: string | undefined;
+    const idxCari = args.indexOf('--cari') !== -1 ? args.indexOf('--cari') : args.indexOf('--filter');
+    if (idxCari !== -1 && args[idxCari + 1] && !args[idxCari + 1].startsWith('-')) {
+      opsiCari = args[idxCari + 1];
+    }
+
+    let opsiTimeout: number | undefined;
+    const idxTimeout = args.indexOf('--timeout');
+    if (idxTimeout !== -1 && args[idxTimeout + 1]) {
+      const parsed = parseInt(args[idxTimeout + 1], 10);
+      if (!isNaN(parsed)) opsiTimeout = parsed;
+    }
 
     // Bersihkan flags dari argumen posisi
-    const argumenBersih = args.filter(a => !a.startsWith('-') && a !== 'json');
+    const argumenBersih = args.filter((a, idx) => {
+      if (a.startsWith('-') || a === 'json') return false;
+      if (idx > 0 && (args[idx - 1] === '--cari' || args[idx - 1] === '--filter' || args[idx - 1] === '--timeout' || args[idx - 1] === '--format')) {
+        return false;
+      }
+      return true;
+    });
     const perintah = argumenBersih[0]?.toLowerCase();
     const argumenTambahan = argumenBersih.slice(1);
 
@@ -103,6 +135,10 @@ export class NusantaraCLI {
             'bahasa-server',
             'lsp',
             'server',
+            'uji',
+            'test',
+            'uji-semua',
+            'quality-gate',
           ].includes(perintah) &&
             this.pembaca.apakahAda(perintah)))
       ) {
@@ -114,6 +150,27 @@ export class NusantaraCLI {
       }
 
       switch (perintah) {
+        case 'uji':
+        case 'test': {
+          const target = argumenTambahan[0];
+          return this.eksekusiUji(target, {
+            filter: opsiCari,
+            verbose: opsiVerbose,
+            json: opsiJSON,
+            timeoutMs: opsiTimeout,
+            warna: opsiWarna,
+          });
+        }
+
+        case 'uji-semua':
+        case 'quality-gate': {
+          return this.eksekusiGerbangKualitas({
+            verbose: opsiVerbose,
+            json: opsiJSON,
+            warna: opsiWarna,
+          });
+        }
+
         case 'bahasa-server':
         case 'lsp':
         case 'server': {
@@ -236,7 +293,7 @@ export class NusantaraCLI {
         case 'versi':
         case '--version':
         case '-v': {
-          this.log('NUSANTARA Language Server, Toolchain & Package Manager (nusantara) v0.20.0 (fondasi v0.19.0)');
+          this.log('NUSANTARA Testing Framework, Language Server, Toolchain & Package Manager (nusantara) v0.21.0 (fondasi v0.20.0, v0.19.0)');
           return 0;
         }
 
@@ -534,6 +591,87 @@ export class NusantaraCLI {
     return 0;
   }
 
+  /**
+   * Eksekusi pengujian otomatis unit/integrasi/regresi NUSANTARA.
+   */
+  private eksekusiUji(
+    target: string | undefined,
+    opsi: {
+      filter?: string;
+      verbose?: boolean;
+      json?: boolean;
+      timeoutMs?: number;
+      warna?: boolean;
+    }
+  ): number {
+    const penemu = new PenemuUji(this.pembaca);
+    let daftarBerkas: string[] = [];
+
+    if (target) {
+      const apakahDir = typeof this.pembaca.apakahDirektori === 'function' ? this.pembaca.apakahDirektori(target) : false;
+      if (this.pembaca.apakahAda(target) && !apakahDir) {
+        daftarBerkas = [target];
+      } else {
+        daftarBerkas = penemu.temukan(target);
+      }
+    } else {
+      daftarBerkas = penemu.temukan('.');
+    }
+
+    if (daftarBerkas.length === 0) {
+      const pesan = `Tidak ada berkas pengujian (*.uji.nusantara atau *_test.nusantara) yang ditemukan${
+        target ? ` di target '${target}'` : ''
+      }.`;
+      if (opsi.json) {
+        this.log(JSON.stringify({ sukses: true, total: 0, pesan }));
+      } else {
+        this.log(`[i] ${pesan}`);
+      }
+      return 0;
+    }
+
+    const runner = new PelariUji({
+      timeoutMs: opsi.timeoutMs ?? 5000,
+      verbose: opsi.verbose,
+      pembaca: this.pembaca,
+    });
+
+    const ringkasan = runner.jalankanSinkron(daftarBerkas, { filter: opsi.filter });
+
+    if (opsi.json) {
+      this.log(PelaporJSON.format(ringkasan));
+    } else {
+      this.log(PelaporKonsol.format(ringkasan, { warna: opsi.warna, verbose: opsi.verbose }));
+    }
+
+    return ringkasan.gagal > 0 ? 1 : 0;
+  }
+
+  /**
+   * Eksekusi Quality Gate lengkap untuk verifikasi kualitas NUSANTARA.
+   */
+  private eksekusiGerbangKualitas(opsi: {
+    verbose?: boolean;
+    json?: boolean;
+    warna?: boolean;
+  }): number {
+    const gerbang = new GerbangKualitas({
+      pembaca: this.pembaca,
+      verbose: opsi.verbose,
+      ambangBatasCakupan: 85,
+    });
+
+    const hasil = gerbang.jalankanSinkron();
+
+    if (opsi.json) {
+      this.log(JSON.stringify(hasil, null, 2));
+    } else {
+      this.log(gerbang.formatLaporanTeks(hasil, { warna: opsi.warna }));
+    }
+
+    return hasil.lulusSemua ? 0 : 1;
+  }
+
   private laporkanGalatCLI(
     err: unknown,
     opsi: { kodeSumber?: string; namaBerkas?: string; debug?: boolean; json?: boolean; warna?: boolean }
@@ -559,15 +697,17 @@ export class NusantaraCLI {
 
   private cetakBantuan(): void {
     this.log(`
-Bahasa Pemrograman NUSANTARA (v0.20.0)
-Antarmuka Baris Perintah (CLI), Toolchain & Language Server
+Bahasa Pemrograman NUSANTARA (v0.21.0)
+Antarmuka Baris Perintah (CLI), Toolchain, Language Server & Testing Framework
 
 Penggunaan:
   nusantara <perintah> [argumen...]
   nusantara <berkas.nusantara> [argumen...]
 
-Perintah Eksekusi, Toolchain & Developer Tools:
+Perintah Eksekusi, Toolchain, Testing & Developer Tools:
   jalankan <berkas>      Eksekusi program NUSANTARA
+  uji [<target>]         Menjalankan pengujian otomatis (*.uji.nusantara / *_test.nusantara)
+  uji-semua, quality-gate Menjalankan seluruh Quality Gate & Verifikasi Kualitas NUSANTARA
   format [<berkas>|.]    Format kode sumber NUSANTARA sesuai standar resmi
   cek [<berkas>|.]       Pemeriksaan sintaksis, sistem tipe, dan linter tanpa eksekusi
   bahasa-server, lsp     Menjalankan Language Server Protocol (LSP) via stdio untuk IDE/Editor
@@ -580,6 +720,11 @@ Perintah Manajemen Paket:
   perbarui [<nama>]      Memperbarui dependensi ke versi kompatibel terbaru
   daftar                 Menampilkan daftar dependensi proyek saat ini
   info                   Menampilkan ringkasan metadata paket proyek
+
+Opsi Perintah 'uji':
+  --cari, --filter <teks> Filter pengujian berdasarkan nama atau jalur berkas
+  --verbose, -V          Tampilkan rincian detail setiap assertion/penegasan yang diuji
+  --timeout <ms>         Batas waktu eksekusi setiap berkas pengujian (default: 5000ms)
 
 Opsi Perintah 'format':
   --tulis, -w            Tulis hasil format langsung ke berkas (in-place) secara aman
@@ -594,8 +739,8 @@ Opsi Global:
   --version, -v, versi   Tampilkan versi resmi NUSANTARA
 
 Kode Status Keluar (Exit Codes):
-  0                      Operasi berhasil tanpa kesalahan
-  1                      Terdapat kesalahan sintaks, tipe, linter, atau runtime
+  0                      Operasi berhasil tanpa kesalahan (atau semua test lulus)
+  1                      Terdapat kesalahan sintaks, tipe, linter, runtime, atau kegagalan penegasan test
   2                      Kesalahan sintaksis argumen atau perintah CLI tidak valid
 `);
   }

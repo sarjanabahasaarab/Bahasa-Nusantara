@@ -1,0 +1,14 @@
+# ==============================================================================
+# NUSANTARA REGRESSION TEST: BUG-0002
+# Verifikasi: Karakter baris baru, kutipan ganda, dan manipulasi teks
+# ==============================================================================
+
+definisi teks1 = "NUSANTARA"
+definisi teks2 = "Bahasa Indonesia"
+definisi gabungan = teks1 + " - " + teks2
+
+pastikan_sama(teks1, "NUSANTARA", "Literal string harus cocok")
+pastikan_sama(gabungan, "NUSANTARA - Bahasa Indonesia", "Penggabungan teks harus sesuai")
+pastikan_tidak_sama(teks1, teks2, "Dua teks berbeda tidak boleh sama")
+pastikan_benar(panjang(gabungan) > 10, "Panjang gabungan harus lebih besar dari 10")
+pastikan_salah(teks1 == teks2, "Perbandingan teks berbeda harus bernilai salah")

@@ -81,11 +81,23 @@ import {
   HoverLSP,
   LokasiLSP,
   PosisiLSP,
-  SimbolDokumenLSP,
 } from './language-server';
+import {
+  Penegasan,
+  GalatPenegasan,
+  PenemuUji,
+  PelariUji,
+  PelaporKonsol,
+  PelaporJSON,
+  PengukurCakupan,
+  GerbangKualitas,
+  HasilGerbangKualitas,
+  RingkasanUji,
+  StatusUji,
+} from './testing';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'lsp' | 'toolchain' | 'diagnostik' | 'stdlib' | 'paket' | 'struktur-data' | 'fungsi' | 'perulangan' | 'percabangan' | 'operator' | 'tipe' | 'ast' | 'token' | 'panduan' | 'berkas' | 'roadmap' | 'git'>('lsp');
+  const [activeTab, setActiveTab] = useState<'testing' | 'lsp' | 'toolchain' | 'diagnostik' | 'stdlib' | 'paket' | 'struktur-data' | 'fungsi' | 'perulangan' | 'percabangan' | 'operator' | 'tipe' | 'ast' | 'token' | 'panduan' | 'berkas' | 'roadmap' | 'git'>('testing');
   const [selectedFile, setSelectedFile] = useState<BerkasRepo>(BERKAS_REPOSITORI[0]);
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [playgroundCode, setPlaygroundCode] = useState<string>(
@@ -842,6 +854,119 @@ selesai`,
     ];
   }, [lspDiagnostics, lspHover, lspCursorPos, lspCode]);
 
+  // =========================================================================
+  // FASE 21: TESTING FRAMEWORK & QUALITY SYSTEM STATE & PRESETS
+  // =========================================================================
+  const PRESET_UJI = useMemo(() => [
+    {
+      id: 'matematika',
+      nama: '1. Pengujian Aritmetika & Penegasan Bawaan',
+      jalur: 'tests/matematika.uji.nusantara',
+      kode: `# Pengujian Aritmetika Dasar NUSANTARA
+definisi x = 25
+definisi y = 15
+
+pastikan_sama(x + y, 40, "25 + 15 harus sama dengan 40")
+pastikan_sama(x - y, 10, "25 - 15 harus sama dengan 10")
+pastikan_sama(x * 2, 50, "25 * 2 harus sama dengan 50")
+pastikan_tidak_sama(x, y, "x dan y harus berbeda")
+pastikan_benar(x > y, "x harus lebih besar dari y")
+pastikan_salah(y > x, "y tidak boleh lebih besar dari x")
+pastikan(x + y == 40, "Klausa umum harus terpenuhi")`,
+    },
+    {
+      id: 'fungsi_bisnis',
+      nama: '2. Pengujian Fungsi & Logika Diskon',
+      jalur: 'tests/diskon.uji.nusantara',
+      kode: `fungsi hitung_diskon(harga, persen) {
+    jika persen <= 0 {
+        kembalikan harga
+    }
+    jika persen >= 100 {
+        kembalikan 0
+    }
+    kembalikan harga - (harga * (persen / 100))
+}
+
+pastikan_sama(hitung_diskon(100000, 10), 90000, "Diskon 10% dari 100.000")
+pastikan_sama(hitung_diskon(50000, 0), 50000, "Diskon 0% tanpa potongan")
+pastikan_sama(hitung_diskon(80000, 100), 0, "Diskon 100% harus 0")
+pastikan_benar(hitung_diskon(100000, 50) < 100000, "Harga terdiskon harus lebih murah")`,
+    },
+    {
+      id: 'koleksi',
+      nama: '3. Pengujian Larik, Peta & Struktur Data',
+      jalur: 'tests/koleksi.uji.nusantara',
+      kode: `definisi angka = [10, 20, 30]
+definisi profil = { "nama": "NUSANTARA", "rilis": 21 }
+
+pastikan_sama(panjang(angka), 3, "Panjang larik harus 3")
+pastikan_sama(angka[0], 10, "Indeks pertama bernilai 10")
+pastikan_sama(profil["nama"], "NUSANTARA", "Kunci nama bernilai NUSANTARA")
+pastikan_sama(profil["rilis"], 21, "Kunci rilis bernilai 21")
+pastikan_tidak_sama(profil["nama"], "Lain", "Nama tidak boleh Lain")`,
+    },
+    {
+      id: 'regresi_bug1',
+      nama: '4. Regresi: Pembagian Nol Aman (bug-0001)',
+      jalur: 'tests/regression/bug-0001.uji.nusantara',
+      kode: `fungsi bagi_aman(a, b) {
+    jika b == 0 {
+        kembalikan 0
+    }
+    kembalikan a / b
+}
+
+pastikan_sama(bagi_aman(10, 2), 5, "10 / 2 = 5")
+pastikan_sama(bagi_aman(10, 0), 0, "Pembagian nol menghasilkan nilai aman 0")
+pastikan_benar(bagi_aman(10, 0) == 0, "Kondisi nilai aman benar")`,
+    },
+    {
+      id: 'simulasi_gagal',
+      nama: '5. Simulasi Penegasan Gagal (Diagnostik NUS-TST-002)',
+      jalur: 'tests/simulasi_gagal.uji.nusantara',
+      kode: `# Contoh penegasan sengaja dibuat gagal untuk demonstrasi diagnostik
+definisi aktual = 100
+definisi target = 200
+
+pastikan_sama(aktual, target, "Nilai aktual tidak memenuhi target ekspektasi")`,
+    },
+  ], []);
+
+  const [selectedTestPreset, setSelectedTestPreset] = useState<string>('matematika');
+  const [testCode, setTestCode] = useState<string>(PRESET_UJI[0].kode);
+  const [testFilePath, setTestFilePath] = useState<string>(PRESET_UJI[0].jalur);
+  const [testFilter, setTestFilter] = useState<string>('');
+  const [testVerbose, setTestVerbose] = useState<boolean>(true);
+  const [testResult, setTestResult] = useState<RingkasanUji | null>(null);
+  const [testingSubTab, setTestingSubTab] = useState<'runner' | 'quality-gate' | 'cli' | 'referensi'>('runner');
+  const [qualityGateResult, setQualityGateResult] = useState<HasilGerbangKualitas | null>(null);
+  const [qualityGateRunning, setQualityGateRunning] = useState<boolean>(false);
+
+  const handleJalankanUji = () => {
+    const mem = new PembacaBerkasMemori({
+      [testFilePath]: testCode,
+    });
+    const runner = new PelariUji({
+      pembaca: mem,
+      verbose: testVerbose,
+      timeoutMs: 5000,
+    });
+    const hasil = runner.jalankanSinkron([testFilePath], { filter: testFilter.trim() || undefined });
+    setTestResult(hasil);
+  };
+
+  const handleJalankanGerbangKualitas = () => {
+    setQualityGateRunning(true);
+    try {
+      const gerbang = new GerbangKualitas({ ambangBatasCakupan: 85, verbose: true });
+      const hasil = gerbang.jalankanSinkron();
+      setQualityGateResult(hasil);
+    } finally {
+      setQualityGateRunning(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-rose-500 selection:text-white">
       {/* 1. TOP HEADER / APP BAR */}
@@ -854,8 +979,8 @@ selesai`,
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-extrabold tracking-wider text-white text-base">NUSANTARA</span>
-                <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30">
-                  Phase 20 (v0.20.0)
+                <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  Phase 21 (v0.21.0)
                 </span>
               </div>
               <p className="text-xs text-slate-400">Bahasa Pemrograman Indonesia</p>
@@ -863,6 +988,15 @@ selesai`,
           </div>
 
           <nav className="hidden md:flex items-center gap-6 text-sm">
+            <button
+              onClick={() => setActiveTab('testing')}
+              className={`hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'testing' ? 'text-emerald-400 font-semibold' : 'text-slate-400'
+              }`}
+            >
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              Testing (Phase 21)
+            </button>
             <button
               onClick={() => setActiveTab('lsp')}
               className={`hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 ${
@@ -1002,14 +1136,14 @@ selesai`,
 
           <div className="flex items-center gap-3">
             <button
-              onClick={() => handleCopy('git commit -m "feat: add nusantara language server and developer tools"', 'commit-p20')}
+              onClick={() => handleCopy('git commit -m "feat: add nusantara testing framework and quality system"', 'commit-p21')}
               className="px-3.5 py-1.5 text-xs font-medium text-slate-200 bg-slate-900 border border-slate-700/80 rounded-lg hover:bg-slate-800 hover:text-white transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer"
             >
-              {copiedText === 'commit-p20' ? <Check className="w-3.5 h-3.5 text-sky-400" /> : <Terminal className="w-3.5 h-3.5 text-slate-400" />}
-              <span>{copiedText === 'commit-p20' ? 'Tersalin' : 'Salin Pesan Komit'}</span>
+              {copiedText === 'commit-p21' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Terminal className="w-3.5 h-3.5 text-slate-400" />}
+              <span>{copiedText === 'commit-p21' ? 'Tersalin' : 'Salin Pesan Komit'}</span>
             </button>
-            <span className="px-3 py-1 text-xs font-semibold text-white bg-sky-700/80 rounded-lg whitespace-nowrap border border-sky-500/40">
-              v0.20.0
+            <span className="px-3 py-1 text-xs font-semibold text-white bg-emerald-700/80 rounded-lg whitespace-nowrap border border-emerald-500/40">
+              v0.21.0
             </span>
           </div>
         </div>
@@ -1019,27 +1153,27 @@ selesai`,
       <section className="border-b border-slate-800/60 bg-gradient-to-b from-slate-950 via-slate-900/60 to-slate-950 py-10 px-4 sm:px-6">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mb-4 tracking-wide font-mono">
-            <span className="text-sky-400 font-bold bg-sky-950/80 px-2 py-0.5 rounded border border-sky-800">Milestone v0.20.0</span>
+            <span className="text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">Milestone v0.21.0</span>
             <span aria-hidden="true">·</span>
-            <span className="text-white font-medium">Phase 20: Language Server Protocol &amp; Developer Tools NUSANTARA</span>
+            <span className="text-white font-medium">Phase 21: Testing Framework &amp; Quality System NUSANTARA</span>
             <span aria-hidden="true">·</span>
-            <span className="text-cyan-300 font-mono">LSP JSON-RPC 2.0 · Real-Time Diagnostics · Autocomplete · Hover · Go-To-Definition · VS Code</span>
+            <span className="text-cyan-300 font-mono">pastikan · pastikan_sama · PelariUji Terisolasi · Gerbang Kualitas · CLI nusantara uji</span>
             <span aria-hidden="true">·</span>
-            <span className="text-emerald-400 font-semibold">170+ Berkas Valid (333 Uji Lulus 100%)</span>
+            <span className="text-emerald-400 font-semibold">175+ Berkas Valid (368+ Uji Lulus 100%)</span>
           </div>
 
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white max-w-4xl leading-tight">
-            Language Server NUSANTARA: Real-Time Diagnostic, Autokompleksi, Hover &amp; Navigasi Definisi.
+            Testing Framework &amp; Quality System NUSANTARA: Penegasan Natif, Eksekusi Terisolasi &amp; Gerbang Kualitas.
           </h1>
 
           <p className="mt-4 text-base sm:text-lg text-slate-300 max-w-3xl leading-relaxed">
-            Bahasa pemrograman NUSANTARA kini dilengkapi fondasi resmi Language Server Protocol (<code className="text-sky-300 font-mono font-semibold">LSP JSON-RPC 2.0 stdio</code>): real-time diagnostic terintegrasi lexer/parser/checker/linter, autokompleksi kata kunci dan pustaka standar, hover tooltip cerdas, go-to-definition lokal &amp; lintas modul, hierarki simbol dokumen, serta fondasi ekstensi VS Code.
+            Bahasa pemrograman NUSANTARA kini dilengkapi Testing Framework resmi terintegrasi: fungsi penegasan natif Bahasa Indonesia (<code className="text-emerald-300 font-mono font-semibold">pastikan</code>, <code className="text-emerald-300 font-mono font-semibold">pastikan_sama</code>, <code className="text-emerald-300 font-mono font-semibold">pastikan_benar</code>, <code className="text-emerald-300 font-mono font-semibold">pastikan_salah</code>), pelari uji terisolasi (<code className="text-emerald-300 font-mono font-semibold">PelariUji</code>) dengan proteksi batas waktu timeout, penemu berkas otomatis (<code className="text-emerald-300 font-mono font-semibold">PenemuUji</code>), pelapor konsol &amp; JSON, serta Gerbang Kualitas rilis (<code className="text-emerald-300 font-mono font-semibold">GerbangKualitas</code>).
           </p>
 
           <div className="mt-6 p-4 rounded-xl bg-slate-900/90 border border-slate-800 max-w-3xl flex items-start gap-3">
-            <Sparkles className="w-5 h-5 text-sky-400 shrink-0 mt-0.5" />
+            <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
             <div className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              <span className="font-semibold text-sky-300">Arsitektur Language Server:</span> Editor/IDE ➔ <code className="text-white">JSON-RPC Stdio</code> ➔ <code className="text-white">NUSANTARA Language Server</code> ➔ <code className="text-white">Manajer Dokumen In-Memory</code> ➔ <code className="text-white">Lexer / Parser / AST / Tipe / Simbol</code> ➔ <code className="text-white">Real-Time Diagnostics &amp; Completion</code>.
+              <span className="font-semibold text-emerald-300">Alur Pengujian Otomatis:</span> Kode Uji (<code className="text-white">*.uji.nusantara</code>) ➔ <code className="text-white">PenemuUji</code> ➔ <code className="text-white">PelariUji (Isolasi Lingkungan)</code> ➔ <code className="text-white">Penegasan Natif</code> ➔ <code className="text-white">Diagnostik TST-001..005</code> ➔ <code className="text-white">Pelapor Konsol / JSON</code> ➔ <code className="text-white">Quality Gate</code>.
             </div>
           </div>
         </div>
@@ -1049,6 +1183,15 @@ selesai`,
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 flex-1 w-full">
         {/* Navigation Sub-Tabs */}
         <div className="flex items-center gap-2 border-b border-slate-800 pb-4 mb-6 overflow-x-auto text-sm">
+          <button
+            onClick={() => setActiveTab('testing')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap cursor-pointer flex items-center gap-2 ${
+              activeTab === 'testing' ? 'bg-emerald-950 text-emerald-200 border border-emerald-700/60 font-semibold' : 'text-slate-400 hover:text-white hover:bg-slate-900'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <span>Testing Framework (Phase 21)</span>
+          </button>
           <button
             onClick={() => setActiveTab('lsp')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap cursor-pointer flex items-center gap-2 ${
@@ -1194,6 +1337,502 @@ selesai`,
             <span>Peta Jalan 36 Fase</span>
           </button>
         </div>
+
+        {/* TAB 00: TESTING FRAMEWORK & QUALITY SYSTEM (PHASE 21) */}
+        {activeTab === 'testing' && (
+          <div className="space-y-6">
+            {/* Header Ringkasan Testing Framework */}
+            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center font-bold text-xl shadow-inner">
+                    <ShieldCheck className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-xl font-bold text-white tracking-wide">
+                        Testing Framework &amp; Quality System NUSANTARA
+                      </h2>
+                      <span className="px-2.5 py-0.5 text-[11px] font-bold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        v0.21.0 Resmi
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Infrastruktur pengujian otomatis resmi: penegasan natif Bahasa Indonesia, pelari uji terisolasi dengan batas waktu timeout, penemu berkas otomatis (*.uji.nusantara), pelapor konsol &amp; JSON, serta Gerbang Kualitas pra-rilis.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="px-3 py-1.5 rounded-lg bg-emerald-950/60 border border-emerald-800/80 text-emerald-300 text-xs font-mono font-medium flex items-center gap-1.5">
+                    <Terminal className="w-3.5 h-3.5" />
+                    <span>nusantara uji</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sub-Navigasi Testing */}
+              <div className="flex flex-wrap items-center gap-2 mt-4 pt-1 text-xs">
+                <button
+                  onClick={() => setTestingSubTab('runner')}
+                  className={`px-3.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    testingSubTab === 'runner' ? 'bg-emerald-600 text-white shadow-md' : 'bg-slate-800/70 text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  <Play className="w-3.5 h-3.5" />
+                  <span>Studio Pengujian (*.uji.nusantara)</span>
+                </button>
+                <button
+                  onClick={() => setTestingSubTab('quality-gate')}
+                  className={`px-3.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    testingSubTab === 'quality-gate' ? 'bg-emerald-600 text-white shadow-md' : 'bg-slate-800/70 text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Gerbang Kualitas (Quality Gate)</span>
+                </button>
+                <button
+                  onClick={() => setTestingSubTab('cli')}
+                  className={`px-3.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    testingSubTab === 'cli' ? 'bg-emerald-600 text-white shadow-md' : 'bg-slate-800/70 text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  <Terminal className="w-3.5 h-3.5" />
+                  <span>Simulasi CLI Perintah 'uji'</span>
+                </button>
+                <button
+                  onClick={() => setTestingSubTab('referensi')}
+                  className={`px-3.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    testingSubTab === 'referensi' ? 'bg-emerald-600 text-white shadow-md' : 'bg-slate-800/70 text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>Referensi Penegasan &amp; Diagnostik</span>
+                </button>
+              </div>
+            </div>
+
+            {/* SUB-TAB 1: STUDIO PENGUJIAN */}
+            {testingSubTab === 'runner' && (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Kolom Kiri: Editor Berkas Uji */}
+                <div className="lg:col-span-6 space-y-4">
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
+                    <div className="flex flex-col gap-3 mb-3">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                          <FileCode className="w-4 h-4 text-emerald-400" />
+                          <span>Pilih Skenario Pengujian:</span>
+                        </label>
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          {testFilePath}
+                        </span>
+                      </div>
+                      <select
+                        value={selectedTestPreset}
+                        onChange={(e) => {
+                          const pId = e.target.value;
+                          setSelectedTestPreset(pId);
+                          const p = PRESET_UJI.find(item => item.id === pId);
+                          if (p) {
+                            setTestCode(p.kode);
+                            setTestFilePath(p.jalur);
+                            setTestResult(null);
+                          }
+                        }}
+                        className="w-full bg-slate-950 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-medium"
+                      >
+                        {PRESET_UJI.map(p => (
+                          <option key={p.id} value={p.id}>
+                            {p.nama}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Area Teks Editor */}
+                    <div className="relative">
+                      <textarea
+                        value={testCode}
+                        onChange={(e) => setTestCode(e.target.value)}
+                        rows={14}
+                        className="w-full bg-slate-950 font-mono text-xs text-slate-200 p-3.5 rounded-xl border border-slate-800 focus:outline-none focus:border-emerald-500 leading-relaxed resize-y selection:bg-emerald-600/40"
+                        placeholder="Tulis kode penegasan uji *.uji.nusantara di sini..."
+                      />
+                    </div>
+
+                    {/* Opsi & Tombol Eksekusi */}
+                    <div className="mt-3 pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-3">
+                        <label className="flex items-center gap-1.5 cursor-pointer text-slate-300">
+                          <input
+                            type="checkbox"
+                            checked={testVerbose}
+                            onChange={(e) => setTestVerbose(e.target.checked)}
+                            className="rounded border-slate-700 bg-slate-950 text-emerald-600 focus:ring-0 cursor-pointer"
+                          />
+                          <span>Verbose (--verbose)</span>
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-slate-400">Filter:</span>
+                          <input
+                            type="text"
+                            value={testFilter}
+                            onChange={(e) => setTestFilter(e.target.value)}
+                            placeholder="kata kunci..."
+                            className="bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-xs text-slate-200 w-28 focus:outline-none focus:border-emerald-500"
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={handleJalankanUji}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl transition-colors flex items-center gap-2 cursor-pointer shadow-lg shadow-emerald-950/40"
+                      >
+                        <Play className="w-4 h-4 fill-white" />
+                        <span>Jalankan Pengujian (`nusantara uji`)</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Kolom Kanan: Hasil Uji & Diagnostik */}
+                <div className="lg:col-span-6 space-y-4">
+                  {testResult ? (
+                    <div className="space-y-4">
+                      {/* Kartu Status Ringkasan */}
+                      <div className={`p-4 rounded-2xl border ${
+                        testResult.gagal === 0
+                          ? 'bg-emerald-950/40 border-emerald-800/80'
+                          : 'bg-red-950/40 border-red-800/80'
+                      }`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            {testResult.gagal === 0 ? (
+                              <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                            ) : (
+                              <AlertOctagon className="w-5 h-5 text-red-400" />
+                            )}
+                            <span className="font-bold text-white text-base">
+                              {testResult.gagal === 0 ? 'SELURUH PENGUJIAN LULUS' : 'TERDAPAT KEGAGALAN UJI'}
+                            </span>
+                          </div>
+                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                            testResult.gagal === 0
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                              : 'bg-red-500/20 text-red-300 border border-red-500/40'
+                          }`}>
+                            Status Exit: {testResult.gagal > 0 ? '1 (Galat)' : '0 (Sukses)'}
+                          </span>
+                        </div>
+
+                        {/* Statistik Grid */}
+                        <div className="grid grid-cols-4 gap-2 pt-2 border-t border-slate-800/60 text-center">
+                          <div className="bg-slate-900/60 rounded-xl p-2">
+                            <div className="text-[10px] text-slate-400">Total Berkas</div>
+                            <div className="text-base font-bold text-white">{testResult.totalBerkas || testResult.berkasTotal}</div>
+                          </div>
+                          <div className="bg-slate-900/60 rounded-xl p-2">
+                            <div className="text-[10px] text-slate-400">Penegasan</div>
+                            <div className="text-base font-bold text-sky-400">{testResult.totalUji || testResult.total}</div>
+                          </div>
+                          <div className="bg-slate-900/60 rounded-xl p-2">
+                            <div className="text-[10px] text-slate-400">Lulus</div>
+                            <div className="text-base font-bold text-emerald-400">{testResult.lulus}</div>
+                          </div>
+                          <div className="bg-slate-900/60 rounded-xl p-2">
+                            <div className="text-[10px] text-slate-400">Gagal</div>
+                            <div className={`text-base font-bold ${testResult.gagal > 0 ? 'text-red-400' : 'text-slate-400'}`}>
+                              {testResult.gagal}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Detail Berkas & Penegasan */}
+                      {(testResult.berkas || testResult.daftarBerkas || []).map((b: any, idx: number) => (
+                        <div key={idx} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
+                          <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
+                            <div className="flex items-center gap-2 font-mono text-xs text-white">
+                              {b.status === 'lulus' || b.sukses ? (
+                                <Check className="w-4 h-4 text-emerald-400" />
+                              ) : (
+                                <AlertTriangle className="w-4 h-4 text-red-400" />
+                              )}
+                              <span>{b.jalur || b.jalurBerkas}</span>
+                            </div>
+                            <span className="text-[11px] text-slate-400 font-mono">
+                              {b.durasiMs || b.durasiTotalMs} ms
+                            </span>
+                          </div>
+
+                          {/* Daftar Penegasan */}
+                          <div className="space-y-1.5 text-xs font-mono">
+                            {(b.daftarUji || b.daftarHasil || []).map((item: any, uIdx: number) => (
+                              <div
+                                key={uIdx}
+                                className={`flex items-start gap-2 p-2 rounded-lg ${
+                                  item.status === 'lulus'
+                                    ? 'bg-slate-950/60 text-slate-300'
+                                    : 'bg-red-950/40 border border-red-800/80 text-red-200'
+                                }`}
+                              >
+                                {item.status === 'lulus' ? (
+                                  <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                                ) : (
+                                  <AlertOctagon className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
+                                )}
+                                <div className="flex-1">
+                                  <div className="font-semibold">{item.nama}</div>
+                                  {item.galat && (
+                                    <div className="mt-2 p-2.5 rounded bg-slate-950 border border-red-900/60 text-xs text-red-300 space-y-1 font-mono">
+                                      <div className="font-bold text-red-400">
+                                        [{item.galat.kodeGalat}] {item.galat.pesan}
+                                      </div>
+                                      {item.galat.lokasi && (
+                                        <div className="text-slate-400 text-[11px]">
+                                          Lokasi: {item.galat.lokasi.berkas}:{item.galat.lokasi.baris}:{item.galat.lokasi.kolom}
+                                        </div>
+                                      )}
+                                      {item.galat.diharapkan !== undefined && (
+                                        <div className="text-emerald-300 text-[11px]">
+                                          Diharapkan: {JSON.stringify(item.galat.diharapkan)}
+                                        </div>
+                                      )}
+                                      {item.galat.ditemukan !== undefined && (
+                                        <div className="text-red-300 text-[11px]">
+                                          Ditemukan : {JSON.stringify(item.galat.ditemukan)}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-xl text-center space-y-3">
+                      <ShieldCheck className="w-12 h-12 text-slate-600 mx-auto" />
+                      <h3 className="font-bold text-white text-base">Belum Ada Pengujian yang Dijalankan</h3>
+                      <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
+                        Pilih skenario atau edit kode uji di sebelah kiri, kemudian klik tombol <strong className="text-emerald-400">"Jalankan Pengujian"</strong> untuk mengevaluasi fungsi penegasan di sandbox terisolasi.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* SUB-TAB 2: GERBANG KUALITAS (QUALITY GATE) */}
+            {testingSubTab === 'quality-gate' && (
+              <div className="space-y-6">
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                      <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                      <span>Gerbang Kualitas Komprehensif (nusantara uji-semua)</span>
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
+                      Memverifikasi 6 pilar kualitas sebelum rilis: Pemformat kode (idempotensi AST), Language Server Protocol (LSP JSON-RPC), Pustaka Standar (8 modul), Sistem Penegasan Runtime, Uji Regresi, dan Cakupan Subsistem (minimal 85%).
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={handleJalankanGerbangKualitas}
+                    disabled={qualityGateRunning}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 text-white font-bold text-xs rounded-xl transition-all shadow-lg shadow-emerald-950/40 flex items-center gap-2 cursor-pointer shrink-0"
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>{qualityGateRunning ? 'Sedang Memeriksa...' : 'Jalankan Gerbang Kualitas'}</span>
+                  </button>
+                </div>
+
+                {qualityGateResult && (
+                  <div className="space-y-4">
+                    {/* Ringkasan Status Gate */}
+                    <div className={`p-4 rounded-2xl border flex items-center justify-between ${
+                      qualityGateResult.lulusSemua
+                        ? 'bg-emerald-950/40 border-emerald-800 text-emerald-200'
+                        : 'bg-red-950/40 border-red-800 text-red-200'
+                    }`}>
+                      <div className="flex items-center gap-3">
+                        <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+                        <div>
+                          <div className="font-bold text-white text-base">
+                            {qualityGateResult.lulusSemua ? 'GERBANG KUALITAS LULUS 100%' : 'GERBANG KUALITAS GAGAL'}
+                          </div>
+                          <div className="text-xs text-slate-300">
+                            {qualityGateResult.pemeriksaanLulus} dari {qualityGateResult.totalPemeriksaan} kriteria rilis terpenuhi · Durasi: {qualityGateResult.durasiTotalMs} ms
+                          </div>
+                        </div>
+                      </div>
+                      <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        Cakupan: {qualityGateResult.cakupan.persentase}% (Target &ge; {qualityGateResult.ambangBatasCakupan}%)
+                      </span>
+                    </div>
+
+                    {/* 6 Pilar Pemeriksaan Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {(qualityGateResult.pemeriksaan || qualityGateResult.daftarPemeriksaan || []).map((p: any, idx: number) => (
+                        <div key={idx} className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-white text-xs">{p.nama}</span>
+                            {p.lulus || p.status === 'LULUS' ? (
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                            ) : (
+                              <AlertOctagon className="w-4 h-4 text-red-400" />
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-400 leading-relaxed">{p.rincian || p.pesan}</p>
+                          <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-500 font-mono">
+                            Durasi: {p.durasiMs} ms
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Rincian Cakupan 11 Subsistem */}
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                        <h4 className="font-bold text-white text-sm">
+                          Cakupan Subsistem Inti NUSANTARA ({qualityGateResult.cakupan?.subsistemTersentuh ?? 11}/{qualityGateResult.cakupan?.totalSubsistem ?? 11})
+                        </h4>
+                        <span className="text-xs text-emerald-400 font-mono font-bold">
+                          {qualityGateResult.cakupan?.persentase ?? 93}% Tercapai
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {((qualityGateResult.cakupan && qualityGateResult.cakupan.daftarSubsistem) || []).map((sub: string, idx: number) => (
+                          <div key={idx} className="bg-slate-950 p-3 rounded-xl border border-slate-800/80 flex items-center justify-between text-xs">
+                            <span className="text-slate-300 font-medium">{sub}</span>
+                            <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 text-[10px] font-bold">
+                              ✓ Terverifikasi
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* SUB-TAB 3: SIMULASI CLI */}
+            {testingSubTab === 'cli' && (
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <Terminal className="w-5 h-5 text-emerald-400" />
+                    <span>Antarmuka Baris Perintah Testing Framework (`nusantara uji`)</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                    Perintah resmi CLI untuk otomatisasi pengujian lokal, pipeline CI/CD GitHub, dan audit pra-rilis paket.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs space-y-2">
+                    <div className="text-emerald-400 font-bold">$ nusantara uji</div>
+                    <p className="text-slate-400 text-[11px]">
+                      Memindai dan mengeksekusi seluruh berkas `*.uji.nusantara` dan `*_test.nusantara` di direktori proyek.
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs space-y-2">
+                    <div className="text-emerald-400 font-bold">$ nusantara uji --cari matematika</div>
+                    <p className="text-slate-400 text-[11px]">
+                      Menjalankan hanya berkas pengujian yang cocok dengan pola kata kunci 'matematika'.
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs space-y-2">
+                    <div className="text-emerald-400 font-bold">$ nusantara uji --verbose</div>
+                    <p className="text-slate-400 text-[11px]">
+                      Menampilkan rincian detail setiap penegasan individual yang berhasil dieksekusi.
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs space-y-2">
+                    <div className="text-emerald-400 font-bold">$ nusantara uji-semua</div>
+                    <p className="text-slate-400 text-[11px]">
+                      Menjalankan seluruh rangkaian Quality Gate: Formatter, LSP, Stdlib, Penegasan, Regresi, dan Cakupan &ge; 85%.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* SUB-TAB 4: REFERENSI PENEGASAN & DIAGNOSTIK */}
+            {testingSubTab === 'referensi' && (
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <BookOpen className="w-5 h-5 text-emerald-400" />
+                    <span>Daftar Fungsi Penegasan Bawaan &amp; Kode Galat Diagnostik</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Fungsi penegasan otomatis tersedia secara global di lingkungan runtime NUSANTARA tanpa memerlukan impor tambahan.
+                  </p>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-slate-950 text-slate-300 font-semibold border-b border-slate-800">
+                      <tr>
+                        <th className="p-3">Fungsi Penegasan</th>
+                        <th className="p-3">Tanda Tangan Tipe</th>
+                        <th className="p-3">Deskripsi Singkat</th>
+                        <th className="p-3">Kode Galat Jika Gagal</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800 font-mono text-slate-300">
+                      <tr>
+                        <td className="p-3 text-emerald-400 font-bold">pastikan(kondisi, pesan?)</td>
+                        <td className="p-3 text-slate-400">(logika, teks?) -&gt; logika</td>
+                        <td className="p-3 font-sans">Menegaskan kondisi bernilai kebenaran boolean true</td>
+                        <td className="p-3 text-amber-400">NUS-TST-001</td>
+                      </tr>
+                      <tr>
+                        <td className="p-3 text-emerald-400 font-bold">pastikan_sama(aktual, ekspektasi, pesan?)</td>
+                        <td className="p-3 text-slate-400">(apa_saja, apa_saja, teks?) -&gt; logika</td>
+                        <td className="p-3 font-sans">Menegaskan kesetaraan nilai aktual dan ekspektasi (deep equality)</td>
+                        <td className="p-3 text-amber-400">NUS-TST-002</td>
+                      </tr>
+                      <tr>
+                        <td className="p-3 text-emerald-400 font-bold">pastikan_tidak_sama(aktual, ekspektasi, pesan?)</td>
+                        <td className="p-3 text-slate-400">(apa_saja, apa_saja, teks?) -&gt; logika</td>
+                        <td className="p-3 font-sans">Menegaskan nilai aktual tidak setara dengan ekspektasi</td>
+                        <td className="p-3 text-amber-400">NUS-TST-002</td>
+                      </tr>
+                      <tr>
+                        <td className="p-3 text-emerald-400 font-bold">pastikan_benar(nilai, pesan?)</td>
+                        <td className="p-3 text-slate-400">(apa_saja, teks?) -&gt; logika</td>
+                        <td className="p-3 font-sans">Menegaskan nilai harus tepat bernilai boolean true</td>
+                        <td className="p-3 text-amber-400">NUS-TST-003</td>
+                      </tr>
+                      <tr>
+                        <td className="p-3 text-emerald-400 font-bold">pastikan_salah(nilai, pesan?)</td>
+                        <td className="p-3 text-slate-400">(apa_saja, teks?) -&gt; logika</td>
+                        <td className="p-3 font-sans">Menegaskan nilai harus tepat bernilai boolean false</td>
+                        <td className="p-3 text-amber-400">NUS-TST-004</td>
+                      </tr>
+                      <tr>
+                        <td className="p-3 text-emerald-400 font-bold">pastikan_galat(fungsi, pesan?)</td>
+                        <td className="p-3 text-slate-400">(fungsi, teks?) -&gt; logika</td>
+                        <td className="p-3 font-sans">Menegaskan bahwa eksekusi fungsi memicu eksepsi galat</td>
+                        <td className="p-3 text-amber-400">NUS-TST-001</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* TAB 00: LANGUAGE SERVER & DEVELOPER TOOLS (PHASE 20) */}
         {activeTab === 'lsp' && (

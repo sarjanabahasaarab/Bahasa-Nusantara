@@ -24,7 +24,8 @@
     "test:diagnostik": "tsx pengujian/diagnostik/uji_diagnostik.ts",
     "test:toolchain": "tsx pengujian/toolchain/uji_toolchain.ts",
     "test:lsp": "tsx pengujian/lsp/uji_lsp.ts",
-    "test": "node skrip/periksa_fondasi.js && tsx pengujian/lexer/uji_lexer.ts && tsx pengujian/parser/uji_parser.ts && tsx pengujian/interpreter/uji_interpreter.ts && tsx pengujian/tipe/uji_tipe.ts && tsx pengujian/operator/uji_operator.ts && tsx pengujian/percabangan/uji_percabangan.ts && tsx pengujian/perulangan/uji_perulangan.ts && tsx pengujian/fungsi/uji_fungsi.ts && tsx pengujian/struktur_data/uji_struktur_data.ts && tsx pengujian/modul/uji_modul.ts && tsx pengujian/paket/uji_paket.ts && tsx pengujian/stdlib/uji_stdlib.ts && tsx pengujian/diagnostik/uji_diagnostik.ts && tsx pengujian/toolchain/uji_toolchain.ts && tsx pengujian/lsp/uji_lsp.ts"
+    "test:testing": "tsx pengujian/testing/uji_testing.ts",
+    "test": "node skrip/periksa_fondasi.js && tsx pengujian/lexer/uji_lexer.ts && tsx pengujian/parser/uji_parser.ts && tsx pengujian/interpreter/uji_interpreter.ts && tsx pengujian/tipe/uji_tipe.ts && tsx pengujian/operator/uji_operator.ts && tsx pengujian/percabangan/uji_percabangan.ts && tsx pengujian/perulangan/uji_perulangan.ts && tsx pengujian/fungsi/uji_fungsi.ts && tsx pengujian/struktur_data/uji_struktur_data.ts && tsx pengujian/modul/uji_modul.ts && tsx pengujian/paket/uji_paket.ts && tsx pengujian/stdlib/uji_stdlib.ts && tsx pengujian/diagnostik/uji_diagnostik.ts && tsx pengujian/toolchain/uji_toolchain.ts && tsx pengujian/lsp/uji_lsp.ts && tsx pengujian/testing/uji_testing.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

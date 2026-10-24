@@ -15,6 +15,7 @@ import { simbolEksporAcak, buatEksporAcak } from './acak';
 import { simbolEksporKoleksi, buatEksporKoleksi } from './koleksi';
 import { simbolEksporBerkas, buatEksporBerkas, SandboxBerkas, sandboxBerkasGlobal } from './berkas';
 import { simbolEksporSistem, buatEksporSistem, VERSI_NUSANTARA } from './sistem';
+import { simbolEksporUji, buatEksporUji } from './uji';
 
 export * from './teks';
 export * from './matematika';
@@ -24,6 +25,7 @@ export * from './acak';
 export * from './koleksi';
 export * from './berkas';
 export * from './sistem';
+export * from './uji';
 
 export interface MetadataModulStandar {
   nama: string;
@@ -83,6 +85,12 @@ export const KATALOG_MODUL_STANDAR: Record<string, MetadataModulStandar> = {
     pabrikEkspor: (opsi?: { argumenCLI?: string[]; envOverrides?: Record<string, string> }) =>
       buatEksporSistem(opsi?.argumenCLI, opsi?.envOverrides),
   },
+  uji: {
+    nama: 'uji',
+    deskripsi: 'Modul pengujian resmi NUSANTARA: penegasan nilai (pastikan, pastikanSama, pastikanTidakSama, pastikanBenar, pastikanSalah).',
+    simbolEkspor: simbolEksporUji,
+    pabrikEkspor: () => buatEksporUji(),
+  },
 };
 
 /**
@@ -138,11 +146,25 @@ export function normalisasiNamaModulStandar(namaAtauJalur: string): string | und
   return undefined;
 }
 
+export const DAFTAR_MODUL_STANDAR_INTI = [
+  'teks',
+  'matematika',
+  'konversi',
+  'waktu',
+  'acak',
+  'koleksi',
+  'berkas',
+  'sistem',
+];
+
 /**
- * Mengembalikan seluruh nama modul standar resmi yang tersedia.
+ * Mengembalikan seluruh nama modul standar resmi yang tersedia (8 modul inti Phase 17).
  */
-export function dapatkanDaftarNamaModulStandar(): string[] {
-  return Object.keys(KATALOG_MODUL_STANDAR);
+export function dapatkanDaftarNamaModulStandar(sertakanPengujian: boolean = false): string[] {
+  if (sertakanPengujian) {
+    return Object.keys(KATALOG_MODUL_STANDAR);
+  }
+  return [...DAFTAR_MODUL_STANDAR_INTI];
 }
 
 /**

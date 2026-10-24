@@ -1,0 +1,20 @@
+# ==============================================================================
+# NUSANTARA REGRESSION TEST: BUG-0001
+# Verifikasi: Pembagian bilangan dan penanganan operasi aritmetika batas
+# ==============================================================================
+
+fungsi bagi_aman(a, b) {
+    jika b == 0 {
+        kembalikan 0
+    }
+    kembalikan a / b
+}
+
+# Penegasan operasi normal
+pastikan_sama(bagi_aman(10, 2), 5, "Pembagian normal 10 / 2 harus menghasilkan 5")
+pastikan_sama(bagi_aman(15, 3), 5, "Pembagian normal 15 / 3 harus menghasilkan 5")
+pastikan_sama(bagi_aman(7, 2), 3.5, "Pembagian pecahan 7 / 2 harus menghasilkan 3.5")
+
+# Penegasan pembagian dengan nol tertangani
+pastikan_sama(bagi_aman(10, 0), 0, "Pembagi nol harus mengembalikan nilai aman 0")
+pastikan_benar(bagi_aman(10, 0) == 0, "Kondisi nilai aman harus benar")

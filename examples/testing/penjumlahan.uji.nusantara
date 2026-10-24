@@ -1,0 +1,21 @@
+# ==============================================================================
+# CONTOH PENGUJIAN: OPERASI ARITMETIKA DASAR
+# Menggunakan fungsi penegasan bawaan NUSANTARA:
+# pastikan, pastikan_sama, pastikan_tidak_sama, pastikan_benar, pastikan_salah
+# ==============================================================================
+
+definisi a = 20
+definisi b = 15
+
+# Penegasan kesetaraan nilai
+pastikan_sama(a + b, 35, "20 + 15 harus sama dengan 35")
+pastikan_sama(a - b, 5, "20 - 15 harus sama dengan 5")
+pastikan_sama(a * 2, 40, "20 * 2 harus sama dengan 40")
+
+# Penegasan ketidaksamaan
+pastikan_tidak_sama(a + b, 50, "Hasil penjumlahan tidak boleh bernilai 50")
+
+# Penegasan kondisi kebenaran logika
+pastikan_benar(a > b, "a harus bernilai lebih besar dari b")
+pastikan_salah(b > a, "b tidak boleh lebih besar dari a")
+pastikan(a + b == 35, "Klausa umum harus terpenuhi")

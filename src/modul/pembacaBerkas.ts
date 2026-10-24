@@ -51,13 +51,27 @@ export class PembacaBerkasMemori implements PembacaBerkas {
 
   public apakahAda(jalur: string): boolean {
     const absolut = this.jalurAbsolut(jalur);
-    return this.berkas.has(absolut);
+    if (this.berkas.has(absolut)) return true;
+    if (this.berkas.has(jalur)) return true;
+    const norm = this.normalisasiJalur(jalur);
+    if (this.berkas.has(norm)) return true;
+    const targetTail = '/' + norm.replace(/^\/+/, '');
+    for (const k of this.berkas.keys()) {
+      if (k.endsWith(targetTail)) return true;
+    }
+    return this.apakahDirektori(jalur);
   }
 
   public apakahDirektori(jalur: string): boolean {
     const absolut = this.jalurAbsolut(jalur);
+    const prefix = absolut === '/' ? '/' : (absolut.endsWith('/') ? absolut : absolut + '/');
     for (const k of this.berkas.keys()) {
-      if (k.startsWith(absolut.endsWith('/') ? absolut : absolut + '/')) return true;
+      if (k.startsWith(prefix)) return true;
+    }
+    const norm = this.normalisasiJalur(jalur);
+    const normPrefix = norm === '/' ? '/' : (norm.endsWith('/') ? norm : norm + '/');
+    for (const k of this.berkas.keys()) {
+      if (k.includes(normPrefix)) return true;
     }
     return false;
   }
@@ -78,11 +92,15 @@ export class PembacaBerkasMemori implements PembacaBerkas {
 
   public baca(jalur: string): string {
     const absolut = this.jalurAbsolut(jalur);
-    const konten = this.berkas.get(absolut);
-    if (konten === undefined) {
-      throw new Error(`Berkas '${jalur}' tidak ditemukan pada sistem memori.`);
+    if (this.berkas.has(absolut)) return this.berkas.get(absolut)!;
+    if (this.berkas.has(jalur)) return this.berkas.get(jalur)!;
+    const norm = this.normalisasiJalur(jalur);
+    if (this.berkas.has(norm)) return this.berkas.get(norm)!;
+    const targetTail = '/' + norm.replace(/^\/+/, '');
+    for (const [k, v] of this.berkas.entries()) {
+      if (k.endsWith(targetTail)) return v;
     }
-    return konten;
+    throw new Error(`Berkas '${jalur}' tidak ditemukan pada sistem memori.`);
   }
 
   public jalurAbsolut(jalur: string): string {
@@ -153,7 +171,7 @@ export class PembacaBerkasNode implements PembacaBerkas {
   public apakahAda(jalur: string): boolean {
     if (!this.fs) return false;
     try {
-      return this.fs.existsSync(jalur) && this.fs.statSync(jalur).isFile();
+      return this.fs.existsSync(jalur);
     } catch {
       return false;
     }

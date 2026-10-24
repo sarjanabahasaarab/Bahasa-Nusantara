@@ -1,0 +1,27 @@
+# ==============================================================================
+# CONTOH PENGUJIAN: MANIPULASI KOLEKSI & STRUKTUR DATA
+# ==============================================================================
+
+definisi buah = ["mangga", "pisang", "pepaya", "jeruk"]
+
+fungsi saring_panjang(daftar, batas_panjang) {
+    definisi hasil = []
+    definisi i = 0
+    selama i < panjang(daftar) {
+        definisi item = daftar[i]
+        jika panjang(item) >= batas_panjang {
+            tambah(hasil, item)
+        }
+        i = i + 1
+    }
+    kembalikan hasil
+}
+
+pastikan_sama(panjang(buah), 4, "Jumlah buah mula-mula harus 4")
+pastikan_sama(buah[0], "mangga", "Elemen pertama harus mangga")
+pastikan_tidak_sama(buah[1], "apel", "Elemen kedua bukan apel")
+
+definisi disaring = saring_panjang(buah, 6)
+pastikan_sama(panjang(disaring), 3, "Harus ada 3 buah dengan panjang nama >= 6 huruf (mangga, pisang, pepaya)")
+pastikan_sama(disaring[0], "mangga", "Elemen tersaring 1 adalah mangga")
+pastikan_benar(panjang(disaring) > 0, "Daftar tersaring tidak boleh kosong")

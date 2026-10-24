@@ -1,0 +1,38 @@
+# ==============================================================================
+# CONTOH PENGUJIAN: PENGUJIAN FUNGSI DAN LOGIKA BISNIS
+# ==============================================================================
+
+fungsi hitung_diskon(harga, persen) {
+    jika persen <= 0 {
+        kembalikan harga
+    }
+    jika persen >= 100 {
+        kembalikan 0
+    }
+    definisi potongan = harga * (persen / 100)
+    kembalikan harga - potongan
+}
+
+fungsi tentukan_kategori_usia(usia) {
+    jika usia < 13 {
+        kembalikan "anak"
+    }
+    jika usia < 20 {
+        kembalikan "remaja"
+    }
+    jika usia < 60 {
+        kembalikan "dewasa"
+    }
+    kembalikan "lansia"
+}
+
+# Uji fungsi hitung diskon
+pastikan_sama(hitung_diskon(100000, 10), 90000, "Diskon 10% dari 100000 adalah 90000")
+pastikan_sama(hitung_diskon(50000, 0), 50000, "Diskon 0% tidak memotong harga")
+pastikan_sama(hitung_diskon(75000, 100), 0, "Diskon 100% menjadikan harga gratis")
+
+# Uji penentuan kategori usia
+pastikan_sama(tentukan_kategori_usia(8), "anak", "Usia 8 tahun masuk kategori anak")
+pastikan_sama(tentukan_kategori_usia(17), "remaja", "Usia 17 tahun masuk kategori remaja")
+pastikan_sama(tentukan_kategori_usia(30), "dewasa", "Usia 30 tahun masuk kategori dewasa")
+pastikan_sama(tentukan_kategori_usia(70), "lansia", "Usia 70 tahun masuk kategori lansia")

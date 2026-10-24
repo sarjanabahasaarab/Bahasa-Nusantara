@@ -56,6 +56,7 @@ import { SinyalHentikan, SinyalLanjutkan, SinyalKembalikan } from './sinyal';
 import { PemeriksaTipe } from '../tipe/pemeriksaTipe';
 import { apakahKompatibel } from '../tipe/kompatibilitas';
 import { evaluasiOperasiUnari, evaluasiOperasiBiner } from '../operator/evaluasi';
+import { Penegasan } from '../testing/penegasan';
 import {
   PemuatModul,
   ResolverModul,
@@ -167,6 +168,83 @@ export class Interpreter {
       },
     };
     this.lingkunganGlobal.definisikan('panjang', fnPanjang, true);
+
+    // Registrasi fungsi penegasan resmi (testing assertions Phase 21)
+    const buatPenegasanSama = (nama: string, harusSama: boolean) => {
+      const fn: NilaiFungsiBawaan = {
+        jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+        nama,
+        eksekusi: (argumen: NilaiRuntime[]) => {
+          if (argumen.length < 2) {
+            throw new GalatRuntime(
+              JenisGalatRuntime.ARGUMEN_FUNGSI_TIDAK_SESUAI,
+              `Fungsi '${nama}' membutuhkan minimal 2 argumen: (aktual, ${harusSama ? 'diharapkan' : 'tidak_diharapkan'}, [pesan]).`,
+              undefined,
+              [...this.tumpukanPanggilan]
+            );
+          }
+          const aktual = argumen[0];
+          const pembanding = argumen[1];
+          const pesan = argumen[2]?.jenis === JenisNilaiRuntime.TEKS ? argumen[2].nilai : undefined;
+          if (harusSama) {
+            Penegasan.pastikanSama(aktual, pembanding, pesan);
+          } else {
+            Penegasan.pastikanTidakSama(aktual, pembanding, pesan);
+          }
+          return buatLogika(true);
+        },
+      };
+      this.lingkunganGlobal.definisikan(nama, fn, true);
+    };
+
+    buatPenegasanSama('pastikan_sama', true);
+    buatPenegasanSama('pastikanSama', true);
+    buatPenegasanSama('pastikan_tidak_sama', false);
+    buatPenegasanSama('pastikanTidakSama', false);
+
+    const fnPastikan: NilaiFungsiBawaan = {
+      jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+      nama: 'pastikan',
+      eksekusi: (argumen: NilaiRuntime[]) => {
+        if (argumen.length < 1) {
+          throw new GalatRuntime(
+            JenisGalatRuntime.ARGUMEN_FUNGSI_TIDAK_SESUAI,
+            `Fungsi 'pastikan' membutuhkan minimal 1 argumen: (kondisi, [pesan]).`,
+            undefined,
+            [...this.tumpukanPanggilan]
+          );
+        }
+        const kondisi = argumen[0];
+        const pesan = argumen[1]?.jenis === JenisNilaiRuntime.TEKS ? argumen[1].nilai : undefined;
+        Penegasan.pastikan(kondisi, pesan);
+        return buatLogika(true);
+      },
+    };
+    this.lingkunganGlobal.definisikan('pastikan', fnPastikan, true);
+
+    const fnPastikanBenar: NilaiFungsiBawaan = {
+      jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+      nama: 'pastikan_benar',
+      eksekusi: (argumen: NilaiRuntime[]) => {
+        const pesan = argumen[1]?.jenis === JenisNilaiRuntime.TEKS ? argumen[1].nilai : undefined;
+        Penegasan.pastikanBenar(argumen[0], pesan);
+        return buatLogika(true);
+      },
+    };
+    this.lingkunganGlobal.definisikan('pastikan_benar', fnPastikanBenar, true);
+    this.lingkunganGlobal.definisikan('pastikanBenar', fnPastikanBenar, true);
+
+    const fnPastikanSalah: NilaiFungsiBawaan = {
+      jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+      nama: 'pastikan_salah',
+      eksekusi: (argumen: NilaiRuntime[]) => {
+        const pesan = argumen[1]?.jenis === JenisNilaiRuntime.TEKS ? argumen[1].nilai : undefined;
+        Penegasan.pastikanSalah(argumen[0], pesan);
+        return buatLogika(true);
+      },
+    };
+    this.lingkunganGlobal.definisikan('pastikan_salah', fnPastikanSalah, true);
+    this.lingkunganGlobal.definisikan('pastikanSalah', fnPastikanSalah, true);
   }
 
   public dapatkanPemuatModul(): PemuatModul {
