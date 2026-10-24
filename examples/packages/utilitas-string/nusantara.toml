@@ -1,0 +1,9 @@
+[nusantara]
+nama = "utilitas-string"
+versi = "1.0.0"
+deskripsi = "Paket utilitas manipulasi teks dan string tingkat lanjut untuk NUSANTARA"
+lisensi = "Apache-2.0"
+penulis = "Tim Komunitas Nusantara"
+kata_kunci = ["string", "teks", "utilitas", "format"]
+
+[dependensi]

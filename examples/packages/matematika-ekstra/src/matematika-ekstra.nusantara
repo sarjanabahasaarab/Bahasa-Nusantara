@@ -1,0 +1,31 @@
+// Paket Matematika Ekstra
+// Modul matematika tingkat lanjut untuk ekosistem NUSANTARA
+modul matematika_ekstra
+
+ekspor fungsi kuadrat(n: bilangan): bilangan
+mulai
+    kembalikan n * n
+selesai
+
+ekspor fungsi pangkat_tiga(n: bilangan): bilangan
+mulai
+    kembalikan n * n * n
+selesai
+
+ekspor fungsi faktorial(n: bilangan): bilangan
+mulai
+    jika n <= 1 maka
+        kembalikan 1
+    akhir
+    kembalikan n * faktorial(n - 1)
+selesai
+
+ekspor fungsi fpb(a: bilangan, b: bilangan): bilangan
+mulai
+    selama b != 0 lakukan
+        sisa : bilangan = a % b
+        a = b
+        b = sisa
+    akhir
+    kembalikan a
+selesai

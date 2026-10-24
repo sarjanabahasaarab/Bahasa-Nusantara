@@ -95,9 +95,10 @@ import {
   RingkasanUji,
   StatusUji,
 } from './testing';
+import StudioEkosistemPaket from './komponen/StudioEkosistemPaket';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'testing' | 'lsp' | 'toolchain' | 'diagnostik' | 'stdlib' | 'paket' | 'struktur-data' | 'fungsi' | 'perulangan' | 'percabangan' | 'operator' | 'tipe' | 'ast' | 'token' | 'panduan' | 'berkas' | 'roadmap' | 'git'>('testing');
+  const [activeTab, setActiveTab] = useState<'ekosistem' | 'testing' | 'lsp' | 'toolchain' | 'diagnostik' | 'stdlib' | 'paket' | 'struktur-data' | 'fungsi' | 'perulangan' | 'percabangan' | 'operator' | 'tipe' | 'ast' | 'token' | 'panduan' | 'berkas' | 'roadmap' | 'git'>('ekosistem');
   const [selectedFile, setSelectedFile] = useState<BerkasRepo>(BERKAS_REPOSITORI[0]);
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [playgroundCode, setPlaygroundCode] = useState<string>(
@@ -979,8 +980,8 @@ pastikan_sama(aktual, target, "Nilai aktual tidak memenuhi target ekspektasi")`,
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-extrabold tracking-wider text-white text-base">NUSANTARA</span>
-                <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  Phase 21 (v0.21.0)
+                <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  Phase 22 (v0.22.0)
                 </span>
               </div>
               <p className="text-xs text-slate-400">Bahasa Pemrograman Indonesia</p>
@@ -988,6 +989,15 @@ pastikan_sama(aktual, target, "Nilai aktual tidak memenuhi target ekspektasi")`,
           </div>
 
           <nav className="hidden md:flex items-center gap-6 text-sm">
+            <button
+              onClick={() => setActiveTab('ekosistem')}
+              className={`hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'ekosistem' ? 'text-amber-400 font-semibold' : 'text-slate-400'
+              }`}
+            >
+              <Boxes className="w-4 h-4 text-amber-400" />
+              Ekosistem (Phase 22)
+            </button>
             <button
               onClick={() => setActiveTab('testing')}
               className={`hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 ${
@@ -1136,14 +1146,14 @@ pastikan_sama(aktual, target, "Nilai aktual tidak memenuhi target ekspektasi")`,
 
           <div className="flex items-center gap-3">
             <button
-              onClick={() => handleCopy('git commit -m "feat: add nusantara testing framework and quality system"', 'commit-p21')}
+              onClick={() => handleCopy('git commit -m "feat: add nusantara package ecosystem and local registry foundation"', 'commit-p22')}
               className="px-3.5 py-1.5 text-xs font-medium text-slate-200 bg-slate-900 border border-slate-700/80 rounded-lg hover:bg-slate-800 hover:text-white transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer"
             >
-              {copiedText === 'commit-p21' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Terminal className="w-3.5 h-3.5 text-slate-400" />}
-              <span>{copiedText === 'commit-p21' ? 'Tersalin' : 'Salin Pesan Komit'}</span>
+              {copiedText === 'commit-p22' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Terminal className="w-3.5 h-3.5 text-slate-400" />}
+              <span>{copiedText === 'commit-p22' ? 'Tersalin' : 'Salin Pesan Komit'}</span>
             </button>
-            <span className="px-3 py-1 text-xs font-semibold text-white bg-emerald-700/80 rounded-lg whitespace-nowrap border border-emerald-500/40">
-              v0.21.0
+            <span className="px-3 py-1 text-xs font-semibold text-white bg-amber-700/80 rounded-lg whitespace-nowrap border border-amber-500/40">
+              v0.22.0
             </span>
           </div>
         </div>
@@ -1153,27 +1163,27 @@ pastikan_sama(aktual, target, "Nilai aktual tidak memenuhi target ekspektasi")`,
       <section className="border-b border-slate-800/60 bg-gradient-to-b from-slate-950 via-slate-900/60 to-slate-950 py-10 px-4 sm:px-6">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mb-4 tracking-wide font-mono">
-            <span className="text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">Milestone v0.21.0</span>
+            <span className="text-amber-400 font-bold bg-amber-950/80 px-2 py-0.5 rounded border border-amber-800">Milestone v0.22.0</span>
             <span aria-hidden="true">·</span>
-            <span className="text-white font-medium">Phase 21: Testing Framework &amp; Quality System NUSANTARA</span>
+            <span className="text-white font-medium">Phase 22: Package Ecosystem &amp; Registry NUSANTARA</span>
             <span aria-hidden="true">·</span>
-            <span className="text-cyan-300 font-mono">pastikan · pastikan_sama · PelariUji Terisolasi · Gerbang Kualitas · CLI nusantara uji</span>
+            <span className="text-cyan-300 font-mono">Arsip .npk · SHA-256 Integritas · RegistriLokal &amp; Remote · ValidatorPaket · nusantara paket</span>
             <span aria-hidden="true">·</span>
-            <span className="text-emerald-400 font-semibold">175+ Berkas Valid (368+ Uji Lulus 100%)</span>
+            <span className="text-emerald-400 font-semibold">18 Test Suites (100% Lulus)</span>
           </div>
 
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white max-w-4xl leading-tight">
-            Testing Framework &amp; Quality System NUSANTARA: Penegasan Natif, Eksekusi Terisolasi &amp; Gerbang Kualitas.
+            Package Ecosystem &amp; Registry NUSANTARA: Format Arsip .npk, Validasi Imutabilitas &amp; Registri Terdistribusi.
           </h1>
 
           <p className="mt-4 text-base sm:text-lg text-slate-300 max-w-3xl leading-relaxed">
-            Bahasa pemrograman NUSANTARA kini dilengkapi Testing Framework resmi terintegrasi: fungsi penegasan natif Bahasa Indonesia (<code className="text-emerald-300 font-mono font-semibold">pastikan</code>, <code className="text-emerald-300 font-mono font-semibold">pastikan_sama</code>, <code className="text-emerald-300 font-mono font-semibold">pastikan_benar</code>, <code className="text-emerald-300 font-mono font-semibold">pastikan_salah</code>), pelari uji terisolasi (<code className="text-emerald-300 font-mono font-semibold">PelariUji</code>) dengan proteksi batas waktu timeout, penemu berkas otomatis (<code className="text-emerald-300 font-mono font-semibold">PenemuUji</code>), pelapor konsol &amp; JSON, serta Gerbang Kualitas rilis (<code className="text-emerald-300 font-mono font-semibold">GerbangKualitas</code>).
+            Ekosistem package resmi NUSANTARA kini hadir lengkap dengan format arsip terstandardisasi (<code className="text-amber-300 font-mono font-semibold">.npk</code>), verifikasi integritas kriptografis <code className="text-amber-300 font-mono font-semibold">SHA-256</code>, mesin validasi 5 tahap (<code className="text-amber-300 font-mono font-semibold">ValidatorPaket</code>), arsitektur registri ganda (<code className="text-amber-300 font-mono font-semibold">RegistriLokal</code> &amp; <code className="text-amber-300 font-mono font-semibold">RegistriJarakJauh</code>), immutabilitas versi rilis, serta CLI <code className="text-amber-300 font-mono font-semibold">nusantara paket &lt;bangun|cek|terbit|cari|info|pasang&gt;</code>.
           </p>
 
           <div className="mt-6 p-4 rounded-xl bg-slate-900/90 border border-slate-800 max-w-3xl flex items-start gap-3">
-            <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+            <Boxes className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
             <div className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              <span className="font-semibold text-emerald-300">Alur Pengujian Otomatis:</span> Kode Uji (<code className="text-white">*.uji.nusantara</code>) ➔ <code className="text-white">PenemuUji</code> ➔ <code className="text-white">PelariUji (Isolasi Lingkungan)</code> ➔ <code className="text-white">Penegasan Natif</code> ➔ <code className="text-white">Diagnostik TST-001..005</code> ➔ <code className="text-white">Pelapor Konsol / JSON</code> ➔ <code className="text-white">Quality Gate</code>.
+              <span className="font-semibold text-amber-300">Alur Distribusi Package:</span> Kode Sumber ➔ <code className="text-white">ValidatorPaket (Manifest, Sintaks, Uji Otomatis, Audit Kredensial)</code> ➔ <code className="text-white">Arsip .npk (nusantara-npk-v1)</code> ➔ <code className="text-white">SHA-256 Checksum</code> ➔ <code className="text-white">Registri (Lokal / Jarak Jauh)</code> ➔ <code className="text-white">Pemasangan &amp; Verifikasi Integritas</code>.
             </div>
           </div>
         </div>
@@ -1183,6 +1193,15 @@ pastikan_sama(aktual, target, "Nilai aktual tidak memenuhi target ekspektasi")`,
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 flex-1 w-full">
         {/* Navigation Sub-Tabs */}
         <div className="flex items-center gap-2 border-b border-slate-800 pb-4 mb-6 overflow-x-auto text-sm">
+          <button
+            onClick={() => setActiveTab('ekosistem')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap cursor-pointer flex items-center gap-2 ${
+              activeTab === 'ekosistem' ? 'bg-amber-950 text-amber-200 border border-amber-700/60 font-semibold' : 'text-slate-400 hover:text-white hover:bg-slate-900'
+            }`}
+          >
+            <Boxes className="w-4 h-4 text-amber-400" />
+            <span>Ekosistem &amp; Registri (Phase 22)</span>
+          </button>
           <button
             onClick={() => setActiveTab('testing')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap cursor-pointer flex items-center gap-2 ${
@@ -1337,6 +1356,9 @@ pastikan_sama(aktual, target, "Nilai aktual tidak memenuhi target ekspektasi")`,
             <span>Peta Jalan 36 Fase</span>
           </button>
         </div>
+
+        {/* TAB 000: PACKAGE ECOSYSTEM & REGISTRY (PHASE 22) */}
+        {activeTab === 'ekosistem' && <StudioEkosistemPaket />}
 
         {/* TAB 00: TESTING FRAMEWORK & QUALITY SYSTEM (PHASE 21) */}
         {activeTab === 'testing' && (

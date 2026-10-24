@@ -8,6 +8,47 @@ export interface BerkasRepo {
 }
 
 export const BERKAS_REPOSITORI: BerkasRepo[] = [
+  // --- FASE 22: PACKAGE ECOSYSTEM & REGISTRY NUSANTARA ---
+  {
+    jalur: 'docs/referensi/package.md',
+    nama: 'package.md',
+    kategori: 'Spesifikasi Paket & Bundle .npk',
+    bahasa: 'markdown',
+    ukuran: 6200,
+    konten: `# Referensi Paket Bahasa NUSANTARA (v0.22.0)\n\nSpesifikasi format manifest nusantara.toml, bundle .npk, penamaan paket, versioning semantik, integritas SHA-256, dan validasi kelayakan paket.`
+  },
+  {
+    jalur: 'docs/referensi/registry.md',
+    nama: 'registry.md',
+    kategori: 'Spesifikasi Registri & Rilis Immutable',
+    bahasa: 'markdown',
+    ukuran: 5400,
+    konten: `# Referensi Registri Paket NUSANTARA (v0.22.0)\n\nArsitektur RegistriLokal & RegistriJarakJauh, aturan immutabilitas rilis, pencarian paket, verifikasi checksum, dan perintah CLI.`
+  },
+  {
+    jalur: 'docs/pengembang/package-system.md',
+    nama: 'package-system.md',
+    kategori: 'Panduan Pengembang Ekosistem Paket',
+    bahasa: 'markdown',
+    ukuran: 4900,
+    konten: `# Panduan Pengembang Sistem Paket & Registri NUSANTARA\n\nAlur kerja penerbitan paket, pembuatan bundle .npk, penulisan pengujian paket, dan resolusi dependensi offline.`
+  },
+  {
+    jalur: 'pengujian/paket/uji_ekosistem_registri.ts',
+    nama: 'uji_ekosistem_registri.ts',
+    kategori: '24 Pengujian Ekosistem & Registri',
+    bahasa: 'javascript',
+    ukuran: 26000,
+    konten: `// Rangkaian 24 Uji Komprehensif Ekosistem Paket & Registri NUSANTARA (Phase 22 - 100% LULUS)`
+  },
+  {
+    jalur: 'examples/packages/matematika-ekstra/nusantara.toml',
+    nama: 'nusantara.toml (matematika-ekstra)',
+    kategori: 'Contoh Paket Resmi',
+    bahasa: 'teks',
+    ukuran: 420,
+    konten: `[nusantara]\nnama = "matematika-ekstra"\nversi = "1.0.0"\ndeskripsi = "Paket matematika ekstensi untuk bahasa pemrograman NUSANTARA"\nlisensi = "MIT"\npenulis = "Tim Pengembang Nusantara"`
+  },
   // --- FASE 21: TESTING FRAMEWORK & QUALITY SYSTEM NUSANTARA ---
   {
     jalur: 'docs/referensi/testing.md',
@@ -693,7 +734,7 @@ export const DAFTAR_FASE_ROADMAP = [
   { fase: 19, nama: 'Toolchain & Formatter', versi: 'v0.19.0', kategori: 'Tooling', status: 'Selesai' },
   { fase: 20, nama: 'Language Server & Developer Tools', versi: 'v0.20.0', kategori: 'Tooling', status: 'Selesai' },
   { fase: 21, nama: 'Testing Framework & Quality System', versi: 'v0.21.0', kategori: 'Tooling', status: 'Selesai' },
-  { fase: 22, nama: 'Backend Compiler', versi: 'v0.22.0', kategori: 'Kompilasi Native', status: 'Rencana' },
+  { fase: 22, nama: 'Package Ecosystem & Registry', versi: 'v0.22.0', kategori: 'Ekosistem', status: 'Selesai' },
   { fase: 23, nama: 'Executable Native', versi: 'v0.23.0', kategori: 'Kompilasi Native', status: 'Rencana' },
   { fase: 24, nama: 'Optimasi Compiler', versi: 'v0.24.0', kategori: 'Kompilasi Native', status: 'Rencana' },
   { fase: 25, nama: 'Sistem Build', versi: 'v0.25.0', kategori: 'Kompilasi Native', status: 'Rencana' },

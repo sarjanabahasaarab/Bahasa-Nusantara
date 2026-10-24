@@ -17,11 +17,27 @@ import { GrafDependensi, GalatKetergantunganMelingkar, GalatKonflikVersi } from 
 import { PackageRegistry, LocalRegistry } from './registry';
 import { validasiNamaPaket, periksaKeamananJalurLokal } from './keamanan';
 import { apakahKompatibel, uraiVersi, bandingkanVersi } from './semver';
+import {
+  buatArsipPaket,
+  uraiArsipPaket,
+  ekstrakArsipPaket,
+  ArsipPaketData,
+  apakahHarusDiabaikan,
+} from './arsip';
+import { ValidatorPaket, LaporanValidasiPaket } from './validasi';
+import {
+  AntarmukaRegistri,
+  RegistriLokal,
+  HasilPencarianPaket,
+  MetadataPaketRegistri,
+  HasilPenerbitanPaket,
+} from './registri';
 
 export interface OpsiPengelolaPaket {
   direktoriProyek?: string;
   pembacaBerkas?: PembacaBerkas;
   registry?: PackageRegistry;
+  registriLokal?: RegistriLokal;
 }
 
 export interface HasilEksekusiCLI {
@@ -73,6 +89,19 @@ export class PengelolaPaket {
         '/proyek/paket',
         '/proyek/packages',
       ]);
+
+    this.registriLokal =
+      opsi?.registriLokal ||
+      new RegistriLokal({
+        pembacaBerkas: this.pembaca,
+        direktoriBasis: this.pembaca.gabungJalur(this.direktoriProyek, 'registri'),
+      });
+  }
+
+  private registriLokal: RegistriLokal;
+
+  public dapatkanRegistriLokal(): RegistriLokal {
+    return this.registriLokal;
   }
 
   public dapatkanDirektoriProyek(): string {
@@ -464,6 +493,300 @@ export class PengelolaPaket {
       jumlahDependensi: Object.keys(manifest.dependensi).length,
       lokasiProyek: this.direktoriProyek,
     };
+  }
+
+  // ==========================================================================
+  // PHASE 22 — PACKAGE ECOSYSTEM & REGISTRY EXTENSIONS
+  // ==========================================================================
+
+  /**
+   * Memeriksa dan memvalidasi kelayakan paket: nusantara paket cek
+   */
+  public cek(direktoriSasaran?: string): LaporanValidasiPaket {
+    const target = direktoriSasaran
+      ? this.pembaca.normalisasiJalur(this.pembaca.jalurAbsolut(direktoriSasaran))
+      : this.direktoriProyek;
+    const validator = new ValidatorPaket(this.pembaca);
+    return validator.validasi(target);
+  }
+
+  /**
+   * Membangun berkas arsip paket (.npk): nusantara paket bangun
+   */
+  public bangun(
+    direktoriSasaran?: string,
+    opsi?: { jalurKeluaran?: string; lewatiUji?: boolean } | string
+  ): ArsipPaketData {
+    const target = direktoriSasaran
+      ? this.pembaca.normalisasiJalur(this.pembaca.jalurAbsolut(direktoriSasaran))
+      : this.direktoriProyek;
+
+    const opsiObj = typeof opsi === 'string' ? { jalurKeluaran: opsi } : opsi;
+
+    if (!opsiObj?.lewatiUji) {
+      const laporan = this.cek(target);
+      if (!laporan.valid) {
+        throw new Error(
+          `Validasi paket '${laporan.nama}' gagal. Tidak dapat membangun arsip release:\n` +
+            laporan.daftarGalat.map(g => `  • ${g}`).join('\n')
+        );
+      }
+    }
+
+    const jalurManifest = this.pembaca.gabungJalur(target, 'nusantara.toml');
+    const manifest = bacaManifest(this.pembaca.baca(jalurManifest));
+    const daftarBerkas = this.kumpulkanSemuaBerkasDirektori(target);
+
+    const arsip = buatArsipPaket(manifest, daftarBerkas);
+
+    // Tulis arsip ke .nusantara/dist/<nama>-<versi>.npk atau jalur yang ditentukan
+    let jalurArsipKeluar = '';
+    if (opsiObj?.jalurKeluaran) {
+      jalurArsipKeluar = this.pembaca.normalisasiJalur(this.pembaca.jalurAbsolut(opsiObj.jalurKeluaran));
+      if (!jalurArsipKeluar.endsWith('.npk')) {
+        jalurArsipKeluar = this.pembaca.gabungJalur(
+          jalurArsipKeluar,
+          `${manifest.nusantara.nama}-${manifest.nusantara.versi}.npk`
+        );
+      }
+    } else {
+      jalurArsipKeluar = this.pembaca.gabungJalur(
+        target,
+        '.nusantara',
+        'dist',
+        `${manifest.nusantara.nama}-${manifest.nusantara.versi}.npk`
+      );
+    }
+
+    this.tulisBerkasAman(jalurArsipKeluar, arsip.kontenSerial);
+    return arsip;
+  }
+
+  /**
+   * Menerbitkan paket ke registri: nusantara paket terbit
+   */
+  public terbitkan(
+    direktoriSasaran?: string,
+    opsi?: { registriTarget?: AntarmukaRegistri; token?: string; lewatiUji?: boolean }
+  ): HasilPenerbitanPaket {
+    const target = direktoriSasaran
+      ? this.pembaca.normalisasiJalur(this.pembaca.jalurAbsolut(direktoriSasaran))
+      : this.direktoriProyek;
+
+    const arsip = this.bangun(target, { lewatiUji: opsi?.lewatiUji });
+    const registri = opsi?.registriTarget || this.dapatkanRegistriLokal();
+    return (registri as any).terbitkan(arsip, { token: opsi?.token }) as HasilPenerbitanPaket;
+  }
+
+  /**
+   * Mencari paket di registri: nusantara paket cari <kueri>
+   */
+  public cari(
+    kueri: string,
+    registriTarget?: AntarmukaRegistri
+  ): HasilPencarianPaket[] {
+    const registri = registriTarget || this.dapatkanRegistriLokal();
+    return (registri as any).cari(kueri) as HasilPencarianPaket[];
+  }
+
+  /**
+   * Menampilkan informasi paket dari registri: nusantara paket info <nama>
+   */
+  public infoPaketRegistri(
+    nama: string,
+    registriTarget?: AntarmukaRegistri
+  ): MetadataPaketRegistri | null {
+    const registri = registriTarget || this.dapatkanRegistriLokal();
+    return (registri as any).dapatkanMetadata(nama) as MetadataPaketRegistri | null;
+  }
+
+  /**
+   * Memasang paket dari registri atau jalur paket lokal ke proyek saat ini: nusantara paket pasang <nama>
+   */
+  public pasangPaket(
+    namaAtauJalur: string,
+    opsi?: { versi?: string; batasan?: string; registri?: AntarmukaRegistri; offline?: boolean }
+  ): HasilEksekusiCLI {
+    const registri = opsi?.registri || this.dapatkanRegistriLokal();
+    const namaPaket = namaAtauJalur.trim();
+
+    // 1. Cek apakah nama berupa direktori paket lokal
+    const apakahJalur =
+      namaPaket.startsWith('./') ||
+      namaPaket.startsWith('../') ||
+      namaPaket.startsWith('/') ||
+      namaPaket.includes('/');
+    if (apakahJalur && this.pembaca.apakahAda(this.pembaca.gabungJalur(namaPaket, 'nusantara.toml'))) {
+      const manifestPath = this.pembaca.gabungJalur(namaPaket, 'nusantara.toml');
+      const manifestLokal = bacaManifest(this.pembaca.baca(manifestPath));
+      const jalurManifest = this.dapatkanJalurManifest();
+      if (this.pembaca.apakahAda(jalurManifest)) {
+        const manifestProyek = bacaManifest(this.pembaca.baca(jalurManifest));
+        manifestProyek.dependensi[manifestLokal.nusantara.nama] = { path: namaPaket };
+        this.tulisBerkasAman(jalurManifest, tulisManifest(manifestProyek));
+      }
+      return this.pasang();
+    }
+
+    // 2. Ambil dari Registri (atau Offline Cache)
+    validasiNamaPaket(namaPaket);
+    const meta = (registri as any).dapatkanMetadata(namaPaket) as MetadataPaketRegistri | null;
+    if (!meta) {
+      throw new Error(
+        `Paket '${namaPaket}' tidak ditemukan di registri ${registri.nama}.\nGunakan 'nusantara paket cari ${namaPaket}' untuk menemukan paket yang relevan.`
+      );
+    }
+
+    // Pilih versi terbaik yang sesuai dengan batasan
+    const batasan = opsi?.batasan || '*';
+    const daftarVersi = Object.keys(meta.daftarVersi).sort((a, b) => {
+      try {
+        return bandingkanVersi(uraiVersi(b), uraiVersi(a));
+      } catch {
+        return b.localeCompare(a);
+      }
+    });
+
+    const versiTerpilih = daftarVersi.find(v => apakahKompatibel(v, batasan));
+    if (!versiTerpilih) {
+      throw new Error(
+        `Tidak ada versi paket '${namaPaket}' yang memenuhi batasan '${batasan}'.\nVersi tersedia: ${daftarVersi.join(', ')}`
+      );
+    }
+
+    const infoVersi = meta.daftarVersi[versiTerpilih];
+    const jalurCache = this.pembaca.gabungJalur(
+      this.direktoriProyek,
+      '.nusantara',
+      'cache',
+      'paket',
+      `${namaPaket}-${versiTerpilih}-${infoVersi.checksum.slice(0, 12)}`
+    );
+
+    let arsip: ArsipPaketData;
+    if (opsi?.offline && this.pembaca.apakahAda(this.pembaca.gabungJalur(jalurCache, 'nusantara.toml'))) {
+      // Pasang dari cache lokal (Mode Offline)
+      const daftarBerkasCache = this.kumpulkanSemuaBerkasDirektori(jalurCache);
+      const manifestCache = bacaManifest(this.pembaca.baca(this.pembaca.gabungJalur(jalurCache, 'nusantara.toml')));
+      arsip = buatArsipPaket(manifestCache, daftarBerkasCache);
+    } else {
+      // Unduh dari registri
+      arsip = (registri as any).unduh(namaPaket, versiTerpilih) as ArsipPaketData;
+
+      // Verifikasi Integritas SHA-256
+      if (infoVersi.checksum && arsip.checksum !== infoVersi.checksum) {
+        throw new Error(
+          `Verifikasi integritas paket '${namaPaket}@${versiTerpilih}' GAGAL!\n` +
+            `Checksum yang diharapkan: ${infoVersi.checksum}\n` +
+            `Checksum yang diterima  : ${arsip.checksum}`
+        );
+      }
+
+      // Simpan salinan ke cache offline
+      ekstrakArsipPaket(arsip, this.pembaca, jalurCache);
+    }
+
+    // Ekstrak berkas paket ke direktori proyek .nusantara/paket/<nama>/
+    const dirTujuan = this.pembaca.gabungJalur(this.dapatkanDirektoriPaket(), namaPaket);
+    this.hapusDirektoriRekursif(dirTujuan);
+    ekstrakArsipPaket(arsip, this.pembaca, dirTujuan);
+
+    // Perbarui manifest nusantara.toml jika ada
+    const jalurManifest = this.dapatkanJalurManifest();
+    if (this.pembaca.apakahAda(jalurManifest)) {
+      try {
+        const manifestProyek = bacaManifest(this.pembaca.baca(jalurManifest));
+        manifestProyek.dependensi[namaPaket] = `^${versiTerpilih}`;
+        this.tulisBerkasAman(jalurManifest, tulisManifest(manifestProyek));
+      } catch {
+        // Abaikan jika manifest belum ada
+      }
+    }
+
+    // Perbarui lockfile nusantara.lock
+    const jalurLock = this.dapatkanJalurLock();
+    let lock: BerkasKunci = { versi_format: 1, paket: [] };
+    if (this.pembaca.apakahAda(jalurLock)) {
+      try {
+        lock = bacaLock(this.pembaca.baca(jalurLock));
+      } catch {
+        lock = { versi_format: 1, paket: [] };
+      }
+    }
+
+    // Hapus entri lama jika ada dan tambahkan yang baru
+    lock.paket = lock.paket.filter(p => p.nama !== namaPaket);
+    lock.paket.push({
+      nama: namaPaket,
+      versi: versiTerpilih,
+      sumber: `registri:${registri.nama}`,
+      integritas: arsip.checksum,
+      dependensi: infoVersi.dependensi,
+    });
+    this.tulisBerkasAman(jalurLock, tulisLock(lock));
+
+    return {
+      sukses: true,
+      pesan: `Paket '${namaPaket}@${versiTerpilih}' berhasil dipasang dari registri ${registri.nama}.`,
+      data: {
+        nama: namaPaket,
+        versi: versiTerpilih,
+        checksum: arsip.checksum,
+        lokasi: dirTujuan,
+      },
+    };
+  }
+
+  private kumpulkanSemuaBerkasDirektori(direktori: string): Record<string, string> {
+    const hasil: Record<string, string> = {};
+    const normDir = this.pembaca.normalisasiJalur(this.pembaca.jalurAbsolut(direktori));
+
+    if (typeof (this.pembaca as any).dapatkanSemuaBerkas === 'function') {
+      const semua = (this.pembaca as any).dapatkanSemuaBerkas() as Map<string, string>;
+      for (const [jalur, konten] of semua.entries()) {
+        const normJalur = this.pembaca.normalisasiJalur(jalur);
+        if (normJalur.startsWith(normDir === '/' ? '/' : normDir + '/')) {
+          const relatif = normJalur.slice(normDir.length + 1).replace(/^[/\\]+/, '');
+          if (!apakahHarusDiabaikan(relatif)) {
+            hasil[relatif] = konten;
+          }
+        }
+      }
+      return hasil;
+    }
+
+    // Fallback pindai disk fisik rekursif
+    const pindai = (subDir: string) => {
+      let entri: string[] = [];
+      if (typeof (this.pembaca as any).daftarDirektori === 'function') {
+        try {
+          entri = (this.pembaca as any).daftarDirektori(subDir) || [];
+        } catch {
+          entri = [];
+        }
+      }
+
+      for (const item of entri) {
+        if (apakahHarusDiabaikan(item)) continue;
+        const lengkap = this.pembaca.gabungJalur(subDir, item);
+        const isDir =
+          typeof (this.pembaca as any).apakahDirektori === 'function'
+            ? (this.pembaca as any).apakahDirektori(lengkap)
+            : false;
+
+        if (isDir) {
+          pindai(lengkap);
+        } else {
+          const relatif = lengkap.slice(normDir.length + 1).replace(/^[/\\]+/, '');
+          if (!apakahHarusDiabaikan(relatif)) {
+            hasil[relatif] = this.pembaca.baca(lengkap);
+          }
+        }
+      }
+    };
+
+    pindai(normDir);
+    return hasil;
   }
 
   // ==========================================================================

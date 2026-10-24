@@ -1,0 +1,16 @@
+// Paket Utilitas String
+modul utilitas_string
+
+ekspor fungsi bungkus_kutip(s: teks): teks
+mulai
+    kembalikan "'" + s + "'"
+selesai
+
+ekspor fungsi ulangi_teks(s: teks, kali: bilangan): teks
+mulai
+    hasil : teks = ""
+    untuk i dari 1 sampai kali lakukan
+        hasil = hasil + s
+    akhir
+    kembalikan hasil
+selesai

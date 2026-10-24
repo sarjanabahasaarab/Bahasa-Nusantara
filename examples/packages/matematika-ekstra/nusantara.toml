@@ -1,0 +1,9 @@
+[nusantara]
+nama = "matematika-ekstra"
+versi = "1.0.0"
+deskripsi = "Paket matematika ekstensi untuk bahasa pemrograman NUSANTARA"
+lisensi = "MIT"
+penulis = "Tim Pengembang Nusantara"
+kata_kunci = ["matematika", "aljabar", "trigonometri", "numerik"]
+
+[dependensi]

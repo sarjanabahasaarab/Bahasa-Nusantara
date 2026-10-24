@@ -157,11 +157,19 @@ export class PembacaBerkasNode implements PembacaBerkas {
 
   constructor() {
     try {
-      // Menggunakan dynamic require/import secara aman agar kompatibel di lingkungan bundler
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      this.fs = typeof window === 'undefined' ? require('fs') : null;
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      this.path = typeof window === 'undefined' ? require('path') : null;
+      const proc = typeof process !== 'undefined' ? (process as any) : null;
+      this.fs =
+        proc?.getBuiltinModule
+          ? proc.getBuiltinModule('fs')
+          : typeof require !== 'undefined'
+          ? require('fs')
+          : null;
+      this.path =
+        proc?.getBuiltinModule
+          ? proc.getBuiltinModule('path')
+          : typeof require !== 'undefined'
+          ? require('path')
+          : null;
     } catch {
       this.fs = null;
       this.path = null;

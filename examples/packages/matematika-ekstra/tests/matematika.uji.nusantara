@@ -1,0 +1,4 @@
+// Pengujian Unit Paket matematika-ekstra
+pastikan_sama(4 * 4, 16)
+pastikan(2 + 2 == 4, "Penjumlahan dasar benar")
+pastikan_benar(benar)
