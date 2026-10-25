@@ -128,7 +128,9 @@ export function buatArsipPaket(
     validasiJalurArsip(jalur);
     const normJalur = jalur.replace(/\\/g, '/').replace(/^\/+/, '');
     berkasBersih[normJalur] = konten;
-    totalUkuranByte += Buffer.from ? Buffer.from(konten, 'utf-8').length : konten.length;
+    totalUkuranByte += typeof TextEncoder !== 'undefined'
+      ? new TextEncoder().encode(konten).length
+      : (typeof Buffer !== 'undefined' ? Buffer.from(konten, 'utf-8').length : konten.length);
   }
 
   // Urutkan kunci berkas secara deterministik untuk stabilitas hash checksum

@@ -55,7 +55,11 @@ export type PesanJSONRPC = PermintaanJSONRPC | NotifikasiJSONRPC | ResponsSukses
  */
 export function formatPesanBingkaiLSP(payload: any): string {
   const jsonStr = JSON.stringify(payload);
-  const bufferLength = Buffer.byteLength(jsonStr, 'utf-8');
+  const bufferLength = typeof TextEncoder !== 'undefined'
+    ? new TextEncoder().encode(jsonStr).length
+    : (typeof Buffer !== 'undefined' && typeof Buffer.byteLength === 'function'
+      ? Buffer.byteLength(jsonStr, 'utf-8')
+      : jsonStr.length);
   return `Content-Length: ${bufferLength}\r\n\r\n${jsonStr}`;
 }
 
@@ -98,25 +102,47 @@ export class PembacaBingkaiLSP {
       const awalKonten = indeksHeaderAkhir + 4;
       const totalPanjangDibutuhkan = awalKonten + panjangKonten;
 
-      const bufferAsli = Buffer.from(this.bufferTeks, 'utf-8');
-      if (bufferAsli.length < totalPanjangDibutuhkan) {
-        // Konten belum sepenuhnya tiba
-        break;
-      }
+      if (typeof Buffer !== 'undefined') {
+        const bufferAsli = Buffer.from(this.bufferTeks, 'utf-8');
+        if (bufferAsli.length < totalPanjangDibutuhkan) {
+          // Konten belum sepenuhnya tiba
+          break;
+        }
 
-      // Potong payload konten
-      const kontenBuf = bufferAsli.subarray(awalKonten, totalPanjangDibutuhkan);
-      const kontenTeks = kontenBuf.toString('utf-8');
+        // Potong payload konten
+        const kontenBuf = bufferAsli.subarray(awalKonten, totalPanjangDibutuhkan);
+        const kontenTeks = kontenBuf.toString('utf-8');
 
-      // Potong sisa buffer
-      const sisaBuf = bufferAsli.subarray(totalPanjangDibutuhkan);
-      this.bufferTeks = sisaBuf.toString('utf-8');
+        // Potong sisa buffer
+        const sisaBuf = bufferAsli.subarray(totalPanjangDibutuhkan);
+        this.bufferTeks = sisaBuf.toString('utf-8');
 
-      try {
-        const pesanTerurai = JSON.parse(kontenTeks);
-        daftarPesan.push(pesanTerurai);
-      } catch (err) {
-        // JSON tidak valid
+        try {
+          const pesanTerurai = JSON.parse(kontenTeks);
+          daftarPesan.push(pesanTerurai);
+        } catch (err) {
+          // JSON tidak valid
+        }
+      } else {
+        const encoder = new TextEncoder();
+        const decoder = new TextDecoder();
+        const bufferAsli = encoder.encode(this.bufferTeks);
+        if (bufferAsli.length < totalPanjangDibutuhkan) {
+          break;
+        }
+
+        const kontenBuf = bufferAsli.subarray(awalKonten, totalPanjangDibutuhkan);
+        const kontenTeks = decoder.decode(kontenBuf);
+
+        const sisaBuf = bufferAsli.subarray(totalPanjangDibutuhkan);
+        this.bufferTeks = decoder.decode(sisaBuf);
+
+        try {
+          const pesanTerurai = JSON.parse(kontenTeks);
+          daftarPesan.push(pesanTerurai);
+        } catch (err) {
+          // JSON tidak valid
+        }
       }
     }
 

@@ -229,7 +229,13 @@ export class SandboxBerkas {
       );
     }
     const konten = this.baca(jalur);
-    return Buffer.byteLength ? Buffer.byteLength(konten, 'utf8') : konten.length;
+    if (typeof TextEncoder !== 'undefined') {
+      return new TextEncoder().encode(konten).length;
+    }
+    if (typeof Buffer !== 'undefined' && typeof Buffer.byteLength === 'function') {
+      return Buffer.byteLength(konten, 'utf8');
+    }
+    return konten.length;
   }
 
   public buatDirektori(jalur: string): boolean {
