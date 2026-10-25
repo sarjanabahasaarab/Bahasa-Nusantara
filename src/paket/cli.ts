@@ -21,10 +21,13 @@ import { PelariUji, PenemuUji, PelaporKonsol, PelaporJSON, GerbangKualitas } fro
 import {
   VERSI_NUSANTARA,
   LABEL_VERSI_NUSANTARA,
+  FASE_TERAKHIR,
+  NAMA_FASE_TERAKHIR,
   dapatkanBannerCLI,
   dapatkanInfoHost,
 } from '../konstanta/versi';
 import { MesinBuild, PlatformTarget } from '../build';
+import { MesinCI, ValidatorAlurKerjaGitHub } from '../cicd';
 
 export interface OpsiCLI {
   pengelola?: PengelolaPaket;
@@ -170,6 +173,9 @@ export class NusantaraCLI {
             'clean',
             'rilis',
             'release',
+            'ci',
+            'alur-kerja',
+            'workflow',
           ].includes(perintah) &&
             this.pembaca.apakahAda(perintah)))
       ) {
@@ -305,6 +311,22 @@ export class NusantaraCLI {
           });
         }
 
+        case 'ci':
+        case 'alur-kerja':
+        case 'workflow': {
+          const subPerintah = argumenTambahan[0]?.toLowerCase();
+          const sisaArgumen = argumenTambahan.slice(1);
+          return this.eksekusiCI(subPerintah, sisaArgumen, {
+            json: opsiJSON,
+            warna: opsiWarna,
+            verbose: opsiVerbose,
+            debug: opsiDebug,
+            markdown: args.includes('--markdown'),
+            simulasikanRilis: args.includes('--rilis') || args.includes('--release'),
+            persetujuanRilis: args.includes('--setujui') || args.includes('--confirm'),
+          });
+        }
+
         case 'terbit':
         case 'publikasi':
         case 'publish': {
@@ -419,7 +441,8 @@ export class NusantaraCLI {
             }
             this.log('Informasi Paket NUSANTARA:\n');
             this.log(`  Nama             : ${info.nama}`);
-            this.log(`  Versi            : ${info.versi}`);
+            this.log(`  Versi            : ${info.versi} (${LABEL_VERSI_NUSANTARA})`);
+            this.log(`  Fase             : ${FASE_TERAKHIR} (${NAMA_FASE_TERAKHIR})`);
             this.log(`  Deskripsi        : ${info.deskripsi}`);
             this.log(`  Lisensi          : ${info.lisensi}`);
             this.log(`  Jml Dependensi   : ${info.jumlahDependensi}`);
@@ -1190,8 +1213,8 @@ Penggunaan Perintah 'nusantara paket':
       nama: 'NUSANTARA',
       versi: VERSI_NUSANTARA,
       label: LABEL_VERSI_NUSANTARA,
-      fase: 23,
-      namaFase: 'Build System & Distribution',
+      fase: FASE_TERAKHIR,
+      namaFase: NAMA_FASE_TERAKHIR,
       host: hostInfo,
       modeDefault: 'release',
       targetDidukung: ['windows-x64', 'linux-x64', 'macos-x64', 'macos-arm64'],
@@ -1220,14 +1243,93 @@ Penggunaan Perintah 'nusantara paket':
     return 0;
   }
 
+  /**
+   * Eksekusi alur kerja CI/CD lokal dan verifikasi GitHub Actions (Phase 24).
+   */
+  private eksekusiCI(
+    subPerintah: string | undefined,
+    sisaArgumen: string[],
+    opsi: {
+      json?: boolean;
+      warna?: boolean;
+      verbose?: boolean;
+      debug?: boolean;
+      markdown?: boolean;
+      simulasikanRilis?: boolean;
+      persetujuanRilis?: boolean;
+    }
+  ): number {
+    if (subPerintah === 'periksa-workflow' || subPerintah === 'lint') {
+      const validator = new ValidatorAlurKerjaGitHub(this.pembaca);
+      const jalurCI = this.pembaca.gabungJalur(this.pengelola.dapatkanDirektoriProyek(), '.github/workflows/ci.yml');
+      const jalurRelease = this.pembaca.gabungJalur(this.pengelola.dapatkanDirektoriProyek(), '.github/workflows/release.yml');
+
+      const valCI = validator.validasiBerkas(jalurCI);
+      const valRel = validator.validasiBerkas(jalurRelease);
+
+      if (opsi.json) {
+        this.log(JSON.stringify({ ci: valCI, release: valRel }, null, 2));
+        return valCI.valid && valRel.valid ? 0 : 1;
+      }
+
+      this.log('Pemeriksaan Keamanan & Sintaks Alur Kerja GitHub Actions:\n');
+      this.log(`  1. .github/workflows/ci.yml       : ${valCI.valid ? '[✓ VALID]' : '[✗ GALAT]'}`);
+      this.log(`     - Least Privilege Permissions : ${valCI.leastPrivilegeTercapai ? 'Ya (contents: read)' : 'Tidak'}`);
+      this.log(`     - Concurrency Control         : ${valCI.concurrencyAman ? 'Aman' : 'Perlu diperbaiki'}`);
+      this.log(`     - Daftar Job                  : ${valCI.daftarJob.map((j) => j.id).join(', ')}`);
+
+      this.log(`\n  2. .github/workflows/release.yml  : ${valRel.valid ? '[✓ VALID]' : '[✗ GALAT]'}`);
+      this.log(`     - Least Privilege Permissions : ${valRel.leastPrivilegeTercapai ? 'Ya (contents: read root)' : 'Tidak'}`);
+      this.log(`     - Gerbang Persetujuan Manual  : ${valRel.persetujuanRilisAman ? 'Wajib (confirm_release)' : 'Tidak aman'}`);
+      this.log(`     - Daftar Job                  : ${valRel.daftarJob.map((j) => j.id).join(', ')}`);
+
+      const semuaTemuan = [...valCI.temuan, ...valRel.temuan];
+      if (semuaTemuan.length > 0) {
+        this.log('\nTemuan Audit Keamanan & Konfigurasi:');
+        for (const t of semuaTemuan) {
+          const badge = t.tingkat === 'kritis' ? '[KRITIS]' : t.tingkat === 'peringatan' ? '[PERINGATAN]' : '[INFO]';
+          this.log(`  - ${badge} ${t.pesan}`);
+        }
+      }
+
+      return valCI.valid && valRel.valid ? 0 : 1;
+    }
+
+    // Default: Jalankan Mesin CI Pipeline
+    const mesin = new MesinCI({
+      pembaca: this.pembaca,
+      direktoriBasis: this.pengelola.dapatkanDirektoriProyek(),
+      verbose: opsi.verbose,
+      simulasikanRilis: opsi.simulasikanRilis,
+      persetujuanRilis: opsi.persetujuanRilis,
+    });
+
+    const hasil = mesin.jalankan();
+
+    if (opsi.json) {
+      this.log(JSON.stringify(hasil, null, 2));
+    } else if (opsi.markdown) {
+      this.log(hasil.ringkasanMarkdown);
+    } else {
+      this.log(hasil.ringkasanTeks);
+    }
+
+    return hasil.statusAkhir === 'PASS' ? 0 : 1;
+  }
+
   private cetakBantuan(): void {
     this.log(`
-Bahasa Pemrograman NUSANTARA (v0.23.0)
-Antarmuka Baris Perintah (CLI), Sistem Build & Distribusi, Ekosistem Paket, Testing & LSP
+Bahasa Pemrograman NUSANTARA (${LABEL_VERSI_NUSANTARA})
+Antarmuka Baris Perintah (CLI), CI/CD & Automated Release, Build System & Distribution, Package Ecosystem, Testing & LSP
 
 Penggunaan:
   nusantara <perintah> [argumen...]
   nusantara <berkas.nusantara> [argumen...]
+
+Perintah Alur Kerja CI/CD & Validasi Rilis (Phase 24):
+  ci [--markdown] [--json]     Menjalankan seluruh alur validasi CI lokal (statis, uji, quality gate, matriks build)
+  ci periksa-workflow, ci lint Memvalidasi sintaks dan keamanan berkas workflow GitHub Actions (.github/workflows)
+  ci --rilis [--setujui]       Mensimulasikan gerbang rilis dan validasi prasyarat persetujuan rilis manual
 
 Perintah Sistem Build & Distribusi (Phase 23):
   bangun [--mode debug|release] [--target <platform>] [--bersih] [--tanpa-uji]
@@ -1253,6 +1355,11 @@ Perintah Ekosistem Paket & Registri (Phase 16 & 22):
   hapus <nama>           Menghapus paket dari dependensi dan sistem lokal
   perbarui [<nama>]      Memperbarui dependensi ke versi kompatibel terbaru
   daftar                 Menampilkan daftar dependensi proyek saat ini
+
+Opsi Perintah 'ci':
+  --markdown             Keluarkan ringkasan format Markdown terstandar GitHub Step Summary
+  --rilis                Simulasikan gerbang pelepasan rilis resmi
+  --setujui              Berikan konfirmasi persetujuan rilis manual eksplisit
 
 Opsi Perintah 'bangun' & 'rilis':
   --mode, -m <mode>      Pilih mode build: 'release' (teroptimasi) atau 'debug' (default: release)

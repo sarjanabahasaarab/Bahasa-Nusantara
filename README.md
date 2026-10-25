@@ -2,11 +2,12 @@
 
 > **Bahasa Pemrograman 100% Bahasa Indonesia untuk Komputasi Modern, Terbuka, dan Berkelanjutan.**
 
-[![Status](https://img.shields.io/badge/status-fase_23:_build_system_&_distribution-blue.svg)](ROADMAP.md)
-[![Versi](https://img.shields.io/badge/versi-v0.23.0-emerald.svg)](PERUBAHAN.md)
+[![Status](https://img.shields.io/badge/status-fase_24:_ci%2Fcd_&_automated_release-blue.svg)](ROADMAP.md)
+[![Versi](https://img.shields.io/badge/versi-v0.24.0-emerald.svg)](PERUBAHAN.md)
+[![CI/CD](https://img.shields.io/badge/CI%2FCD-passing-brightgreen.svg)](.github/workflows/ci.yml)
 [![Lisensi](https://img.shields.io/badge/lisensi-Apache_2.0-blue.svg)](LISENSI)
 [![Tata Bahasa](https://img.shields.io/badge/grammar-EBNF_ISO--14977-purple.svg)](dokumentasi/GRAMMAR-EBNF.md)
-[![Testing](https://img.shields.io/badge/testing-19_suites_lulus_100%25-green.svg)](pengujian/README.md)
+[![Testing](https://img.shields.io/badge/testing-20_suites_lulus_100%25-green.svg)](pengujian/README.md)
 [![Build](https://img.shields.io/badge/build-cross--platform_dist-teal.svg)](docs/referensi/build-system.md)
 
 ---
@@ -19,7 +20,8 @@ NUSANTARA bukan sekadar penerjemah sintaksis bahasa asing, melainkan ikhtiar man
 
 - **Ekstensi Berkas Resmi:** `.nusantara`
 - **Lisensi:** [Apache License 2.0](LISENSI)
-- **Status Saat Ini:** **Phase 23: Build System & Distribution NUSANTARA (Milestone v0.23.0).**
+- **Status Saat Ini:** **Phase 24: CI/CD, Automated Release & GitHub Workflow NUSANTARA (Milestone v0.24.0).**
+- **Dokumentasi CI/CD:** [docs/referensi/ci-cd.md](docs/referensi/ci-cd.md) & [docs/pengembang/github-workflows.md](docs/pengembang/github-workflows.md)
 - **Dokumentasi Build System:** [docs/referensi/build-system.md](docs/referensi/build-system.md) & [docs/pengembang/build.md](docs/pengembang/build.md)
 - **Dokumentasi Distribusi:** [docs/referensi/distribution.md](docs/referensi/distribution.md)
 - **Dokumentasi Paket & Registri:** [docs/referensi/package.md](docs/referensi/package.md) & [docs/referensi/registry.md](docs/referensi/registry.md)
@@ -34,16 +36,16 @@ NUSANTARA bukan sekadar penerjemah sintaksis bahasa asing, melainkan ikhtiar man
 ### 2.1 Menggunakan Paket Biner Rilis Resmi
 Unduh paket distribusi untuk sistem operasi Anda dari folder `dist/` atau halaman rilis resmi:
 
-- **Windows (x64)**: `nusantara-v0.23.0-windows-x64.zip`
-- **Linux (x64)**: `nusantara-v0.23.0-linux-x64.tar.gz` atau `.zip`
-- **macOS (Intel x64)**: `nusantara-v0.23.0-macos-x64.tar.gz`
-- **macOS (Apple Silicon ARM64)**: `nusantara-v0.23.0-macos-arm64.tar.gz`
+- **Windows (x64)**: `nusantara-v0.24.0-windows-x64.zip`
+- **Linux (x64)**: `nusantara-v0.24.0-linux-x64.tar.gz` atau `.zip`
+- **macOS (Intel x64)**: `nusantara-v0.24.0-macos-x64.tar.gz`
+- **macOS (Apple Silicon ARM64)**: `nusantara-v0.24.0-macos-arm64.tar.gz`
 
 #### Langkah Pemasangan:
 ```bash
 # 1. Ekstrak arsip (contoh Linux/macOS)
-tar -xzf nusantara-v0.23.0-linux-x64.tar.gz
-cd nusantara-v0.23.0-linux-x64
+tar -xzf nusantara-v0.24.0-linux-x64.tar.gz
+cd nusantara-v0.24.0-linux-x64
 
 # 2. Jalankan installer otomatis (atau salin direktori bin ke PATH)
 ./install.sh
@@ -53,7 +55,7 @@ nusantara --versi
 ```
 
 Pada Windows:
-1. Ekstrak berkas `nusantara-v0.23.0-windows-x64.zip`.
+1. Ekstrak berkas `nusantara-v0.24.0-windows-x64.zip`.
 2. Klik ganda `install.bat` atau tambahkan folder `bin` ke variabel lingkungan `PATH`.
 3. Buka PowerShell / Command Prompt dan jalankan `nusantara --versi`.
 

@@ -1,0 +1,171 @@
+name: NUSANTARA Continuous Integration
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+# P0: Least-Privilege Permissions at workflow root
+permissions:
+  contents: read
+
+# P1: Concurrency Control (Batalkan alur lama pada PR, jangan batalkan pada push main)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # ============================================================================
+  # 1. STATIC CHECKS & LINTING
+  # ============================================================================
+  static-checks:
+    name: NUSANTARA / Pemeriksaan Statis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Pasang Lingkungan Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Pasang Dependensi Proyek (Reproducible)
+        run: |
+          npm ci || npm install --no-audit --prefer-offline
+
+      - name: Validasi Konfigurasi & Tipe Data (Lint / Typecheck)
+        run: |
+          npm run lint
+
+  # ============================================================================
+  # 2. AUTOMATED TEST SUITE (PHASE 1 - 24)
+  # ============================================================================
+  test-suite:
+    name: NUSANTARA / Pengujian Otomatis (${{ matrix.os }})
+    needs: static-checks
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Pasang Lingkungan Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Pasang Dependensi
+        run: |
+          npm ci || npm install --no-audit --prefer-offline
+
+      - name: Jalankan Rangkaian Uji Lengkap (Phase 1–24)
+        run: |
+          npm test
+
+  # ============================================================================
+  # 3. QUALITY GATE NUSANTARA
+  # ============================================================================
+  quality-gate:
+    name: NUSANTARA / Gerbang Kualitas (Quality Gate)
+    needs: [static-checks, test-suite]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Pasang Lingkungan Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Pasang Dependensi
+        run: |
+          npm ci || npm install --no-audit --prefer-offline
+
+      - name: Verifikasi Standar Kualitas (Cakupan & Konsistensi)
+        run: |
+          npx tsx pengujian/testing/uji_testing.ts
+
+  # ============================================================================
+  # 4. BUILD VALIDATION MATRIX (Windows, Linux, macOS)
+  # ============================================================================
+  build-matrix-validation:
+    name: NUSANTARA / Validasi Build (${{ matrix.target }})
+    needs: quality-gate
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [windows-x64, linux-x64, macos-x64, macos-arm64]
+        include:
+          - target: windows-x64
+            os: windows-latest
+          - target: linux-x64
+            os: ubuntu-latest
+          - target: macos-x64
+            os: macos-13
+          - target: macos-arm64
+            os: macos-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Pasang Lingkungan Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Pasang Dependensi
+        run: |
+          npm ci || npm install --no-audit --prefer-offline
+
+      - name: Bangun Proyek Web & Kompilator
+        run: |
+          npm run build
+
+      - name: Validasi Pembuatan Distribusi Target (${{ matrix.target }})
+        run: |
+          npx tsx -e "import { MesinBuild } from './src/build'; const m = new MesinBuild(); const r = m.bangun({ targetPlatforms: ['${{ matrix.target }}'], tanpaUji: true }); if (!r.sukses) process.exit(1);"
+
+      - name: Unggah Artefak Sementara CI (Retention 7 Hari)
+        uses: actions/upload-artifact@v4
+        with:
+          name: nusantara-ci-${{ matrix.target }}
+          path: dist/*
+          retention-days: 7
+          if-no-files-found: warn
+
+  # ============================================================================
+  # 5. CI SUMMARY & STEP SUMMARY GENERATION
+  # ============================================================================
+  ci-summary:
+    name: NUSANTARA / Ringkasan CI
+    needs: [static-checks, test-suite, quality-gate, build-matrix-validation]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Buat Laporan Ringkasan CI Resmi
+        run: |
+          echo "## 🇮🇩 NUSANTARA CI SUMMARY (v0.24.0)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Tahapan Alur Kerja | Status | Runner Host | Keterangan |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :---: | :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+          echo "| Pemeriksaan Statis (Lint/TSC) | ${{ needs.static-checks.result == 'success' && '✅ PASS' || '❌ FAIL' }} | ubuntu-latest | Validasi sintaks dan tipe TypeScript |" >> $GITHUB_STEP_SUMMARY
+          echo "| Rangkaian Uji Otomatis | ${{ needs.test-suite.result == 'success' && '✅ PASS' || '❌ FAIL' }} | Ubuntu, Windows, macOS | Seluruh unit, integrasi, dan stdlib |" >> $GITHUB_STEP_SUMMARY
+          echo "| Gerbang Kualitas (Quality Gate) | ${{ needs.quality-gate.result == 'success' && '✅ PASS' || '❌ FAIL' }} | ubuntu-latest | Ambang batas kualitas dan regresi |" >> $GITHUB_STEP_SUMMARY
+          echo "| Matriks Build Lintas Platform | ${{ needs.build-matrix-validation.result == 'success' && '✅ PASS' || '❌ FAIL' }} | Multi-OS Matrix | Windows x64, Linux x64, macOS x64/ARM64 |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status Release**: \`NOT PUBLISHED\` (CI Pipeline tidak mempublikasikan rilis publik)." >> $GITHUB_STEP_SUMMARY

@@ -98,9 +98,10 @@ import {
 } from './testing';
 import StudioEkosistemPaket from './komponen/StudioEkosistemPaket';
 import StudioDistribusiBuild from './komponen/StudioDistribusiBuild';
+import { StudioCicdWorkflow } from './komponen/StudioCicdWorkflow';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'distribusi' | 'ekosistem' | 'testing' | 'lsp' | 'toolchain' | 'diagnostik' | 'stdlib' | 'paket' | 'struktur-data' | 'fungsi' | 'perulangan' | 'percabangan' | 'operator' | 'tipe' | 'ast' | 'token' | 'panduan' | 'berkas' | 'roadmap' | 'git'>('distribusi');
+  const [activeTab, setActiveTab] = useState<'cicd' | 'distribusi' | 'ekosistem' | 'testing' | 'lsp' | 'toolchain' | 'diagnostik' | 'stdlib' | 'paket' | 'struktur-data' | 'fungsi' | 'perulangan' | 'percabangan' | 'operator' | 'tipe' | 'ast' | 'token' | 'panduan' | 'berkas' | 'roadmap' | 'git'>('cicd');
   const [selectedFile, setSelectedFile] = useState<BerkasRepo>(BERKAS_REPOSITORI[0]);
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [playgroundCode, setPlaygroundCode] = useState<string>(
@@ -982,8 +983,8 @@ pastikan_sama(aktual, target, "Nilai aktual tidak memenuhi target ekspektasi")`,
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-extrabold tracking-wider text-white text-base">NUSANTARA</span>
-                <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded bg-teal-500/20 text-teal-300 border border-teal-500/30">
-                  Phase 23 (v0.23.0)
+                <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                  Phase 24 (v0.24.0)
                 </span>
               </div>
               <p className="text-xs text-slate-400">Bahasa Pemrograman Indonesia</p>
@@ -991,6 +992,15 @@ pastikan_sama(aktual, target, "Nilai aktual tidak memenuhi target ekspektasi")`,
           </div>
 
           <nav className="hidden md:flex items-center gap-6 text-sm">
+            <button
+              onClick={() => setActiveTab('cicd')}
+              className={`hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'cicd' ? 'text-indigo-400 font-semibold' : 'text-slate-400'
+              }`}
+            >
+              <Workflow className="w-4 h-4 text-indigo-400" />
+              CI/CD &amp; Release (Phase 24)
+            </button>
             <button
               onClick={() => setActiveTab('distribusi')}
               className={`hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 ${
@@ -1174,27 +1184,27 @@ pastikan_sama(aktual, target, "Nilai aktual tidak memenuhi target ekspektasi")`,
       <section className="border-b border-slate-800/60 bg-gradient-to-b from-slate-950 via-slate-900/60 to-slate-950 py-10 px-4 sm:px-6">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mb-4 tracking-wide font-mono">
-            <span className="text-teal-400 font-bold bg-teal-950/80 px-2 py-0.5 rounded border border-teal-800">Milestone v0.23.0</span>
+            <span className="text-indigo-400 font-bold bg-indigo-950/80 px-2 py-0.5 rounded border border-indigo-800">Milestone v0.24.0</span>
             <span aria-hidden="true">·</span>
-            <span className="text-white font-medium">Phase 23: Build System &amp; Distribution NUSANTARA</span>
+            <span className="text-white font-medium">Phase 24: CI/CD, Automated Release &amp; GitHub Workflow</span>
             <span aria-hidden="true">·</span>
-            <span className="text-cyan-300 font-mono">Windows · Linux · macOS · Reproducible · SHA256SUMS · nusantara bangun</span>
+            <span className="text-indigo-300 font-mono">GitHub Actions · Multi-OS Matrix · Least Privilege · Quality Gate · Release Approval</span>
             <span aria-hidden="true">·</span>
-            <span className="text-teal-400 font-semibold">19 Test Suites (100% Lulus)</span>
+            <span className="text-emerald-400 font-semibold">20 Test Suites (100% Lulus)</span>
           </div>
 
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white max-w-4xl leading-tight">
-            Build System &amp; Distribution NUSANTARA: Kompilasi Lintas Platform, Integritas SHA-256 &amp; Artefak Biner Mandiri.
+            CI/CD &amp; Automated Release NUSANTARA: Otomasi Pengujian Multi-OS, Gerbang Kualitas &amp; Distribusi Aman.
           </h1>
 
           <p className="mt-4 text-base sm:text-lg text-slate-300 max-w-3xl leading-relaxed">
-            Sistem build dan distribusi resmi NUSANTARA kini hadir lengkap dengan pipeline kompilasi lintas platform (<code className="text-teal-300 font-mono font-semibold">windows-x64</code>, <code className="text-teal-300 font-mono font-semibold">linux-x64</code>, <code className="text-teal-300 font-mono font-semibold">macos-x64</code>, <code className="text-teal-300 font-mono font-semibold">macos-arm64</code>), pembuatan arsip biner mandiri (<code className="text-teal-300 font-mono font-semibold">.zip</code> &amp; <code className="text-teal-300 font-mono font-semibold">.tar.gz</code>), fondasi reproducible builds deterministik, verifikasi integritas <code className="text-teal-300 font-mono font-semibold">SHA-256</code> (<code className="text-teal-300 font-mono font-semibold">SHA256SUMS</code>), manifest rilis resmi (<code className="text-teal-300 font-mono font-semibold">release-manifest.json</code>), pembersih rilis (<code className="text-teal-300 font-mono font-semibold">nusantara bersihkan</code>), serta CLI <code className="text-teal-300 font-mono font-semibold">nusantara bangun &amp; nusantara rilis</code>.
+            Infrastruktur CI/CD Bahasa NUSANTARA kini aktif menggunakan GitHub Actions (<code className="text-indigo-300 font-mono">.github/workflows/ci.yml</code> &amp; <code className="text-indigo-300 font-mono">release.yml</code>), pemeriksaan statis, pengujian otomatis berjenjang di Ubuntu, Windows, dan macOS, Quality Gate, validasi matriks build lintas platform (<code className="text-indigo-300 font-mono font-semibold">windows-x64</code>, <code className="text-indigo-300 font-mono font-semibold">linux-x64</code>, <code className="text-indigo-300 font-mono font-semibold">macos-x64</code>, <code className="text-indigo-300 font-mono font-semibold">macos-arm64</code>), ringkasan hasil terformat (<code className="text-indigo-300 font-mono">$GITHUB_STEP_SUMMARY</code>), kebijakan hak akses minimal (<code className="text-indigo-300 font-mono">contents: read</code>), serta perlindungan gerbang persetujuan manual rilis resmi (<code className="text-indigo-300 font-mono">confirm_release</code>).
           </p>
 
           <div className="mt-6 p-4 rounded-xl bg-slate-900/90 border border-slate-800 max-w-3xl flex items-start gap-3">
-            <HardDrive className="w-5 h-5 text-teal-400 shrink-0 mt-0.5" />
+            <Workflow className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
             <div className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              <span className="font-semibold text-teal-300">Alur Rilis Distribusi:</span> Kode Sumber ➔ <code className="text-white">nusantara.toml [build]</code> ➔ <code className="text-white">Pengujian Pra-Rilis Wajib</code> ➔ <code className="text-white">Penataan Struktur (bin, lib, std, docs)</code> ➔ <code className="text-white">Pengemasan Biner PKZip &amp; TAR</code> ➔ <code className="text-white">SHA256SUMS &amp; Manifest</code> ➔ <code className="text-white">Smoke Test &amp; Validasi</code>.
+              <span className="font-semibold text-indigo-300">Alur CI/CD:</span> Developer Push/PR ➔ <code className="text-white">Pemeriksaan Statis</code> ➔ <code className="text-white">Pengujian Otomatis Multi-OS</code> ➔ <code className="text-white">Quality Gate</code> ➔ <code className="text-white">Matriks Build Lintas Platform</code> ➔ <code className="text-white">Persetujuan Manual (confirm_release)</code> ➔ <code className="text-white">Publikasi Release Resmi</code>.
             </div>
           </div>
         </div>
@@ -1204,6 +1214,15 @@ pastikan_sama(aktual, target, "Nilai aktual tidak memenuhi target ekspektasi")`,
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 flex-1 w-full">
         {/* Navigation Sub-Tabs */}
         <div className="flex items-center gap-2 border-b border-slate-800 pb-4 mb-6 overflow-x-auto text-sm">
+          <button
+            onClick={() => setActiveTab('cicd')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap cursor-pointer flex items-center gap-2 ${
+              activeTab === 'cicd' ? 'bg-indigo-950 text-indigo-200 border border-indigo-700/60 font-semibold' : 'text-slate-400 hover:text-white hover:bg-slate-900'
+            }`}
+          >
+            <Workflow className="w-4 h-4 text-indigo-400" />
+            <span>CI/CD &amp; Release (Phase 24)</span>
+          </button>
           <button
             onClick={() => setActiveTab('distribusi')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap cursor-pointer flex items-center gap-2 ${
@@ -1376,6 +1395,9 @@ pastikan_sama(aktual, target, "Nilai aktual tidak memenuhi target ekspektasi")`,
             <span>Peta Jalan 36 Fase</span>
           </button>
         </div>
+
+        {/* TAB 00000: CI/CD & AUTOMATED RELEASE (PHASE 24) */}
+        {activeTab === 'cicd' && <StudioCicdWorkflow />}
 
         {/* TAB 0000: BUILD SYSTEM & DISTRIBUTION (PHASE 23) */}
         {activeTab === 'distribusi' && <StudioDistribusiBuild />}

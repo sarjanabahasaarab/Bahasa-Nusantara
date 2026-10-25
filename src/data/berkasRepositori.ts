@@ -8,6 +8,47 @@ export interface BerkasRepo {
 }
 
 export const BERKAS_REPOSITORI: BerkasRepo[] = [
+  // --- FASE 24: CI/CD, AUTOMATED RELEASE & GITHUB WORKFLOW ---
+  {
+    jalur: '.github/workflows/ci.yml',
+    nama: 'ci.yml',
+    kategori: 'Alur Kerja Continuous Integration',
+    bahasa: 'teks',
+    ukuran: 3800,
+    konten: `# Alur Kerja GitHub Actions CI NUSANTARA (v0.24.0)\n\nPemeriksaan statis lint/typecheck, pengujian multi-OS (Linux, Windows, macOS), Quality Gate, dan build validation.`
+  },
+  {
+    jalur: '.github/workflows/release.yml',
+    nama: 'release.yml',
+    kategori: 'Alur Kerja Publikasi Rilis Otomatis',
+    bahasa: 'teks',
+    ukuran: 5200,
+    konten: `# Alur Kerja GitHub Actions Release NUSANTARA (v0.24.0)\n\nGerbang persetujuan manual (confirm_release), build matriks 4 OS, kompilasi SHA256SUMS & manifest, serta least-privilege publishing.`
+  },
+  {
+    jalur: 'docs/referensi/ci-cd.md',
+    nama: 'ci-cd.md',
+    kategori: 'Spesifikasi Referensi CI/CD',
+    bahasa: 'markdown',
+    ukuran: 4900,
+    konten: `# Referensi Teknis CI/CD & Alur Kerja GitHub Actions NUSANTARA (v0.24.0)\n\nArsitektur pipeline, kebijakan permissions contents: read, proteksi concurrency, dan release approval gate.`
+  },
+  {
+    jalur: 'docs/pengembang/github-workflows.md',
+    nama: 'github-workflows.md',
+    kategori: 'Panduan Pengembang Alur Kerja GitHub',
+    bahasa: 'markdown',
+    ukuran: 4200,
+    konten: `# Panduan Pengembang: Alur Kerja GitHub Actions & Release NUSANTARA\n\nSiklus PR checks, troubleshooting kegagalan CI, dan prosedur manual workflow dispatch release.`
+  },
+  {
+    jalur: 'pengujian/cicd/uji_cicd_workflow.ts',
+    nama: 'uji_cicd_workflow.ts',
+    kategori: '20 Pengujian CI/CD & Alur Kerja GitHub',
+    bahasa: 'javascript',
+    ukuran: 14000,
+    konten: `// Rangkaian 20 Pengujian Resmi CI/CD & Alur Kerja GitHub Actions NUSANTARA (Phase 24 - 100% LULUS)`
+  },
   // --- FASE 23: BUILD SYSTEM & DISTRIBUTION NUSANTARA ---
   {
     jalur: 'docs/referensi/build-system.md',
@@ -769,7 +810,7 @@ export const DAFTAR_FASE_ROADMAP = [
   { fase: 21, nama: 'Testing Framework & Quality System', versi: 'v0.21.0', kategori: 'Tooling', status: 'Selesai' },
   { fase: 22, nama: 'Package Ecosystem & Registry', versi: 'v0.22.0', kategori: 'Ekosistem', status: 'Selesai' },
   { fase: 23, nama: 'Build System & Distribution', versi: 'v0.23.0', kategori: 'Distribusi', status: 'Selesai' },
-  { fase: 24, nama: 'CI/CD & Automated Release', versi: 'v0.24.0', kategori: 'DevOps & Otomasi', status: 'Rencana' },
+  { fase: 24, nama: 'CI/CD & Automated Release', versi: 'v0.24.0', kategori: 'DevOps & Otomasi', status: 'Selesai' },
   { fase: 25, nama: 'Sistem Build', versi: 'v0.25.0', kategori: 'Kompilasi Native', status: 'Rencana' },
   { fase: 26, nama: 'CLI', versi: 'v0.26.0', kategori: 'Ekosistem', status: 'Rencana' },
   { fase: 27, nama: 'Package Manager', versi: 'v0.27.0', kategori: 'Ekosistem', status: 'Rencana' },

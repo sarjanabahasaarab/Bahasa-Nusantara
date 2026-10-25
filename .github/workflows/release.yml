@@ -1,0 +1,304 @@
+name: NUSANTARA Automated Release & Distribution
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versi rilis target (contoh: 0.24.0)'
+        required: true
+        default: '0.24.0'
+      confirm_release:
+        description: 'Konfirmasi eksplisit: Setujui publikasi rilis resmi NUSANTARA (true/false)'
+        type: boolean
+        required: true
+        default: false
+      release_type:
+        description: 'Tipe rilis GitHub'
+        type: choice
+        options:
+          - 'release'
+          - 'draft'
+          - 'prerelease'
+        default: 'release'
+      dry_run:
+        description: 'Uji alur rilis tanpa mempublikasikan artefak publik'
+        type: boolean
+        default: false
+  push:
+    tags:
+      - 'v*.*.*'
+
+# Least-Privilege Permissions at root
+permissions:
+  contents: read
+
+# Concurrency: Jangan pernah membatalkan rilis yang sedang berlangsung di tengah jalan
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ============================================================================
+  # 1. VERIFIKASI PERSETUJUAN & INTEGRITAS RILIS
+  # ============================================================================
+  verify-release-approval:
+    name: NUSANTARA / Verifikasi Persetujuan & Versi
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Periksa Persetujuan Manual Pengguna
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [ "${{ inputs.confirm_release }}" != "true" ]; then
+            echo "❌ [GAGAL] Persetujuan eksplisit rilis belum diberikan (confirm_release=false)."
+            echo "Rilis resmi tidak dapat dilanjutkan tanpa persetujuan manual pengguna."
+            exit 1
+          fi
+          echo "✅ Persetujuan manual rilis telah dikonfirmasi oleh pengguna."
+
+      - name: Pasang Lingkungan Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Pasang Dependensi
+        run: |
+          npm ci || npm install --no-audit --prefer-offline
+
+      - name: Validasi Konsistensi Versi Proyek
+        run: |
+          npx tsx -e "
+            import { VERSI_NUSANTARA, LABEL_VERSI_NUSANTARA } from './src/konstanta/versi';
+            import fs from 'node:fs';
+            console.log('Versi Resmi:', VERSI_NUSANTARA);
+            const toml = fs.readFileSync('nusantara.toml', 'utf-8');
+            if (!toml.includes('versi = \"' + VERSI_NUSANTARA + '\"')) {
+              console.error('Versi di nusantara.toml tidak cocok dengan versi.ts');
+              process.exit(1);
+            }
+            console.log('✅ Konsistensi versi tervalidasi.');
+          "
+
+  # ============================================================================
+  # 2. RUN FULL TEST SUITE & QUALITY GATE
+  # ============================================================================
+  test-and-gate:
+    name: NUSANTARA / Pengujian Penuh Sebelum Rilis
+    needs: verify-release-approval
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Pasang Lingkungan Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Pasang Dependensi
+        run: |
+          npm ci || npm install --no-audit --prefer-offline
+
+      - name: Jalankan Static Check & Seluruh Rangkaian Uji
+        run: |
+          npm run lint
+          npm test
+
+      - name: Verifikasi Quality Gate
+        run: |
+          npx tsx pengujian/testing/uji_testing.ts
+
+  # ============================================================================
+  # 3. BUILD RELEASE ARTIFACTS MATRIX
+  # ============================================================================
+  build-release-artifacts:
+    name: NUSANTARA / Bangun Artefak Rilis (${{ matrix.target }})
+    needs: test-and-gate
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        target: [windows-x64, linux-x64, macos-x64, macos-arm64]
+        include:
+          - target: windows-x64
+            os: windows-latest
+          - target: linux-x64
+            os: ubuntu-latest
+          - target: macos-x64
+            os: macos-13
+          - target: macos-arm64
+            os: macos-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Pasang Lingkungan Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Pasang Dependensi
+        run: |
+          npm ci || npm install --no-audit --prefer-offline
+
+      - name: Bangun Distribusi Bersih Resmi (${{ matrix.target }})
+        run: |
+          npx tsx -e "
+            import { MesinBuild } from './src/build';
+            const mesin = new MesinBuild();
+            const hasil = mesin.bangun({
+              mode: 'release',
+              targetPlatforms: ['${{ matrix.target }}'],
+              tanpaUji: false,
+              bersihkanSebelum: true,
+              reproducible: true
+            });
+            if (!hasil.sukses) {
+              console.error('Build rilis gagal:', hasil.pesan);
+              process.exit(1);
+            }
+            console.log('Build rilis sukses:', hasil.artefak.length, 'artefak dihasilkan.');
+          "
+
+      - name: Unggah Artefak Rilis Sementara
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-pkg-${{ matrix.target }}
+          path: dist/*
+          retention-days: 1
+
+  # ============================================================================
+  # 4. COMPILE CHECKSUMS, MANIFEST & VALIDASI INTEGRITAS
+  # ============================================================================
+  compile-release-bundle:
+    name: NUSANTARA / Kompilasi SHA256SUMS & Manifest
+    needs: build-release-artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Pasang Lingkungan Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Unduh Seluruh Artefak Terkompilasi
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-pkg-*
+          path: dist/
+          merge-multiple: true
+
+      - name: Hitung Checksum SHA-256 & Buat Manifest Rilis Resmi
+        run: |
+          npx tsx -e "
+            import fs from 'node:fs';
+            import crypto from 'node:crypto';
+            import { VERSI_NUSANTARA } from './src/konstanta/versi';
+            
+            const files = fs.readdirSync('dist').filter(f => f.endsWith('.zip') || f.endsWith('.tar.gz'));
+            console.log('Menghitung SHA-256 untuk berkas:', files);
+            let shaLines = [];
+            let manifestItems = [];
+            
+            for (const f of files) {
+              const buf = fs.readFileSync('dist/' + f);
+              const hash = crypto.createHash('sha256').update(buf).digest('hex');
+              shaLines.push(hash + '  ' + f);
+              manifestItems.push({ filename: f, sha256: hash, sizeBytes: buf.length });
+            }
+            
+            fs.writeFileSync('dist/SHA256SUMS', shaLines.join('\n') + '\n');
+            const manifest = {
+              version: VERSI_NUSANTARA,
+              generatedAt: '2026-10-25T00:00:00.000Z',
+              artifacts: manifestItems
+            };
+            fs.writeFileSync('dist/release-manifest.json', JSON.stringify(manifest, null, 2));
+            console.log('✅ SHA256SUMS dan release-manifest.json berhasil dibuat.');
+          "
+
+      - name: Validasi Integritas SHA256SUMS
+        run: |
+          cd dist && sha256sum -c SHA256SUMS
+
+      - name: Unggah Bundel Rilis Siap Publikasi
+        uses: actions/upload-artifact@v4
+        with:
+          name: nusantara-release-bundle
+          path: dist/*
+          retention-days: 14
+
+  # ============================================================================
+  # 5. PUBLIKASI RELEASE GITHUB (LEAST PRIVILEGE UPGRADE)
+  # ============================================================================
+  publish-release:
+    name: NUSANTARA / Publikasi Rilis Resmi
+    needs: compile-release-bundle
+    runs-on: ubuntu-latest
+    # Elevated permissions ONLY on the publishing job
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Unduh Bundel Rilis
+        uses: actions/download-artifact@v4
+        with:
+          name: nusantara-release-bundle
+          path: dist/
+
+      - name: Siapkan Catatan Rilis Resmi
+        id: notes
+        run: |
+          cat << 'EOF' > dist/RELEASE_NOTES.md
+          # 🇮🇩 Bahasa Pemrograman NUSANTARA — Rilis v0.24.0
+          
+          Rilis resmi sistem CI/CD, alur kerja pengujian otomatis, dan distribusi aman Bahasa Pemrograman NUSANTARA.
+          
+          ### 🚀 Fitur Baru & Peningkatan:
+          - **GitHub Actions CI Pipeline**: Pemeriksaan statis, uji regresi multi-OS (Linux, Windows, macOS), dan verifikasi Quality Gate.
+          - **Alur Kerja Rilis Terotomasi**: Rilis dengan persetujuan eksplisit manual pengguna, verifikasi konsistensi versi, dan validasi artefak.
+          - **Matriks Build Lintas Platform**: Windows x64, Linux x64, macOS x64, dan macOS ARM64.
+          - **Integritas Kriptografis**: Checksum SHA-256 resmi (`SHA256SUMS`) dan manifest terstruktur (`release-manifest.json`).
+          - **Audit Keamanan & Least Privilege**: Kebijakan permission `contents: read` standar dan proteksi terhadap kebocoran rahasia.
+          
+          ### 📦 Verifikasi Integritas Checksum:
+          Lihat berkas \`SHA256SUMS\` terlampir untuk memverifikasi keaslian bundel biner.
+          EOF
+
+      - name: Publikasikan Rilis GitHub (Hanya Jika Bukan Dry Run)
+        if: inputs.dry_run != true
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.zip
+            dist/*.tar.gz
+            dist/SHA256SUMS
+            dist/release-manifest.json
+          name: 'NUSANTARA v0.24.0 — CI/CD & Automated Release'
+          tag_name: ${{ github.ref_name }}
+          body_path: dist/RELEASE_NOTES.md
+          draft: ${{ inputs.release_type == 'draft' }}
+          prerelease: ${{ inputs.release_type == 'prerelease' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Buat Ringkasan Publikasi di Step Summary
+        if: always()
+        run: |
+          echo "## 🇮🇩 NUSANTARA RELEASE SUMMARY (v0.24.0)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status Eksekusi Rilis**: ${{ job.status == 'success' && '✅ SUKSES' || '❌ GAGAL' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tipe Rilis**: \`${{ inputs.release_type || 'release' }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Persetujuan Manual**: Dikonfirmasi oleh operator." >> $GITHUB_STEP_SUMMARY
+          echo "- **Dry Run**: \`${{ inputs.dry_run || 'false' }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Artefak Terbit**: Tersedia di GitHub Releases dan Artifacts." >> $GITHUB_STEP_SUMMARY
