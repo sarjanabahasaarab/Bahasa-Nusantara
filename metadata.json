@@ -1,6 +1,6 @@
 {
   "name": "NUSANTARA - Bahasa Pemrograman Indonesia",
-  "description": "Package Ecosystem, Registry, Testing Framework, Language Server Protocol, dan toolchain bahasa pemrograman NUSANTARA v0.22.0.",
+  "description": "Build System & Distribution, Package Ecosystem, Registry, Testing Framework, dan Language Server bahasa pemrograman NUSANTARA v0.23.0.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

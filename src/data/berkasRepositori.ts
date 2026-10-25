@@ -8,6 +8,39 @@ export interface BerkasRepo {
 }
 
 export const BERKAS_REPOSITORI: BerkasRepo[] = [
+  // --- FASE 23: BUILD SYSTEM & DISTRIBUTION NUSANTARA ---
+  {
+    jalur: 'docs/referensi/build-system.md',
+    nama: 'build-system.md',
+    kategori: 'Spesifikasi Sistem Build',
+    bahasa: 'markdown',
+    ukuran: 6800,
+    konten: `# Panduan Referensi Sistem Build NUSANTARA (v0.23.0)\n\nSpesifikasi teknis pipeline build, nusantara.toml [build], mode debug vs release, clean build, dan reproducible build foundation.`
+  },
+  {
+    jalur: 'docs/referensi/distribution.md',
+    nama: 'distribution.md',
+    kategori: 'Spesifikasi Distribusi & Rilis',
+    bahasa: 'markdown',
+    ukuran: 5900,
+    konten: `# Panduan Distribusi & Paket Rilis NUSANTARA (v0.23.0)\n\nStruktur arsip distribusi Windows, Linux, macOS, installer foundation, dan verifikasi checksum SHA-256.`
+  },
+  {
+    jalur: 'docs/pengembang/build.md',
+    nama: 'build.md',
+    kategori: 'Panduan Pengembang Sistem Build',
+    bahasa: 'markdown',
+    ukuran: 5100,
+    konten: `# Panduan Pengembang Sistem Build & Distribusi\n\nArsitektur modul src/build/, single source of truth versi, dan pengemasan biner murni.`
+  },
+  {
+    jalur: 'pengujian/build/uji_build_distribusi.ts',
+    nama: 'uji_build_distribusi.ts',
+    kategori: '24 Pengujian Sistem Build & Distribusi',
+    bahasa: 'javascript',
+    ukuran: 14200,
+    konten: `// Rangkaian 24 Pengujian Resmi Sistem Build & Distribusi NUSANTARA (Phase 23)`
+  },
   // --- FASE 22: PACKAGE ECOSYSTEM & REGISTRY NUSANTARA ---
   {
     jalur: 'docs/referensi/package.md',
@@ -735,8 +768,8 @@ export const DAFTAR_FASE_ROADMAP = [
   { fase: 20, nama: 'Language Server & Developer Tools', versi: 'v0.20.0', kategori: 'Tooling', status: 'Selesai' },
   { fase: 21, nama: 'Testing Framework & Quality System', versi: 'v0.21.0', kategori: 'Tooling', status: 'Selesai' },
   { fase: 22, nama: 'Package Ecosystem & Registry', versi: 'v0.22.0', kategori: 'Ekosistem', status: 'Selesai' },
-  { fase: 23, nama: 'Executable Native', versi: 'v0.23.0', kategori: 'Kompilasi Native', status: 'Rencana' },
-  { fase: 24, nama: 'Optimasi Compiler', versi: 'v0.24.0', kategori: 'Kompilasi Native', status: 'Rencana' },
+  { fase: 23, nama: 'Build System & Distribution', versi: 'v0.23.0', kategori: 'Distribusi', status: 'Selesai' },
+  { fase: 24, nama: 'CI/CD & Automated Release', versi: 'v0.24.0', kategori: 'DevOps & Otomasi', status: 'Rencana' },
   { fase: 25, nama: 'Sistem Build', versi: 'v0.25.0', kategori: 'Kompilasi Native', status: 'Rencana' },
   { fase: 26, nama: 'CLI', versi: 'v0.26.0', kategori: 'Ekosistem', status: 'Rencana' },
   { fase: 27, nama: 'Package Manager', versi: 'v0.27.0', kategori: 'Ekosistem', status: 'Rencana' },

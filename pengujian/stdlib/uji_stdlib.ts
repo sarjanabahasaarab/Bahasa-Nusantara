@@ -12,6 +12,7 @@ import {
   buatEksporKoleksi,
   buatEksporBerkas,
   buatEksporSistem,
+  VERSI_NUSANTARA,
   SandboxBerkas,
   apakahModulStandar,
   dapatkanDaftarNamaModulStandar,
@@ -424,7 +425,7 @@ uji('Informasi lingkungan versi, platform, arsitektur, argumen, dan env', () => 
   const fnAmbilEnv = sys.get('ambilEnv') as NilaiFungsiBawaan;
   const fnUptime = sys.get('waktuOperasi') as NilaiFungsiBawaan;
 
-  samaDengan((fnVersi.eksekusi([]) as any).nilai, '0.17.0');
+  samaDengan((fnVersi.eksekusi([]) as any).nilai, VERSI_NUSANTARA);
   benar(typeof (fnPlatform.eksekusi([]) as any).nilai === 'string');
   benar(typeof (fnArsitektur.eksekusi([]) as any).nilai === 'string');
 
@@ -554,7 +555,7 @@ selesai
   const interpreter = new Interpreter(buffer);
   interpreter.jalankanKode(kode);
 
-  samaDengan(buffer.dapatkanSeluruhTeks().join('\n').trim(), 'Versi: 0.17.0');
+  samaDengan(buffer.dapatkanSeluruhTeks().join('\n').trim(), `Versi: ${VERSI_NUSANTARA}`);
 });
 
 console.log('\n======================================================');

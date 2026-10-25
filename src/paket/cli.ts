@@ -18,6 +18,13 @@ import {
 } from '../toolchain';
 import { jalankanServerBahasaStdio } from '../language-server';
 import { PelariUji, PenemuUji, PelaporKonsol, PelaporJSON, GerbangKualitas } from '../testing';
+import {
+  VERSI_NUSANTARA,
+  LABEL_VERSI_NUSANTARA,
+  dapatkanBannerCLI,
+  dapatkanInfoHost,
+} from '../konstanta/versi';
+import { MesinBuild, PlatformTarget } from '../build';
 
 export interface OpsiCLI {
   pengelola?: PengelolaPaket;
@@ -159,6 +166,10 @@ export class NusantaraCLI {
             'cari',
             'search',
             'arsip',
+            'bersihkan',
+            'clean',
+            'rilis',
+            'release',
           ].includes(perintah) &&
             this.pembaca.apakahAda(perintah)))
       ) {
@@ -259,11 +270,37 @@ export class NusantaraCLI {
 
         case 'bangun':
         case 'build': {
-          const target = argumenTambahan[0];
-          return this.eksekusiBangunPaket(target, {
+          if (argumenTambahan[0] === 'paket') {
+            return this.eksekusiBangunPaket(argumenTambahan[1], {
+              debug: opsiDebug,
+              json: opsiJSON,
+              warna: opsiWarna,
+              tanpaUji: args.includes('--tanpa-uji') || args.includes('--no-test'),
+            });
+          }
+          return this.eksekusiBangunDistribusi(args, argumenTambahan, {
             debug: opsiDebug,
             json: opsiJSON,
             warna: opsiWarna,
+            tanpaUji: args.includes('--tanpa-uji') || args.includes('--no-test'),
+          });
+        }
+
+        case 'bersihkan':
+        case 'clean': {
+          return this.eksekusiBersihkan(args, argumenTambahan, {
+            json: opsiJSON,
+            warna: opsiWarna,
+          });
+        }
+
+        case 'rilis':
+        case 'release': {
+          return this.eksekusiBangunDistribusi(args, argumenTambahan, {
+            debug: opsiDebug,
+            json: opsiJSON,
+            warna: opsiWarna,
+            mode: 'release',
             tanpaUji: args.includes('--tanpa-uji') || args.includes('--no-test'),
           });
         }
@@ -372,25 +409,34 @@ export class NusantaraCLI {
               warna: opsiWarna,
             });
           }
-          const info = this.pengelola.info();
-          if (opsiJSON) {
-            this.log(JSON.stringify(info, null, 2));
+          const jalurToml = this.pembaca.gabungJalur(this.pengelola.dapatkanDirektoriProyek(), 'nusantara.toml');
+          if (this.pembaca.apakahAda(jalurToml)) {
+            const info = this.pengelola.info();
+            const hostInfo = dapatkanInfoHost();
+            if (opsiJSON) {
+              this.log(JSON.stringify({ ...info, host: hostInfo }, null, 2));
+              return 0;
+            }
+            this.log('Informasi Paket NUSANTARA:\n');
+            this.log(`  Nama             : ${info.nama}`);
+            this.log(`  Versi            : ${info.versi}`);
+            this.log(`  Deskripsi        : ${info.deskripsi}`);
+            this.log(`  Lisensi          : ${info.lisensi}`);
+            this.log(`  Jml Dependensi   : ${info.jumlahDependensi}`);
+            this.log(`  Lokasi Proyek    : ${info.lokasiProyek}`);
+            this.log(`  Platform Host    : ${hostInfo.namaPlatform}`);
+            this.log(`  Arsitektur       : ${hostInfo.arsitektur}`);
+            this.log(`  Mode Build       : release`);
             return 0;
+          } else {
+            return this.eksekusiInfoSistem(opsiJSON);
           }
-          this.log('Informasi Paket NUSANTARA:\n');
-          this.log(`  Nama             : ${info.nama}`);
-          this.log(`  Versi            : ${info.versi}`);
-          this.log(`  Deskripsi        : ${info.deskripsi}`);
-          this.log(`  Lisensi          : ${info.lisensi}`);
-          this.log(`  Jml Dependensi   : ${info.jumlahDependensi}`);
-          this.log(`  Lokasi Proyek    : ${info.lokasiProyek}`);
-          return 0;
         }
 
         case 'versi':
         case '--version':
         case '-v': {
-          this.log('NUSANTARA Package Ecosystem & Registry, Testing Framework, Language Server & Toolchain (nusantara) v0.22.0 (fondasi v0.21.0, v0.20.0, v0.19.0)');
+          this.log(dapatkanBannerCLI());
           return 0;
         }
 
@@ -1049,14 +1095,146 @@ Penggunaan Perintah 'nusantara paket':
     return 0;
   }
 
+  private eksekusiBangunDistribusi(
+    rawArgs: string[],
+    argsTambahan: string[],
+    opsi: {
+      debug?: boolean;
+      json?: boolean;
+      warna?: boolean;
+      mode?: 'debug' | 'release';
+      tanpaUji?: boolean;
+    }
+  ): number {
+    const mesin = new MesinBuild(this.pembaca, {
+      log: this.log,
+      error: this.error,
+    });
+
+    let mode: 'debug' | 'release' = opsi.mode || 'release';
+    const modeIdx = rawArgs.findIndex(a => a === '--mode' || a === '-m');
+    if (modeIdx !== -1 && rawArgs[modeIdx + 1]) {
+      const m = rawArgs[modeIdx + 1].toLowerCase();
+      if (m === 'debug' || m === 'release') mode = m;
+    } else if (rawArgs.includes('--debug') || rawArgs.includes('-d') || opsi.debug) {
+      mode = 'debug';
+    } else if (rawArgs.includes('--release') || rawArgs.includes('-r')) {
+      mode = 'release';
+    }
+
+    let targetPlatform: PlatformTarget[] | undefined;
+    const targetIdx = rawArgs.findIndex(a => a === '--target' || a === '-t');
+    if (targetIdx !== -1 && rawArgs[targetIdx + 1]) {
+      targetPlatform = [rawArgs[targetIdx + 1] as PlatformTarget];
+    }
+
+    const apakahBersih = rawArgs.includes('--bersih') || rawArgs.includes('--clean');
+    if (apakahBersih) {
+      mesin.bersihkan();
+    }
+
+    const hasil = mesin.bangun({
+      mode,
+      target: targetPlatform,
+      verifikasiUji: !opsi.tanpaUji && !rawArgs.includes('--tanpa-uji'),
+      verbose: rawArgs.includes('--verbose') || rawArgs.includes('-V'),
+    });
+
+    if (opsi.json) {
+      this.log(JSON.stringify(hasil, null, 2));
+      return hasil.sukses ? 0 : 1;
+    }
+
+    if (hasil.sukses) {
+      this.log(hasil.pesan);
+      this.log(`\nArtefak Distribusi (${hasil.artefak.length}):`);
+      for (const a of hasil.artefak) {
+        const kb = (a.ukuranByte / 1024).toFixed(1);
+        this.log(`  - ${a.namaBerkas.padEnd(46)} (${kb} KB, sha256: ${a.sha256.substring(0, 16)}...)`);
+      }
+      if (hasil.manifest) {
+        this.log(`\nBerkas Manifest Rilis : dist/release-manifest.json`);
+        this.log(`Berkas Checksum Resmi  : dist/SHA256SUMS`);
+      }
+      return 0;
+    } else {
+      this.error(hasil.pesan);
+      if (hasil.galat) {
+        this.error(`Rincian galat: ${hasil.galat}`);
+      }
+      return 1;
+    }
+  }
+
+  private eksekusiBersihkan(
+    rawArgs: string[],
+    argsTambahan: string[],
+    opsi: { json?: boolean; warna?: boolean }
+  ): number {
+    const mesin = new MesinBuild(this.pembaca, {
+      log: this.log,
+      error: this.error,
+    });
+    const hasil = mesin.bersihkan();
+    if (opsi.json) {
+      this.log(JSON.stringify(hasil, null, 2));
+      return 0;
+    }
+    this.log(hasil.pesan);
+    return 0;
+  }
+
+  private eksekusiInfoSistem(opsiJSON?: boolean): number {
+    const hostInfo = dapatkanInfoHost();
+    const info = {
+      nama: 'NUSANTARA',
+      versi: VERSI_NUSANTARA,
+      label: LABEL_VERSI_NUSANTARA,
+      fase: 23,
+      namaFase: 'Build System & Distribution',
+      host: hostInfo,
+      modeDefault: 'release',
+      targetDidukung: ['windows-x64', 'linux-x64', 'macos-x64', 'macos-arm64'],
+      direktori: {
+        akarProyek: this.pengelola.dapatkanDirektoriProyek(),
+        dist: 'dist',
+        target: 'target',
+        stdlib: 'std',
+      },
+    };
+
+    if (opsiJSON) {
+      this.log(JSON.stringify(info, null, 2));
+      return 0;
+    }
+
+    this.log('NUSANTARA - Informasi Sistem & Build:');
+    this.log(`  Versi            : ${info.label} (${info.namaFase})`);
+    this.log(`  Platform Host    : ${hostInfo.namaPlatform}`);
+    this.log(`  Arsitektur       : ${hostInfo.arsitektur}`);
+    this.log(`  Mode Default     : ${info.modeDefault}`);
+    this.log(`  Target Resmi     : ${info.targetDidukung.join(', ')}`);
+    this.log(`  Direktori Output : ${info.direktori.dist}`);
+    this.log(`  Direktori Build  : ${info.direktori.target}`);
+    this.log(`  Pustaka Standar  : ${info.direktori.stdlib}`);
+    return 0;
+  }
+
   private cetakBantuan(): void {
     this.log(`
-Bahasa Pemrograman NUSANTARA (v0.22.0)
-Antarmuka Baris Perintah (CLI), Ekosistem Paket & Registri, Testing & Developer Tools
+Bahasa Pemrograman NUSANTARA (v0.23.0)
+Antarmuka Baris Perintah (CLI), Sistem Build & Distribusi, Ekosistem Paket, Testing & LSP
 
 Penggunaan:
   nusantara <perintah> [argumen...]
   nusantara <berkas.nusantara> [argumen...]
+
+Perintah Sistem Build & Distribusi (Phase 23):
+  bangun [--mode debug|release] [--target <platform>] [--bersih] [--tanpa-uji]
+                         Membangun artefak rilis biner resmi untuk Windows, Linux, dan macOS
+  bersihkan, clean      Membersihkan direktori artefak kompilasi dan rilis (dist/ dan target/)
+  rilis                 Membangun paket rilis distribusi mode release dengan seluruh validasi
+  info                  Menampilkan informasi build sistem NUSANTARA atau metadata paket
 
 Perintah Eksekusi, Toolchain, Testing & Developer Tools:
   jalankan <berkas>      Eksekusi program NUSANTARA
@@ -1066,27 +1244,26 @@ Perintah Eksekusi, Toolchain, Testing & Developer Tools:
   cek [<berkas>|.]       Pemeriksaan sintaksis, sistem tipe, dan linter tanpa eksekusi
   bahasa-server, lsp     Menjalankan Language Server Protocol (LSP) via stdio untuk IDE/Editor
 
-Perintah Ekosistem Paket & Registri:
+Perintah Ekosistem Paket & Registri (Phase 16 & 22):
   paket <subperintah>    Kelola paket & registri (bangun, cek, terbit, cari, info, pasang, buat, daftar)
-  bangun [<target>]      Membangun arsip bundle paket (.npk) dengan pengujian otomatis
   terbit [<target>]      Menerbitkan paket ke registri (rilis immutable dengan SHA-256)
   cari <kueri>           Mencari paket yang tersedia di registri
-  info [<nama>]          Menampilkan informasi paket proyek lokal atau metadata registri
   pasang [<nama>]        Memasang dependensi proyek atau memasang paket dari registri
   buat <nama>            Membuat paket atau proyek baru dengan nusantara.toml
   hapus <nama>           Menghapus paket dari dependensi dan sistem lokal
   perbarui [<nama>]      Memperbarui dependensi ke versi kompatibel terbaru
   daftar                 Menampilkan daftar dependensi proyek saat ini
 
+Opsi Perintah 'bangun' & 'rilis':
+  --mode, -m <mode>      Pilih mode build: 'release' (teroptimasi) atau 'debug' (default: release)
+  --target, -t <plt>     Target spesifik: 'windows-x64', 'linux-x64', 'macos-x64', 'macos-arm64'
+  --bersih, --clean      Jalankan pembersihan direktori keluaran sebelum memulai build
+  --tanpa-uji            Lewati pengujian pra-rilis otomatis (hanya untuk pengujian cepat)
+
 Opsi Perintah 'uji':
   --cari, --filter <teks> Filter pengujian berdasarkan nama atau jalur berkas
   --verbose, -V          Tampilkan rincian detail setiap assertion/penegasan yang diuji
   --timeout <ms>         Batas waktu eksekusi setiap berkas pengujian (default: 5000ms)
-
-Opsi Perintah Paket & Registri:
-  --tanpa-uji            Lewati pengujian otomatis sebelum pengemasan/penerbitan
-  --offline              Gunakan cache lokal tanpa menghubungi registri jaringan
-  --terkunci             Kunci resolusi dependensi mengacu pada nusantara.lock
 
 Opsi Perintah 'format':
   --tulis, -w            Tulis hasil format langsung ke berkas (in-place) secara aman

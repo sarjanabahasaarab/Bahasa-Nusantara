@@ -14,8 +14,9 @@ import {
 } from '../interpreter/nilai';
 import { GalatRuntime, JenisGalatRuntime } from '../interpreter/galat';
 import { InfoSimbolModul } from '../modul/jenisModul';
+import { VERSI_NUSANTARA } from '../konstanta/versi';
 
-export const VERSI_NUSANTARA = '0.17.0';
+export { VERSI_NUSANTARA };
 
 export const simbolEksporSistem: Map<string, InfoSimbolModul> = new Map([
   [

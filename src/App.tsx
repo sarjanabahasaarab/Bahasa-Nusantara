@@ -34,6 +34,7 @@ import {
   Search,
   Wrench,
   Compass,
+  HardDrive,
 } from 'lucide-react';
 import {
   BERKAS_REPOSITORI,
@@ -96,9 +97,10 @@ import {
   StatusUji,
 } from './testing';
 import StudioEkosistemPaket from './komponen/StudioEkosistemPaket';
+import StudioDistribusiBuild from './komponen/StudioDistribusiBuild';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'ekosistem' | 'testing' | 'lsp' | 'toolchain' | 'diagnostik' | 'stdlib' | 'paket' | 'struktur-data' | 'fungsi' | 'perulangan' | 'percabangan' | 'operator' | 'tipe' | 'ast' | 'token' | 'panduan' | 'berkas' | 'roadmap' | 'git'>('ekosistem');
+  const [activeTab, setActiveTab] = useState<'distribusi' | 'ekosistem' | 'testing' | 'lsp' | 'toolchain' | 'diagnostik' | 'stdlib' | 'paket' | 'struktur-data' | 'fungsi' | 'perulangan' | 'percabangan' | 'operator' | 'tipe' | 'ast' | 'token' | 'panduan' | 'berkas' | 'roadmap' | 'git'>('distribusi');
   const [selectedFile, setSelectedFile] = useState<BerkasRepo>(BERKAS_REPOSITORI[0]);
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [playgroundCode, setPlaygroundCode] = useState<string>(
@@ -974,14 +976,14 @@ pastikan_sama(aktual, target, "Nilai aktual tidak memenuhi target ekspektasi")`,
       <header className="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-600 via-indigo-600 to-amber-500 flex items-center justify-center font-bold text-lg text-white shadow-lg shadow-rose-950/40">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-600 via-indigo-600 to-teal-500 flex items-center justify-center font-bold text-lg text-white shadow-lg shadow-teal-950/40">
               ID
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-extrabold tracking-wider text-white text-base">NUSANTARA</span>
-                <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                  Phase 22 (v0.22.0)
+                <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                  Phase 23 (v0.23.0)
                 </span>
               </div>
               <p className="text-xs text-slate-400">Bahasa Pemrograman Indonesia</p>
@@ -989,6 +991,15 @@ pastikan_sama(aktual, target, "Nilai aktual tidak memenuhi target ekspektasi")`,
           </div>
 
           <nav className="hidden md:flex items-center gap-6 text-sm">
+            <button
+              onClick={() => setActiveTab('distribusi')}
+              className={`hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'distribusi' ? 'text-teal-400 font-semibold' : 'text-slate-400'
+              }`}
+            >
+              <HardDrive className="w-4 h-4 text-teal-400" />
+              Build &amp; Distribusi (Phase 23)
+            </button>
             <button
               onClick={() => setActiveTab('ekosistem')}
               className={`hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 ${
@@ -1146,14 +1157,14 @@ pastikan_sama(aktual, target, "Nilai aktual tidak memenuhi target ekspektasi")`,
 
           <div className="flex items-center gap-3">
             <button
-              onClick={() => handleCopy('git commit -m "feat: add nusantara package ecosystem and local registry foundation"', 'commit-p22')}
+              onClick={() => handleCopy('git commit -m "feat: add nusantara build and distribution system"', 'commit-p23')}
               className="px-3.5 py-1.5 text-xs font-medium text-slate-200 bg-slate-900 border border-slate-700/80 rounded-lg hover:bg-slate-800 hover:text-white transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer"
             >
-              {copiedText === 'commit-p22' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Terminal className="w-3.5 h-3.5 text-slate-400" />}
-              <span>{copiedText === 'commit-p22' ? 'Tersalin' : 'Salin Pesan Komit'}</span>
+              {copiedText === 'commit-p23' ? <Check className="w-3.5 h-3.5 text-teal-400" /> : <Terminal className="w-3.5 h-3.5 text-slate-400" />}
+              <span>{copiedText === 'commit-p23' ? 'Tersalin' : 'Salin Pesan Komit'}</span>
             </button>
-            <span className="px-3 py-1 text-xs font-semibold text-white bg-amber-700/80 rounded-lg whitespace-nowrap border border-amber-500/40">
-              v0.22.0
+            <span className="px-3 py-1 text-xs font-semibold text-white bg-teal-700/80 rounded-lg whitespace-nowrap border border-teal-500/40">
+              v0.23.0
             </span>
           </div>
         </div>
@@ -1163,27 +1174,27 @@ pastikan_sama(aktual, target, "Nilai aktual tidak memenuhi target ekspektasi")`,
       <section className="border-b border-slate-800/60 bg-gradient-to-b from-slate-950 via-slate-900/60 to-slate-950 py-10 px-4 sm:px-6">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mb-4 tracking-wide font-mono">
-            <span className="text-amber-400 font-bold bg-amber-950/80 px-2 py-0.5 rounded border border-amber-800">Milestone v0.22.0</span>
+            <span className="text-teal-400 font-bold bg-teal-950/80 px-2 py-0.5 rounded border border-teal-800">Milestone v0.23.0</span>
             <span aria-hidden="true">·</span>
-            <span className="text-white font-medium">Phase 22: Package Ecosystem &amp; Registry NUSANTARA</span>
+            <span className="text-white font-medium">Phase 23: Build System &amp; Distribution NUSANTARA</span>
             <span aria-hidden="true">·</span>
-            <span className="text-cyan-300 font-mono">Arsip .npk · SHA-256 Integritas · RegistriLokal &amp; Remote · ValidatorPaket · nusantara paket</span>
+            <span className="text-cyan-300 font-mono">Windows · Linux · macOS · Reproducible · SHA256SUMS · nusantara bangun</span>
             <span aria-hidden="true">·</span>
-            <span className="text-emerald-400 font-semibold">18 Test Suites (100% Lulus)</span>
+            <span className="text-teal-400 font-semibold">19 Test Suites (100% Lulus)</span>
           </div>
 
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white max-w-4xl leading-tight">
-            Package Ecosystem &amp; Registry NUSANTARA: Format Arsip .npk, Validasi Imutabilitas &amp; Registri Terdistribusi.
+            Build System &amp; Distribution NUSANTARA: Kompilasi Lintas Platform, Integritas SHA-256 &amp; Artefak Biner Mandiri.
           </h1>
 
           <p className="mt-4 text-base sm:text-lg text-slate-300 max-w-3xl leading-relaxed">
-            Ekosistem package resmi NUSANTARA kini hadir lengkap dengan format arsip terstandardisasi (<code className="text-amber-300 font-mono font-semibold">.npk</code>), verifikasi integritas kriptografis <code className="text-amber-300 font-mono font-semibold">SHA-256</code>, mesin validasi 5 tahap (<code className="text-amber-300 font-mono font-semibold">ValidatorPaket</code>), arsitektur registri ganda (<code className="text-amber-300 font-mono font-semibold">RegistriLokal</code> &amp; <code className="text-amber-300 font-mono font-semibold">RegistriJarakJauh</code>), immutabilitas versi rilis, serta CLI <code className="text-amber-300 font-mono font-semibold">nusantara paket &lt;bangun|cek|terbit|cari|info|pasang&gt;</code>.
+            Sistem build dan distribusi resmi NUSANTARA kini hadir lengkap dengan pipeline kompilasi lintas platform (<code className="text-teal-300 font-mono font-semibold">windows-x64</code>, <code className="text-teal-300 font-mono font-semibold">linux-x64</code>, <code className="text-teal-300 font-mono font-semibold">macos-x64</code>, <code className="text-teal-300 font-mono font-semibold">macos-arm64</code>), pembuatan arsip biner mandiri (<code className="text-teal-300 font-mono font-semibold">.zip</code> &amp; <code className="text-teal-300 font-mono font-semibold">.tar.gz</code>), fondasi reproducible builds deterministik, verifikasi integritas <code className="text-teal-300 font-mono font-semibold">SHA-256</code> (<code className="text-teal-300 font-mono font-semibold">SHA256SUMS</code>), manifest rilis resmi (<code className="text-teal-300 font-mono font-semibold">release-manifest.json</code>), pembersih rilis (<code className="text-teal-300 font-mono font-semibold">nusantara bersihkan</code>), serta CLI <code className="text-teal-300 font-mono font-semibold">nusantara bangun &amp; nusantara rilis</code>.
           </p>
 
           <div className="mt-6 p-4 rounded-xl bg-slate-900/90 border border-slate-800 max-w-3xl flex items-start gap-3">
-            <Boxes className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+            <HardDrive className="w-5 h-5 text-teal-400 shrink-0 mt-0.5" />
             <div className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              <span className="font-semibold text-amber-300">Alur Distribusi Package:</span> Kode Sumber ➔ <code className="text-white">ValidatorPaket (Manifest, Sintaks, Uji Otomatis, Audit Kredensial)</code> ➔ <code className="text-white">Arsip .npk (nusantara-npk-v1)</code> ➔ <code className="text-white">SHA-256 Checksum</code> ➔ <code className="text-white">Registri (Lokal / Jarak Jauh)</code> ➔ <code className="text-white">Pemasangan &amp; Verifikasi Integritas</code>.
+              <span className="font-semibold text-teal-300">Alur Rilis Distribusi:</span> Kode Sumber ➔ <code className="text-white">nusantara.toml [build]</code> ➔ <code className="text-white">Pengujian Pra-Rilis Wajib</code> ➔ <code className="text-white">Penataan Struktur (bin, lib, std, docs)</code> ➔ <code className="text-white">Pengemasan Biner PKZip &amp; TAR</code> ➔ <code className="text-white">SHA256SUMS &amp; Manifest</code> ➔ <code className="text-white">Smoke Test &amp; Validasi</code>.
             </div>
           </div>
         </div>
@@ -1193,6 +1204,15 @@ pastikan_sama(aktual, target, "Nilai aktual tidak memenuhi target ekspektasi")`,
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 flex-1 w-full">
         {/* Navigation Sub-Tabs */}
         <div className="flex items-center gap-2 border-b border-slate-800 pb-4 mb-6 overflow-x-auto text-sm">
+          <button
+            onClick={() => setActiveTab('distribusi')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap cursor-pointer flex items-center gap-2 ${
+              activeTab === 'distribusi' ? 'bg-teal-950 text-teal-200 border border-teal-700/60 font-semibold' : 'text-slate-400 hover:text-white hover:bg-slate-900'
+            }`}
+          >
+            <HardDrive className="w-4 h-4 text-teal-400" />
+            <span>Sistem Build &amp; Distribusi (Phase 23)</span>
+          </button>
           <button
             onClick={() => setActiveTab('ekosistem')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap cursor-pointer flex items-center gap-2 ${
@@ -1356,6 +1376,9 @@ pastikan_sama(aktual, target, "Nilai aktual tidak memenuhi target ekspektasi")`,
             <span>Peta Jalan 36 Fase</span>
           </button>
         </div>
+
+        {/* TAB 0000: BUILD SYSTEM & DISTRIBUTION (PHASE 23) */}
+        {activeTab === 'distribusi' && <StudioDistribusiBuild />}
 
         {/* TAB 000: PACKAGE ECOSYSTEM & REGISTRY (PHASE 22) */}
         {activeTab === 'ekosistem' && <StudioEkosistemPaket />}
