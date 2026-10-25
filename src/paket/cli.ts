@@ -28,6 +28,7 @@ import {
 } from '../konstanta/versi';
 import { MesinBuild, PlatformTarget } from '../build';
 import { MesinCI, ValidatorAlurKerjaGitHub } from '../cicd';
+import { PelariDebuggerCLI, PelariProfilerCLI } from '../debugger';
 
 export interface OpsiCLI {
   pengelola?: PengelolaPaket;
@@ -112,6 +113,23 @@ export class NusantaraCLI {
       if (!isNaN(parsed)) opsiTimeout = parsed;
     }
 
+    let opsiPerintahDebug: string[] | undefined;
+    for (const a of args) {
+      if (a.startsWith('--perintah=')) {
+        opsiPerintahDebug = a.slice(11).split(';').map(c => c.trim()).filter(Boolean);
+      } else if (a.startsWith('--commands=')) {
+        opsiPerintahDebug = a.slice(11).split(';').map(c => c.trim()).filter(Boolean);
+      }
+    }
+
+    let opsiAmbang: number | undefined;
+    for (const a of args) {
+      if (a.startsWith('--ambang=')) {
+        const val = parseFloat(a.slice(9));
+        if (!isNaN(val)) opsiAmbang = val;
+      }
+    }
+
     // Bersihkan flags dari argumen posisi
     const argumenBersih = args.filter((a, idx) => {
       if (a.startsWith('-') || a === 'json') return false;
@@ -176,6 +194,12 @@ export class NusantaraCLI {
             'ci',
             'alur-kerja',
             'workflow',
+            'debug',
+            'debig',
+            'telusur',
+            'profil',
+            'profile',
+            'profiler',
           ].includes(perintah) &&
             this.pembaca.apakahAda(perintah)))
       ) {
@@ -187,6 +211,27 @@ export class NusantaraCLI {
       }
 
       switch (perintah) {
+        case 'debug':
+        case 'debig':
+        case 'telusur': {
+          const target = argumenTambahan[0];
+          return this.eksekusiDebug(target, {
+            perintahAwal: opsiPerintahDebug,
+            verbose: opsiVerbose,
+          });
+        }
+
+        case 'profil':
+        case 'profile':
+        case 'profiler': {
+          const target = argumenTambahan[0];
+          return this.eksekusiProfil(target, {
+            json: opsiJSON,
+            ambangMs: opsiAmbang,
+            tanpaWarna: opsiTanpaWarna,
+          });
+        }
+
         case 'uji':
         case 'test': {
           const target = argumenTambahan[0];
@@ -442,7 +487,7 @@ export class NusantaraCLI {
             this.log('Informasi Paket NUSANTARA:\n');
             this.log(`  Nama             : ${info.nama}`);
             this.log(`  Versi            : ${info.versi} (${LABEL_VERSI_NUSANTARA})`);
-            this.log(`  Fase             : ${FASE_TERAKHIR} (${NAMA_FASE_TERAKHIR})`);
+            this.log(`  Fase             : ${FASE_TERAKHIR} (${NAMA_FASE_TERAKHIR} / CI/CD & Build System)`);
             this.log(`  Deskripsi        : ${info.deskripsi}`);
             this.log(`  Lisensi          : ${info.lisensi}`);
             this.log(`  Jml Dependensi   : ${info.jumlahDependensi}`);
@@ -1232,7 +1277,7 @@ Penggunaan Perintah 'nusantara paket':
     }
 
     this.log('NUSANTARA - Informasi Sistem & Build:');
-    this.log(`  Versi            : ${info.label} (${info.namaFase})`);
+    this.log(`  Versi            : ${info.label} (${info.namaFase} / CI/CD & Build System)`);
     this.log(`  Platform Host    : ${hostInfo.namaPlatform}`);
     this.log(`  Arsitektur       : ${hostInfo.arsitektur}`);
     this.log(`  Mode Default     : ${info.modeDefault}`);
@@ -1317,14 +1362,88 @@ Penggunaan Perintah 'nusantara paket':
     return hasil.statusAkhir === 'PASS' ? 0 : 1;
   }
 
+  /**
+   * Eksekusi sesi penelusuran (debugging) interaktif & terarah (Phase 25).
+   */
+  private eksekusiDebug(
+    target: string | undefined,
+    opsi: { perintahAwal?: string[]; verbose?: boolean }
+  ): number {
+    if (!target) {
+      this.error(
+        "Kesalahan argumen:\nPerintah 'nusantara debug' memerlukan argumen berkas target (.nusantara).\nContoh: nusantara debug program.nusantara"
+      );
+      return 1;
+    }
+
+    if (!this.pembaca.apakahAda(target)) {
+      this.error(`Berkas target '${target}' tidak ditemukan.`);
+      return 1;
+    }
+
+    const sumber = this.pembaca.baca(target);
+    const pelari = new PelariDebuggerCLI({
+      log: this.log,
+      error: this.error,
+    });
+
+    try {
+      const sesi = pelari.jalankan({
+        berkas: target,
+        sumber,
+        perintahAwal: opsi.perintahAwal,
+        verbose: opsi.verbose,
+      });
+      return sesi.status === 'finished' || sesi.status === 'terminated' ? 0 : 1;
+    } catch (e: any) {
+      this.error(`Debugging terhenti dengan galat: ${e?.message || e}`);
+      return 1;
+    }
+  }
+
+  /**
+   * Eksekusi pengukuran kinerja & profiler waktu eksekusi fungsi (Phase 25).
+   */
+  private eksekusiProfil(
+    target: string | undefined,
+    opsi: { json?: boolean; ambangMs?: number; tanpaWarna?: boolean }
+  ): number {
+    if (!target) {
+      this.error(
+        "Kesalahan argumen:\nPerintah 'nusantara profil' memerlukan argumen berkas target (.nusantara).\nContoh: nusantara profil program.nusantara"
+      );
+      return 1;
+    }
+
+    if (!this.pembaca.apakahAda(target)) {
+      this.error(`Berkas target '${target}' tidak ditemukan.`);
+      return 1;
+    }
+
+    const sumber = this.pembaca.baca(target);
+    const hasil = PelariProfilerCLI.jalankan(target, sumber, {
+      json: opsi.json,
+      ambangMs: opsi.ambangMs,
+      tanpaWarna: opsi.tanpaWarna,
+      log: this.log,
+      error: this.error,
+    });
+
+    return hasil.kodeKeluar;
+  }
+
   private cetakBantuan(): void {
     this.log(`
 Bahasa Pemrograman NUSANTARA (${LABEL_VERSI_NUSANTARA})
-Antarmuka Baris Perintah (CLI), CI/CD & Automated Release, Build System & Distribution, Package Ecosystem, Testing & LSP
+Antarmuka Baris Perintah (CLI), Debugger & Profiler, CI/CD & Automated Release, Build System & Distribution, Package Ecosystem, Testing & LSP
 
 Penggunaan:
   nusantara <perintah> [argumen...]
   nusantara <berkas.nusantara> [argumen...]
+
+Perintah Debugger & Profiler Runtime (Phase 25):
+  debug <berkas> [--perintah="<cmds>"]   Menjalankan sesi penelusuran program interaktif / batch
+  profil <berkas> [--json] [--ambang=<ms>] Mengukur waktu eksekusi fungsi, waktu mandiri, dan statistik memori
 
 Perintah Alur Kerja CI/CD & Validasi Rilis (Phase 24):
   ci [--markdown] [--json]     Menjalankan seluruh alur validasi CI lokal (statis, uji, quality gate, matriks build)
@@ -1355,6 +1474,13 @@ Perintah Ekosistem Paket & Registri (Phase 16 & 22):
   hapus <nama>           Menghapus paket dari dependensi dan sistem lokal
   perbarui [<nama>]      Memperbarui dependensi ke versi kompatibel terbaru
   daftar                 Menampilkan daftar dependensi proyek saat ini
+
+Opsi Perintah 'debug':
+  --perintah="<cmds>"    Jalankan rentetan perintah debug non-interaktif dipisahkan titik koma (;)
+
+Opsi Perintah 'profil':
+  --json                 Keluarkan laporan profiling dalam format JSON terstruktur
+  --ambang=<ms>          Hanya tampilkan fungsi yang waktu eksekusinya melebihi ambang batas (ms)
 
 Opsi Perintah 'ci':
   --markdown             Keluarkan ringkasan format Markdown terstandar GitHub Step Summary

@@ -302,7 +302,7 @@ uji('8.2 Build system Phase 23 tetap menghasilkan artefak bersih dan SHA-256 sah
 
   samaDengan(hasil.sukses, true);
   pastikan(hasil.artefak.length > 0, 'Harus menghasilkan artefak');
-  pastikan(Boolean(hasil.sha256sums && hasil.sha256sums.includes('nusantara-v0.24.0-linux-x64')), 'SHA256SUMS memuat artefak Linux');
+  pastikan(Boolean(hasil.sha256sums && hasil.sha256sums.includes(`nusantara-${LABEL_VERSI_NUSANTARA}-linux-x64`)), 'SHA256SUMS memuat artefak Linux');
 });
 
 console.log('\n============================================================');

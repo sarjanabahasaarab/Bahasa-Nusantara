@@ -3,13 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * NUSANTARA - Single Source of Truth untuk Informasi Versi dan Rilis
- * Target Milestone: Phase 24 (v0.24.0)
+ * Target Milestone: Phase 25 (v0.25.0)
  */
 
-export const VERSI_NUSANTARA = '0.24.0';
-export const LABEL_VERSI_NUSANTARA = 'v0.24.0';
-export const FASE_TERAKHIR = 24;
-export const NAMA_FASE_TERAKHIR = 'CI/CD, Automated Release & GitHub Workflow';
+export const VERSI_NUSANTARA = '0.25.0';
+export const LABEL_VERSI_NUSANTARA = 'v0.25.0';
+export const FASE_TERAKHIR = 25;
+export const NAMA_FASE_TERAKHIR = 'Debugger, Runtime Inspection & Profiler';
 
 export interface InfoRilisNUSANTARA {
   versi: string;
@@ -39,7 +39,7 @@ export const METADATA_RILIS_NUSANTARA: InfoRilisNUSANTARA = {
  * Mengembalikan informasi banner string resmi untuk CLI.
  */
 export function dapatkanBannerCLI(): string {
-  return `NUSANTARA CI/CD & Automated Release, Build System & Distribution, Package Ecosystem & Registry, Testing Framework, Language Server & Toolchain (nusantara) ${LABEL_VERSI_NUSANTARA} (fondasi v0.23.0, v0.22.0, v0.21.0, v0.20.0, v0.19.0)`;
+  return `NUSANTARA Debugger & Profiler, CI/CD & Automated Release, Build System & Distribution, Package Ecosystem & Registry, Testing Framework, Language Server & Toolchain (nusantara) ${LABEL_VERSI_NUSANTARA} (fondasi v0.24.0, v0.23.0, v0.22.0, v0.21.0, v0.20.0, v0.19.0)`;
 }
 
 /**

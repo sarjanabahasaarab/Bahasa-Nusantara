@@ -8,6 +8,31 @@ export interface BerkasRepo {
 }
 
 export const BERKAS_REPOSITORI: BerkasRepo[] = [
+  // --- FASE 25: DEBUGGER, RUNTIME INSPECTION & PROFILER NUSANTARA ---
+  {
+    jalur: 'docs/referensi/debugger.md',
+    nama: 'debugger.md',
+    kategori: 'Referensi Debugger & Profiler',
+    bahasa: 'markdown',
+    ukuran: 5400,
+    konten: `# Panduan Referensi Debugger & Profiler NUSANTARA (v0.25.0)\n\nSpesifikasi teknis source location tracking, breakpoint validation, stepping (step-in/over/out), call stack, variabel, evaluasi ekspresi, watch expressions, DAP adapter, dan profiler.`
+  },
+  {
+    jalur: 'docs/pengembang/debugger-profiler.md',
+    nama: 'debugger-profiler.md',
+    kategori: 'Panduan Pengembang Debugger',
+    bahasa: 'markdown',
+    ukuran: 4800,
+    konten: `# Dokumentasi Pengembang: Arsitektur Debugger & Profiler NUSANTARA\n\nStruktur modul src/debugger/, state machine SesiDebug, kalkulasi self-time, dan integrasi DAP Protocol.`
+  },
+  {
+    jalur: 'pengujian/debugger/uji_debugger_profiler.ts',
+    nama: 'uji_debugger_profiler.ts',
+    kategori: 'Pengujian Debugger & Profiler',
+    bahasa: 'javascript',
+    ukuran: 15500,
+    konten: `// Rangkaian Pengujian Resmi Debugger & Profiler NUSANTARA (Phase 25 - 100% LULUS)`
+  },
   // --- FASE 24: CI/CD, AUTOMATED RELEASE & GITHUB WORKFLOW ---
   {
     jalur: '.github/workflows/ci.yml',
@@ -811,8 +836,8 @@ export const DAFTAR_FASE_ROADMAP = [
   { fase: 22, nama: 'Package Ecosystem & Registry', versi: 'v0.22.0', kategori: 'Ekosistem', status: 'Selesai' },
   { fase: 23, nama: 'Build System & Distribution', versi: 'v0.23.0', kategori: 'Distribusi', status: 'Selesai' },
   { fase: 24, nama: 'CI/CD & Automated Release', versi: 'v0.24.0', kategori: 'DevOps & Otomasi', status: 'Selesai' },
-  { fase: 25, nama: 'Sistem Build', versi: 'v0.25.0', kategori: 'Kompilasi Native', status: 'Rencana' },
-  { fase: 26, nama: 'CLI', versi: 'v0.26.0', kategori: 'Ekosistem', status: 'Rencana' },
+  { fase: 25, nama: 'Debugger, Runtime Inspection & Profiler', versi: 'v0.25.0', kategori: 'Tooling & Runtime', status: 'Selesai' },
+  { fase: 26, nama: 'Native Compiler & LLVM Backend', versi: 'v0.26.0', kategori: 'Kompilasi Native', status: 'Rencana' },
   { fase: 27, nama: 'Package Manager', versi: 'v0.27.0', kategori: 'Ekosistem', status: 'Rencana' },
   { fase: 28, nama: 'Package Registry', versi: 'v0.28.0', kategori: 'Ekosistem', status: 'Rencana' },
   { fase: 29, nama: 'Standard Library', versi: 'v0.29.0', kategori: 'Ekosistem', status: 'Rencana' },

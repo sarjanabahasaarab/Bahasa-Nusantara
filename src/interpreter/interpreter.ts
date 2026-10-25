@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { PosisiSumber } from '../lexer/posisi';
 import {
   NodeProgram,
   PernyataanAST,
@@ -68,6 +69,35 @@ import {
 import { SandboxBerkas } from '../stdlib';
 import { deteksiKonteksPaket } from '../diagnostik';
 
+export interface KonteksDebugPernyataan {
+  lingkungan: Lingkungan;
+  lingkunganGlobal: Lingkungan;
+  tumpukanPanggilan: BingkaiTumpukan[];
+  modulAktif?: { nama: string; jalurBerkas?: string };
+}
+
+export interface KaitDebugInterpreter {
+  sebelumPernyataan?: (stmt: PernyataanAST, konteks: KonteksDebugPernyataan) => void;
+  setelahPernyataan?: (stmt: PernyataanAST, konteks: KonteksDebugPernyataan) => void;
+  sebelumPanggilanFungsi?: (
+    namaFungsi: string,
+    argumen: NilaiRuntime[],
+    posisi?: PosisiSumber,
+    deklarasi?: NodeDeklarasiFungsi
+  ) => void;
+  setelahPanggilanFungsi?: (
+    namaFungsi: string,
+    hasil: NilaiRuntime,
+    posisi?: PosisiSumber
+  ) => void;
+  padaGalat?: (galat: GalatRuntime, konteks: KonteksDebugPernyataan) => void;
+}
+
+export interface KaitProfiler {
+  mulaiPanggilan: (namaFungsi: string) => void;
+  selesaiPanggilan: (namaFungsi: string) => void;
+}
+
 export interface OpsiInterpreter {
   maksimalIterasiPerulangan?: number;
   pemuatModul?: PemuatModul;
@@ -77,6 +107,8 @@ export interface OpsiInterpreter {
   sandboxBerkas?: SandboxBerkas;
   argumenCLI?: string[];
   envOverrides?: Record<string, string>;
+  kaitDebug?: KaitDebugInterpreter;
+  profiler?: KaitProfiler;
 }
 
 /**
@@ -92,11 +124,15 @@ export class Interpreter {
   private pemuatModul: PemuatModul;
   private direktoriBasis?: string;
   private modulAktifSaatIni?: { nama: string; jalurBerkas?: string };
+  private kaitDebug?: KaitDebugInterpreter;
+  private profiler?: KaitProfiler;
 
   constructor(outputWriter?: OutputWriter, opsi?: OpsiInterpreter) {
     this.outputWriter = outputWriter || new PenulisOutputKonsol();
     this.maksimalIterasiPerulangan = opsi?.maksimalIterasiPerulangan ?? 1_000_000;
     this.direktoriBasis = opsi?.direktoriBasis;
+    this.kaitDebug = opsi?.kaitDebug;
+    this.profiler = opsi?.profiler;
     this.lingkunganGlobal = new Lingkungan();
     this.lingkunganSaatIni = this.lingkunganGlobal;
 
@@ -255,6 +291,43 @@ export class Interpreter {
     this.pemuatModul = pemuat;
   }
 
+  public tetapkanKaitDebug(kait?: KaitDebugInterpreter): void {
+    this.kaitDebug = kait;
+  }
+
+  public tetapkanProfiler(profiler?: KaitProfiler): void {
+    this.profiler = profiler;
+  }
+
+  public dapatkanLingkunganSaatIni(): Lingkungan {
+    return this.lingkunganSaatIni;
+  }
+
+  public tetapkanLingkunganSaatIni(lingkungan: Lingkungan): void {
+    this.lingkunganSaatIni = lingkungan;
+  }
+
+  public dapatkanLingkunganGlobal(): Lingkungan {
+    return this.lingkunganGlobal;
+  }
+
+  public dapatkanTumpukanPanggilan(): readonly BingkaiTumpukan[] {
+    return this.tumpukanPanggilan;
+  }
+
+  public dapatkanModulAktif(): { nama: string; jalurBerkas?: string } | undefined {
+    return this.modulAktifSaatIni;
+  }
+
+  private buatKonteksDebug(): KonteksDebugPernyataan {
+    return {
+      lingkungan: this.lingkunganSaatIni,
+      lingkunganGlobal: this.lingkunganGlobal,
+      tumpukanPanggilan: [...this.tumpukanPanggilan],
+      modulAktif: this.modulAktifSaatIni,
+    };
+  }
+
   /**
    * Mengeksekusi kode program mentah (.nusantara).
    */
@@ -348,6 +421,9 @@ export class Interpreter {
           [...this.tumpukanPanggilan]
         );
       }
+      if (this.kaitDebug?.padaGalat && e instanceof GalatRuntime) {
+        this.kaitDebug.padaGalat(e, this.buatKonteksDebug());
+      }
       throw e;
     } finally {
       this.tumpukanPanggilan.pop();
@@ -397,9 +473,21 @@ export class Interpreter {
 
   // ==========================================================================
   // EKSEKUSI PERNYATAAN (STATEMENTS)
-  // ==========================================================================
-
   private eksekusiPernyataan(stmt: PernyataanAST): void {
+    if (this.kaitDebug?.sebelumPernyataan) {
+      this.kaitDebug.sebelumPernyataan(stmt, this.buatKonteksDebug());
+    }
+
+    try {
+      this.evaluasiPernyataanInti(stmt);
+    } finally {
+      if (this.kaitDebug?.setelahPernyataan) {
+        this.kaitDebug.setelahPernyataan(stmt, this.buatKonteksDebug());
+      }
+    }
+  }
+
+  private evaluasiPernyataanInti(stmt: PernyataanAST): void {
     switch (stmt.jenis) {
       case JenisNodeAST.PERNYATAAN_IMPOR: {
         this.prosesPernyataanImpor(
@@ -996,6 +1084,14 @@ export class Interpreter {
       versiPaket: infoPaket?.versiPaket,
     });
 
+    this.profiler?.mulaiPanggilan(fnDeklarasi.nama);
+    this.kaitDebug?.sebelumPanggilanFungsi?.(
+      fnDeklarasi.nama,
+      argumen,
+      nodePanggil.posisi?.awal,
+      fnDeklarasi
+    );
+
     try {
       for (const stmt of fnDeklarasi.tubuh) {
         this.eksekusiPernyataan(stmt);
@@ -1009,7 +1105,9 @@ export class Interpreter {
           modulNamaAktif
         );
       }
-      return buatKosong();
+      const hasil = buatKosong();
+      this.kaitDebug?.setelahPanggilanFungsi?.(fnDeklarasi.nama, hasil, nodePanggil.posisi?.awal);
+      return hasil;
     } catch (e: any) {
       if (e instanceof SinyalKembalikan) {
         if (fnDeklarasi.tipeKembalian && fnDeklarasi.tipeKembalian !== 'kosong') {
@@ -1032,6 +1130,7 @@ export class Interpreter {
             );
           }
         }
+        this.kaitDebug?.setelahPanggilanFungsi?.(fnDeklarasi.nama, e.nilai, nodePanggil.posisi?.awal);
         return e.nilai;
       }
       throw e;
@@ -1039,6 +1138,7 @@ export class Interpreter {
       this.tumpukanPanggilan.pop();
       this.lingkunganSaatIni = simpanLingkungan;
       this.modulAktifSaatIni = simpanModulAktif;
+      this.profiler?.selesaiPanggilan(fnDeklarasi.nama);
     }
   }
 }

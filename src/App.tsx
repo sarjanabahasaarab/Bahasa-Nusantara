@@ -99,9 +99,10 @@ import {
 import StudioEkosistemPaket from './komponen/StudioEkosistemPaket';
 import StudioDistribusiBuild from './komponen/StudioDistribusiBuild';
 import { StudioCicdWorkflow } from './komponen/StudioCicdWorkflow';
+import { StudioDebugger } from './komponen/StudioDebugger';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'cicd' | 'distribusi' | 'ekosistem' | 'testing' | 'lsp' | 'toolchain' | 'diagnostik' | 'stdlib' | 'paket' | 'struktur-data' | 'fungsi' | 'perulangan' | 'percabangan' | 'operator' | 'tipe' | 'ast' | 'token' | 'panduan' | 'berkas' | 'roadmap' | 'git'>('cicd');
+  const [activeTab, setActiveTab] = useState<'debugger' | 'cicd' | 'distribusi' | 'ekosistem' | 'testing' | 'lsp' | 'toolchain' | 'diagnostik' | 'stdlib' | 'paket' | 'struktur-data' | 'fungsi' | 'perulangan' | 'percabangan' | 'operator' | 'tipe' | 'ast' | 'token' | 'panduan' | 'berkas' | 'roadmap' | 'git'>('debugger');
   const [selectedFile, setSelectedFile] = useState<BerkasRepo>(BERKAS_REPOSITORI[0]);
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [playgroundCode, setPlaygroundCode] = useState<string>(
@@ -984,7 +985,7 @@ pastikan_sama(aktual, target, "Nilai aktual tidak memenuhi target ekspektasi")`,
               <div className="flex items-center gap-2">
                 <span className="font-extrabold tracking-wider text-white text-base">NUSANTARA</span>
                 <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                  Phase 24 (v0.24.0)
+                  Phase 25 (v0.25.0)
                 </span>
               </div>
               <p className="text-xs text-slate-400">Bahasa Pemrograman Indonesia</p>
@@ -992,6 +993,15 @@ pastikan_sama(aktual, target, "Nilai aktual tidak memenuhi target ekspektasi")`,
           </div>
 
           <nav className="hidden md:flex items-center gap-6 text-sm">
+            <button
+              onClick={() => setActiveTab('debugger')}
+              className={`hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'debugger' ? 'text-indigo-400 font-semibold' : 'text-slate-400'
+              }`}
+            >
+              <Bug className="w-4 h-4 text-indigo-400" />
+              Debugger &amp; Profiler (Phase 25)
+            </button>
             <button
               onClick={() => setActiveTab('cicd')}
               className={`hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 ${
@@ -1215,6 +1225,15 @@ pastikan_sama(aktual, target, "Nilai aktual tidak memenuhi target ekspektasi")`,
         {/* Navigation Sub-Tabs */}
         <div className="flex items-center gap-2 border-b border-slate-800 pb-4 mb-6 overflow-x-auto text-sm">
           <button
+            onClick={() => setActiveTab('debugger')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap cursor-pointer flex items-center gap-2 ${
+              activeTab === 'debugger' ? 'bg-indigo-950 text-indigo-200 border border-indigo-700/60 font-semibold' : 'text-slate-400 hover:text-white hover:bg-slate-900'
+            }`}
+          >
+            <Bug className="w-4 h-4 text-indigo-400" />
+            <span>Debugger &amp; Profiler (Phase 25)</span>
+          </button>
+          <button
             onClick={() => setActiveTab('cicd')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap cursor-pointer flex items-center gap-2 ${
               activeTab === 'cicd' ? 'bg-indigo-950 text-indigo-200 border border-indigo-700/60 font-semibold' : 'text-slate-400 hover:text-white hover:bg-slate-900'
@@ -1395,6 +1414,9 @@ pastikan_sama(aktual, target, "Nilai aktual tidak memenuhi target ekspektasi")`,
             <span>Peta Jalan 36 Fase</span>
           </button>
         </div>
+
+        {/* TAB 000000: DEBUGGER & PROFILER (PHASE 25) */}
+        {activeTab === 'debugger' && <StudioDebugger />}
 
         {/* TAB 00000: CI/CD & AUTOMATED RELEASE (PHASE 24) */}
         {activeTab === 'cicd' && <StudioCicdWorkflow />}
