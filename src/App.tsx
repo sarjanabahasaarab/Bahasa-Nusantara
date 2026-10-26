@@ -100,9 +100,10 @@ import StudioEkosistemPaket from './komponen/StudioEkosistemPaket';
 import StudioDistribusiBuild from './komponen/StudioDistribusiBuild';
 import { StudioCicdWorkflow } from './komponen/StudioCicdWorkflow';
 import { StudioDebugger } from './komponen/StudioDebugger';
+import StudioIDE from './komponen/ide/StudioIDE';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'debugger' | 'cicd' | 'distribusi' | 'ekosistem' | 'testing' | 'lsp' | 'toolchain' | 'diagnostik' | 'stdlib' | 'paket' | 'struktur-data' | 'fungsi' | 'perulangan' | 'percabangan' | 'operator' | 'tipe' | 'ast' | 'token' | 'panduan' | 'berkas' | 'roadmap' | 'git'>('debugger');
+  const [activeTab, setActiveTab] = useState<'ide' | 'debugger' | 'cicd' | 'distribusi' | 'ekosistem' | 'testing' | 'lsp' | 'toolchain' | 'diagnostik' | 'stdlib' | 'paket' | 'struktur-data' | 'fungsi' | 'perulangan' | 'percabangan' | 'operator' | 'tipe' | 'ast' | 'token' | 'panduan' | 'berkas' | 'roadmap' | 'git'>('ide');
   const [selectedFile, setSelectedFile] = useState<BerkasRepo>(BERKAS_REPOSITORI[0]);
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [playgroundCode, setPlaygroundCode] = useState<string>(
@@ -994,6 +995,15 @@ pastikan_sama(aktual, target, "Nilai aktual tidak memenuhi target ekspektasi")`,
 
           <nav className="hidden md:flex items-center gap-6 text-sm">
             <button
+              onClick={() => setActiveTab('ide')}
+              className={`hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'ide' ? 'text-emerald-400 font-semibold' : 'text-slate-400'
+              }`}
+            >
+              <Code2 className="w-4 h-4 text-emerald-400" />
+              IDE &amp; DevTools (Phase 26)
+            </button>
+            <button
               onClick={() => setActiveTab('debugger')}
               className={`hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'debugger' ? 'text-indigo-400 font-semibold' : 'text-slate-400'
@@ -1225,6 +1235,15 @@ pastikan_sama(aktual, target, "Nilai aktual tidak memenuhi target ekspektasi")`,
         {/* Navigation Sub-Tabs */}
         <div className="flex items-center gap-2 border-b border-slate-800 pb-4 mb-6 overflow-x-auto text-sm">
           <button
+            onClick={() => setActiveTab('ide')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap cursor-pointer flex items-center gap-2 ${
+              activeTab === 'ide' ? 'bg-emerald-950 text-emerald-200 border border-emerald-700/60 font-semibold' : 'text-slate-400 hover:text-white hover:bg-slate-900'
+            }`}
+          >
+            <Code2 className="w-4 h-4 text-emerald-400" />
+            <span>IDE &amp; DevTools (Phase 26)</span>
+          </button>
+          <button
             onClick={() => setActiveTab('debugger')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap cursor-pointer flex items-center gap-2 ${
               activeTab === 'debugger' ? 'bg-indigo-950 text-indigo-200 border border-indigo-700/60 font-semibold' : 'text-slate-400 hover:text-white hover:bg-slate-900'
@@ -1414,6 +1433,9 @@ pastikan_sama(aktual, target, "Nilai aktual tidak memenuhi target ekspektasi")`,
             <span>Peta Jalan 36 Fase</span>
           </button>
         </div>
+
+        {/* TAB 0000000: NUSANTARA IDE & DEVTOOLS (PHASE 26) */}
+        {activeTab === 'ide' && <StudioIDE />}
 
         {/* TAB 000000: DEBUGGER & PROFILER (PHASE 25) */}
         {activeTab === 'debugger' && <StudioDebugger />}

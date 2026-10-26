@@ -837,7 +837,7 @@ export const DAFTAR_FASE_ROADMAP = [
   { fase: 23, nama: 'Build System & Distribution', versi: 'v0.23.0', kategori: 'Distribusi', status: 'Selesai' },
   { fase: 24, nama: 'CI/CD & Automated Release', versi: 'v0.24.0', kategori: 'DevOps & Otomasi', status: 'Selesai' },
   { fase: 25, nama: 'Debugger, Runtime Inspection & Profiler', versi: 'v0.25.0', kategori: 'Tooling & Runtime', status: 'Selesai' },
-  { fase: 26, nama: 'Native Compiler & LLVM Backend', versi: 'v0.26.0', kategori: 'Kompilasi Native', status: 'Rencana' },
+  { fase: 26, nama: 'Developer Tools & IDE Foundation', versi: 'v0.26.0', kategori: 'Tooling & IDE', status: 'Selesai' },
   { fase: 27, nama: 'Package Manager', versi: 'v0.27.0', kategori: 'Ekosistem', status: 'Rencana' },
   { fase: 28, nama: 'Package Registry', versi: 'v0.28.0', kategori: 'Ekosistem', status: 'Rencana' },
   { fase: 29, nama: 'Standard Library', versi: 'v0.29.0', kategori: 'Ekosistem', status: 'Rencana' },

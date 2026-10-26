@@ -1,6 +1,6 @@
 {
   "name": "NUSANTARA - Bahasa Pemrograman Indonesia",
-  "description": "Debugger, Runtime Inspection & Profiler, CI/CD & Automated Release, Build System, Package Ecosystem, Testing Framework, dan Language Server bahasa pemrograman NUSANTARA v0.25.0.",
+  "description": "Developer Tools & IDE Foundation, Debugger, Profiler, CI/CD, Build System, Package Ecosystem, Testing Framework, dan Language Server bahasa pemrograman NUSANTARA v0.26.0.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

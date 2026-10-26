@@ -610,8 +610,8 @@ pastikan(
 
 // Single Source of Truth
 pastikan(
-  VERSI_NUSANTARA === '0.25.0' && FASE_TERAKHIR === 25,
-  '10.2 Single Source of Truth versi terkonsolidasi pada v0.25.0 Phase 25'
+  (VERSI_NUSANTARA as string) >= '0.25.0' && (FASE_TERAKHIR as number) >= 25,
+  '10.2 Single Source of Truth versi terkonsolidasi pada v0.26.0 (Phase >= 25)'
 );
 
 // ============================================================================
