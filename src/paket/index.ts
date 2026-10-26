@@ -12,6 +12,7 @@ export * from './registry';
 export * from './arsip';
 export * from './validasi';
 export * from './registri';
+export * from './cache';
 export * from './pengelolaPaket';
 export * from './cli';
 

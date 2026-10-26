@@ -189,4 +189,103 @@ export class GrafDependensi {
 
     return hasil;
   }
+
+  /**
+   * Menghasilkan representasi visual pohon dependensi format konsol/teks (Phase 27).
+   */
+  public formatPohon(akarAwal?: string): string {
+    if (this.simpul.size === 0) {
+      return '(graf dependensi kosong)';
+    }
+
+    // Temukan simpul akar jika tidak ditentukan
+    let simpulAkar = akarAwal;
+    if (!simpulAkar || !this.simpul.has(simpulAkar)) {
+      // Cari simpul sumber === 'akar' atau yang tidak diminta paket lain
+      const diminta = new Set<string>();
+      for (const s of this.simpul.values()) {
+        for (const dep of Object.keys(s.dependensi)) {
+          diminta.add(dep);
+        }
+      }
+      for (const [nama, s] of this.simpul) {
+        if (s.sumber === 'akar' || !diminta.has(nama)) {
+          simpulAkar = nama;
+          break;
+        }
+      }
+      if (!simpulAkar) {
+        simpulAkar = Array.from(this.simpul.keys())[0];
+      }
+    }
+
+    const dataAkar = this.simpul.get(simpulAkar);
+    const versiAkar = dataAkar ? dataAkar.versi : 'unknown';
+    const baris: string[] = [`${simpulAkar}@${versiAkar}`];
+
+    const cetakCabang = (nama: string, awalan: string, aktif: Set<string>) => {
+      const simpulData = this.simpul.get(nama);
+      if (!simpulData) return;
+
+      const daftarKunci = Object.keys(simpulData.dependensi);
+      daftarKunci.forEach((kunciDep, indeks) => {
+        const apakahTerakhir = indeks === daftarKunci.length - 1;
+        const konektor = apakahTerakhir ? '└── ' : '├── ';
+        const childIndent = apakahTerakhir ? '    ' : '│   ';
+        const batasan = simpulData.dependensi[kunciDep];
+        const dataAnak = this.simpul.get(kunciDep);
+        const versiAnak = dataAnak ? dataAnak.versi : batasan;
+
+        if (aktif.has(kunciDep)) {
+          baris.push(`${awalan}${konektor}${kunciDep}@${versiAnak} [MELINGKAR]`);
+          return;
+        }
+
+        baris.push(`${awalan}${konektor}${kunciDep}@${versiAnak} (${batasan})`);
+
+        const nextAktif = new Set(aktif);
+        nextAktif.add(kunciDep);
+        cetakCabang(kunciDep, awalan + childIndent, nextAktif);
+      });
+    };
+
+    cetakCabang(simpulAkar, '', new Set([simpulAkar]));
+    return baris.join('\n');
+  }
+
+  /**
+   * Melakukan audit keamanan struktur dependensi graf (Phase 27).
+   */
+  public auditKeamanan(): HasilAuditKeamanan {
+    const siklus = this.deteksiSiklus();
+    const konflik = this.deteksiKonflikVersi();
+    const temuan: string[] = [];
+
+    if (siklus) {
+      temuan.push(`Terdeteksi siklus ketergantungan: ${siklus.join(' → ')}`);
+    }
+
+    for (const k of konflik) {
+      const pemintaStr = k.permintaan.map(p => `${p.batasan} (dari ${p.peminta})`).join(', ');
+      temuan.push(`Konflik versi paket '${k.namaPaket}': ${pemintaStr}`);
+    }
+
+    return {
+      totalPaket: this.simpul.size,
+      aman: !siklus && konflik.length === 0,
+      adaSiklus: !!siklus,
+      siklus,
+      konflikVersi: konflik,
+      temuan,
+    };
+  }
+}
+
+export interface HasilAuditKeamanan {
+  totalPaket: number;
+  aman: boolean;
+  adaSiklus: boolean;
+  siklus: string[] | null;
+  konflikVersi: KonflikVersi[];
+  temuan: string[];
 }

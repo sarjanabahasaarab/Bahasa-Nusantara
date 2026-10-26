@@ -151,12 +151,20 @@ export class NusantaraCLI {
             'inisialisasi',
             'pasang',
             'instal',
+            'tambah',
+            'add',
             'hapus',
             'buang',
             'perbarui',
             'update',
             'daftar',
             'list',
+            'pohon',
+            'tree',
+            'graf',
+            'audit',
+            'bersihkan-cache',
+            'cache-clean',
             'info',
             'versi',
             '-v',
@@ -432,6 +440,19 @@ export class NusantaraCLI {
           return 0;
         }
 
+        case 'tambah':
+        case 'add': {
+          const nama = argumenTambahan[0];
+          if (!nama) {
+            this.error("Kesalahan argumen:\nPerintah 'nusantara tambah' memerlukan argumen <nama-paket> [<batasan-versi>].\nContoh: nusantara tambah matematika ^1.0.0");
+            return 1;
+          }
+          const batasan = argumenTambahan[1];
+          const hasil = this.pengelola.tambah(nama, batasan);
+          this.log(`[✓ SUKSES] ${hasil.pesan}`);
+          return 0;
+        }
+
         case 'hapus':
         case 'buang': {
           const nama = argumenTambahan[0];
@@ -465,6 +486,44 @@ export class NusantaraCLI {
             const status = item.terpasang ? `(terpasang: ${item.versiTerpasang || 'ok'})` : `(belum terpasang)`;
             this.log(`  ${item.nama.padEnd(16)} ${item.batasan.padEnd(10)} ${status}`);
           }
+          return 0;
+        }
+
+        case 'pohon':
+        case 'tree':
+        case 'graf': {
+          const pohon = this.pengelola.dapatkanPohonDependensi(argumenTambahan[0]);
+          this.log('Pohon Dependensi Proyek NUSANTARA:\n');
+          this.log(pohon);
+          return 0;
+        }
+
+        case 'audit': {
+          const hasil = this.pengelola.audit();
+          if (opsiJSON) {
+            this.log(JSON.stringify(hasil, null, 2));
+            return hasil.aman ? 0 : 1;
+          }
+          this.log('Audit Keamanan & Integritas Dependensi NUSANTARA:');
+          this.log(`  Total Paket Terpasang : ${hasil.totalPaket}`);
+          this.log(`  Status Integritas     : ${hasil.integritasLockValid ? '[✓ VALID]' : '[✗ RUSAK / BERBEDA]'}`);
+          this.log(`  Siklus Dependensi     : ${hasil.adaSiklus ? '[✗ TERDETEKSI]' : '[✓ BERSIH]'}`);
+          this.log(`  Konflik Versi         : ${hasil.konflikVersi.length === 0 ? '[✓ TIDAK ADA]' : `[✗ ${hasil.konflikVersi.length} KONFLIK]`}`);
+          this.log(`  Status Keamanan       : ${hasil.aman ? '[✓ AMAN]' : '[✗ PERLU TINDAKAN]'}`);
+
+          if (hasil.temuan.length > 0) {
+            this.log('\nDaftar Temuan Masalah:');
+            for (const t of hasil.temuan) {
+              this.log(`  • ${t}`);
+            }
+          }
+          return hasil.aman ? 0 : 1;
+        }
+
+        case 'bersihkan-cache':
+        case 'cache-clean': {
+          const hasil = this.pengelola.bersihkanCache();
+          this.log(`[✓ SUKSES] ${hasil.pesan}`);
           return 0;
         }
 
@@ -987,6 +1046,56 @@ export class NusantaraCLI {
         return 0;
       }
 
+      case 'tambah':
+      case 'add': {
+        const nama = argumen[0];
+        if (!nama) {
+          this.error("Perintah 'nusantara paket tambah' memerlukan argumen <nama-paket> [<batasan-versi>].");
+          return 1;
+        }
+        const hasil = this.pengelola.tambah(nama, argumen[1]);
+        this.log(`[✓ SUKSES] ${hasil.pesan}`);
+        return 0;
+      }
+
+      case 'pohon':
+      case 'tree':
+      case 'graf': {
+        const pohon = this.pengelola.dapatkanPohonDependensi(argumen[0]);
+        this.log('Pohon Dependensi Proyek NUSANTARA:\n');
+        this.log(pohon);
+        return 0;
+      }
+
+      case 'audit': {
+        const hasil = this.pengelola.audit();
+        if (opsi.json) {
+          this.log(JSON.stringify(hasil, null, 2));
+          return hasil.aman ? 0 : 1;
+        }
+        this.log('Audit Keamanan & Integritas Dependensi NUSANTARA:');
+        this.log(`  Total Paket Terpasang : ${hasil.totalPaket}`);
+        this.log(`  Status Integritas     : ${hasil.integritasLockValid ? '[✓ VALID]' : '[✗ RUSAK / BERBEDA]'}`);
+        this.log(`  Siklus Dependensi     : ${hasil.adaSiklus ? '[✗ TERDETEKSI]' : '[✓ BERSIH]'}`);
+        this.log(`  Konflik Versi         : ${hasil.konflikVersi.length === 0 ? '[✓ TIDAK ADA]' : `[✗ ${hasil.konflikVersi.length} KONFLIK]`}`);
+        this.log(`  Status Keamanan       : ${hasil.aman ? '[✓ AMAN]' : '[✗ PERLU TINDAKAN]'}`);
+
+        if (hasil.temuan.length > 0) {
+          this.log('\nDaftar Temuan Masalah:');
+          for (const t of hasil.temuan) {
+            this.log(`  • ${t}`);
+          }
+        }
+        return hasil.aman ? 0 : 1;
+      }
+
+      case 'bersihkan-cache':
+      case 'cache-clean': {
+        const hasil = this.pengelola.bersihkanCache();
+        this.log(`[✓ SUKSES] ${hasil.pesan}`);
+        return 0;
+      }
+
       case 'bantuan':
       case 'bantu':
       case '--help':
@@ -1000,8 +1109,13 @@ Penggunaan Perintah 'nusantara paket':
   nusantara paket cari <kueri>                      Mencari paket yang tersedia di registri
   nusantara paket info <nama>                       Menampilkan metadata detail paket di registri
   nusantara paket pasang <nama> [<versi>]           Memasang paket dari registri dan memperbarui manifest
+  nusantara paket tambah <nama> [<versi>]           Menambahkan dependensi baru ke manifest dan pasang
+  nusantara paket hapus <nama>                      Menghapus dependensi dari manifest dan proyek
   nusantara paket buat <nama>                       Membuat struktur paket baru
   nusantara paket daftar                            Menampilkan daftar dependensi proyek saat ini
+  nusantara paket pohon                             Menampilkan pohon visual dependensi proyek
+  nusantara paket audit                             Audit keamanan graf, siklus, konflik, dan lockfile
+  nusantara paket bersihkan-cache                   Membersihkan cache paket offline lokal
 `);
         return 0;
       }
@@ -1465,15 +1579,19 @@ Perintah Eksekusi, Toolchain, Testing & Developer Tools:
   cek [<berkas>|.]       Pemeriksaan sintaksis, sistem tipe, dan linter tanpa eksekusi
   bahasa-server, lsp     Menjalankan Language Server Protocol (LSP) via stdio untuk IDE/Editor
 
-Perintah Ekosistem Paket & Registri (Phase 16 & 22):
-  paket <subperintah>    Kelola paket & registri (bangun, cek, terbit, cari, info, pasang, buat, daftar)
+Perintah Ekosistem Paket & Dependency Management (Phase 16, 22 & 27):
+  paket <subperintah>    Kelola paket & registri (bangun, cek, terbit, cari, info, pasang, tambah, hapus, pohon, audit)
   terbit [<target>]      Menerbitkan paket ke registri (rilis immutable dengan SHA-256)
   cari <kueri>           Mencari paket yang tersedia di registri
-  pasang [<nama>]        Memasang dependensi proyek atau memasang paket dari registri
+  pasang [<nama>]        Memasang dependensi proyek atau memasang paket dari registri (--terkunci)
+  tambah <nama> [<versi>] Menambahkan paket ke nusantara.toml dan menginstal dependensi
   buat <nama>            Membuat paket atau proyek baru dengan nusantara.toml
   hapus <nama>           Menghapus paket dari dependensi dan sistem lokal
   perbarui [<nama>]      Memperbarui dependensi ke versi kompatibel terbaru
   daftar                 Menampilkan daftar dependensi proyek saat ini
+  pohon [<akar>]         Menampilkan visualisasi hierarki pohon graf dependensi
+  audit                  Audit keamanan dependensi, deteksi siklus, konflik versi & hash
+  bersihkan-cache        Mengosongkan cache paket offline lokal
 
 Opsi Perintah 'debug':
   --perintah="<cmds>"    Jalankan rentetan perintah debug non-interaktif dipisahkan titik koma (;)

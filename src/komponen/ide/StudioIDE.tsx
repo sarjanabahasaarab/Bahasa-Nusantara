@@ -999,19 +999,79 @@ export const StudioIDE: React.FC = () => {
             {tabSidebar === 'packages' && (
               <div className="flex-1 flex flex-col h-full p-3 space-y-3 overflow-y-auto">
                 <span className="text-xs font-bold tracking-wider uppercase text-slate-300">
-                  {t('nav.packages')}
+                  {t('nav.packages')} (Phase 27)
                 </span>
-                <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-xs space-y-1.5">
-                  <div className="font-semibold text-amber-300">nusantara.toml</div>
+                <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-xs space-y-2">
+                  <div className="font-semibold text-amber-300">nusantara.toml &amp; nusantara.lock</div>
                   <div className="text-[11px] text-slate-400">
-                    Manajemen dependensi proyek resmi via Package Manager Phase 22.
+                    Ekosistem paket dan dependency management resmi NUSANTARA v{VERSI_NUSANTARA}.
                   </div>
-                  <button
-                    onClick={() => bukaBerkas('/proyek/nusantara.toml')}
-                    className="mt-1 px-2 py-1 text-[11px] rounded bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer"
-                  >
-                    Buka nusantara.toml
-                  </button>
+                  <div className="flex flex-col gap-1.5 pt-1">
+                    <button
+                      onClick={() => bukaBerkas('/proyek/nusantara.toml')}
+                      className="w-full text-left px-2.5 py-1 text-[11px] rounded bg-slate-850 hover:bg-slate-800 text-slate-200 border border-slate-700/60 cursor-pointer flex items-center justify-between"
+                    >
+                      <span>Buka nusantara.toml</span>
+                      <span className="text-[10px] text-slate-500 font-mono">manifest</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!workspaceRef.current.apakahAda('/proyek/nusantara.lock')) {
+                          workspaceRef.current.simpanBerkas(
+                            '/proyek/nusantara.lock',
+                            '# Berkas kunci dependensi resmi NUSANTARA v0.27.0\nversi_format = 1\n'
+                          );
+                        }
+                        bukaBerkas('/proyek/nusantara.lock');
+                      }}
+                      className="w-full text-left px-2.5 py-1 text-[11px] rounded bg-slate-850 hover:bg-slate-800 text-slate-200 border border-slate-700/60 cursor-pointer flex items-center justify-between"
+                    >
+                      <span>Buka nusantara.lock</span>
+                      <span className="text-[10px] text-slate-500 font-mono">lockfile</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-xs space-y-2">
+                  <span className="font-semibold text-slate-300 text-[11px] block">Perintah Terminal Terpadu:</span>
+                  <div className="flex flex-col gap-1.5">
+                    <button
+                      onClick={() => {
+                        setTabBawah('terminal');
+                        setTampilkanPanelBawah(true);
+                        terminalRef.current.eksekusiPerintah('nusantara pasang');
+                        setDaftarEntriTerminal(terminalRef.current.dapatkanEntri());
+                        muatUlangPohon();
+                      }}
+                      className="w-full text-left px-2.5 py-1 text-[11px] rounded bg-violet-950/40 hover:bg-violet-900/50 text-violet-300 border border-violet-800/50 cursor-pointer"
+                    >
+                      $ nusantara pasang
+                    </button>
+                    <button
+                      onClick={() => {
+                        setTabBawah('terminal');
+                        setTampilkanPanelBawah(true);
+                        terminalRef.current.eksekusiPerintah('nusantara audit');
+                        setDaftarEntriTerminal(terminalRef.current.dapatkanEntri());
+                        muatUlangPohon();
+                      }}
+                      className="w-full text-left px-2.5 py-1 text-[11px] rounded bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-300 border border-emerald-800/50 cursor-pointer"
+                    >
+                      $ nusantara audit
+                    </button>
+                    <button
+                      onClick={() => {
+                        setTabBawah('terminal');
+                        setTampilkanPanelBawah(true);
+                        terminalRef.current.eksekusiPerintah('nusantara pohon');
+                        setDaftarEntriTerminal(terminalRef.current.dapatkanEntri());
+                        muatUlangPohon();
+                      }}
+                      className="w-full text-left px-2.5 py-1 text-[11px] rounded bg-sky-950/40 hover:bg-sky-900/50 text-sky-300 border border-sky-800/50 cursor-pointer"
+                    >
+                      $ nusantara pohon
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

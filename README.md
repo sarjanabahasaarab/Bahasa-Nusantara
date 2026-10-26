@@ -2,12 +2,13 @@
 
 > **Bahasa Pemrograman 100% Bahasa Indonesia untuk Komputasi Modern, Terbuka, dan Berkelanjutan.**
 
-[![Status](https://img.shields.io/badge/status-fase_26:_developer_tools_&_ide-blue.svg)](ROADMAP.md)
-[![Versi](https://img.shields.io/badge/versi-v0.26.0-emerald.svg)](PERUBAHAN.md)
+[![Status](https://img.shields.io/badge/status-fase_27:_package_ecosystem_&_dependency_management-blue.svg)](ROADMAP.md)
+[![Versi](https://img.shields.io/badge/versi-v0.27.0-emerald.svg)](PERUBAHAN.md)
 [![CI/CD](https://img.shields.io/badge/CI%2FCD-passing-brightgreen.svg)](.github/workflows/ci.yml)
 [![Lisensi](https://img.shields.io/badge/lisensi-Apache_2.0-blue.svg)](LISENSI)
 [![Tata Bahasa](https://img.shields.io/badge/grammar-EBNF_ISO--14977-purple.svg)](dokumentasi/GRAMMAR-EBNF.md)
-[![Testing](https://img.shields.io/badge/testing-22_suites_lulus_100%25-green.svg)](pengujian/README.md)
+[![Testing](https://img.shields.io/badge/testing-23_suites_lulus_100%25-green.svg)](pengujian/README.md)
+[![Ekosistem](https://img.shields.io/badge/ekosistem-package_cache_&_lockfile-teal.svg)](docs/referensi/dependency-management.md)
 [![IDE](https://img.shields.io/badge/IDE-cross--platform_studio-indigo.svg)](docs/ide/getting-started.md)
 [![Build](https://img.shields.io/badge/build-cross--platform_dist-teal.svg)](docs/referensi/build-system.md)
 
@@ -21,7 +22,8 @@ NUSANTARA bukan sekadar penerjemah sintaksis bahasa asing, melainkan ikhtiar man
 
 - **Ekstensi Berkas Resmi:** `.nusantara`
 - **Lisensi:** [Apache License 2.0](LISENSI)
-- **Status Saat Ini:** **Phase 26: Developer Tools & IDE Foundation NUSANTARA (Milestone v0.26.0).**
+- **Status Saat Ini:** **Phase 27: Nusantara Package Ecosystem & Dependency Management (Milestone v0.27.0).**
+- **Dokumentasi Manajemen Dependensi:** [docs/referensi/dependency-management.md](docs/referensi/dependency-management.md) & [docs/pengembang/package-cache.md](docs/pengembang/package-cache.md)
 - **Dokumentasi IDE & DevTools:** [docs/ide/getting-started.md](docs/ide/getting-started.md) & [docs/pengembang/ide-architecture.md](docs/pengembang/ide-architecture.md)
 - **Dokumentasi Debugger & Profiler:** [docs/referensi/debugger.md](docs/referensi/debugger.md) & [docs/pengembang/debugger-profiler.md](docs/pengembang/debugger-profiler.md)
 - **Dokumentasi CI/CD:** [docs/referensi/ci-cd.md](docs/referensi/ci-cd.md) & [docs/pengembang/github-workflows.md](docs/pengembang/github-workflows.md)

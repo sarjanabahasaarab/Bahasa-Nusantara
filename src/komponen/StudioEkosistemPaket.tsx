@@ -25,6 +25,12 @@ import {
   Check,
   Play,
   RotateCcw,
+  GitBranch,
+  Database,
+  Lock,
+  RefreshCw,
+  Trash2,
+  Plus,
 } from 'lucide-react';
 import {
   PengelolaPaket,
@@ -39,9 +45,14 @@ import {
 import { PembacaBerkasMemori } from '../modul';
 
 export function StudioEkosistemPaket() {
-  const [subTab, setSubTab] = useState<'katalog' | 'validator' | 'arsip' | 'cli'>('katalog');
+  const [subTab, setSubTab] = useState<'katalog' | 'validator' | 'arsip' | 'dependensi' | 'cache' | 'cli'>('dependensi');
   const [kueriCari, setKueriCari] = useState('');
   const [copiedText, setCopiedText] = useState<string | null>(null);
+  const [namaDepInput, setNamaDepInput] = useState('matematika-ekstra');
+  const [versiDepInput, setVersiDepInput] = useState('^1.0.0');
+  const [apakahTerkunci, setApakahTerkunci] = useState(false);
+  const [laporanAudit, setLaporanAudit] = useState<any>(null);
+  const [renderCounter, setRenderCounter] = useState(0);
 
   // Inisialisasi memori filesystem dan registri lokal terpadu
   const { memori, registri, pengelola, cli } = useMemo(() => {
@@ -230,6 +241,100 @@ pastikan_benar(benar)
     ]);
   };
 
+  const handleTambahDependensi = () => {
+    try {
+      const res = pengelola.tambah(namaDepInput, versiDepInput);
+      setPesanAksi({ tipe: 'sukses', teks: res.pesan });
+      setRenderCounter(c => c + 1);
+    } catch (err: any) {
+      setPesanAksi({ tipe: 'galat', teks: err.message });
+    }
+  };
+
+  const handleHapusDependensi = (nama: string) => {
+    try {
+      const res = pengelola.hapus(nama);
+      setPesanAksi({ tipe: 'sukses', teks: res.pesan });
+      setRenderCounter(c => c + 1);
+    } catch (err: any) {
+      setPesanAksi({ tipe: 'galat', teks: err.message });
+    }
+  };
+
+  const handlePasangDependensi = () => {
+    try {
+      const res = pengelola.pasang({ terkunci: apakahTerkunci });
+      setPesanAksi({ tipe: 'sukses', teks: res.pesan });
+      setRenderCounter(c => c + 1);
+    } catch (err: any) {
+      setPesanAksi({ tipe: 'galat', teks: err.message });
+    }
+  };
+
+  const handleJalankanAudit = () => {
+    try {
+      const res = pengelola.audit();
+      setLaporanAudit(res);
+      if (res.aman) {
+        setPesanAksi({ tipe: 'sukses', teks: 'Audit Keamanan & Integritas: SEMUA DEPENDENSI & LOCKFILE VALID!' });
+      } else {
+        setPesanAksi({ tipe: 'galat', teks: `Audit Keamanan: Ditemukan ${res.temuan.length} temuan!` });
+      }
+    } catch (err: any) {
+      setPesanAksi({ tipe: 'galat', teks: err.message });
+    }
+  };
+
+  const handleBersihkanCache = () => {
+    try {
+      const res = pengelola.bersihkanCache();
+      setPesanAksi({ tipe: 'sukses', teks: res.pesan });
+      setRenderCounter(c => c + 1);
+    } catch (err: any) {
+      setPesanAksi({ tipe: 'galat', teks: err.message });
+    }
+  };
+
+  const daftarDependensiProyek = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _ = renderCounter;
+    try {
+      return pengelola.daftar();
+    } catch {
+      return [];
+    }
+  }, [pengelola, renderCounter]);
+
+  const pohonDependensiTeks = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _ = renderCounter;
+    try {
+      return pengelola.dapatkanPohonDependensi();
+    } catch (e: any) {
+      return `(Gagal menghasilkan pohon: ${e.message})`;
+    }
+  }, [pengelola, renderCounter]);
+
+  const entriCacheSemua = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _ = renderCounter;
+    try {
+      return pengelola.dapatkanManajerCache().dapatkanSemuaEntri();
+    } catch {
+      return [];
+    }
+  }, [pengelola, renderCounter]);
+
+  const totalUkuranCacheByte = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _ = renderCounter;
+    try {
+      return pengelola.dapatkanManajerCache().hitungTotalUkuranCache();
+    } catch {
+      return 0;
+    }
+  }, [pengelola, renderCounter]);
+
   return (
     <div className="space-y-6">
       {/* 1. Header Ringkasan Ekosistem Paket & Registri */}
@@ -242,14 +347,14 @@ pastikan_benar(benar)
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-xl font-bold text-white tracking-wide">
-                  Ekosistem Paket &amp; Registri NUSANTARA
+                  Ekosistem Paket &amp; Dependency Management NUSANTARA
                 </h2>
                 <span className="px-2.5 py-0.5 text-[11px] font-bold rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30">
-                  v0.22.0 Resmi
+                  v0.27.0 Resmi
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-1">
-                Fondasi distribusi paket modern: arsip bundle <code className="text-violet-300">.npk</code> dengan SHA-256 integrity hash, aturan immutabilitas rilis, validasi paket menyeluruh, katalog registri terpadu, dan CLI <code className="text-violet-300">nusantara paket</code>.
+                Sistem ekosistem paket dan resolusi dependensi profesional: manifest <code className="text-violet-300">nusantara.toml</code>, semver constraint, graph dependency resolver, lockfile <code className="text-violet-300">nusantara.lock</code>, cache offline terdistribusi, registri lokal, dan CLI.
               </p>
             </div>
           </div>
@@ -257,11 +362,11 @@ pastikan_benar(benar)
           <div className="flex flex-wrap items-center gap-2">
             <div className="px-3 py-1.5 rounded-lg bg-violet-950/60 border border-violet-800/80 text-violet-300 text-xs font-mono font-medium flex items-center gap-1.5">
               <Terminal className="w-3.5 h-3.5" />
-              <span>nusantara paket bangun</span>
+              <span>nusantara pasang</span>
             </div>
             <div className="px-3 py-1.5 rounded-lg bg-violet-950/60 border border-violet-800/80 text-violet-300 text-xs font-mono font-medium flex items-center gap-1.5">
               <Terminal className="w-3.5 h-3.5" />
-              <span>nusantara paket terbit</span>
+              <span>nusantara audit</span>
             </div>
           </div>
         </div>
@@ -269,13 +374,31 @@ pastikan_benar(benar)
         {/* Sub-Navigasi Ekosistem */}
         <div className="flex flex-wrap items-center gap-2 mt-4 pt-1 text-xs">
           <button
+            onClick={() => setSubTab('dependensi')}
+            className={`px-3.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
+              subTab === 'dependensi' ? 'bg-violet-600 text-white shadow-md' : 'bg-slate-800/70 text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            <GitBranch className="w-3.5 h-3.5" />
+            <span>Pohon &amp; Manajemen Dependensi</span>
+          </button>
+          <button
+            onClick={() => setSubTab('cache')}
+            className={`px-3.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
+              subTab === 'cache' ? 'bg-violet-600 text-white shadow-md' : 'bg-slate-800/70 text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            <Database className="w-3.5 h-3.5" />
+            <span>Sistem Cache Paket Offline</span>
+          </button>
+          <button
             onClick={() => setSubTab('katalog')}
             className={`px-3.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
               subTab === 'katalog' ? 'bg-violet-600 text-white shadow-md' : 'bg-slate-800/70 text-slate-300 hover:bg-slate-800'
             }`}
           >
             <Boxes className="w-3.5 h-3.5" />
-            <span>Katalog Registri &amp; Pencarian Paket</span>
+            <span>Katalog Registri &amp; Pencarian</span>
           </button>
           <button
             onClick={() => setSubTab('validator')}
@@ -284,7 +407,7 @@ pastikan_benar(benar)
             }`}
           >
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Studio Validasi &amp; Penerbitan Paket</span>
+            <span>Studio Validasi &amp; Penerbitan</span>
           </button>
           <button
             onClick={() => setSubTab('arsip')}
@@ -307,7 +430,329 @@ pastikan_benar(benar)
         </div>
       </div>
 
-      {/* 2. SUB-TAB 1: KATALOG REGISTRI & PENCARIAN */}
+      {/* NOTIFIKASI PESAN AKSI */}
+      {pesanAksi && (
+        <div
+          className={`p-4 rounded-xl border text-xs flex items-center justify-between ${
+            pesanAksi.tipe === 'sukses'
+              ? 'bg-emerald-950/40 border-emerald-800 text-emerald-300'
+              : pesanAksi.tipe === 'galat'
+              ? 'bg-rose-950/40 border-rose-800 text-rose-300'
+              : 'bg-blue-950/40 border-blue-800 text-blue-300'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {pesanAksi.tipe === 'sukses' && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
+            {pesanAksi.tipe === 'galat' && <XCircle className="w-4 h-4 text-rose-400" />}
+            {pesanAksi.tipe === 'info' && <AlertTriangle className="w-4 h-4 text-blue-400" />}
+            <span className="font-medium">{pesanAksi.teks}</span>
+          </div>
+          <button
+            onClick={() => setPesanAksi(null)}
+            className="text-slate-400 hover:text-white cursor-pointer px-2 py-0.5 rounded text-[11px]"
+          >
+            Tutup
+          </button>
+        </div>
+      )}
+
+      {/* SUB-TAB 1: POHON & MANAJEMEN DEPENDENSI (PHASE 27) */}
+      {subTab === 'dependensi' && (
+        <div className="space-y-6">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <GitBranch className="w-4 h-4 text-violet-400" />
+                  Manajemen Dependensi Proyek &amp; Graf Resolusi (Phase 27)
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Visualisasi graf pohon dependensi, deteksi siklus otomatis, audit konflik versi, dan lockfile reproduktif.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleJalankanAudit}
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer border border-slate-700 transition-colors"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-violet-400" />
+                  <span>Audit Keamanan &amp; Hash</span>
+                </button>
+                <button
+                  onClick={handlePasangDependensi}
+                  className="px-3.5 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-md transition-colors"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Pasang Semua Dependensi</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Form Tambah Dependensi */}
+            <div className="bg-slate-950 border border-slate-800/80 rounded-xl p-4">
+              <h4 className="text-xs font-bold text-slate-200 mb-3 flex items-center gap-2">
+                <Plus className="w-3.5 h-3.5 text-violet-400" />
+                Tambah Dependensi Baru (<code className="text-violet-300 font-mono">nusantara tambah &lt;nama&gt; [&lt;batasan&gt;]</code>)
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                <div className="sm:col-span-5">
+                  <label className="block text-[11px] text-slate-400 mb-1">Nama Paket</label>
+                  <input
+                    type="text"
+                    value={namaDepInput}
+                    onChange={e => setNamaDepInput(e.target.value)}
+                    placeholder="misal: matematika-ekstra"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500"
+                  />
+                </div>
+                <div className="sm:col-span-4">
+                  <label className="block text-[11px] text-slate-400 mb-1">Batasan SemVer</label>
+                  <input
+                    type="text"
+                    value={versiDepInput}
+                    onChange={e => setVersiDepInput(e.target.value)}
+                    placeholder="misal: ^1.0.0, ~1.2.0, *"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500 font-mono"
+                  />
+                </div>
+                <div className="sm:col-span-3">
+                  <button
+                    onClick={handleTambahDependensi}
+                    className="w-full px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer shadow transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Tambahkan &amp; Pasang</span>
+                  </button>
+                </div>
+              </div>
+              <div className="mt-2.5 flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="terkunciCheck"
+                  checked={apakahTerkunci}
+                  onChange={e => setApakahTerkunci(e.target.checked)}
+                  className="rounded border-slate-700 text-violet-600 focus:ring-violet-500"
+                />
+                <label htmlFor="terkunciCheck" className="text-[11px] text-slate-400 flex items-center gap-1 cursor-pointer">
+                  <Lock className="w-3 h-3 text-slate-500" />
+                  Mode Instalasi Terkunci Reproduktif (<code className="text-violet-300 font-mono">--terkunci</code>, verifikasi integritas lockfile)
+                </label>
+              </div>
+            </div>
+
+            {/* Grid 2 Kolom: Daftar Dependensi & Pohon Visual */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Kolom Kiri: Tabel Dependensi Proyek */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-slate-300">
+                    Dependensi Terdaftar ({daftarDependensiProyek.length})
+                  </h4>
+                  <span className="text-[11px] text-slate-500 font-mono">nusantara.toml</span>
+                </div>
+
+                <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden">
+                  {daftarDependensiProyek.length === 0 ? (
+                    <div className="p-6 text-center text-xs text-slate-500">
+                      Belum ada dependensi. Tambahkan dependensi pertama Anda di atas.
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-800/80">
+                      {daftarDependensiProyek.map(dep => (
+                        <div key={dep.nama} className="p-3.5 flex items-center justify-between gap-3 text-xs">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-white font-mono">{dep.nama}</span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-950/70 text-violet-300 border border-violet-800/60 font-mono">
+                                {dep.batasan}
+                              </span>
+                              {dep.terpasang && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950/70 text-emerald-300 border border-emerald-800/60">
+                                  ✓ terpasang {dep.versiTerpasang ? `(v${dep.versiTerpasang})` : ''}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-slate-500 mt-0.5 block font-mono">
+                              sumber: {dep.sumber}
+                            </span>
+                          </div>
+
+                          <button
+                            onClick={() => handleHapusDependensi(dep.nama)}
+                            className="p-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 hover:text-rose-200 border border-rose-800/40 transition-colors cursor-pointer"
+                            title={`Hapus ${dep.nama}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Kolom Kanan: Pohon Visual Graf Dependensi */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                    <GitBranch className="w-3.5 h-3.5 text-emerald-400" />
+                    Pohon Dependensi Konsol (<code className="text-emerald-300 font-mono">nusantara pohon</code>)
+                  </h4>
+                  <button
+                    onClick={() => handleCopy(pohonDependensiTeks, 'pohon')}
+                    className="text-[11px] text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer"
+                  >
+                    {copiedText === 'pohon' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    <span>Salin</span>
+                  </button>
+                </div>
+
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs text-emerald-400 leading-relaxed overflow-x-auto min-h-[140px]">
+                  <pre className="whitespace-pre">{pohonDependensiTeks}</pre>
+                </div>
+              </div>
+            </div>
+
+            {/* Laporan Audit Keamanan Jika Ada */}
+            {laporanAudit && (
+              <div className={`p-4 rounded-xl border ${laporanAudit.aman ? 'bg-emerald-950/30 border-emerald-800/80' : 'bg-rose-950/30 border-rose-800/80'} space-y-3`}>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-white flex items-center gap-2">
+                    <ShieldCheck className={`w-4 h-4 ${laporanAudit.aman ? 'text-emerald-400' : 'text-rose-400'}`} />
+                    Laporan Audit Dependensi &amp; Integritas Lockfile
+                  </h4>
+                  <span className={`text-[11px] px-2 py-0.5 rounded font-bold ${laporanAudit.aman ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>
+                    {laporanAudit.aman ? 'STATUS: AMAN & TERVERIFIKASI' : 'STATUS: TEMUAN MASALAH'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block">Total Paket</span>
+                    <span className="font-bold text-white">{laporanAudit.totalPaket}</span>
+                  </div>
+                  <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block">Siklus Melingkar</span>
+                    <span className={`font-bold ${laporanAudit.adaSiklus ? 'text-rose-400' : 'text-emerald-400'}`}>
+                      {laporanAudit.adaSiklus ? 'Terdeteksi' : 'Bersih'}
+                    </span>
+                  </div>
+                  <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block">Konflik Versi</span>
+                    <span className={`font-bold ${laporanAudit.konflikVersi.length > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                      {laporanAudit.konflikVersi.length} konflik
+                    </span>
+                  </div>
+                  <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block">Integritas Hash</span>
+                    <span className={`font-bold ${laporanAudit.integritasLockValid ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {laporanAudit.integritasLockValid ? 'Valid' : 'Gagal'}
+                    </span>
+                  </div>
+                </div>
+
+                {laporanAudit.temuan.length > 0 && (
+                  <div className="mt-2 text-xs space-y-1">
+                    <span className="font-bold text-slate-300 block">Temuan:</span>
+                    {laporanAudit.temuan.map((t: string, idx: number) => (
+                      <p key={idx} className="text-rose-300 font-mono text-[11px] pl-3 border-l-2 border-rose-600">
+                        • {t}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* SUB-TAB 2: SISTEM CACHE PAKET OFFLINE (PHASE 27) */}
+      {subTab === 'cache' && (
+        <div className="space-y-6">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Database className="w-4 h-4 text-violet-400" />
+                  Sistem Cache Paket Terdistribusi &amp; Offline (Phase 27)
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Cache deterministik lokal untuk instalasi cepat tanpa jaringan dan verifikasi integritas checksum SHA-256 otomatis.
+                </p>
+              </div>
+
+              <button
+                onClick={handleBersihkanCache}
+                className="px-3.5 py-1.5 rounded-xl bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 text-xs font-semibold flex items-center gap-1.5 cursor-pointer border border-rose-800/60 transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Bersihkan Cache Paket</span>
+              </button>
+            </div>
+
+            {/* Statistik Cache */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-violet-400">Total Paket Tercache</span>
+                <p className="text-2xl font-bold text-white font-mono">{entriCacheSemua.length}</p>
+                <p className="text-xs text-slate-500">Paket siap digunakan untuk instalasi offline.</p>
+              </div>
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Ukuran Cache Disk</span>
+                <p className="text-2xl font-bold text-white font-mono">{(totalUkuranCacheByte / 1024).toFixed(1)} KB</p>
+                <p className="text-xs text-slate-500">{totalUkuranCacheByte} byte total payload tersimpan.</p>
+              </div>
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-sky-400">Proteksi Integritas</span>
+                <p className="text-2xl font-bold text-white font-mono">SHA-256</p>
+                <p className="text-xs text-slate-500">Deteksi manipulasi data berkas otomatis.</p>
+              </div>
+            </div>
+
+            {/* Tabel Daftar Paket dalam Cache */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold text-slate-300">
+                Daftar Paket dalam Cache Lokal (~/.nusantara/cache)
+              </h4>
+              <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden">
+                {entriCacheSemua.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-slate-500">
+                    Cache paket kosong. Jalankan 'nusantara pasang' atau 'nusantara tambah' untuk memuat dependensi ke dalam cache lokal.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-800/80">
+                    {entriCacheSemua.map(entri => (
+                      <div key={`${entri.nama}@${entri.versi}`} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-white font-mono">{entri.nama}</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-950/70 text-violet-300 border border-violet-800/60 font-mono">
+                              v{entri.versi}
+                            </span>
+                            <span className="text-[10px] text-slate-400">
+                              {entri.jumlahBerkas} berkas ({entri.ukuranByte} B)
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 font-mono mt-1">
+                            SHA-256: {entri.checksumSha256}
+                          </p>
+                        </div>
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          Disimpan: {new Date(entri.waktuDisimpan).toLocaleTimeString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. SUB-TAB 3: KATALOG REGISTRI & PENCARIAN */}
       {subTab === 'katalog' && (
         <div className="space-y-6">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">

@@ -13,7 +13,7 @@ import {
   NilaiDependensi,
 } from './manifest';
 import { BerkasKunci, EntriPaketKunci, bacaLock, tulisLock, hitungChecksum } from './lockfile';
-import { GrafDependensi, GalatKetergantunganMelingkar, GalatKonflikVersi } from './graph';
+import { GrafDependensi, GalatKetergantunganMelingkar, GalatKonflikVersi, HasilAuditKeamanan } from './graph';
 import { PackageRegistry, LocalRegistry } from './registry';
 import { validasiNamaPaket, periksaKeamananJalurLokal } from './keamanan';
 import { apakahKompatibel, uraiVersi, bandingkanVersi } from './semver';
@@ -32,12 +32,15 @@ import {
   MetadataPaketRegistri,
   HasilPenerbitanPaket,
 } from './registri';
+import { ManajerCachePaket, EntriCachePaket } from './cache';
 
 export interface OpsiPengelolaPaket {
   direktoriProyek?: string;
   pembacaBerkas?: PembacaBerkas;
   registry?: PackageRegistry;
   registriLokal?: RegistriLokal;
+  cache?: ManajerCachePaket;
+  direktoriCache?: string;
 }
 
 export interface HasilEksekusiCLI {
@@ -70,6 +73,8 @@ export class PengelolaPaket {
   private readonly pembaca: PembacaBerkas;
   private readonly direktoriProyek: string;
   private readonly registry: PackageRegistry;
+  private readonly cache: ManajerCachePaket;
+  private registriLokal: RegistriLokal;
 
   constructor(opsi?: OpsiPengelolaPaket) {
     this.pembaca =
@@ -96,12 +101,21 @@ export class PengelolaPaket {
         pembacaBerkas: this.pembaca,
         direktoriBasis: this.pembaca.gabungJalur(this.direktoriProyek, 'registri'),
       });
-  }
 
-  private registriLokal: RegistriLokal;
+    this.cache =
+      opsi?.cache ||
+      new ManajerCachePaket(
+        this.pembaca,
+        opsi?.direktoriCache || this.pembaca.gabungJalur(this.direktoriProyek, '.nusantara', 'cache')
+      );
+  }
 
   public dapatkanRegistriLokal(): RegistriLokal {
     return this.registriLokal;
+  }
+
+  public dapatkanManajerCache(): ManajerCachePaket {
+    return this.cache;
   }
 
   public dapatkanDirektoriProyek(): string {
@@ -166,9 +180,9 @@ export class PengelolaPaket {
   }
 
   /**
-   * Menginstal dependensi proyek: nusantara pasang [--terkunci]
+   * Menginstal dependensi proyek: nusantara pasang [--terkunci] [--lewati-cache]
    */
-  public pasang(opsi?: { terkunci?: boolean }): HasilEksekusiCLI {
+  public pasang(opsi?: { terkunci?: boolean; lewatiCache?: boolean }): HasilEksekusiCLI {
     const jalurManifest = this.dapatkanJalurManifest();
     if (!this.pembaca.apakahAda(jalurManifest)) {
       throw new Error(
@@ -228,6 +242,13 @@ export class PengelolaPaket {
       let sumberTerpilih = '';
       let berkasPaket: Record<string, string> = {};
       let manifestDep: ManifestPaket | null = null;
+      const entriKunciSebelumnya = lockSebelumnya?.paket.find(p => p.nama === namaDep);
+
+      if (opsi?.terkunci && !entriKunciSebelumnya && !(typeof nilaiDep === 'object' && nilaiDep.path)) {
+        throw new Error(
+          `Dependensi '${namaDep}' tidak terdaftar pada berkas 'nusantara.lock' saat opsi '--terkunci' digunakan.`
+        );
+      }
 
       if (typeof nilaiDep === 'object' && nilaiDep.path) {
         // Dependensi jalur lokal
@@ -266,32 +287,74 @@ export class PengelolaPaket {
       } else {
         // Dependensi versi melalui Registry
         const batasanVersi = typeof nilaiDep === 'string' ? nilaiDep : nilaiDep.versi || '*';
-        const info = this.registry.dapatkanInfo(namaDep);
 
-        if (!info) {
-          throw new Error(
-            `Kesalahan dependency:\npaket '${namaDep}' versi '${batasanVersi}' tidak ditemukan pada registri lokal atau direktori paket.`
-          );
+        const metaRegistri = this.registriLokal ? this.registriLokal.dapatkanMetadata(namaDep) : null;
+        const info = this.registry ? this.registry.dapatkanInfo(namaDep) : null;
+
+        if (opsi?.terkunci && entriKunciSebelumnya) {
+          versiTerpilih = entriKunciSebelumnya.versi;
+          sumberTerpilih = entriKunciSebelumnya.sumber;
+        } else {
+          if (!metaRegistri && !info) {
+            throw new Error(
+              `Kesalahan dependency:\npaket '${namaDep}' versi '${batasanVersi}' tidak ditemukan pada registri lokal atau direktori paket.`
+            );
+          }
+
+          // Cari versi yang kompatibel
+          const daftarVersi = metaRegistri
+            ? Object.keys(metaRegistri.daftarVersi)
+            : Object.keys(info!.daftarVersi);
+
+          const kandidatVersi = daftarVersi.sort((a, b) => {
+            try {
+              return bandingkanVersi(uraiVersi(b), uraiVersi(a));
+            } catch {
+              return b.localeCompare(a);
+            }
+          });
+
+          const cocok = kandidatVersi.find(v => apakahKompatibel(v, batasanVersi));
+          if (!cocok) {
+            throw new Error(
+              `Kesalahan dependency:\nversi package '${namaDep}' tidak dapat memenuhi kebutuhan dependency '${batasanVersi}'.`
+            );
+          }
+
+          versiTerpilih = cocok;
+          sumberTerpilih = `registri:${namaDep}@${versiTerpilih}`;
         }
 
-        // Cari versi yang kompatibel
-        const kandidatVersi = Object.keys(info.daftarVersi).sort((a, b) => {
-          return bandingkanVersi(uraiVersi(b), uraiVersi(a));
-        });
-
-        const cocok = kandidatVersi.find(v => apakahKompatibel(v, batasanVersi));
-        if (!cocok) {
-          throw new Error(
-            `Kesalahan dependency:\nversi package '${namaDep}' tidak dapat memenuhi kebutuhan dependency '${batasanVersi}'.`
-          );
+        // Cek cache terlebih dahulu (jika tidak dilewati)
+        const checksumHarapan = entriKunciSebelumnya?.integritas;
+        if (!opsi?.lewatiCache && this.cache.apakahAda(namaDep, versiTerpilih, checksumHarapan)) {
+          const hasilCache = this.cache.ambil(namaDep, versiTerpilih, checksumHarapan);
+          if (hasilCache.ditemukan && hasilCache.integritasValid && hasilCache.berkas) {
+            berkasPaket = hasilCache.berkas;
+            if (berkasPaket['nusantara.toml']) {
+              manifestDep = bacaManifest(berkasPaket['nusantara.toml']);
+            }
+          }
         }
 
-        versiTerpilih = cocok;
-        sumberTerpilih = `registri:${namaDep}@${versiTerpilih}`;
-        berkasPaket = this.registry.ambilBerkasPaket(namaDep, versiTerpilih);
+        // Ambil dari registry jika belum ada dari cache
+        if (Object.keys(berkasPaket).length === 0) {
+          if (metaRegistri && metaRegistri.daftarVersi[versiTerpilih]) {
+            const arsip = this.registriLokal.unduh(namaDep, versiTerpilih);
+            berkasPaket = arsip.berkas;
+          } else if (info) {
+            berkasPaket = this.registry.ambilBerkasPaket(namaDep, versiTerpilih);
+          }
 
-        if (berkasPaket['nusantara.toml']) {
-          manifestDep = bacaManifest(berkasPaket['nusantara.toml']);
+          if (berkasPaket['nusantara.toml']) {
+            manifestDep = bacaManifest(berkasPaket['nusantara.toml']);
+          }
+          // Simpan ke cache untuk instalasi mendatang
+          try {
+            this.cache.simpan(namaDep, versiTerpilih, berkasPaket, checksumHarapan);
+          } catch {
+            // Abaikan kesalahan penulisan cache
+          }
         }
       }
 
@@ -324,6 +387,17 @@ export class PengelolaPaket {
 
       const hash = hitungChecksum(ringkasanKonten || `${namaDep}@${versiTerpilih}`);
 
+      // Verifikasi integritas dengan lockfile jika dalam mode terkunci
+      if (opsi?.terkunci && entriKunciSebelumnya && entriKunciSebelumnya.integritas) {
+        if (entriKunciSebelumnya.integritas !== hash) {
+          throw new Error(
+            `Verifikasi integritas GAGAL untuk paket '${namaDep}@${versiTerpilih}'.\n` +
+            `Hash diharapkan (nusantara.lock): ${entriKunciSebelumnya.integritas}\n` +
+            `Hash aktual terpasang           : ${hash}`
+          );
+        }
+      }
+
       entriKunciHasil.push({
         nama: namaDep,
         versi: versiTerpilih,
@@ -347,7 +421,7 @@ export class PengelolaPaket {
       throw new GalatKonflikVersi(k.namaPaket, batasanList);
     }
 
-    // 4. Perbarui atau tulis berkas nusantara.lock
+    // 4. Perbarui atau tulis berkas nusantara.lock (jika tidak dalam mode terkunci yang identik)
     const berkasLockBaru: BerkasKunci = {
       versi_format: 1,
       paket: entriKunciHasil,
@@ -358,6 +432,177 @@ export class PengelolaPaket {
       sukses: true,
       pesan: `Berhasil memasang ${entriKunciHasil.length} dependensi. Berkas 'nusantara.lock' telah diperbarui.`,
       data: { paket: entriKunciHasil },
+    };
+  }
+
+  /**
+   * Menambahkan dependensi baru ke proyek: nusantara tambah <nama> [<batasan>]
+   */
+  public tambah(
+    namaPaket: string,
+    batasanVersi?: string,
+    opsi?: { path?: string }
+  ): HasilEksekusiCLI {
+    validasiNamaPaket(namaPaket);
+
+    const jalurManifest = this.dapatkanJalurManifest();
+    if (!this.pembaca.apakahAda(jalurManifest)) {
+      throw new Error(`Berkas 'nusantara.toml' tidak ditemukan di ${this.direktoriProyek}.`);
+    }
+
+    const manifest = bacaManifest(this.pembaca.baca(jalurManifest));
+
+    if (opsi?.path) {
+      manifest.dependensi[namaPaket] = { path: opsi.path };
+    } else {
+      manifest.dependensi[namaPaket] = batasanVersi || '^1.0.0';
+    }
+
+    this.tulisBerkasAman(jalurManifest, tulisManifest(manifest));
+
+    // Pasang dependensi secara langsung
+    const hasilPasang = this.pasang();
+
+    return {
+      sukses: true,
+      pesan: `Dependensi '${namaPaket}' (${typeof manifest.dependensi[namaPaket] === 'string' ? manifest.dependensi[namaPaket] : JSON.stringify(manifest.dependensi[namaPaket])}) berhasil ditambahkan ke nusantara.toml.`,
+      data: {
+        nama: namaPaket,
+        dependensi: manifest.dependensi[namaPaket],
+        hasilPasang,
+      },
+    };
+  }
+
+  /**
+   * Mengosongkan cache lokal ekosistem paket NUSANTARA: nusantara bersihkan-cache
+   */
+  public bersihkanCache(): HasilEksekusiCLI {
+    const hasil = this.cache.bersihkanSemua();
+    return {
+      sukses: true,
+      pesan: `Cache paket NUSANTARA berhasil dibersihkan (${hasil.jumlahDihapus} paket, ${hasil.ukuranByte} byte dihapus).`,
+      data: hasil,
+    };
+  }
+
+  /**
+   * Menghasilkan representasi visual pohon dependensi proyek: nusantara pohon (Phase 27).
+   */
+  public dapatkanPohonDependensi(akarAwal?: string): string {
+    const jalurManifest = this.dapatkanJalurManifest();
+    if (!this.pembaca.apakahAda(jalurManifest)) {
+      throw new Error(`Berkas 'nusantara.toml' tidak ditemukan.`);
+    }
+
+    const manifest = bacaManifest(this.pembaca.baca(jalurManifest));
+    const graf = new GrafDependensi();
+
+    const depAkarString: Record<string, string> = {};
+    for (const [depNama, depVal] of Object.entries(manifest.dependensi)) {
+      depAkarString[depNama] = typeof depVal === 'string' ? depVal : depVal.versi || '*';
+    }
+
+    graf.tambahSimpul({
+      nama: manifest.nusantara.nama,
+      versi: manifest.nusantara.versi,
+      sumber: 'akar',
+      dependensi: depAkarString,
+    });
+
+    const jalurLock = this.dapatkanJalurLock();
+    if (this.pembaca.apakahAda(jalurLock)) {
+      try {
+        const lock = bacaLock(this.pembaca.baca(jalurLock));
+        for (const p of lock.paket) {
+          graf.tambahSimpul({
+            nama: p.nama,
+            versi: p.versi,
+            sumber: p.sumber,
+            dependensi: p.dependensi || {},
+          });
+        }
+      } catch {
+        // Abaikan jika lock rusak
+      }
+    }
+
+    return graf.formatPohon(akarAwal || manifest.nusantara.nama);
+  }
+
+  /**
+   * Melakukan audit keamanan dependensi, integritas lockfile, dan cache proyek (Phase 27).
+   */
+  public audit(): HasilAuditKeamanan & { integritasLockValid: boolean; galatIntegritas: string[] } {
+    const jalurManifest = this.dapatkanJalurManifest();
+    if (!this.pembaca.apakahAda(jalurManifest)) {
+      throw new Error(`Berkas 'nusantara.toml' tidak ditemukan.`);
+    }
+
+    const manifest = bacaManifest(this.pembaca.baca(jalurManifest));
+    const graf = new GrafDependensi();
+
+    const depAkarString: Record<string, string> = {};
+    for (const [depNama, depVal] of Object.entries(manifest.dependensi)) {
+      depAkarString[depNama] = typeof depVal === 'string' ? depVal : depVal.versi || '*';
+    }
+
+    graf.tambahSimpul({
+      nama: manifest.nusantara.nama,
+      versi: manifest.nusantara.versi,
+      sumber: 'akar',
+      dependensi: depAkarString,
+    });
+
+    const jalurLock = this.dapatkanJalurLock();
+    const galatIntegritas: string[] = [];
+    let integritasLockValid = true;
+
+    if (this.pembaca.apakahAda(jalurLock)) {
+      try {
+        const lock = bacaLock(this.pembaca.baca(jalurLock));
+        const dirPaket = this.dapatkanDirektoriPaket();
+
+        for (const p of lock.paket) {
+          graf.tambahSimpul({
+            nama: p.nama,
+            versi: p.versi,
+            sumber: p.sumber,
+            dependensi: p.dependensi || {},
+          });
+
+          // Verifikasi integritas direktori fisik paket
+          const jalurFisik = this.pembaca.gabungJalur(dirPaket, p.nama);
+          if (this.pembaca.apakahAda(jalurFisik)) {
+            const berkas = this.kumpulkanSemuaBerkasDirektori(jalurFisik);
+            let ringkasan = '';
+            for (const [, isi] of Object.entries(berkas)) {
+              ringkasan += isi;
+            }
+            const hashAktual = hitungChecksum(ringkasan || `${p.nama}@${p.versi}`);
+            if (p.integritas && p.integritas !== hashAktual) {
+              integritasLockValid = false;
+              galatIntegritas.push(
+                `Paket '${p.nama}@${p.versi}' tidak cocok dengan nusantara.lock (diharapkan: ${p.integritas}, aktual: ${hashAktual})`
+              );
+            }
+          }
+        }
+      } catch (e: any) {
+        integritasLockValid = false;
+        galatIntegritas.push(`Gagal membaca lockfile: ${e.message}`);
+      }
+    }
+
+    const hasilAuditGraf = graf.auditKeamanan();
+    const temuanGabungan = [...hasilAuditGraf.temuan, ...galatIntegritas];
+
+    return {
+      ...hasilAuditGraf,
+      aman: hasilAuditGraf.aman && integritasLockValid,
+      integritasLockValid,
+      galatIntegritas,
+      temuan: temuanGabungan,
     };
   }
 

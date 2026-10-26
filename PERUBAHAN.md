@@ -4,6 +4,39 @@ Seluruh perubahan penting pada proyek bahasa pemrograman NUSANTARA dicatat dalam
 
 Format penomoran versi mengacu pada **Semantic Versioning** (`vMAJOR.MINOR.PATCH`). Pada masa pengembangan awal, versi minor mencerminkan tahapan fase roadmap (misal `v0.1.0` untuk Phase 1, `v0.2.0` untuk Phase 2, `v0.3.0` untuk Phase 3, `v0.4.0` untuk Phase 4, `v0.5.0` untuk Phase 5, `v0.6.0` untuk Phase 6, `v0.7.0` untuk Phase 7, `v0.8.0` untuk Phase 8, `v0.9.0` untuk Phase 9, `v0.10.0` untuk Phase 10).
 
+## [v0.27.0] — 2026-10-26
+### Phase 27: Nusantara Package Ecosystem & Dependency Management
+
+Fase ini mengimplementasikan ekosistem paket dan sistem manajemen dependensi profesional yang terintegrasi penuh dengan CLI (`nusantara`), build system, registri (Phase 22), IDE (Phase 26), CI/CD (Phase 24), pustaka standar, serta sistem keamanan integritas kriptografis.
+
+#### Ditambahkan:
+- **Subsistem Package Cache (`src/paket/cache.ts`):**
+  - Mesin `ManajerCachePaket` untuk penyimpanan dan pengambilan paket berbasis identitas `nama@versi`.
+  - Verifikasi integritas hash SHA-256 otomatis (`sha256-...`) dan deteksi pemalsuan arsip (*tamper detection*).
+  - Metode manajemen cache: `simpan`, `ambil`, `memiliki`, `verifikasiIntegritas`, `daftarCache`, `hapus`, dan `bersihkan`.
+  - Abstraksi multi-runtime yang kompatibel dengan filesystem Node.js (`fs`) dan lingkungan memori/peramban (`PembacaBerkasMemori`).
+- **Pohon & Audit Dependensi (`src/paket/graph.ts`):**
+  - Representasi graf dan visualisasi pohon dependensi hierarkis (`formatPohon()`) dengan perlindungan siklus tak terbatas (*cycle-safe recursion*).
+  - Mesin audit keamanan internal (`auditKeamanan()`) yang mendeteksi ketergantungan sirkular (*circular dependencies*) dan konflik versi paket.
+- **Penyempurnaan Pengelola Paket (`src/paket/pengelolaPaket.ts`):**
+  - Integrasi cache-first: pencarian dari cache lokal sebelum menghubungi registri.
+  - Bridge ganda: pencarian pada `RegistriLokal` (Phase 22/27) dengan fallback mulus ke `PackageRegistry` (Phase 16).
+  - Pemasangan deterministik dan reproduktif (`pasang({ terkunci: true })`): verifikasi kepatuhan 100% terhadap `nusantara.lock` dan pembatalan otomatis jika hash integritas tidak cocok.
+  - Perintah baru: `tambah()` (menambahkan dependensi ke manifest dan lockfile), `dapatkanPohonDependensi()` (pohon grafis), `audit()` (audit integritas berkas fisik dan lockfile), dan `bersihkanCache()`.
+- **Perluasan CLI Subsystem (`src/paket/cli.ts`):**
+  - Perintah baru: `nusantara tambah <nama> [batasan]` (alias: `add`), `nusantara pohon` (alias: `tree`, `graf`), `nusantara audit`, dan `nusantara bersihkan-cache` (alias: `cache-clean`).
+  - Opsi bendera baru: `--terkunci` / `--locked` dan `--lewati-cache` / `--no-cache` pada perintah `pasang`.
+  - Dukungan output JSON `--json` pada seluruh perintah paket untuk integrasi CI/CD.
+- **Integrasi Antarmuka Studio IDE (`StudioEkosistemPaket.tsx` & `StudioIDE.tsx`):**
+  - Penambahan subtab `dependensi` dan `cache` pada modul Ekosistem Paket IDE.
+  - Formulir interaktif penambahan dependensi baru, audit keamanan sekali klik, instalasi mode terkunci, dan visualisasi pohon dependensi proyek.
+  - Tombol aksi cepat terminal di laci paket IDE untuk mengeksekusi `$ nusantara pasang`, `$ nusantara audit`, dan `$ nusantara pohon`.
+- **Dokumentasi & Pengujian:**
+  - `docs/referensi/dependency-management.md` dan `docs/pengembang/package-cache.md`.
+  - `pengujian/paket/uji_ekosistem_dependensi.ts`: 25 skenario pengujian komprehensif (100% Lulus) mencakup SSOT, SemVer, graph resolver, cache, tampering, determinisme lockfile, dan tata bahasa parser aktual.
+
+---
+
 ## [v0.19.0] — 2026-10-22
 ### Phase 19: Toolchain & Formatter NUSANTARA
 
