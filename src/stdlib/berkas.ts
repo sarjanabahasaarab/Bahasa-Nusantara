@@ -10,6 +10,7 @@ import {
   buatLogika,
   buatTeks,
   buatDaftar,
+  buatPeta,
   NilaiFungsiBawaan,
 } from '../interpreter/nilai';
 import { GalatRuntime, JenisGalatRuntime } from '../interpreter/galat';
@@ -93,6 +94,45 @@ export const simbolEksporBerkas: Map<string, InfoSimbolModul> = new Map([
       kategori: 'fungsi',
       parameter: [],
       tipeKembalian: 'teks',
+    },
+  ],
+  [
+    'hapus',
+    {
+      nama: 'hapus',
+      kategori: 'fungsi',
+      parameter: [{ nama: 'jalur', tipe: 'teks' }],
+      tipeKembalian: 'logika',
+    },
+  ],
+  [
+    'apakahDirektori',
+    {
+      nama: 'apakahDirektori',
+      kategori: 'fungsi',
+      parameter: [{ nama: 'jalur', tipe: 'teks' }],
+      tipeKembalian: 'logika',
+    },
+  ],
+  [
+    'salin',
+    {
+      nama: 'salin',
+      kategori: 'fungsi',
+      parameter: [
+        { nama: 'sumber', tipe: 'teks' },
+        { nama: 'tujuan', tipe: 'teks' },
+      ],
+      tipeKembalian: 'logika',
+    },
+  ],
+  [
+    'metadata',
+    {
+      nama: 'metadata',
+      kategori: 'fungsi',
+      parameter: [{ nama: 'jalur', tipe: 'teks' }],
+      tipeKembalian: 'peta',
     },
   ],
 ]);
@@ -283,6 +323,55 @@ export class SandboxBerkas {
       return [];
     }
   }
+
+  public hapus(jalur: string): boolean {
+    const kanonikal = this.validasiDanSelesaikanJalur(jalur);
+    if (!this.ada(jalur)) {
+      return false;
+    }
+    if (this.pembaca instanceof PembacaBerkasMemori) {
+      this.pembaca.hapusBerkas(kanonikal);
+      return true;
+    }
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const fs = typeof window === 'undefined' ? require('fs') : null;
+      if (fs && fs.existsSync(kanonikal)) {
+        const stat = fs.statSync(kanonikal);
+        if (stat.isDirectory()) {
+          fs.rmdirSync(kanonikal, { recursive: true });
+        } else {
+          fs.unlinkSync(kanonikal);
+        }
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  public apakahDirektori(jalur: string): boolean {
+    const kanonikal = this.validasiDanSelesaikanJalur(jalur);
+    if (this.pembaca instanceof PembacaBerkasMemori) {
+      return this.pembaca.apakahDirektori(kanonikal);
+    }
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const fs = typeof window === 'undefined' ? require('fs') : null;
+      if (fs && fs.existsSync(kanonikal)) {
+        return fs.statSync(kanonikal).isDirectory();
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  public salin(sumber: string, tujuan: string): boolean {
+    const teksSumber = this.baca(sumber);
+    return this.tulis(tujuan, teksSumber);
+  }
 }
 
 export const sandboxBerkasGlobal = new SandboxBerkas();
@@ -397,6 +486,76 @@ export function buatEksporBerkas(sandbox: SandboxBerkas = sandboxBerkasGlobal): 
     eksekusi: () => buatTeks(sandbox.dapatkanDirektoriBasis()),
   };
   ekspor.set('dapatkanJalurBasis', fnDapatkanJalurBasis);
+
+  const fnHapus: NilaiFungsiBawaan = {
+    jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+    nama: 'hapus',
+    eksekusi: (args: NilaiRuntime[]) => {
+      if (args.length !== 1 || args[0].jenis !== JenisNilaiRuntime.TEKS) {
+        throw new GalatRuntime(
+          JenisGalatRuntime.ARGUMEN_FUNGSI_TIDAK_SESUAI,
+          `Fungsi 'berkas.hapus' membutuhkan 1 argumen bertipe teks.`
+        );
+      }
+      return buatLogika(sandbox.hapus(args[0].nilai));
+    },
+  };
+  ekspor.set('hapus', fnHapus);
+
+  const fnApakahDirektori: NilaiFungsiBawaan = {
+    jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+    nama: 'apakahDirektori',
+    eksekusi: (args: NilaiRuntime[]) => {
+      if (args.length !== 1 || args[0].jenis !== JenisNilaiRuntime.TEKS) {
+        throw new GalatRuntime(
+          JenisGalatRuntime.ARGUMEN_FUNGSI_TIDAK_SESUAI,
+          `Fungsi 'berkas.apakahDirektori' membutuhkan 1 argumen bertipe teks.`
+        );
+      }
+      return buatLogika(sandbox.apakahDirektori(args[0].nilai));
+    },
+  };
+  ekspor.set('apakahDirektori', fnApakahDirektori);
+
+  const fnSalin: NilaiFungsiBawaan = {
+    jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+    nama: 'salin',
+    eksekusi: (args: NilaiRuntime[]) => {
+      if (args.length !== 2 || args[0].jenis !== JenisNilaiRuntime.TEKS || args[1].jenis !== JenisNilaiRuntime.TEKS) {
+        throw new GalatRuntime(
+          JenisGalatRuntime.ARGUMEN_FUNGSI_TIDAK_SESUAI,
+          `Fungsi 'berkas.salin' membutuhkan 2 argumen bertipe teks (sumber, tujuan).`
+        );
+      }
+      return buatLogika(sandbox.salin(args[0].nilai, args[1].nilai));
+    },
+  };
+  ekspor.set('salin', fnSalin);
+
+  const fnMetadata: NilaiFungsiBawaan = {
+    jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+    nama: 'metadata',
+    eksekusi: (args: NilaiRuntime[]) => {
+      if (args.length !== 1 || args[0].jenis !== JenisNilaiRuntime.TEKS) {
+        throw new GalatRuntime(
+          JenisGalatRuntime.ARGUMEN_FUNGSI_TIDAK_SESUAI,
+          `Fungsi 'berkas.metadata' membutuhkan 1 argumen bertipe teks.`
+        );
+      }
+      const jalur = args[0].nilai;
+      const ada = sandbox.ada(jalur);
+      const isDir = ada ? sandbox.apakahDirektori(jalur) : false;
+      const ukuran = ada && !isDir ? sandbox.ukuran(jalur) : 0;
+      const peta = new Map<string, NilaiRuntime>([
+        ['ada', buatLogika(ada)],
+        ['apakahDirektori', buatLogika(isDir)],
+        ['ukuran', buatBilangan(ukuran)],
+        ['jalur', buatTeks(jalur)],
+      ]);
+      return buatPeta(peta);
+    },
+  };
+  ekspor.set('metadata', fnMetadata);
 
   return ekspor;
 }

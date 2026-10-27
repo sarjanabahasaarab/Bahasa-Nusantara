@@ -9,6 +9,7 @@ import {
   buatBilangan,
   buatTeks,
   buatLogika,
+  buatDaftar,
   NilaiFungsiBawaan,
 } from '../interpreter/nilai';
 import { GalatRuntime, JenisGalatRuntime } from '../interpreter/galat';
@@ -113,6 +114,105 @@ export const simbolEksporTeks: Map<string, InfoSimbolModul> = new Map([
         { nama: 's', tipe: 'teks' },
         { nama: 'target', tipe: 'teks' },
         { nama: 'pengganti', tipe: 'teks' },
+      ],
+      tipeKembalian: 'teks',
+    },
+  ],
+  [
+    'awalan',
+    {
+      nama: 'awalan',
+      kategori: 'fungsi',
+      parameter: [
+        { nama: 's', tipe: 'teks' },
+        { nama: 'awalan', tipe: 'teks' },
+      ],
+      tipeKembalian: 'logika',
+    },
+  ],
+  [
+    'akhiran',
+    {
+      nama: 'akhiran',
+      kategori: 'fungsi',
+      parameter: [
+        { nama: 's', tipe: 'teks' },
+        { nama: 'akhiran', tipe: 'teks' },
+      ],
+      tipeKembalian: 'logika',
+    },
+  ],
+  [
+    'pisah',
+    {
+      nama: 'pisah',
+      kategori: 'fungsi',
+      parameter: [
+        { nama: 's', tipe: 'teks' },
+        { nama: 'pemisah', tipe: 'teks' },
+      ],
+      tipeKembalian: 'daftar',
+    },
+  ],
+  [
+    'panjangKarakter',
+    {
+      nama: 'panjangKarakter',
+      kategori: 'fungsi',
+      parameter: [{ nama: 's', tipe: 'teks' }],
+      tipeKembalian: 'bilangan',
+    },
+  ],
+  [
+    'panjangByte',
+    {
+      nama: 'panjangByte',
+      kategori: 'fungsi',
+      parameter: [{ nama: 's', tipe: 'teks' }],
+      tipeKembalian: 'bilangan',
+    },
+  ],
+  [
+    'apakahKosong',
+    {
+      nama: 'apakahKosong',
+      kategori: 'fungsi',
+      parameter: [{ nama: 's', tipe: 'teks' }],
+      tipeKembalian: 'logika',
+    },
+  ],
+  [
+    'ulangi',
+    {
+      nama: 'ulangi',
+      kategori: 'fungsi',
+      parameter: [
+        { nama: 's', tipe: 'teks' },
+        { nama: 'jumlah', tipe: 'bilangan' },
+      ],
+      tipeKembalian: 'teks',
+    },
+  ],
+  [
+    'format',
+    {
+      nama: 'format',
+      kategori: 'fungsi',
+      parameter: [
+        { nama: 'pola', tipe: 'teks' },
+        { nama: 'daftarArgumen', tipe: 'daftar' },
+      ],
+      tipeKembalian: 'teks',
+    },
+  ],
+  [
+    'karakterPada',
+    {
+      nama: 'karakterPada',
+      kategori: 'fungsi',
+      parameter: [
+        { nama: 's', tipe: 'teks' },
+        { nama: 'indeks', tipe: 'bilangan' },
       ],
       tipeKembalian: 'teks',
     },
@@ -266,6 +366,175 @@ export function buatEksporTeks(): Map<string, NilaiRuntime> {
     },
   };
   ekspor.set('ganti', fnGanti);
+
+  const fnAwalan: NilaiFungsiBawaan = {
+    jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+    nama: 'awalan',
+    eksekusi: (args: NilaiRuntime[]) => {
+      if (args.length !== 2 || args[0].jenis !== JenisNilaiRuntime.TEKS || args[1].jenis !== JenisNilaiRuntime.TEKS) {
+        throw new GalatRuntime(
+          JenisGalatRuntime.ARGUMEN_FUNGSI_TIDAK_SESUAI,
+          `Fungsi 'teks.awalan' membutuhkan 2 argumen bertipe teks (s, awalan).`
+        );
+      }
+      return buatLogika(args[0].nilai.startsWith(args[1].nilai));
+    },
+  };
+  ekspor.set('awalan', fnAwalan);
+
+  const fnAkhiran: NilaiFungsiBawaan = {
+    jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+    nama: 'akhiran',
+    eksekusi: (args: NilaiRuntime[]) => {
+      if (args.length !== 2 || args[0].jenis !== JenisNilaiRuntime.TEKS || args[1].jenis !== JenisNilaiRuntime.TEKS) {
+        throw new GalatRuntime(
+          JenisGalatRuntime.ARGUMEN_FUNGSI_TIDAK_SESUAI,
+          `Fungsi 'teks.akhiran' membutuhkan 2 argumen bertipe teks (s, akhiran).`
+        );
+      }
+      return buatLogika(args[0].nilai.endsWith(args[1].nilai));
+    },
+  };
+  ekspor.set('akhiran', fnAkhiran);
+
+  const fnPisah: NilaiFungsiBawaan = {
+    jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+    nama: 'pisah',
+    eksekusi: (args: NilaiRuntime[]) => {
+      if (args.length < 1 || args[0].jenis !== JenisNilaiRuntime.TEKS) {
+        throw new GalatRuntime(
+          JenisGalatRuntime.ARGUMEN_FUNGSI_TIDAK_SESUAI,
+          `Fungsi 'teks.pisah' membutuhkan argumen pertama bertipe teks.`
+        );
+      }
+      const pemisah = args.length > 1 && args[1].jenis === JenisNilaiRuntime.TEKS ? args[1].nilai : ' ';
+      const bagian = args[0].nilai.split(pemisah).map(b => buatTeks(b));
+      return buatDaftar(bagian);
+    },
+  };
+  ekspor.set('pisah', fnPisah);
+
+  const fnPanjangKarakter: NilaiFungsiBawaan = {
+    jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+    nama: 'panjangKarakter',
+    eksekusi: (args: NilaiRuntime[]) => {
+      if (args.length !== 1 || args[0].jenis !== JenisNilaiRuntime.TEKS) {
+        throw new GalatRuntime(
+          JenisGalatRuntime.ARGUMEN_FUNGSI_TIDAK_SESUAI,
+          `Fungsi 'teks.panjangKarakter' membutuhkan 1 argumen bertipe teks.`
+        );
+      }
+      // Menghitung Unicode code points (bukan hanya UTF-16 code units)
+      return buatBilangan(Array.from(args[0].nilai).length);
+    },
+  };
+  ekspor.set('panjangKarakter', fnPanjangKarakter);
+
+  const fnPanjangByte: NilaiFungsiBawaan = {
+    jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+    nama: 'panjangByte',
+    eksekusi: (args: NilaiRuntime[]) => {
+      if (args.length !== 1 || args[0].jenis !== JenisNilaiRuntime.TEKS) {
+        throw new GalatRuntime(
+          JenisGalatRuntime.ARGUMEN_FUNGSI_TIDAK_SESUAI,
+          `Fungsi 'teks.panjangByte' membutuhkan 1 argumen bertipe teks.`
+        );
+      }
+      if (typeof TextEncoder !== 'undefined') {
+        return buatBilangan(new TextEncoder().encode(args[0].nilai).length);
+      }
+      if (typeof Buffer !== 'undefined' && typeof Buffer.byteLength === 'function') {
+        return buatBilangan(Buffer.byteLength(args[0].nilai, 'utf8'));
+      }
+      return buatBilangan(args[0].nilai.length);
+    },
+  };
+  ekspor.set('panjangByte', fnPanjangByte);
+
+  const fnApakahKosong: NilaiFungsiBawaan = {
+    jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+    nama: 'apakahKosong',
+    eksekusi: (args: NilaiRuntime[]) => {
+      if (args.length !== 1 || args[0].jenis !== JenisNilaiRuntime.TEKS) {
+        throw new GalatRuntime(
+          JenisGalatRuntime.ARGUMEN_FUNGSI_TIDAK_SESUAI,
+          `Fungsi 'teks.apakahKosong' membutuhkan 1 argumen bertipe teks.`
+        );
+      }
+      return buatLogika(args[0].nilai.length === 0);
+    },
+  };
+  ekspor.set('apakahKosong', fnApakahKosong);
+
+  const fnUlangi: NilaiFungsiBawaan = {
+    jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+    nama: 'ulangi',
+    eksekusi: (args: NilaiRuntime[]) => {
+      if (args.length !== 2 || args[0].jenis !== JenisNilaiRuntime.TEKS || args[1].jenis !== JenisNilaiRuntime.BILANGAN) {
+        throw new GalatRuntime(
+          JenisGalatRuntime.ARGUMEN_FUNGSI_TIDAK_SESUAI,
+          `Fungsi 'teks.ulangi' membutuhkan 2 argumen: (s: teks, jumlah: bilangan).`
+        );
+      }
+      const count = Math.max(0, args[1].nilai);
+      return buatTeks(args[0].nilai.repeat(count));
+    },
+  };
+  ekspor.set('ulangi', fnUlangi);
+
+  const fnFormat: NilaiFungsiBawaan = {
+    jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+    nama: 'format',
+    eksekusi: (args: NilaiRuntime[]) => {
+      if (args.length < 1 || args[0].jenis !== JenisNilaiRuntime.TEKS) {
+        throw new GalatRuntime(
+          JenisGalatRuntime.ARGUMEN_FUNGSI_TIDAK_SESUAI,
+          `Fungsi 'teks.format' membutuhkan argumen pertama bertipe teks.`
+        );
+      }
+      let pola = args[0].nilai;
+      const daftarNilai: string[] = [];
+      if (args.length > 1 && args[1].jenis === JenisNilaiRuntime.DAFTAR) {
+        for (const el of args[1].elemen) {
+          daftarNilai.push(el.jenis === JenisNilaiRuntime.TEKS ? el.nilai : String((el as any).nilai ?? ''));
+        }
+      } else {
+        for (let i = 1; i < args.length; i++) {
+          const el = args[i];
+          daftarNilai.push(el.jenis === JenisNilaiRuntime.TEKS ? el.nilai : String((el as any).nilai ?? ''));
+        }
+      }
+
+      for (let i = 0; i < daftarNilai.length; i++) {
+        pola = pola.split(`{${i}}`).join(daftarNilai[i]);
+      }
+      return buatTeks(pola);
+    },
+  };
+  ekspor.set('format', fnFormat);
+
+  const fnKarakterPada: NilaiFungsiBawaan = {
+    jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+    nama: 'karakterPada',
+    eksekusi: (args: NilaiRuntime[]) => {
+      if (args.length !== 2 || args[0].jenis !== JenisNilaiRuntime.TEKS || args[1].jenis !== JenisNilaiRuntime.BILANGAN) {
+        throw new GalatRuntime(
+          JenisGalatRuntime.ARGUMEN_FUNGSI_TIDAK_SESUAI,
+          `Fungsi 'teks.karakterPada' membutuhkan 2 argumen: (s: teks, indeks: bilangan).`
+        );
+      }
+      const s = args[0].nilai;
+      const idx = args[1].nilai;
+      if (idx < 0 || idx >= s.length) {
+        throw new GalatRuntime(
+          JenisGalatRuntime.OPERASI_TIPE_TIDAK_VALID,
+          `Indeks '${idx}' di luar rentang panjang teks (0..${s.length - 1}).`
+        );
+      }
+      return buatTeks(s.charAt(idx));
+    },
+  };
+  ekspor.set('karakterPada', fnKarakterPada);
 
   return ekspor;
 }

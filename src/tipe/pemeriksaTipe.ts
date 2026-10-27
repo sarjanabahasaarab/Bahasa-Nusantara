@@ -846,26 +846,51 @@ export class PemeriksaTipe {
             }
 
             const params = simbol.parameter || [];
-            if (c.argumen.length !== params.length) {
-              throw new GalatTipe(
-                JenisGalatTipe.ARGUMEN_TIDAK_SESUAI,
-                `Fungsi '${targetModul}.${c.namaFungsi}' membutuhkan ${params.length} argumen, tetapi menerima ${c.argumen.length}.`,
-                c.posisi.awal
-              );
-            }
-
-            for (let i = 0; i < c.argumen.length; i++) {
-              const tipeArg = this.periksaEkspresi(c.argumen[i]);
-              const param = params[i];
-              if (!apakahKompatibel(param.tipe, tipeArg)) {
-                const urutan = ['pertama', 'kedua', 'ketiga', 'keempat', 'kelima'][i] || `ke-${i + 1}`;
+            if (simbol.variadik) {
+              const min = simbol.minParameter !== undefined ? simbol.minParameter : params.length;
+              if (c.argumen.length < min) {
                 throw new GalatTipe(
-                  JenisGalatTipe.KETIDAKCOCOKAN_TIPE,
-                  `argumen ${urutan} pada '${targetModul}.${c.namaFungsi}' harus bertipe ${param.tipe}`,
-                  c.argumen[i].posisi.awal,
-                  param.tipe,
-                  tipeArg
+                  JenisGalatTipe.ARGUMEN_TIDAK_SESUAI,
+                  `Fungsi '${targetModul}.${c.namaFungsi}' membutuhkan minimal ${min} argumen, tetapi menerima ${c.argumen.length}.`,
+                  c.posisi.awal
                 );
+              }
+              for (let i = 0; i < c.argumen.length; i++) {
+                const tipeArg = this.periksaEkspresi(c.argumen[i]);
+                const param = params[Math.min(i, params.length - 1)];
+                if (param && !apakahKompatibel(param.tipe, tipeArg)) {
+                  const urutan = ['pertama', 'kedua', 'ketiga', 'keempat', 'kelima'][i] || `ke-${i + 1}`;
+                  throw new GalatTipe(
+                    JenisGalatTipe.KETIDAKCOCOKAN_TIPE,
+                    `argumen ${urutan} pada '${targetModul}.${c.namaFungsi}' harus bertipe ${param.tipe}`,
+                    c.argumen[i].posisi.awal,
+                    param.tipe,
+                    tipeArg
+                  );
+                }
+              }
+            } else {
+              if (c.argumen.length !== params.length) {
+                throw new GalatTipe(
+                  JenisGalatTipe.ARGUMEN_TIDAK_SESUAI,
+                  `Fungsi '${targetModul}.${c.namaFungsi}' membutuhkan ${params.length} argumen, tetapi menerima ${c.argumen.length}.`,
+                  c.posisi.awal
+                );
+              }
+
+              for (let i = 0; i < c.argumen.length; i++) {
+                const tipeArg = this.periksaEkspresi(c.argumen[i]);
+                const param = params[i];
+                if (!apakahKompatibel(param.tipe, tipeArg)) {
+                  const urutan = ['pertama', 'kedua', 'ketiga', 'keempat', 'kelima'][i] || `ke-${i + 1}`;
+                  throw new GalatTipe(
+                    JenisGalatTipe.KETIDAKCOCOKAN_TIPE,
+                    `argumen ${urutan} pada '${targetModul}.${c.namaFungsi}' harus bertipe ${param.tipe}`,
+                    c.argumen[i].posisi.awal,
+                    param.tipe,
+                    tipeArg
+                  );
+                }
               }
             }
 

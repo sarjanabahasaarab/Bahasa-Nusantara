@@ -21,6 +21,8 @@ export interface InfoSimbolModul {
   parameter?: Array<{ nama: string; tipe: string }>;
   tipeKembalian?: string;
   tetap?: boolean;
+  variadik?: boolean;
+  minParameter?: number;
 }
 
 export interface CatatanModul {

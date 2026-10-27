@@ -16,6 +16,12 @@ import { simbolEksporKoleksi, buatEksporKoleksi } from './koleksi';
 import { simbolEksporBerkas, buatEksporBerkas, SandboxBerkas, sandboxBerkasGlobal } from './berkas';
 import { simbolEksporSistem, buatEksporSistem, VERSI_NUSANTARA } from './sistem';
 import { simbolEksporUji, buatEksporUji } from './uji';
+import { simbolEksporJalur, buatEksporJalur } from './jalur';
+import { simbolEksporJson, buatEksporJson } from './json';
+import { simbolEksporLingkungan, buatEksporLingkungan } from './lingkungan';
+import { simbolEksporProses, buatEksporProses, tetapkanHandlerEksekusiProses } from './proses';
+import { simbolEksporJaringan, buatEksporJaringan, tetapkanPengirimHTTPMock } from './jaringan';
+import { simbolEksporKripto, buatEksporKripto } from './kripto';
 
 export * from './teks';
 export * from './matematika';
@@ -26,6 +32,12 @@ export * from './koleksi';
 export * from './berkas';
 export * from './sistem';
 export * from './uji';
+export * from './jalur';
+export * from './json';
+export * from './lingkungan';
+export * from './proses';
+export * from './jaringan';
+export * from './kripto';
 
 export interface MetadataModulStandar {
   nama: string;
@@ -90,6 +102,43 @@ export const KATALOG_MODUL_STANDAR: Record<string, MetadataModulStandar> = {
     deskripsi: 'Modul pengujian resmi NUSANTARA: penegasan nilai (pastikan, pastikanSama, pastikanTidakSama, pastikanBenar, pastikanSalah).',
     simbolEkspor: simbolEksporUji,
     pabrikEkspor: () => buatEksporUji(),
+  },
+  jalur: {
+    nama: 'jalur',
+    deskripsi: 'Manipulasi jalur berkas (path) lintas platform: gabung, normalisasi, ekstensi, direktori induk, nama berkas.',
+    simbolEkspor: simbolEksporJalur,
+    pabrikEkspor: () => buatEksporJalur(),
+  },
+  json: {
+    nama: 'json',
+    deskripsi: 'Penguraian dan serialisasi format JSON aman dengan pemetaan tipe data resmi NUSANTARA.',
+    simbolEkspor: simbolEksporJson,
+    pabrikEkspor: () => buatEksporJson(),
+  },
+  lingkungan: {
+    nama: 'lingkungan',
+    deskripsi: 'Akses dan manipulasi variabel lingkungan proses, pemeriksaan keberadaan, dan direktori kerja.',
+    simbolEkspor: simbolEksporLingkungan,
+    pabrikEkspor: (opsi?: { envOverrides?: Record<string, string> }) =>
+      buatEksporLingkungan(opsi?.envOverrides),
+  },
+  proses: {
+    nama: 'proses',
+    deskripsi: 'Eksekusi sub-proses terisolasi dengan larik argumen aman (pencegahan injeksi perintah shell).',
+    simbolEkspor: simbolEksporProses,
+    pabrikEkspor: () => buatEksporProses(),
+  },
+  jaringan: {
+    nama: 'jaringan',
+    deskripsi: 'Klien HTTP terpadu (GET dan POST) dengan penanganan status, header kustom, dan timeout aman.',
+    simbolEkspor: simbolEksporJaringan,
+    pabrikEkspor: () => buatEksporJaringan(),
+  },
+  kripto: {
+    nama: 'kripto',
+    deskripsi: 'Fungsi kriptografi resmi: hashing SHA-256 & MD5, CSPRNG bilangan dan byte acak, pembandingan waktu konstan.',
+    simbolEkspor: simbolEksporKripto,
+    pabrikEkspor: () => buatEksporKripto(),
   },
 };
 
@@ -157,6 +206,20 @@ export const DAFTAR_MODUL_STANDAR_INTI = [
   'sistem',
 ];
 
+export const DAFTAR_MODUL_STANDAR_FASE28 = [
+  'jalur',
+  'json',
+  'lingkungan',
+  'proses',
+  'jaringan',
+  'kripto',
+];
+
+export const DAFTAR_SEMUA_MODUL_STANDAR = [
+  ...DAFTAR_MODUL_STANDAR_INTI,
+  ...DAFTAR_MODUL_STANDAR_FASE28,
+];
+
 /**
  * Mengembalikan seluruh nama modul standar resmi yang tersedia (8 modul inti Phase 17).
  */
@@ -165,6 +228,13 @@ export function dapatkanDaftarNamaModulStandar(sertakanPengujian: boolean = fals
     return Object.keys(KATALOG_MODUL_STANDAR);
   }
   return [...DAFTAR_MODUL_STANDAR_INTI];
+}
+
+/**
+ * Mengembalikan seluruh modul standar resmi NUSANTARA termasuk ekspansi Phase 28.
+ */
+export function dapatkanSemuaModulStandar(): string[] {
+  return [...DAFTAR_SEMUA_MODUL_STANDAR];
 }
 
 /**
