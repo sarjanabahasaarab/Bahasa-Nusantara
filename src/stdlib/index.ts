@@ -22,6 +22,7 @@ import { simbolEksporLingkungan, buatEksporLingkungan } from './lingkungan';
 import { simbolEksporProses, buatEksporProses, tetapkanHandlerEksekusiProses } from './proses';
 import { simbolEksporJaringan, buatEksporJaringan, tetapkanPengirimHTTPMock } from './jaringan';
 import { simbolEksporKripto, buatEksporKripto } from './kripto';
+import { simbolEksporBasisdata, buatEksporBasisdata } from './basisdata';
 
 export * from './teks';
 export * from './matematika';
@@ -38,6 +39,7 @@ export * from './lingkungan';
 export * from './proses';
 export * from './jaringan';
 export * from './kripto';
+export * from './basisdata';
 
 export interface MetadataModulStandar {
   nama: string;
@@ -140,6 +142,18 @@ export const KATALOG_MODUL_STANDAR: Record<string, MetadataModulStandar> = {
     simbolEkspor: simbolEksporKripto,
     pabrikEkspor: () => buatEksporKripto(),
   },
+  basisdata: {
+    nama: 'basisdata',
+    deskripsi: 'Akses dan manipulasi basis data SQL terpadu (SQLite, DDL, DML, transaksi, prepared statements, dan proteksi injeksi).',
+    simbolEkspor: simbolEksporBasisdata,
+    pabrikEkspor: () => buatEksporBasisdata(),
+  },
+  database: {
+    nama: 'database',
+    deskripsi: 'Alias resmi modul basisdata untuk akses basis data SQL (SQLite, DDL, DML, transaksi, dan prepared statements).',
+    simbolEkspor: simbolEksporBasisdata,
+    pabrikEkspor: () => buatEksporBasisdata(),
+  },
 };
 
 /**
@@ -215,9 +229,15 @@ export const DAFTAR_MODUL_STANDAR_FASE28 = [
   'kripto',
 ];
 
+export const DAFTAR_MODUL_STANDAR_FASE29 = [
+  'basisdata',
+  'database',
+];
+
 export const DAFTAR_SEMUA_MODUL_STANDAR = [
   ...DAFTAR_MODUL_STANDAR_INTI,
   ...DAFTAR_MODUL_STANDAR_FASE28,
+  ...DAFTAR_MODUL_STANDAR_FASE29,
 ];
 
 /**

@@ -822,6 +822,17 @@ export class PemeriksaTipe {
             const targetModul = (c.target as NodePengidentifikasi).nama;
             const catatanModul = this.tabelModul.get(targetModul);
             if (!catatanModul) {
+              const simbolLokal = this.lingkupSaatIni?.ambil(targetModul);
+              if (
+                simbolLokal &&
+                (simbolLokal.tipe === NamaTipe.PETA ||
+                  simbolLokal.tipe === NamaTipe.APAPUN)
+              ) {
+                for (const arg of c.argumen) {
+                  this.periksaEkspresi(arg);
+                }
+                return NamaTipe.APAPUN;
+              }
               throw new GalatTipe(
                 JenisGalatTipe.MODUL_TIDAK_DITEMUKAN,
                 `Modul '${targetModul}' belum diimpor atau tidak ditemukan.`,

@@ -1,0 +1,43 @@
+program ContohBasisdata
+
+gunakan "basisdata" sebagai db
+gunakan "koleksi" sebagai koleksi
+
+mulai
+    tampilkan("=== CONTOH NUSANTARA BASISDATA API (SQLITE) ===")
+    
+    // 1. Membuka koneksi basis data in-memory
+    koneksi : peta = db.bukaMemori()
+    tampilkan("Driver:", db.versiDriver())
+    
+    // 2. Membuat tabel pegawai
+    koneksi.eksekusi("CREATE TABLE pegawai (id INTEGER PRIMARY KEY AUTOINCREMENT, nama TEXT NOT NULL, jabatan TEXT, gaji REAL, aktif INTEGER)")
+    tampilkan("Tabel pegawai berhasil dibuat.")
+    
+    // 3. Menambahkan data pegawai dengan Prepared Statements (parameter binding aman)
+    koneksi.eksekusi("INSERT INTO pegawai (nama, jabatan, gaji, aktif) VALUES (?, ?, ?, ?)", ["Budi Wicaksono", "Arsitek Sistem", 18500000.0, 1])
+    koneksi.eksekusi("INSERT INTO pegawai (nama, jabatan, gaji, aktif) VALUES (?, ?, ?, ?)", ["Citra Lestari", "Pengembang Backend", 14000000.0, 1])
+    koneksi.eksekusi("INSERT INTO pegawai (nama, jabatan, gaji, aktif) VALUES (?, ?, ?, ?)", ["Dimas Prasetyo", "Perekayasa Data", 15500000.0, 1])
+    
+    // 4. Mengambil jumlah pegawai
+    total : bilangan = koneksi.ambilNilai("SELECT COUNT(*) FROM pegawai")
+    tampilkan("Total pegawai terdaftar:", total)
+    
+    // 5. Mengambil data pegawai tunggal
+    pegawaiSatu : peta = koneksi.ambilSatu("SELECT * FROM pegawai WHERE id = ?", [1])
+    tampilkan("Pegawai ID 1:", pegawaiSatu["nama"], "-", pegawaiSatu["jabatan"])
+    
+    // 6. Transaksi: Memperbarui gaji dalam transaksi aman
+    koneksi.mulaiTransaksi()
+    koneksi.eksekusi("UPDATE pegawai SET gaji = ? WHERE nama = ?", [19500000.0, "Budi Wicaksono"])
+    koneksi.commit()
+    tampilkan("Gaji Budi berhasil diperbarui dalam transaksi.")
+    
+    // 7. Mengambil semua data
+    daftarPegawai : daftar = koneksi.ambilSemua("SELECT * FROM pegawai ORDER BY id ASC")
+    tampilkan("Jumlah baris query:", koleksi.panjang(daftarPegawai))
+    
+    // 8. Menutup koneksi
+    koneksi.tutup()
+    tampilkan("Koneksi basis data telah ditutup secara aman.")
+selesai

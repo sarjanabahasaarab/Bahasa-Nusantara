@@ -26,6 +26,8 @@ export const simbolEksporJalur: Map<string, InfoSimbolModul> = new Map([
       kategori: 'fungsi',
       parameter: [{ nama: 'bagian', tipe: 'teks' }],
       tipeKembalian: 'teks',
+      variadik: true,
+      minParameter: 1,
     },
   ],
   [

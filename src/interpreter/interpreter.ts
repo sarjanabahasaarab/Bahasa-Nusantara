@@ -47,6 +47,7 @@ import {
   buatPeta,
   buatModul,
   NilaiModul,
+  NilaiPeta,
   formatNilaiTeks,
   NilaiFungsiPengguna,
   NilaiFungsiBawaan,
@@ -804,11 +805,25 @@ export class Interpreter {
               );
             }
             callee = f;
+          } else if (targetVal.jenis === JenisNilaiRuntime.PETA) {
+            const peta = targetVal as NilaiPeta;
+            const f = peta.nilai.get(c.namaFungsi);
+            if (!f) {
+              const modulErr = this.modulAktifSaatIni?.jalurBerkas || this.modulAktifSaatIni?.nama;
+              throw new GalatRuntime(
+                JenisGalatRuntime.ANGGOTA_MODUL_TIDAK_DITEMUKAN,
+                `Method '${c.namaFungsi}' tidak ditemukan pada objek peta.`,
+                c.posisi.awal,
+                [...this.tumpukanPanggilan],
+                modulErr
+              );
+            }
+            callee = f;
           } else {
             const modulErr = this.modulAktifSaatIni?.jalurBerkas || this.modulAktifSaatIni?.nama;
             throw new GalatRuntime(
               JenisGalatRuntime.OPERASI_TIPE_TIDAK_VALID,
-              `Target pemanggilan bukan merupakan modul, melainkan '${targetVal.jenis}'.`,
+              `Target pemanggilan bukan merupakan modul atau objek peta, melainkan '${targetVal.jenis}'.`,
               c.posisi.awal,
               [...this.tumpukanPanggilan],
               modulErr
