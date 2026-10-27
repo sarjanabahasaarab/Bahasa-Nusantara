@@ -32,6 +32,7 @@ import {
   HasilBuild,
   PlatformTarget,
   ModeBuild,
+  ArtefakBuild,
   PLATFORM_SEMUA,
   normalisasiJalur,
 } from '../build';
@@ -274,7 +275,7 @@ Berkas Checksum Resmi  : dist/SHA256SUMS`,
                   Target Platform Resmi ({platformPilihan.length}/4 terpilih):
                 </label>
                 <div className="grid grid-cols-2 gap-2">
-                  {PLATFORM_SEMUA.map((plat) => {
+                  {PLATFORM_SEMUA.map((plat: PlatformTarget) => {
                     const aktif = platformPilihan.includes(plat);
                     return (
                       <button
@@ -379,7 +380,7 @@ Berkas Checksum Resmi  : dist/SHA256SUMS`,
                   <div className="space-y-2.5">
                     <span className="text-xs font-semibold text-slate-300">Berkas Distribusi Siap Pakai:</span>
                     <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-                      {hasilBuild.artefak.map((art, idx) => {
+                      {hasilBuild.artefak.map((art: ArtefakBuild, idx: number) => {
                         const kb = (art.ukuranByte / 1024).toFixed(1);
                         return (
                           <div
@@ -477,7 +478,7 @@ Berkas Checksum Resmi  : dist/SHA256SUMS`,
                 </span>
                 <pre className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono text-teal-300 overflow-x-auto whitespace-pre leading-relaxed">
                   {hasilBuild.artefak
-                    .map((a) => `${a.sha256}  ${a.namaBerkas}`)
+                    .map((a: ArtefakBuild) => `${a.sha256}  ${a.namaBerkas}`)
                     .join('\n')}
                 </pre>
               </div>
