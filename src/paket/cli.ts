@@ -311,6 +311,24 @@ export class NusantaraCLI {
             warna: opsiWarna,
           });
         }
+        case 'layani':
+        case 'serve':
+        case 'web': {
+          const berkasTarget = argumenTambahan[0];
+          if (!berkasTarget) {
+            this.laporkanGalatCLI(
+              new Error("Perintah 'nusantara layani' memerlukan argumen <berkas.nusantara>.\nContoh: nusantara layani aplikasi.nusantara --port 3000"),
+              { json: opsiJSON, warna: opsiWarna }
+            );
+            return 2;
+          }
+          this.log(`[NUSANTARA Web] Memulai server web dari '${berkasTarget}'...`);
+          return this.jalankanBerkasProgram(berkasTarget, argumenTambahan.slice(1), {
+            debug: opsiDebug,
+            json: opsiJSON,
+            warna: opsiWarna,
+          });
+        }
 
         case 'paket':
         case 'package': {

@@ -23,6 +23,7 @@ import { simbolEksporProses, buatEksporProses, tetapkanHandlerEksekusiProses } f
 import { simbolEksporJaringan, buatEksporJaringan, tetapkanPengirimHTTPMock } from './jaringan';
 import { simbolEksporKripto, buatEksporKripto } from './kripto';
 import { simbolEksporBasisdata, buatEksporBasisdata } from './basisdata';
+import { simbolEksporWeb, buatEksporWeb } from './web';
 
 export * from './teks';
 export * from './matematika';
@@ -40,6 +41,7 @@ export * from './proses';
 export * from './jaringan';
 export * from './kripto';
 export * from './basisdata';
+export * from './web';
 
 export interface MetadataModulStandar {
   nama: string;
@@ -154,6 +156,18 @@ export const KATALOG_MODUL_STANDAR: Record<string, MetadataModulStandar> = {
     simbolEkspor: simbolEksporBasisdata,
     pabrikEkspor: () => buatEksporBasisdata(),
   },
+  web: {
+    nama: 'web',
+    deskripsi: 'Web Application Framework NUSANTARA (HTTP server, router dinamis, request/response API, middleware, berkas statis, template HTML aman, dan REST API).',
+    simbolEkspor: simbolEksporWeb,
+    pabrikEkspor: () => buatEksporWeb(),
+  },
+  http: {
+    nama: 'http',
+    deskripsi: 'Alias resmi modul web untuk pembangunan aplikasi web dan REST API di NUSANTARA.',
+    simbolEkspor: simbolEksporWeb,
+    pabrikEkspor: () => buatEksporWeb(),
+  },
 };
 
 /**
@@ -234,10 +248,16 @@ export const DAFTAR_MODUL_STANDAR_FASE29 = [
   'database',
 ];
 
+export const DAFTAR_MODUL_STANDAR_FASE30 = [
+  'web',
+  'http',
+];
+
 export const DAFTAR_SEMUA_MODUL_STANDAR = [
   ...DAFTAR_MODUL_STANDAR_INTI,
   ...DAFTAR_MODUL_STANDAR_FASE28,
   ...DAFTAR_MODUL_STANDAR_FASE29,
+  ...DAFTAR_MODUL_STANDAR_FASE30,
 ];
 
 /**

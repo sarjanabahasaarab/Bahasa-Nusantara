@@ -1,0 +1,36 @@
+program AplikasiWebUtama
+
+gunakan "web" sebagai web
+gunakan "basisdata" sebagai db
+gunakan "koleksi" sebagai koleksi
+
+fungsi tanganiBeranda(req : peta, res : peta)
+mulai
+    htmlRes : teks = "<html><head><title>Aplikasi NUSANTARA</title><link rel='stylesheet' href='/publik/gaya.css'></head><body><div class='wadah'><h1>Selamat Datang di NUSANTARA Web!</h1><p class='lencana'>Phase 30 v0.30.0</p><p>Framework aplikasi web resmi bahasa pemrograman NUSANTARA.</p><p><a href='/api/produk'>Lihat API Produk (JSON)</a></p></div></body></html>"
+    res.html(htmlRes)
+selesai
+
+fungsi tanganiTentang(req : peta, res : peta)
+mulai
+    res.json({
+        "aplikasi": "NUSANTARA Web Framework",
+        "versi": "0.30.0",
+        "fitur": ["Router Dinamis", "Template Engine Anti-XSS", "REST API", "Database SQLite", "Static Files", "Middleware Pipeline"]
+    })
+selesai
+
+mulai
+    tampilkan("=== MEMULAI APLIKASI WEB NUSANTARA ===")
+    
+    // Inisialisasi Aplikasi Web
+    app : peta = web.buatAplikasi({ "port": 3000, "host": "127.0.0.1" })
+    
+    // Konfigurasi berkas statis
+    app.berkasStatis("/publik", "contoh/web/publik")
+    
+    // Daftarkan Rute
+    app.dapatkan("/", tanganiBeranda)
+    app.dapatkan("/tentang", tanganiTentang)
+    
+    tampilkan("Server web siap melayani permintaan.")
+selesai
