@@ -1,0 +1,63 @@
+program AplikasiAutentikasiNUSANTARA
+
+gunakan "autentikasi" sebagai auth
+gunakan "basisdata" sebagai db
+
+mulai
+    tampilkan("=== CONTOH AUTENTIKASI DAN AKSES KONTROL NUSANTARA (FASE 31) ===")
+
+    // 1. Inisialisasi Database In-Memory
+    koneksi : peta = db.bukaMemori()
+    tampilkan("[1] Basis data SQLite in-memory berhasil dibuka.")
+
+    // 2. Buat Layanan Autentikasi Terintegrasi
+    layanan : peta = auth.buatLayanan(koneksi)
+    layanan.inisialisasiSkema()
+    tampilkan("[2] Layanan Autentikasi & Sesi siap digunakan.")
+
+    // 3. Pendaftaran Pengguna Baru (Password di-hash dengan Scrypt otomatis)
+    tampilkan("[3] Mendaftarkan pengguna baru: budi_santoso (admin)...")
+    hasilRegAdmin : peta = layanan.daftar("budi_santoso", "budi@nusantara.id", "NusantaraAman123!", "admin")
+    admin : peta = hasilRegAdmin["pengguna"]
+    tampilkan("    Pengguna terdaftar dengan peran:", admin["role"])
+
+    // 4. Mendaftarkan pengguna biasa
+    tampilkan("[4] Mendaftarkan pengguna biasa: siti_rahma (pengguna)...")
+    hasilRegUser : peta = layanan.daftar("siti_rahma", "siti@nusantara.id", "KatasandiPengguna456!", "pengguna")
+    user : peta = hasilRegUser["pengguna"]
+    tampilkan("    Pengguna biasa terdaftar dengan peran:", user["role"])
+
+    // 5. Proses Login (Autentikasi dengan Anti-Enumeration & Verifikasi Waktu Konstan)
+    tampilkan("[5] Mencoba login dengan budi_santoso...")
+    hasilLogin : peta = layanan.masuk("budi_santoso", "NusantaraAman123!")
+    tokenSesi : teks = hasilLogin["token"]
+    tampilkan("    Login BERHASIL!")
+    tampilkan("    Token Sesi CSPRNG:", tokenSesi)
+
+    // 6. Validasi Sesi Aktif
+    tampilkan("[6] Memvalidasi sesi yang aktif...")
+    sesiAktif : peta = layanan.validasiSesi(tokenSesi)
+    tampilkan("    Sesi aktif terverifikasi untuk pengguna_id:", sesiAktif["pengguna_id"])
+
+    // 7. Pemeriksaan Hak Akses (RBAC)
+    tampilkan("[7] Menguji Role-Based Access Control (RBAC)...")
+    penggunaMasuk : peta = hasilLogin["pengguna"]
+    apakahAdmin : logika = auth.apakahAdmin(penggunaMasuk)
+    jika apakahAdmin maka
+        tampilkan("    Verifikasi: budi_santoso memiliki hak akses ADMINISTRATOR.")
+    selain
+        tampilkan("    Verifikasi: bukan admin.")
+    akhir
+
+    // 8. Rotasi Sesi (Perlindungan Session Fixation)
+    tampilkan("[8] Melakukan rotasi sesi untuk keamanan...")
+    sesiBaru : peta = layanan.rotasiSesi(tokenSesi)
+    tampilkan("    Token sesi baru setelah rotasi:", sesiBaru["token"])
+
+    // 9. Keluar (Logout & Invalidation Sesi)
+    tampilkan("[9] Logout dan hancurkan sesi...")
+    layanan.keluar(sesiBaru["token"])
+    tampilkan("    Sesi berhasil dihancurkan dari database.")
+
+    tampilkan("=== SEMUA ALUR AUTENTIKASI DAN OTORISASI BERJALAN DENGAN AMAN ===")
+selesai

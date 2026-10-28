@@ -75,54 +75,54 @@ export class AplikasiWeb {
     return this;
   }
 
-  public rute(metode: MetodeHTTP | 'SEMUA', pola: string, penangan: PenanganRute): this {
-    this.router.daftarkan(metode, pola, penangan);
+  public rute(metode: MetodeHTTP | 'SEMUA', pola: string, penangan: PenanganRute, ...middleware: MiddlewareWeb[]): this {
+    this.router.daftarkan(metode, pola, penangan, middleware);
     return this;
   }
 
   // Metode Penjaluran Bahasa Indonesia & Standar
-  public dapatkan(pola: string, penangan: PenanganRute): this {
-    this.router.get(pola, penangan);
+  public dapatkan(pola: string, penangan: PenanganRute, ...middleware: MiddlewareWeb[]): this {
+    this.router.get(pola, penangan, ...middleware);
     return this;
   }
-  public get(pola: string, penangan: PenanganRute): this {
-    return this.dapatkan(pola, penangan);
+  public get(pola: string, penangan: PenanganRute, ...middleware: MiddlewareWeb[]): this {
+    return this.dapatkan(pola, penangan, ...middleware);
   }
 
-  public kirimkan(pola: string, penangan: PenanganRute): this {
-    this.router.post(pola, penangan);
+  public kirimkan(pola: string, penangan: PenanganRute, ...middleware: MiddlewareWeb[]): this {
+    this.router.post(pola, penangan, ...middleware);
     return this;
   }
-  public post(pola: string, penangan: PenanganRute): this {
-    return this.kirimkan(pola, penangan);
+  public post(pola: string, penangan: PenanganRute, ...middleware: MiddlewareWeb[]): this {
+    return this.kirimkan(pola, penangan, ...middleware);
   }
 
-  public perbarui(pola: string, penangan: PenanganRute): this {
-    this.router.put(pola, penangan);
+  public perbarui(pola: string, penangan: PenanganRute, ...middleware: MiddlewareWeb[]): this {
+    this.router.put(pola, penangan, ...middleware);
     return this;
   }
-  public put(pola: string, penangan: PenanganRute): this {
-    return this.perbarui(pola, penangan);
+  public put(pola: string, penangan: PenanganRute, ...middleware: MiddlewareWeb[]): this {
+    return this.perbarui(pola, penangan, ...middleware);
   }
 
-  public tambal(pola: string, penangan: PenanganRute): this {
-    this.router.patch(pola, penangan);
+  public tambal(pola: string, penangan: PenanganRute, ...middleware: MiddlewareWeb[]): this {
+    this.router.patch(pola, penangan, ...middleware);
     return this;
   }
-  public patch(pola: string, penangan: PenanganRute): this {
-    return this.tambal(pola, penangan);
+  public patch(pola: string, penangan: PenanganRute, ...middleware: MiddlewareWeb[]): this {
+    return this.tambal(pola, penangan, ...middleware);
   }
 
-  public hapus(pola: string, penangan: PenanganRute): this {
-    this.router.delete(pola, penangan);
+  public hapus(pola: string, penangan: PenanganRute, ...middleware: MiddlewareWeb[]): this {
+    this.router.delete(pola, penangan, ...middleware);
     return this;
   }
-  public delete(pola: string, penangan: PenanganRute): this {
-    return this.hapus(pola, penangan);
+  public delete(pola: string, penangan: PenanganRute, ...middleware: MiddlewareWeb[]): this {
+    return this.hapus(pola, penangan, ...middleware);
   }
 
-  public semua(pola: string, penangan: PenanganRute): this {
-    this.router.semua(pola, penangan);
+  public semua(pola: string, penangan: PenanganRute, ...middleware: MiddlewareWeb[]): this {
+    this.router.semua(pola, penangan, ...middleware);
     return this;
   }
 
@@ -271,11 +271,12 @@ export class AplikasiWeb {
       await jalankanBerikutnya();
     } catch (err: any) {
       if (!res.sudahTerkirim) {
-        const status = err instanceof GalatWeb ? err.kodeHTTP : 500;
+        const status = err.kodeHTTP ?? (err instanceof GalatWeb ? err.kodeHTTP : 500);
+        const jenisGalat = err.jenis ?? (err instanceof GalatWeb ? err.jenis : 'SERVER_GAGAL');
         res.status(status).json(
           {
             sukses: false,
-            galat: err instanceof GalatWeb ? err.jenis : 'SERVER_GAGAL',
+            galat: jenisGalat,
             pesan: err.message || 'Terjadi kesalahan internal pada server.',
           },
           status

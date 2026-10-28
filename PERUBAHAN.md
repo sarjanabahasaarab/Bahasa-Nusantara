@@ -4,6 +4,55 @@ Seluruh perubahan penting pada proyek bahasa pemrograman NUSANTARA dicatat dalam
 
 Format penomoran versi mengacu pada **Semantic Versioning** (`vMAJOR.MINOR.PATCH`). Pada masa pengembangan awal, versi minor mencerminkan tahapan fase roadmap (misal `v0.1.0` untuk Phase 1, `v0.2.0` untuk Phase 2, `v0.3.0` untuk Phase 3, `v0.4.0` untuk Phase 4, `v0.5.0` untuk Phase 5, `v0.6.0` untuk Phase 6, `v0.7.0` untuk Phase 7, `v0.8.0` untuk Phase 8, `v0.9.0` untuk Phase 9, `v0.10.0` untuk Phase 10).
 
+## [v0.31.0] — 2026-10-28
+### Phase 31: Nusantara Authentication, Session & Access Control
+
+Fase ini mengimplementasikan fondasi autentikasi, manajemen sesi berbasis CSPRNG, proteksi brute-force, kontrol akses berbasis peran (RBAC), serta proteksi CSRF untuk aplikasi web dan REST API bahasa pemrograman NUSANTARA.
+
+#### Ditambahkan:
+- **Subsistem Autentikasi & Otorisasi (`src/autentikasi/`):**
+  - `src/autentikasi/jenis.ts`: Definisi antarmuka `Pengguna`, `Sesi`, `OpsiPasswordPolicy`, `OpsiSesi`, `OpsiBruteForce`, `GalatAutentikasi`.
+  - `src/autentikasi/password.ts`: Implementasi `PengelolaPassword` berbasis **Scrypt KDF** (RFC 7914, N=16384, r=8, p=1), salt 16-byte CSPRNG, dan verifikasi waktu konstan `crypto.timingSafeEqual`.
+  - `src/autentikasi/pengguna.ts`: Repositori pengguna `RepositoriPengguna` dengan query SQL berparameter, indeks unik cepat, dan pembersihan profil publik aman.
+  - `src/autentikasi/sesi.ts`: Pengelola sesi `PengelolaSesi` dengan token 32-byte CSPRNG, penyimpanan database ber-hash SHA-256 (`token_hash`), kedaluwarsa absolut (7 hari), idle timeout (2 jam), dan rotasi sesi (*session fixation protection*).
+  - `src/autentikasi/rbac.ts`: Mesin kontrol akses `ManajerRBAC` dengan peran bawaan (`pengguna`, `editor`, `admin`), izin hierarkis berbasis namespace, dan pencocokan wildcard (`artikel:*`, `*`).
+  - `src/autentikasi/csrf.ts`: Generator dan middleware proteksi CSRF dengan validasi waktu konstan pada metode mutasi HTTP (`POST`, `PUT`, `PATCH`, `DELETE`).
+  - `src/autentikasi/layanan.ts`: Orkestrator terpadu `LayananAutentikasi` yang menyediakan registrasi aman, login anti-enumeration dengan dummy verification latensi setara, penguncian brute-force otomatis, validasi sesi, rotasi sesi, serta penggantian password.
+  - `src/autentikasi/middleware.ts`: Middleware framework web: `buatMiddlewareWajibAutentikasi`, `buatMiddlewareWajibPeran`, `buatMiddlewareWajibIzin`, `buatMiddlewareSesi`, `buatMiddlewareCSRF`.
+- **Integrasi Pustaka Standar (`src/stdlib/autentikasi.ts`):**
+  - Modul standar resmi `autentikasi` (alias: `auth`, `std:autentikasi`, `std:auth`).
+  - Fungsi modul: `hashPassword`, `verifikasiPassword`, `buatLayanan`, `apakahTerautentikasi`, `dapatkanPenggunaSaatIni`, `apakahAdmin`.
+  - Registrasi simbol ke `KATALOG_MODUL_STANDAR`, `DAFTAR_MODUL_STANDAR_FASE31`, dan `DAFTAR_SEMUA_MODUL_STANDAR`.
+- **Contoh Aplikasi & Pengujian:**
+  - `contoh/auth/aplikasi.nusantara` & `contoh/auth/README.md`.
+  - `pengujian/autentikasi/uji_autentikasi_fase31.ts`: 27 skenario uji komprehensif (100% Lulus, 0 Gagal).
+- **Dokumentasi Lengkap:**
+  - `docs/referensi/authentication.md`
+  - `docs/panduan/membuat-login.md`
+  - `docs/panduan/session.md`
+  - `docs/panduan/authorization.md`
+  - `docs/pengembang/authentication-architecture.md`
+
+---
+
+## [v0.30.0] — 2026-10-27
+### Phase 30: Web Application Framework NUSANTARA
+Implementasi fondasi web application framework resmi (modul `web` dan `http`), server HTTP adapter, router dinamis dengan parameter `:id`, mesin template aman Anti-XSS, middleware pipeline, dan REST API generator.
+
+---
+
+## [v0.29.0] — 2026-10-27
+### Phase 29: Database API & Data Access NUSANTARA
+Implementasi antarmuka akses basis data relasional SQLite terpadu berbasis `node:sqlite` (modul `basisdata`), prepared statement, parameter binding, dan manajemen transaksi ACID.
+
+---
+
+## [v0.28.0] — 2026-10-26
+### Phase 28: Nusantara Standard Library Expansion
+Implementasi 6 modul standar ekspansi: `kripto`, `kompresi`, `http_klien`, `validasi`, `berkas_ekspansi`, dan `proses_ekspansi`.
+
+---
+
 ## [v0.27.0] — 2026-10-26
 ### Phase 27: Nusantara Package Ecosystem & Dependency Management
 

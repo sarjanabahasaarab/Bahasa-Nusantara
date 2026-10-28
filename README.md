@@ -2,15 +2,15 @@
 
 > **Bahasa Pemrograman 100% Bahasa Indonesia untuk Komputasi Modern, Terbuka, dan Berkelanjutan.**
 
-[![Status](https://img.shields.io/badge/status-fase_27:_package_ecosystem_&_dependency_management-blue.svg)](ROADMAP.md)
-[![Versi](https://img.shields.io/badge/versi-v0.27.0-emerald.svg)](PERUBAHAN.md)
+[![Status](https://img.shields.io/badge/status-fase_31:_authentication_session_&_access_control-blue.svg)](ROADMAP.md)
+[![Versi](https://img.shields.io/badge/versi-v0.31.0-emerald.svg)](PERUBAHAN.md)
 [![CI/CD](https://img.shields.io/badge/CI%2FCD-passing-brightgreen.svg)](.github/workflows/ci.yml)
 [![Lisensi](https://img.shields.io/badge/lisensi-Apache_2.0-blue.svg)](LISENSI)
 [![Tata Bahasa](https://img.shields.io/badge/grammar-EBNF_ISO--14977-purple.svg)](dokumentasi/GRAMMAR-EBNF.md)
-[![Testing](https://img.shields.io/badge/testing-23_suites_lulus_100%25-green.svg)](pengujian/README.md)
-[![Ekosistem](https://img.shields.io/badge/ekosistem-package_cache_&_lockfile-teal.svg)](docs/referensi/dependency-management.md)
-[![IDE](https://img.shields.io/badge/IDE-cross--platform_studio-indigo.svg)](docs/ide/getting-started.md)
-[![Build](https://img.shields.io/badge/build-cross--platform_dist-teal.svg)](docs/referensi/build-system.md)
+[![Testing](https://img.shields.io/badge/testing-27_suites_lulus_100%25-green.svg)](pengujian/README.md)
+[![Autentikasi](https://img.shields.io/badge/keamanan-scrypt_&_rbac-red.svg)](docs/referensi/authentication.md)
+[![Web](https://img.shields.io/badge/web-framework_&_rest_api-cyan.svg)](docs/referensi/web-framework.md)
+[![Database](https://img.shields.io/badge/database-sqlite_native-amber.svg)](docs/referensi/database.md)
 
 ---
 
@@ -22,16 +22,14 @@ NUSANTARA bukan sekadar penerjemah sintaksis bahasa asing, melainkan ikhtiar man
 
 - **Ekstensi Berkas Resmi:** `.nusantara`
 - **Lisensi:** [Apache License 2.0](LISENSI)
-- **Status Saat Ini:** **Phase 27: Nusantara Package Ecosystem & Dependency Management (Milestone v0.27.0).**
-- **Dokumentasi Manajemen Dependensi:** [docs/referensi/dependency-management.md](docs/referensi/dependency-management.md) & [docs/pengembang/package-cache.md](docs/pengembang/package-cache.md)
-- **Dokumentasi IDE & DevTools:** [docs/ide/getting-started.md](docs/ide/getting-started.md) & [docs/pengembang/ide-architecture.md](docs/pengembang/ide-architecture.md)
-- **Dokumentasi Debugger & Profiler:** [docs/referensi/debugger.md](docs/referensi/debugger.md) & [docs/pengembang/debugger-profiler.md](docs/pengembang/debugger-profiler.md)
-- **Dokumentasi CI/CD:** [docs/referensi/ci-cd.md](docs/referensi/ci-cd.md) & [docs/pengembang/github-workflows.md](docs/pengembang/github-workflows.md)
-- **Dokumentasi Build System:** [docs/referensi/build-system.md](docs/referensi/build-system.md) & [docs/pengembang/build.md](docs/pengembang/build.md)
-- **Dokumentasi Distribusi:** [docs/referensi/distribution.md](docs/referensi/distribution.md)
-- **Dokumentasi Paket & Registri:** [docs/referensi/package.md](docs/referensi/package.md) & [docs/referensi/registry.md](docs/referensi/registry.md)
+- **Status Saat Ini:** **Phase 31: Nusantara Authentication, Session & Access Control (Milestone v0.31.0).**
+- **Dokumentasi Autentikasi & Sesi:** [docs/referensi/authentication.md](docs/referensi/authentication.md) & [docs/pengembang/authentication-architecture.md](docs/pengembang/authentication-architecture.md)
+- **Panduan Login & Registrasi:** [docs/panduan/membuat-login.md](docs/panduan/membuat-login.md) & [docs/panduan/session.md](docs/panduan/session.md)
+- **Panduan Otorisasi (RBAC):** [docs/panduan/authorization.md](docs/panduan/authorization.md)
+- **Dokumentasi Web Framework:** [docs/referensi/web-framework.md](docs/referensi/web-framework.md) & [docs/panduan/membuat-rest-api.md](docs/panduan/membuat-rest-api.md)
+- **Dokumentasi Database:** [docs/referensi/database.md](docs/referensi/database.md)
+- **Dokumentasi Toolchain & Linter:** [docs/referensi/toolchain.md](docs/referensi/toolchain.md)
 - **Dokumentasi Testing:** [docs/referensi/testing.md](docs/referensi/testing.md)
-- **Dokumentasi Language Server:** [docs/referensi/language-server.md](docs/referensi/language-server.md)
 - **Tata Bahasa Formal:** [GRAMMAR-EBNF.md](dokumentasi/GRAMMAR-EBNF.md)
 
 ---

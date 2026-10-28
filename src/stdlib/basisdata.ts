@@ -399,7 +399,9 @@ export function buatObjekKoneksiNusantara(adaptor: AdaptorSQLite): NilaiPeta {
   // Akses internal ke instance adaptor untuk utilitas transaksi
   (mapKoneksi as any).__adaptor = adaptor;
 
-  return buatPeta(mapKoneksi);
+  const resPeta = buatPeta(mapKoneksi);
+  (resPeta as any).__adaptor = adaptor;
+  return resPeta;
 }
 
 /**

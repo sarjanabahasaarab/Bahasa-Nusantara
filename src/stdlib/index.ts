@@ -24,6 +24,7 @@ import { simbolEksporJaringan, buatEksporJaringan, tetapkanPengirimHTTPMock } fr
 import { simbolEksporKripto, buatEksporKripto } from './kripto';
 import { simbolEksporBasisdata, buatEksporBasisdata } from './basisdata';
 import { simbolEksporWeb, buatEksporWeb } from './web';
+import { simbolEksporAutentikasi, buatEksporAutentikasi } from './autentikasi';
 
 export * from './teks';
 export * from './matematika';
@@ -42,6 +43,7 @@ export * from './jaringan';
 export * from './kripto';
 export * from './basisdata';
 export * from './web';
+export * from './autentikasi';
 
 export interface MetadataModulStandar {
   nama: string;
@@ -168,6 +170,18 @@ export const KATALOG_MODUL_STANDAR: Record<string, MetadataModulStandar> = {
     simbolEkspor: simbolEksporWeb,
     pabrikEkspor: () => buatEksporWeb(),
   },
+  autentikasi: {
+    nama: 'autentikasi',
+    deskripsi: 'Autentikasi, manajemen sesi, keamanan password (Scrypt), RBAC, CSRF, dan kontrol akses NUSANTARA.',
+    simbolEkspor: simbolEksporAutentikasi,
+    pabrikEkspor: () => buatEksporAutentikasi(),
+  },
+  auth: {
+    nama: 'auth',
+    deskripsi: 'Alias resmi modul autentikasi untuk manajemen akun pengguna, sesi, dan otorisasi.',
+    simbolEkspor: simbolEksporAutentikasi,
+    pabrikEkspor: () => buatEksporAutentikasi(),
+  },
 };
 
 /**
@@ -253,11 +267,17 @@ export const DAFTAR_MODUL_STANDAR_FASE30 = [
   'http',
 ];
 
+export const DAFTAR_MODUL_STANDAR_FASE31 = [
+  'autentikasi',
+  'auth',
+];
+
 export const DAFTAR_SEMUA_MODUL_STANDAR = [
   ...DAFTAR_MODUL_STANDAR_INTI,
   ...DAFTAR_MODUL_STANDAR_FASE28,
   ...DAFTAR_MODUL_STANDAR_FASE29,
   ...DAFTAR_MODUL_STANDAR_FASE30,
+  ...DAFTAR_MODUL_STANDAR_FASE31,
 ];
 
 /**
