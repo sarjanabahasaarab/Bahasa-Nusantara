@@ -25,6 +25,7 @@ import { simbolEksporKripto, buatEksporKripto } from './kripto';
 import { simbolEksporBasisdata, buatEksporBasisdata } from './basisdata';
 import { simbolEksporWeb, buatEksporWeb } from './web';
 import { simbolEksporAutentikasi, buatEksporAutentikasi } from './autentikasi';
+import { simbolEksporORM, buatEksporORM } from './orm';
 
 export * from './teks';
 export * from './matematika';
@@ -44,6 +45,7 @@ export * from './kripto';
 export * from './basisdata';
 export * from './web';
 export * from './autentikasi';
+export * from './orm';
 
 export interface MetadataModulStandar {
   nama: string;
@@ -181,6 +183,24 @@ export const KATALOG_MODUL_STANDAR: Record<string, MetadataModulStandar> = {
     deskripsi: 'Alias resmi modul autentikasi untuk manajemen akun pengguna, sesi, dan otorisasi.',
     simbolEkspor: simbolEksporAutentikasi,
     pabrikEkspor: () => buatEksporAutentikasi(),
+  },
+  orm: {
+    nama: 'orm',
+    deskripsi: 'Object-Relational Mapping (ORM), Query Builder, Model Database, dan Skema Migrasi NUSANTARA.',
+    simbolEkspor: simbolEksporORM,
+    pabrikEkspor: () => buatEksporORM(),
+  },
+  migrasi: {
+    nama: 'migrasi',
+    deskripsi: 'Alias resmi modul orm untuk migrasi dan skema basis data NUSANTARA.',
+    simbolEkspor: simbolEksporORM,
+    pabrikEkspor: () => buatEksporORM(),
+  },
+  migration: {
+    nama: 'migration',
+    deskripsi: 'Alias resmi modul orm untuk migrasi skema basis data.',
+    simbolEkspor: simbolEksporORM,
+    pabrikEkspor: () => buatEksporORM(),
   },
 };
 

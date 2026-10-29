@@ -1,6 +1,6 @@
 {
   "name": "NUSANTARA - Bahasa Pemrograman Indonesia",
-  "description": "Authentication, Session & Access Control, Web Application Framework, Database API & Data Access, Standard Library Expansion, Package Ecosystem, Developer Tools, Debugger, Profiler, CI/CD, Build System, dan Toolchain bahasa pemrograman NUSANTARA v0.31.0.",
+  "description": "ORM & Database Migration, Authentication, Session & Access Control, Web Application Framework, Database API & Data Access, Standard Library Expansion, Package Ecosystem, Developer Tools, Debugger, Profiler, CI/CD, Build System, dan Toolchain bahasa pemrograman NUSANTARA v0.32.0.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

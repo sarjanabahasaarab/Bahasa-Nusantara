@@ -7,6 +7,7 @@ export interface PembacaBerkas {
   apakahAda(jalur: string): boolean;
   baca(jalur: string): string;
   tulis?(jalur: string, konten: string): void;
+  tulisBerkas?(jalur: string, konten: string): void;
   daftarDirektori?(jalur: string): string[];
   apakahDirektori?(jalur: string): boolean;
   jalurAbsolut(jalur: string): string;

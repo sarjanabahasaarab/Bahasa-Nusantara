@@ -29,6 +29,9 @@ import {
 import { MesinBuild, PlatformTarget } from '../build';
 import { MesinCI, ValidatorAlurKerjaGitHub } from '../cicd';
 import { PelariDebuggerCLI, PelariProfilerCLI } from '../debugger';
+import { AdaptorSQLite } from '../database/sqlite';
+import { PelariMigrasi } from '../migration/migrationRunner';
+import { PelariSeeder } from '../seeder/seederRunner';
 
 export interface OpsiCLI {
   pengelola?: PengelolaPaket;
@@ -395,6 +398,20 @@ export class NusantaraCLI {
             markdown: args.includes('--markdown'),
             simulasikanRilis: args.includes('--rilis') || args.includes('--release'),
             persetujuanRilis: args.includes('--setujui') || args.includes('--confirm'),
+          });
+        }
+
+        case 'db':
+        case 'database':
+        case 'basisdata':
+        case 'migrasi':
+        case 'migration': {
+          const subPerintah = argumenTambahan[0]?.toLowerCase();
+          const sisaArgumen = argumenTambahan.slice(1);
+          return this.eksekusiDB(subPerintah, sisaArgumen, {
+            json: opsiJSON,
+            warna: opsiWarna,
+            verbose: opsiVerbose,
           });
         }
 
@@ -1495,6 +1512,170 @@ Penggunaan Perintah 'nusantara paket':
   }
 
   /**
+   * Eksekusi perintah ORM, Skema & Migrasi Database (Phase 32).
+   */
+  private eksekusiDB(
+    subPerintah: string | undefined,
+    sisaArgumen: string[],
+    opsi: { json?: boolean; warna?: boolean; verbose?: boolean }
+  ): number {
+    const dbPath = this.pembaca.gabungJalur(this.pengelola.dapatkanDirektoriProyek(), 'data.sqlite');
+    const adaptor = new AdaptorSQLite();
+    adaptor.buka({ jalur: dbPath });
+
+    const pelari = new PelariMigrasi(adaptor);
+
+    // Daftarkan migrasi default proyek jika ada
+    pelari.daftarkan({
+      nama: '001_buat_tabel_pengguna_awal',
+      deskripsi: 'Membuat tabel pengguna resmi dan indeks email',
+      naik: (skema) => {
+        skema.buatTabel('pengguna', (t) => {
+          t.id();
+          t.teks('username', 50, { unique: true });
+          t.teks('email', 100, { unique: true });
+          t.teks('password_hash', 255);
+          t.teks('role', 20, { default: 'pengguna' });
+          t.teks('status', 20, { default: 'aktif' });
+          t.stempelWaktu();
+        });
+      },
+      turun: (skema) => {
+        skema.hapusTabel('pengguna');
+      },
+    });
+
+    switch (subPerintah) {
+      case 'status': {
+        const statusList = pelari.status();
+        if (opsi.json) {
+          this.log(JSON.stringify(statusList, null, 2));
+          return 0;
+        }
+        this.log('Status Migrasi Basis Data NUSANTARA:');
+        this.log('------------------------------------------------------------');
+        this.log(`  ${'Nama Migrasi'.padEnd(35)} ${'Status'.padEnd(12)} ${'Batch'}`);
+        this.log('------------------------------------------------------------');
+        for (const s of statusList) {
+          const badge = s.status === 'diterapkan' ? '[DITERAPKAN]' : '[TERTUNDA]';
+          const b = s.batch !== null ? `Batch ${s.batch}` : '-';
+          this.log(`  ${s.nama.padEnd(35)} ${badge.padEnd(12)} ${b}`);
+        }
+        return 0;
+      }
+
+      case 'migrasi':
+      case 'migrate': {
+        try {
+          const res = pelari.migrasi();
+          if (opsi.json) {
+            this.log(JSON.stringify(res, null, 2));
+            return 0;
+          }
+          if (res.berhasil.length === 0) {
+            this.log('[i] Tidak ada migrasi baru yang perlu diterapkan.');
+            return 0;
+          }
+          this.log(`[✓ SUKSES] Berhasil menerapkan ${res.berhasil.length} migrasi (Batch ${res.batch}):`);
+          for (const m of res.berhasil) {
+            this.log(`  - ${m}`);
+          }
+          return 0;
+        } catch (err: any) {
+          this.error(`[✗ GAGAL] Migrasi gagal: ${err.message}`);
+          return 1;
+        }
+      }
+
+      case 'rollback': {
+        try {
+          const res = pelari.rollback();
+          if (opsi.json) {
+            this.log(JSON.stringify(res, null, 2));
+            return 0;
+          }
+          if (res.dibatalkan.length === 0) {
+            this.log('[i] Tidak ada migrasi yang dibatalkan.');
+            return 0;
+          }
+          this.log(`[✓ SUKSES] Berhasil membatalkan ${res.dibatalkan.length} migrasi (Batch ${res.batch}):`);
+          for (const m of res.dibatalkan) {
+            this.log(`  - ${m}`);
+          }
+          return 0;
+        } catch (err: any) {
+          this.error(`[✗ GAGAL] Rollback gagal: ${err.message}`);
+          return 1;
+        }
+      }
+
+      case 'seed': {
+        const pelariSeeder = new PelariSeeder(adaptor);
+        pelariSeeder.daftarkan({
+          nama: 'PenggunaAwalSeeder',
+          deskripsi: 'Memasukkan data contoh akun awal',
+          jalankan: (db) => {
+            const row = db.ambilSatu('SELECT id FROM "pengguna" WHERE "username" = ?', ['admin']);
+            if (!row) {
+              db.eksekusi(
+                'INSERT INTO "pengguna" ("username", "email", "password_hash", "role", "status") VALUES (?, ?, ?, ?, ?)',
+                ['admin', 'admin@nusantara.id', 'scrypt_seed_hash', 'admin', 'aktif']
+              );
+            }
+          },
+        });
+
+        try {
+          const targetSeeder = sisaArgumen[0];
+          const hasil = pelariSeeder.jalankan(targetSeeder);
+          if (opsi.json) {
+            this.log(JSON.stringify(hasil, null, 2));
+            return 0;
+          }
+          this.log(`[✓ SUKSES] Eksekusi seeder database berhasil:`);
+          for (const h of hasil) {
+            this.log(`  - ${h.nama} (${h.durasiMs} ms)`);
+          }
+          return 0;
+        } catch (err: any) {
+          this.error(`[✗ GAGAL] Seeder gagal: ${err.message}`);
+          return 1;
+        }
+      }
+
+      case 'buat-migrasi':
+      case 'make-migration': {
+        const nama = sisaArgumen[0];
+        if (!nama) {
+          this.error("Perintah 'nusantara db buat-migrasi' memerlukan argumen <nama-migrasi>.");
+          return 1;
+        }
+        const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+        const namaBerkas = `${stamp}_${nama}.ts`;
+        const jalur = this.pembaca.gabungJalur(this.pengelola.dapatkanDirektoriProyek(), 'migrasi', namaBerkas);
+        const template = `// Migrasi Database NUSANTARA: ${nama}\nexport default {\n  nama: "${stamp}_${nama}",\n  naik(skema, db) {\n    // DDL Naik\n  },\n  turun(skema, db) {\n    // DDL Turun\n  }\n};\n`;
+        if (this.pembaca.tulis) {
+          this.pembaca.tulis(jalur, template);
+        } else if (this.pembaca.tulisBerkas) {
+          this.pembaca.tulisBerkas(jalur, template);
+        }
+        this.log(`[✓ SUKSES] Berkas migrasi dibuat: ${jalur}`);
+        return 0;
+      }
+
+      default: {
+        this.log(`Perintah Manajemen Basis Data & Migrasi NUSANTARA (Phase 32):
+  nusantara db status               Menampilkan status seluruh migrasi (diterapkan/tertunda)
+  nusantara db migrasi, migrate     Menerapkan seluruh migrasi yang tertunda
+  nusantara db rollback             Membatalkan batch migrasi terakhir
+  nusantara db seed [<nama>]        Menjalankan seeder data awal
+  nusantara db buat-migrasi <nama>  Membuat templat berkas migrasi baru`);
+        return 0;
+      }
+    }
+  }
+
+  /**
    * Eksekusi sesi penelusuran (debugging) interaktif & terarah (Phase 25).
    */
   private eksekusiDebug(
@@ -1572,6 +1753,13 @@ Antarmuka Baris Perintah (CLI), Debugger & Profiler, CI/CD & Automated Release, 
 Penggunaan:
   nusantara <perintah> [argumen...]
   nusantara <berkas.nusantara> [argumen...]
+
+Perintah ORM, Basis Data & Migrasi Skema (Phase 32):
+  db status              Menampilkan status seluruh migrasi (diterapkan vs tertunda)
+  db migrasi, migrate    Menjalankan seluruh migrasi skema yang belum diterapkan
+  db rollback            Membatalkan batch migrasi terakhir
+  db seed [<nama>]       Menjalankan seeder data awal aplikasi
+  db buat-migrasi <nama> Membuat berkas templat migrasi skema baru
 
 Perintah Debugger & Profiler Runtime (Phase 25):
   debug <berkas> [--perintah="<cmds>"]   Menjalankan sesi penelusuran program interaktif / batch
