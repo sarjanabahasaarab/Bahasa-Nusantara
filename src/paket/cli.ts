@@ -32,6 +32,7 @@ import { PelariDebuggerCLI, PelariProfilerCLI } from '../debugger';
 import { AdaptorSQLite } from '../database/sqlite';
 import { PelariMigrasi } from '../migration/migrationRunner';
 import { PelariSeeder } from '../seeder/seederRunner';
+import { ProjectGenerator, ValidatorProyek } from '../generator';
 
 export interface OpsiCLI {
   pengelola?: PengelolaPaket;
@@ -70,10 +71,16 @@ export class NusantaraCLI {
         : null) ||
       (typeof window !== 'undefined' ? new PembacaBerkasMemori() : new PembacaBerkasNode());
 
+    const dirAkarProyek =
+      opsiFinal.direktoriProyek ||
+      (pembacaTerpilih && (pembacaTerpilih as any).direktoriDasar) ||
+      (typeof process !== 'undefined' && process.cwd ? process.cwd() : '/proyek');
+
     this.pengelola =
       opsiFinal.pengelola ||
       new PengelolaPaket({
         ...opsiFinal,
+        direktoriProyek: dirAkarProyek,
         pembacaBerkas: pembacaTerpilih,
       });
     this.pembaca = pembacaTerpilih;
@@ -150,6 +157,11 @@ export class NusantaraCLI {
         perintah &&
         (perintah.endsWith('.nusantara') ||
           (![
+            'new',
+            'baru',
+            'templates',
+            'templat',
+            'template',
             'buat',
             'inisialisasi',
             'pasang',
@@ -443,6 +455,26 @@ export class NusantaraCLI {
             json: opsiJSON,
             warna: opsiWarna,
             tanpaUji: true,
+          });
+        }
+
+        case 'new':
+        case 'baru': {
+          return this.eksekusiNew(argumenTambahan, args, {
+            json: opsiJSON,
+            warna: opsiWarna,
+            debug: opsiDebug,
+          });
+        }
+
+        case 'templates':
+        case 'templat':
+        case 'template': {
+          const sub = argumenTambahan[0]?.toLowerCase();
+          const targetTemplate = argumenTambahan[1];
+          return this.eksekusiTemplates(sub, targetTemplate, {
+            json: opsiJSON,
+            warna: opsiWarna,
           });
         }
 
@@ -851,6 +883,31 @@ export class NusantaraCLI {
 
     // Kasus 2: Pemeriksaan proyek
     const targetDir = target || '.';
+
+    // Validasi manifest dan entry point untuk proyek NUSANTARA
+    const validatorProyek = new ValidatorProyek(this.pembaca);
+    const validasiStruktur = validatorProyek.periksa(targetDir);
+
+    if (!validasiStruktur.adaManifest) {
+      const pesan = `Kesalahan: Direktori '${targetDir}' bukan proyek NUSANTARA yang valid (berkas 'nusantara.toml' atau 'nusantara-project.json' tidak ditemukan).`;
+      if (opsi.json) {
+        this.error(JSON.stringify({ status: 'gagal', pesan, valid: false }, null, 2));
+      } else {
+        this.error(pesan);
+      }
+      return 1;
+    }
+
+    if (!validasiStruktur.adaEntryPoint) {
+      const pesan = `Kesalahan: Proyek pada '${targetDir}' tidak memiliki berkas entry point yang valid ('src/utama.nusantara' atau 'src/lib.nusantara').`;
+      if (opsi.json) {
+        this.error(JSON.stringify({ status: 'gagal', pesan, valid: false }, null, 2));
+      } else {
+        this.error(pesan);
+      }
+      return 1;
+    }
+
     const hasilProyek = pemeriksa.periksaProyek(targetDir);
 
     if (!hasilProyek.sukses || hasilProyek.galat.length > 0) {
@@ -1519,9 +1576,19 @@ Penggunaan Perintah 'nusantara paket':
     sisaArgumen: string[],
     opsi: { json?: boolean; warna?: boolean; verbose?: boolean }
   ): number {
-    const dbPath = this.pembaca.gabungJalur(this.pengelola.dapatkanDirektoriProyek(), 'data.sqlite');
-    const adaptor = new AdaptorSQLite();
-    adaptor.buka({ jalur: dbPath });
+    let adaptor: AdaptorSQLite;
+    if (typeof (this.pembaca as any).dapatkanSemuaBerkas === 'function') {
+      if (!(this.pembaca as any).__adaptorDbCLI) {
+        const ad = new AdaptorSQLite();
+        ad.buka({ jalur: ':memory:' });
+        (this.pembaca as any).__adaptorDbCLI = ad;
+      }
+      adaptor = (this.pembaca as any).__adaptorDbCLI;
+    } else {
+      const dbPath = this.pembaca.gabungJalur(this.pengelola.dapatkanDirektoriProyek(), 'data.sqlite');
+      adaptor = new AdaptorSQLite();
+      adaptor.buka({ jalur: dbPath });
+    }
 
     const pelari = new PelariMigrasi(adaptor);
 
@@ -1745,14 +1812,175 @@ Penggunaan Perintah 'nusantara paket':
     return hasil.kodeKeluar;
   }
 
+  /**
+   * Eksekusi pembuatan proyek baru melalui CLI Application Generator (Phase 33).
+   */
+  private eksekusiNew(
+    argumenTambahan: string[],
+    argsMentah: string[],
+    opsi: { json?: boolean; warna?: boolean; debug?: boolean }
+  ): number {
+    const namaProyek = argumenTambahan[0];
+    if (!namaProyek || namaProyek.startsWith('-')) {
+      const pesan = "Perintah 'nusantara new' memerlukan argumen <nama-proyek>.\nContoh: nusantara new aplikasi-saya --template basic";
+      this.error(pesan);
+      return 1;
+    }
+
+    // Ekstraksi opsi flag
+    let templateId = 'basic';
+    const idxT = argsMentah.findIndex((a) => a === '--template' || a === '-t');
+    if (idxT !== -1 && argsMentah[idxT + 1] && !argsMentah[idxT + 1].startsWith('-')) {
+      templateId = argsMentah[idxT + 1];
+    }
+
+    let deskripsi: string | undefined;
+    const idxD = argsMentah.findIndex((a) => a === '--deskripsi' || a === '--description');
+    if (idxD !== -1 && argsMentah[idxD + 1] && !argsMentah[idxD + 1].startsWith('-')) {
+      deskripsi = argsMentah[idxD + 1];
+    }
+
+    let penulis: string | undefined;
+    const idxA = argsMentah.findIndex((a) => a === '--penulis' || a === '--author');
+    if (idxA !== -1 && argsMentah[idxA + 1] && !argsMentah[idxA + 1].startsWith('-')) {
+      penulis = argsMentah[idxA + 1];
+    }
+
+    const force = argsMentah.includes('--force') || argsMentah.includes('-f') || argsMentah.includes('--paksa');
+    const nonInteraktif = argsMentah.includes('--no-interactive') || argsMentah.includes('--non-interaktif');
+
+    const generator = new ProjectGenerator(this.pembaca);
+    const hasil = generator.buatProyek({
+      namaProyek,
+      templateId,
+      direktoriBasis: this.pengelola.dapatkanDirektoriProyek(),
+      force,
+      nonInteraktif,
+      deskripsi,
+      penulis,
+    });
+
+    if (!hasil.sukses) {
+      if (opsi.json) {
+        this.error(JSON.stringify(hasil, null, 2));
+      } else {
+        this.error(`[✗ GAGAL] ${hasil.pesan}`);
+      }
+      return 1;
+    }
+
+    if (opsi.json) {
+      this.log(JSON.stringify(hasil, null, 2));
+      return 0;
+    }
+
+    this.log(`\n==================================================`);
+    this.log(`NUSANTARA Project Generator (v${VERSI_NUSANTARA})`);
+    this.log(`==================================================`);
+    this.log(`Nama Proyek : ${hasil.namaProyek}`);
+    this.log(`Template    : ${hasil.templateDigunakan}`);
+    this.log(`Lokasi      : ${hasil.direktoriHasil}`);
+    this.log(`\nBerkas yang dibuat:`);
+    for (const b of hasil.berkasDibuat) {
+      this.log(`  ✓ ${b}`);
+    }
+    this.log(`\n[✓ SUKSES] ${hasil.pesan}`);
+    this.log(`\nLangkah selanjutnya untuk memulai:`);
+    for (const p of hasil.petunjukLangkah) {
+      this.log(`  $ ${p}`);
+    }
+    this.log('');
+    return 0;
+  }
+
+  /**
+   * Menampilkan daftar atau detail template proyek (Phase 33).
+   */
+  private eksekusiTemplates(
+    subPerintah: string | undefined,
+    targetTemplate: string | undefined,
+    opsi: { json?: boolean; warna?: boolean }
+  ): number {
+    const generator = new ProjectGenerator(this.pembaca);
+    const registry = generator.dapatkanRegistry();
+
+    // nusantara template info <nama> / nusantara template periksa <nama>
+    if ((subPerintah === 'info' || subPerintah === 'periksa' || subPerintah === 'detail') && targetTemplate) {
+      const tmpl = registry.dapatkan(targetTemplate);
+      if (!tmpl) {
+        this.error(`Template '${targetTemplate}' tidak ditemukan.`);
+        return 1;
+      }
+
+      if (opsi.json) {
+        this.log(JSON.stringify(tmpl, null, 2));
+        return 0;
+      }
+
+      this.log(`\n==================================================`);
+      this.log(`INFORMASI TEMPLATE: ${tmpl.nama} (${tmpl.id})`);
+      this.log(`==================================================`);
+      this.log(`Kategori       : ${tmpl.kategori}`);
+      this.log(`Deskripsi      : ${tmpl.deskripsi}`);
+      this.log(`Versi Template : ${tmpl.versi}`);
+      this.log(`Min. NUSANTARA : v${tmpl.versiMinimumNusantara}`);
+      this.log(`Status         : ${tmpl.status === 'siap' ? '[✓ SIAP DIGUNAKAN]' : '[TERBATAS]'}`);
+      this.log(`Persyaratan    : ${tmpl.persyaratanRuntime.join(', ') || 'Standar'}`);
+      this.log(`Dependensi     : ${Object.keys(tmpl.dependensi).length > 0 ? JSON.stringify(tmpl.dependensi) : 'Tidak ada'}`);
+      this.log(`\nBerkas yang akan dibuat:`);
+      for (const b of tmpl.berkas) {
+        this.log(`  • ${b.jalur}`);
+      }
+      this.log(`  • nusantara.toml`);
+      this.log(`  • nusantara-project.json`);
+      this.log(`\nPetunjuk Jalankan:`);
+      for (const p of tmpl.petunjukJalankan) {
+        this.log(`  $ ${p}`);
+      }
+      if (tmpl.batasan.length > 0) {
+        this.log(`\nBatasan:`);
+        for (const bat of tmpl.batasan) {
+          this.log(`  ! ${bat}`);
+        }
+      }
+      this.log('');
+      return 0;
+    }
+
+    // List all templates
+    const semua = registry.dapatkanSemua();
+    if (opsi.json) {
+      this.log(JSON.stringify(semua, null, 2));
+      return 0;
+    }
+
+    this.log(`\n==================================================`);
+    this.log(`DAFTAR TEMPLATE PROYEK NUSANTARA (v${VERSI_NUSANTARA})`);
+    this.log(`==================================================`);
+    for (const t of semua) {
+      const statusLabel = t.status === 'siap' ? '[✓ Siap]' : '[Terbatas]';
+      this.log(`• ${t.id.padEnd(10)} ${statusLabel.padEnd(12)} (${t.kategori.padEnd(8)}) : ${t.deskripsi}`);
+    }
+    this.log(`\nGunakan 'nusantara new <nama-proyek> --template <id>' untuk membuat proyek.`);
+    this.log(`Gunakan 'nusantara template info <id>' untuk rincian spesifik template.\n`);
+    return 0;
+  }
+
   private cetakBantuan(): void {
     this.log(`
 Bahasa Pemrograman NUSANTARA (${LABEL_VERSI_NUSANTARA})
-Antarmuka Baris Perintah (CLI), Debugger & Profiler, CI/CD & Automated Release, Build System & Distribution, Package Ecosystem, Testing & LSP
+Antarmuka Baris Perintah (CLI), Project Generator, ORM, Auth, Web Framework, CI/CD, Build & Toolchain
 
 Penggunaan:
   nusantara <perintah> [argumen...]
   nusantara <berkas.nusantara> [argumen...]
+
+Perintah Pembuat Proyek & Generator Aplikasi (Phase 33):
+  new <nama> [--template <id>] [--force] [--no-interactive]
+                         Membuat kerangka proyek baru berdasarkan template terverifikasi
+  templates              Menampilkan daftar template proyek yang tersedia
+  template info <id>     Melihat informasi lengkap berkas dan dependensi template tertentu
+  check, periksa         Memvalidasi manifest, entrypoint, dan integritas proyek
 
 Perintah ORM, Basis Data & Migrasi Skema (Phase 32):
   db status              Menampilkan status seluruh migrasi (diterapkan vs tertunda)
