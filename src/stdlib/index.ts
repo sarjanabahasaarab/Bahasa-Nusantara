@@ -27,6 +27,7 @@ import { simbolEksporWeb, buatEksporWeb } from './web';
 import { simbolEksporAutentikasi, buatEksporAutentikasi } from './autentikasi';
 import { simbolEksporORM, buatEksporORM } from './orm';
 import { simbolEksporRealtime, buatEksporRealtime } from './realtime';
+import { simbolEksporHTTP, buatEksporHTTP } from './http';
 
 export * from './teks';
 export * from './matematika';
@@ -48,6 +49,7 @@ export * from './web';
 export * from './autentikasi';
 export * from './orm';
 export * from './realtime';
+export * from './http';
 
 export interface MetadataModulStandar {
   nama: string;
@@ -168,9 +170,9 @@ export const KATALOG_MODUL_STANDAR: Record<string, MetadataModulStandar> = {
     simbolEkspor: simbolEksporWeb,
     pabrikEkspor: () => buatEksporWeb(),
   },
-  http: {
-    nama: 'http',
-    deskripsi: 'Alias resmi modul web untuk pembangunan aplikasi web dan REST API di NUSANTARA.',
+  serverhttp: {
+    nama: 'serverhttp',
+    deskripsi: 'Alias resmi modul web untuk HTTP web server di NUSANTARA.',
     simbolEkspor: simbolEksporWeb,
     pabrikEkspor: () => buatEksporWeb(),
   },
@@ -227,6 +229,24 @@ export const KATALOG_MODUL_STANDAR: Record<string, MetadataModulStandar> = {
     deskripsi: 'Alias resmi modul realtime untuk background task queue.',
     simbolEkspor: simbolEksporRealtime,
     pabrikEkspor: () => buatEksporRealtime(),
+  },
+  http: {
+    nama: 'http',
+    deskripsi: 'Klien HTTP tangguh, REST API integration, download/upload berkas, retry, cookie jar, dan webhook verification.',
+    simbolEkspor: simbolEksporHTTP,
+    pabrikEkspor: () => buatEksporHTTP(),
+  },
+  klienhttp: {
+    nama: 'klienhttp',
+    deskripsi: 'Alias resmi modul http untuk komunikasi jaringan HTTP/HTTPS.',
+    simbolEkspor: simbolEksporHTTP,
+    pabrikEkspor: () => buatEksporHTTP(),
+  },
+  api: {
+    nama: 'api',
+    deskripsi: 'Alias resmi modul http untuk integrasi REST API dan pagination.',
+    simbolEkspor: simbolEksporHTTP,
+    pabrikEkspor: () => buatEksporHTTP(),
   },
 };
 

@@ -1,6 +1,6 @@
 {
   "name": "NUSANTARA - Bahasa Pemrograman Indonesia",
-  "description": "WebSocket, Real-Time Events, Background Tasks, CLI Application Generator, ORM & Database Migration, Authentication, Session & Access Control, Web Application Framework, Database API, Standard Library, Package Ecosystem, Developer Tools, Debugger, Profiler, CI/CD, Build System, dan Toolchain bahasa pemrograman NUSANTARA v0.34.0.",
+  "description": "HTTP Client, API Integration, Layanan Eksternal, Webhook, WebSocket, Real-Time Events, Background Tasks, CLI Generator, ORM, Autentikasi, Web Framework, dan Toolchain bahasa pemrograman NUSANTARA v0.35.0.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -6,10 +6,10 @@
  * Target Milestone: Phase 25 (v0.25.0)
  */
 
-export const VERSI_NUSANTARA = '0.34.0';
-export const LABEL_VERSI_NUSANTARA = 'v0.34.0';
-export const FASE_TERAKHIR = 34;
-export const NAMA_FASE_TERAKHIR = 'WebSocket, Real-Time Events & Background Tasks';
+export const VERSI_NUSANTARA = '0.35.0';
+export const LABEL_VERSI_NUSANTARA = 'v0.35.0';
+export const FASE_TERAKHIR = 35;
+export const NAMA_FASE_TERAKHIR = 'HTTP Client, API Integration & External Services';
 
 export interface InfoRilisNUSANTARA {
   versi: string;
