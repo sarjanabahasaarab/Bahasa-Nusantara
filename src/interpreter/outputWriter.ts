@@ -23,6 +23,10 @@ export class PenulisOutputBuffer implements OutputWriter {
     return [...this.buffer];
   }
 
+  public ambilOutput(): string {
+    return this.buffer.join('\n');
+  }
+
   public bersihkan(): void {
     this.buffer = [];
   }

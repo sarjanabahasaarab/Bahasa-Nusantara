@@ -117,6 +117,7 @@ export interface OpsiInterpreter {
  * Mengevaluasi dan mengeksekusi pohon sintaksis abstrak (AST) hasil Parser.
  */
 export class Interpreter {
+  public static eksekutorAktif: Interpreter | null = null;
   private readonly lingkunganGlobal: Lingkungan;
   private lingkunganSaatIni: Lingkungan;
   private readonly outputWriter: OutputWriter;
@@ -330,9 +331,47 @@ export class Interpreter {
   }
 
   /**
+   * Alias eksekusi kode program mentah.
+   */
+  public interpret(sumber: string, direktoriBasis?: string): void {
+    this.jalankanKode(sumber, direktoriBasis);
+  }
+
+  public panggilFungsiLangsung(
+    callee: NilaiRuntime,
+    argumen: NilaiRuntime[]
+  ): NilaiRuntime {
+    if (callee.jenis === JenisNilaiRuntime.FUNGSI_BAWAAN) {
+      return callee.eksekusi(argumen);
+    }
+    if (callee.jenis === JenisNilaiRuntime.FUNGSI) {
+      const dummyPos = { baris: 1, kolom: 1, indeks: 0 };
+      const nodePanggilDummy: NodePemanggilanFungsi = {
+        jenis: JenisNodeAST.PEMANGGILAN_FUNGSI,
+        namaFungsi: callee.deklarasi.nama,
+        argumen: [],
+        posisi: callee.deklarasi.posisi || { awal: dummyPos, akhir: dummyPos },
+      };
+      return this.panggilFungsiPengguna(callee, argumen, nodePanggilDummy);
+    }
+    return buatKosong();
+  }
+
+  public static panggilFungsiAktif(callee: NilaiRuntime, argumen: NilaiRuntime[]): NilaiRuntime {
+    if (Interpreter.eksekutorAktif) {
+      return Interpreter.eksekutorAktif.panggilFungsiLangsung(callee, argumen);
+    }
+    if (callee.jenis === JenisNilaiRuntime.FUNGSI_BAWAAN) {
+      return callee.eksekusi(argumen);
+    }
+    return buatKosong();
+  }
+
+  /**
    * Mengeksekusi kode program mentah (.nusantara).
    */
   public jalankanKode(sumber: string, direktoriBasis?: string): void {
+    Interpreter.eksekutorAktif = this;
     const basis = direktoriBasis || this.direktoriBasis;
     const parser = new Parser(sumber);
     const ast = parser.parse();

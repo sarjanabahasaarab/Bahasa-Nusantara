@@ -26,6 +26,7 @@ import { simbolEksporBasisdata, buatEksporBasisdata } from './basisdata';
 import { simbolEksporWeb, buatEksporWeb } from './web';
 import { simbolEksporAutentikasi, buatEksporAutentikasi } from './autentikasi';
 import { simbolEksporORM, buatEksporORM } from './orm';
+import { simbolEksporRealtime, buatEksporRealtime } from './realtime';
 
 export * from './teks';
 export * from './matematika';
@@ -46,6 +47,7 @@ export * from './basisdata';
 export * from './web';
 export * from './autentikasi';
 export * from './orm';
+export * from './realtime';
 
 export interface MetadataModulStandar {
   nama: string;
@@ -201,6 +203,30 @@ export const KATALOG_MODUL_STANDAR: Record<string, MetadataModulStandar> = {
     deskripsi: 'Alias resmi modul orm untuk migrasi skema basis data.',
     simbolEkspor: simbolEksporORM,
     pabrikEkspor: () => buatEksporORM(),
+  },
+  realtime: {
+    nama: 'realtime',
+    deskripsi: 'Sistem peristiwa real-time, event bus, antrean tugas latar belakang, dan pekerja background NUSANTARA.',
+    simbolEkspor: simbolEksporRealtime,
+    pabrikEkspor: () => buatEksporRealtime(),
+  },
+  event: {
+    nama: 'event',
+    deskripsi: 'Alias resmi modul realtime untuk bus peristiwa dan pub-sub event listener.',
+    simbolEkspor: simbolEksporRealtime,
+    pabrikEkspor: () => buatEksporRealtime(),
+  },
+  antrean: {
+    nama: 'antrean',
+    deskripsi: 'Alias resmi modul realtime untuk antrean pekerjaan latar belakang (task queue).',
+    simbolEkspor: simbolEksporRealtime,
+    pabrikEkspor: () => buatEksporRealtime(),
+  },
+  queue: {
+    nama: 'queue',
+    deskripsi: 'Alias resmi modul realtime untuk background task queue.',
+    simbolEkspor: simbolEksporRealtime,
+    pabrikEkspor: () => buatEksporRealtime(),
   },
 };
 

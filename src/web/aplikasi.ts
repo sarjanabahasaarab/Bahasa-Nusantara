@@ -172,6 +172,10 @@ export class AplikasiWeb {
     return this.adapterServer.apakahBerjalan();
   }
 
+  public dapatkanServerNode(): import('node:http').Server | null {
+    return this.adapterServer.dapatkanServerNode();
+  }
+
   public async uji(opsiReq: {
     metode?: string;
     jalur: string;

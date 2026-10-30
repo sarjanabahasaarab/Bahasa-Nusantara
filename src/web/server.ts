@@ -264,6 +264,10 @@ export class ServerWebAdapter {
     return this.sedangBerjalan;
   }
 
+  public dapatkanServerNode(): http.Server | null {
+    return this.serverNode;
+  }
+
   public async mulai(
     portOverride?: number,
     hostOverride?: string

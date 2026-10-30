@@ -33,6 +33,7 @@ import { AdaptorSQLite } from '../database/sqlite';
 import { PelariMigrasi } from '../migration/migrationRunner';
 import { PelariSeeder } from '../seeder/seederRunner';
 import { ProjectGenerator, ValidatorProyek } from '../generator';
+import { AntreanTugasMemori, PekerjaLatarBelakang } from '../realtime';
 
 export interface OpsiCLI {
   pengelola?: PengelolaPaket;
@@ -162,6 +163,8 @@ export class NusantaraCLI {
             'templates',
             'templat',
             'template',
+            'worker',
+            'pekerja',
             'buat',
             'inisialisasi',
             'pasang',
@@ -473,6 +476,16 @@ export class NusantaraCLI {
           const sub = argumenTambahan[0]?.toLowerCase();
           const targetTemplate = argumenTambahan[1];
           return this.eksekusiTemplates(sub, targetTemplate, {
+            json: opsiJSON,
+            warna: opsiWarna,
+          });
+        }
+
+        case 'worker':
+        case 'pekerja': {
+          const sub = argumenTambahan[0]?.toLowerCase();
+          const target = argumenTambahan[1];
+          return this.eksekusiWorker(sub, target, {
             json: opsiJSON,
             warna: opsiWarna,
           });
@@ -1966,14 +1979,64 @@ Penggunaan Perintah 'nusantara paket':
     return 0;
   }
 
+  /**
+   * Eksekusi manajemen background worker & pemrosesan antrean tugas (Phase 34).
+   */
+  private eksekusiWorker(
+    subPerintah: string | undefined,
+    _argTarget: string | undefined,
+    opsi: { json?: boolean; warna?: boolean }
+  ): number {
+    const antrean = new AntreanTugasMemori();
+    const pekerja = new PekerjaLatarBelakang(antrean);
+
+    switch (subPerintah) {
+      case 'status': {
+        const stats = antrean.dapatkanStatistik();
+        if (opsi.json) {
+          this.log(JSON.stringify(stats, null, 2));
+          return 0;
+        }
+        this.log('\nStatus Pekerja & Antrean Tugas NUSANTARA (Phase 34):');
+        this.log('------------------------------------------------------------');
+        this.log(`  Total Tugas Dalam Antrean : ${stats.totalTugas}`);
+        this.log(`  Menunggu (Pending)        : ${stats.menunggu}`);
+        this.log(`  Sedang Berjalan (Running) : ${stats.sedangBerjalan}`);
+        this.log(`  Selesai (Completed)       : ${stats.selesai}`);
+        this.log(`  Gagal (Failed)            : ${stats.gagal}`);
+        this.log(`  Dibatalkan (Cancelled)    : ${stats.dibatalkan}`);
+        this.log('------------------------------------------------------------\n');
+        return 0;
+      }
+
+      case 'mulai':
+      case 'start': {
+        pekerja.mulai();
+        this.log('[✓ SUKSES] Background Task Worker NUSANTARA aktif dan memantau antrean.');
+        return 0;
+      }
+
+      default: {
+        this.log(`Perintah Manajemen Pekerja Latar Belakang (Phase 34):
+  nusantara worker status   Menampilkan statistik status antrean tugas
+  nusantara worker start    Memulai pekerja pemroses antrean`);
+        return 0;
+      }
+    }
+  }
+
   private cetakBantuan(): void {
     this.log(`
 Bahasa Pemrograman NUSANTARA (${LABEL_VERSI_NUSANTARA})
-Antarmuka Baris Perintah (CLI), Project Generator, ORM, Auth, Web Framework, CI/CD, Build & Toolchain
+Antarmuka Baris Perintah (CLI), WebSocket, Real-Time Events, Background Worker, Generator, ORM, Auth, Web Framework
 
 Penggunaan:
   nusantara <perintah> [argumen...]
   nusantara <berkas.nusantara> [argumen...]
+
+Perintah Pekerja Latar Belakang & Antrean (Phase 34):
+  worker status          Menampilkan status dan statistik antrean background task
+  worker start           Memulai siklus pemrosesan antrean tugas latar belakang
 
 Perintah Pembuat Proyek & Generator Aplikasi (Phase 33):
   new <nama> [--template <id>] [--force] [--no-interactive]

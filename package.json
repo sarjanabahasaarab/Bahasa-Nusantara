@@ -37,8 +37,9 @@
     "test:auth-v31": "tsx pengujian/autentikasi/uji_autentikasi_fase31.ts",
     "test:orm-v32": "tsx pengujian/orm/uji_orm_fase32.ts",
     "test:generator-v33": "tsx pengujian/generator/uji_generator_fase33.ts",
+    "test:realtime-v34": "tsx pengujian/realtime/uji_realtime_fase34.ts",
     "quality-gate": "tsx pengujian/testing/uji_testing.ts",
-    "test": "node skrip/periksa_fondasi.js && tsx pengujian/lexer/uji_lexer.ts && tsx pengujian/parser/uji_parser.ts && tsx pengujian/interpreter/uji_interpreter.ts && tsx pengujian/tipe/uji_tipe.ts && tsx pengujian/operator/uji_operator.ts && tsx pengujian/percabangan/uji_percabangan.ts && tsx pengujian/perulangan/uji_perulangan.ts && tsx pengujian/fungsi/uji_fungsi.ts && tsx pengujian/struktur_data/uji_struktur_data.ts && tsx pengujian/modul/uji_modul.ts && tsx pengujian/paket/uji_paket.ts && tsx pengujian/stdlib/uji_stdlib.ts && tsx pengujian/diagnostik/uji_diagnostik.ts && tsx pengujian/toolchain/uji_toolchain.ts && tsx pengujian/lsp/uji_lsp.ts && tsx pengujian/testing/uji_testing.ts && tsx pengujian/paket/uji_ekosistem_registri.ts && tsx pengujian/build/uji_build_distribusi.ts && tsx pengujian/cicd/uji_cicd_workflow.ts && tsx pengujian/debugger/uji_debugger_profiler.ts && tsx pengujian/ide/uji_ide_foundation.ts && tsx pengujian/paket/uji_ekosistem_dependensi.ts && tsx pengujian/stdlib/uji_stdlib_fase28.ts && tsx pengujian/database/uji_database_fase29.ts && tsx pengujian/web/uji_web_fase30.ts && tsx pengujian/autentikasi/uji_autentikasi_fase31.ts && tsx pengujian/orm/uji_orm_fase32.ts && tsx pengujian/generator/uji_generator_fase33.ts"
+    "test": "node skrip/periksa_fondasi.js && tsx pengujian/lexer/uji_lexer.ts && tsx pengujian/parser/uji_parser.ts && tsx pengujian/interpreter/uji_interpreter.ts && tsx pengujian/tipe/uji_tipe.ts && tsx pengujian/operator/uji_operator.ts && tsx pengujian/percabangan/uji_percabangan.ts && tsx pengujian/perulangan/uji_perulangan.ts && tsx pengujian/fungsi/uji_fungsi.ts && tsx pengujian/struktur_data/uji_struktur_data.ts && tsx pengujian/modul/uji_modul.ts && tsx pengujian/paket/uji_paket.ts && tsx pengujian/stdlib/uji_stdlib.ts && tsx pengujian/diagnostik/uji_diagnostik.ts && tsx pengujian/toolchain/uji_toolchain.ts && tsx pengujian/lsp/uji_lsp.ts && tsx pengujian/testing/uji_testing.ts && tsx pengujian/paket/uji_ekosistem_registri.ts && tsx pengujian/build/uji_build_distribusi.ts && tsx pengujian/cicd/uji_cicd_workflow.ts && tsx pengujian/debugger/uji_debugger_profiler.ts && tsx pengujian/ide/uji_ide_foundation.ts && tsx pengujian/paket/uji_ekosistem_dependensi.ts && tsx pengujian/stdlib/uji_stdlib_fase28.ts && tsx pengujian/database/uji_database_fase29.ts && tsx pengujian/web/uji_web_fase30.ts && tsx pengujian/autentikasi/uji_autentikasi_fase31.ts && tsx pengujian/orm/uji_orm_fase32.ts && tsx pengujian/generator/uji_generator_fase33.ts && tsx pengujian/realtime/uji_realtime_fase34.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -51,17 +52,19 @@
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "smol-toml": "^1.9.1",
-    "vite": "^8.3.0"
+    "vite": "^8.3.0",
+    "ws": "^8.22.0"
   },
   "devDependencies": {
+    "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/ws": "^8.18.2",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
-    "typescript": "^7.0.2",
-    "@types/express": "^4.17.21"
+    "typescript": "^7.0.2"
   }
 }
