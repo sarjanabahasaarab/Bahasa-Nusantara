@@ -1,0 +1,92 @@
+gunakan "gui" sebagai ui
+
+fungsi saatKlikSapa(evt : peta)
+mulai
+    tampilkan("Aksi sapa dipanggil untuk widget:", evt["idWidget"])
+    ui.tampilkanPesan("Sambutan", "Halo, selamat berkarya dengan GUI NUSANTARA!", "info")
+selesai
+
+fungsi saatUbahTema(evt : peta)
+mulai
+    jika evt["nilaiLogika"] == benar maka
+        ui.aturTema("gelap")
+        tampilkan("Tema diubah menjadi Gelap.")
+    lainnya
+        ui.aturTema("terang")
+        tampilkan("Tema diubah menjadi Terang.")
+    akhir
+selesai
+
+fungsi saatBukaBerkas()
+mulai
+    berkas : peta = ui.bukaBerkas({ judul: "Pilih Berkas Contoh" })
+    tampilkan("Dialog berkas dibuka, status dibatalkan:", berkas["dibatalkan"])
+selesai
+
+fungsi saatKeluar()
+mulai
+    tampilkan("Menutup aplikasi demo GUI.")
+selesai
+
+program DemoDesktopNusantara
+mulai
+    tampilkan("Menginisialisasi Demo Aplikasi Desktop NUSANTARA...")
+
+    aplikasi : peta = ui.buatAplikasi({
+        id: "id.nusantara.demo",
+        nama: "Demo Desktop Nusantara",
+        temaAwal: "terang"
+    })
+
+    jendela : peta = aplikasi.buatJendela({
+        judul: "NUSANTARA Desktop Application v0.36.0",
+        lebar: 800,
+        tinggi: 600
+    })
+
+    // Komponen UI
+    labelJudul : peta = ui.buatLabel("NUSANTARA GUI Framework", {
+        ukuranFont: 20,
+        warna: "#0f172a"
+    })
+
+    inputNama : peta = ui.buatInputTeks("Masukkan nama Anda...")
+    labelSalam : peta = ui.buatLabel("Halo, Pengembang NUSANTARA!")
+
+    tombolSapa : peta = ui.buatTombol("Sapa Saya", saatKlikSapa)
+    centangModeGelap : peta = ui.buatKotakCentang("Aktifkan Skema Kontras / Gelap", salah)
+    centangModeGelap.pasang("nilai_berubah", saatUbahTema)
+
+    // Layout vertikal
+    kontainer : peta = ui.buatKolom([
+        labelJudul,
+        inputNama,
+        tombolSapa,
+        centangModeGelap,
+        labelSalam
+    ], {
+        jarak: 12
+    })
+
+    jendela.setKonten(kontainer)
+
+    // Buat bilah menu
+    menuBar : peta = ui.buatBilahMenu()
+    menuBerkas : peta = ui.buatMenu("Berkas")
+    itemBuka : peta = ui.buatItemMenu("Buka Berkas...", saatBukaBerkas, "Ctrl+O")
+    itemKeluar : peta = ui.buatItemMenu("Keluar", saatKeluar, "Ctrl+Q")
+
+    menuBerkas.tambahItem(itemBuka)
+    menuBerkas.tambahItem(itemKeluar)
+    menuBar.tambahMenu(menuBerkas)
+
+    jendela.setBilahMenu(menuBar)
+
+    tampilkan("Aplikasi Demo GUI berhasil disiapkan!")
+    tampilkan("Judul Jendela: " + jendela["judul"])
+    tampilkan("Ukuran: " + jendela["lebar"] + "x" + jendela["tinggi"])
+
+    // Uji trigger programatik
+    inputNama.setNilai("Budi Nusantara")
+    tombolSapa.picu("klik")
+selesai

@@ -28,6 +28,7 @@ import { simbolEksporAutentikasi, buatEksporAutentikasi } from './autentikasi';
 import { simbolEksporORM, buatEksporORM } from './orm';
 import { simbolEksporRealtime, buatEksporRealtime } from './realtime';
 import { simbolEksporHTTP, buatEksporHTTP } from './http';
+import { simbolEksporGUI, buatEksporGUI } from './gui';
 
 export * from './teks';
 export * from './matematika';
@@ -50,6 +51,7 @@ export * from './autentikasi';
 export * from './orm';
 export * from './realtime';
 export * from './http';
+export * from './gui';
 
 export interface MetadataModulStandar {
   nama: string;
@@ -247,6 +249,30 @@ export const KATALOG_MODUL_STANDAR: Record<string, MetadataModulStandar> = {
     deskripsi: 'Alias resmi modul http untuk integrasi REST API dan pagination.',
     simbolEkspor: simbolEksporHTTP,
     pabrikEkspor: () => buatEksporHTTP(),
+  },
+  gui: {
+    nama: 'gui',
+    deskripsi: 'Framework GUI native dan aplikasi desktop lintas platform NUSANTARA.',
+    simbolEkspor: simbolEksporGUI,
+    pabrikEkspor: () => buatEksporGUI(),
+  },
+  antarmuka: {
+    nama: 'antarmuka',
+    deskripsi: 'Alias resmi modul gui untuk pembuatan antarmuka grafis pengguna (GUI).',
+    simbolEkspor: simbolEksporGUI,
+    pabrikEkspor: () => buatEksporGUI(),
+  },
+  desktop: {
+    nama: 'desktop',
+    deskripsi: 'Alias resmi modul gui untuk pengembangan aplikasi desktop NUSANTARA.',
+    simbolEkspor: simbolEksporGUI,
+    pabrikEkspor: () => buatEksporGUI(),
+  },
+  ui: {
+    nama: 'ui',
+    deskripsi: 'Alias resmi modul gui untuk komponen UI, layout, dan widget.',
+    simbolEkspor: simbolEksporGUI,
+    pabrikEkspor: () => buatEksporGUI(),
   },
 };
 

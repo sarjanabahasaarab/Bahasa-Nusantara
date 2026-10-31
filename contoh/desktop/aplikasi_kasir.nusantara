@@ -1,0 +1,94 @@
+gunakan "gui" sebagai ui
+
+fungsi saatTambahItem(evt : peta)
+mulai
+    tampilkan("Aksi tambah item dipicu untuk widget:", evt["idWidget"])
+    ui.tampilkanPesan("Info", "Barang baru telah ditambahkan ke transaksi.", "info")
+selesai
+
+fungsi saatSelesaiBayar(evt : peta)
+mulai
+    yakin : logika = ui.tampilkanKonfirmasi("Konfirmasi Bayar", "Selesaikan transaksi belanja?")
+    jika yakin == benar maka
+        ui.tampilkanPesan("Transaksi Berhasil", "Struk pembayaran berhasil dicetak. Terima kasih!", "sukses")
+    akhir
+selesai
+
+program AplikasiKasirDesktop
+mulai
+    tampilkan("Memulai Sistem Kasir Desktop NUSANTARA...")
+
+    aplikasi : peta = ui.buatAplikasi({
+        id: "id.nusantara.kasir",
+        nama: "Kasir Nusantara POS",
+        temaAwal: "terang"
+    })
+
+    jendela : peta = aplikasi.buatJendela({
+        judul: "Kasir Pintar NUSANTARA POS - Toko Merdeka",
+        lebar: 900,
+        tinggi: 650
+    })
+
+    // Header Kasir
+    labelHeader : peta = ui.buatLabel("KASIR PINTAR NUSANTARA", {
+        ukuranFont: 22,
+        warna: "#0284c7"
+    })
+
+    // Tabel Transaksi / Keranjang
+    kolomTabel : daftar = [
+        { id: "kode", judul: "Kode Barang", lebar: 120 },
+        { id: "nama", judul: "Nama Produk", lebar: 250 },
+        { id: "harga", judul: "Harga Satuan (Rp)", lebar: 150 },
+        { id: "jumlah", judul: "Qty", lebar: 80 },
+        { id: "subtotal", judul: "Subtotal (Rp)", lebar: 180 }
+    ]
+
+    tabelBelanja : peta = ui.buatTabel(kolomTabel, [])
+
+    labelTotal : peta = ui.buatLabel("Total Pembayaran: Rp 0", {
+        ukuranFont: 16,
+        warna: "#15803d"
+    })
+
+    // Input Tambah Item
+    inputKode : peta = ui.buatInputTeks("Kode (misal: B001)")
+    inputNamaProduk : peta = ui.buatInputTeks("Nama Produk")
+    inputHarga : peta = ui.buatInputTeks("Harga (Rp)")
+    inputJumlah : peta = ui.buatInputTeks("Jumlah (Qty)")
+
+    tombolTambah : peta = ui.buatTombol("Tambah ke Keranjang", saatTambahItem)
+    tombolBayar : peta = ui.buatTombol("Selesaikan Transaksi & Bayar", saatSelesaiBayar)
+
+    barisInput : peta = ui.buatBaris([inputKode, inputNamaProduk, inputHarga, inputJumlah, tombolTambah], {
+        jarak: 8
+    })
+
+    wadahKasir : peta = ui.buatKolom([
+        labelHeader,
+        barisInput,
+        tabelBelanja,
+        labelTotal,
+        tombolBayar
+    ], {
+        jarak: 16
+    })
+
+    jendela.setKonten(wadahKasir)
+    tampilkan("Aplikasi Kasir Nusantara POS siap melayani transaksi.")
+
+    // Simulasikan transaksi kasir perdana
+    subtotal : bilangan = 30000
+    tabelBelanja.tambahBaris({
+        kode: "K001",
+        nama: "Buku Catatan Nusantara A5",
+        harga: 15000,
+        jumlah: 2,
+        subtotal: subtotal
+    })
+    labelTotal.setTeks("Total Pembayaran: Rp 30000")
+    tampilkan("Item berhasil ditambahkan: Buku Catatan Nusantara A5 (Subtotal: Rp " + subtotal + ")")
+
+    tombolTambah.picu("klik")
+selesai

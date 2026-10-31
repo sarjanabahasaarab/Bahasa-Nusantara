@@ -453,6 +453,85 @@ nusantara jalankan src/utama.nusantara
         },
       ],
     });
+
+    // 8. Template: Desktop Application (Phase 36)
+    this.daftarkan({
+      id: 'desktop',
+      nama: 'Aplikasi Desktop GUI (Desktop GUI Application)',
+      kategori: 'aplikasi',
+      deskripsi: 'Aplikasi desktop grafis lintas platform berbasis NUSANTARA GUI Framework dengan window management, layout, dan widget responsif.',
+      versi: '1.0.0',
+      versiMinimumNusantara: '0.36.0',
+      persyaratanRuntime: ['gui', 'interpreter'],
+      dependensi: {},
+      status: 'siap',
+      petunjukJalankan: [
+        'nusantara check',
+        'nusantara jalankan src/utama.nusantara',
+      ],
+      batasan: ['Mendukung sistem operasi Windows, Linux, dan macOS.'],
+      berkas: [
+        {
+          jalur: 'src/utama.nusantara',
+          konten: `gunakan "gui" sebagai antarmuka
+
+fungsi saatKlikTombol(evt : peta)
+mulai
+    antarmuka.tampilkanPesan("Info", "Halo dari aplikasi desktop NUSANTARA!")
+selesai
+
+program {{PASCAL_NAME}}
+mulai
+    aplikasi = antarmuka.buatAplikasi({
+        id: "id.nusantara.{{NAMA_PROYEK}}",
+        nama: "{{NAMA_PROYEK}}",
+        temaAwal: "terang"
+    })
+
+    jendela = aplikasi.buatJendela({
+        judul: "{{NAMA_PROYEK}} - Aplikasi Desktop NUSANTARA",
+        lebar: 800,
+        tinggi: 600
+    })
+
+    labelJudul = antarmuka.buatLabel("Selamat Datang di {{NAMA_PROYEK}}", {
+        ukuranFont: 18,
+        warna: "#1e293b"
+    })
+
+    labelStatus = antarmuka.buatLabel("Status: Siap beroperasi")
+    tombolAksi = antarmuka.buatTombol("Klik Saya", saatKlikTombol)
+
+    wadahKonten = antarmuka.buatKolom([labelJudul, tombolAksi, labelStatus], {
+        jarak: 16
+    })
+
+    jendela.setKonten(wadahKonten)
+    tampilkan("Aplikasi desktop siap dijalankan.")
+selesai
+`,
+        },
+        {
+          jalur: 'README.md',
+          konten: `# {{NAMA_PROYEK}} - Aplikasi Desktop NUSANTARA
+
+{{DESKRIPSI_PROYEK}}
+
+## Persyaratan
+- Bahasa Pemrograman NUSANTARA >= v{{VERSI_NUSANTARA}}
+
+## Menjalankan Aplikasi
+\`\`\`bash
+nusantara jalankan src/utama.nusantara
+\`\`\`
+`,
+        },
+        {
+          jalur: '.gitignore',
+          konten: `target/\n.cache/\n*.log\nbuild/\n`,
+        },
+      ],
+    });
   }
 
   public daftarkan(template: DefinisiTemplate): void {
