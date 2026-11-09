@@ -1,6 +1,6 @@
 {
   "name": "NUSANTARA - Bahasa Pemrograman Indonesia",
-  "description": "Nusantara Game Development Kit (Game SDK), High-Performance Concurrency (Actor Model), Linker & Standalone Executable, LLVM Backend & AOT Native Compilation, NIR, Mobile App Framework, GUI, dan Toolchain bahasa pemrograman NUSANTARA v0.47.0.",
+  "description": "Nusantara OS Minimal Kernel Interface, Game SDK, High-Performance Concurrency (Actor Model), Linker & Standalone Executable, LLVM Backend & AOT Native Compilation, NIR, Mobile App Framework, GUI, dan Toolchain bahasa pemrograman NUSANTARA v0.48.0.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

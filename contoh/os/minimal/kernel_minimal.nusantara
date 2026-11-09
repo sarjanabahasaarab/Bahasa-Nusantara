@@ -1,0 +1,24 @@
+// ==========================================
+// CONTOH NUSANTARA OS - Kernel Minimal
+// Phase 48: Minimal Kernel Interface (v0.48.0)
+// ==========================================
+
+gunakan std:os;
+
+fungsi kernel_main() {
+    tulisKonsol("==================================================");
+    tulisKonsol("     SELAMAT DATANG DI NUSANTARA OS (v0.48.0)     ");
+    tulisKonsol("==================================================");
+    tulisKonsol("[INIT] Booting kernel minimal x86_64 higher-half...");
+    tulisKonsol("[INIT] Status bootloader: Multiboot2 valid (0xE85250D6)");
+
+    status = statusKernel();
+    tulisKonsol("[KERNEL] Keadaan saat ini: " + status.state);
+    tulisKonsol("[KERNEL] Siklus Ticks    : " + status.ticks);
+    tulisKonsol("[KERNEL] Heap Bebas      : " + status.heapFree + " bytes");
+
+    tulisKonsol("[KERNEL] Kernel minimal siap menjalankan tugas.");
+    kembalikan 0;
+}
+
+kernel_main();

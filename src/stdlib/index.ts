@@ -31,6 +31,7 @@ import { simbolEksporHTTP, buatEksporHTTP } from './http';
 import { simbolEksporGUI, buatEksporGUI } from './gui';
 import { simbolEksporMobile, buatEksporMobile } from './mobile';
 import { simbolEksporGame, buatEksporGame } from './game';
+import { simbolEksporOS, buatEksporOS } from './os';
 
 export * from './teks';
 export * from './matematika';
@@ -56,6 +57,7 @@ export * from './http';
 export * from './gui';
 export * from './mobile';
 export * from './game';
+export * from './os';
 
 export interface MetadataModulStandar {
   nama: string;
@@ -320,6 +322,24 @@ export const KATALOG_MODUL_STANDAR: Record<string, MetadataModulStandar> = {
     simbolEkspor: simbolEksporGame,
     pabrikEkspor: () => buatEksporGame(),
   },
+  os: {
+    nama: 'os',
+    deskripsi: 'Antarmuka Kernel Nusantara OS, alokasi memori heap, VFS, syscalls, dan manajemen sistem operasi.',
+    simbolEkspor: simbolEksporOS,
+    pabrikEkspor: () => buatEksporOS(),
+  },
+  kernel: {
+    nama: 'kernel',
+    deskripsi: 'Alias resmi Bahasa Indonesia untuk antarmuka kernel Nusantara OS.',
+    simbolEkspor: simbolEksporOS,
+    pabrikEkspor: () => buatEksporOS(),
+  },
+  sistem_operasi: {
+    nama: 'sistem_operasi',
+    deskripsi: 'Alias lengkap Bahasa Indonesia untuk antarmuka sistem operasi Nusantara OS.',
+    simbolEkspor: simbolEksporOS,
+    pabrikEkspor: () => buatEksporOS(),
+  },
 };
 
 /**
@@ -423,6 +443,12 @@ export const DAFTAR_MODUL_STANDAR_FASE47 = [
   'engine',
 ];
 
+export const DAFTAR_MODUL_STANDAR_FASE48 = [
+  'os',
+  'kernel',
+  'sistem_operasi',
+];
+
 export const DAFTAR_SEMUA_MODUL_STANDAR = [
   ...DAFTAR_MODUL_STANDAR_INTI,
   ...DAFTAR_MODUL_STANDAR_FASE28,
@@ -431,6 +457,7 @@ export const DAFTAR_SEMUA_MODUL_STANDAR = [
   ...DAFTAR_MODUL_STANDAR_FASE31,
   ...DAFTAR_MODUL_STANDAR_FASE37,
   ...DAFTAR_MODUL_STANDAR_FASE47,
+  ...DAFTAR_MODUL_STANDAR_FASE48,
 ];
 
 /**

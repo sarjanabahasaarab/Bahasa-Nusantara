@@ -1,0 +1,40 @@
+// ==========================================
+// CONTOH NUSANTARA OS - Pengujian Panggilan Sistem (Syscall) & VFS
+// Phase 48: Minimal Kernel Interface (v0.48.0)
+// ==========================================
+
+gunakan std:os;
+
+fungsi uji_sistem() {
+    tulisKonsol("[SYSCALL] Memulai verifikasi panggilan sistem...");
+
+    // 1. Dapatkan Process ID
+    pid = dapatkanPid();
+    tulisKonsol("[SYSCALL] sys_process_id() -> PID: " + pid);
+
+    // 2. Operasi Berkas VFS (RamFS)
+    fd = bukaBerkas("/etc/motd", "w");
+    tulisKonsol("[SYSCALL] sys_file_open('/etc/motd', 'w') -> FD: " + fd);
+
+    pesan = "Selamat datang di Nusantara OS Minimal Kernel Interface!";
+    tertulis = tulisBerkas(fd, pesan);
+    tulisKonsol("[SYSCALL] sys_file_write(fd=" + fd + ") -> Tertulis " + tertulis + " bytes");
+
+    tutupBerkas(fd);
+    tulisKonsol("[SYSCALL] sys_file_close(fd=" + fd + ") -> Berkas ditutup.");
+
+    // 3. Baca kembali berkas
+    fdBaca = bukaBerkas("/etc/motd", "r");
+    konten = bacaBerkas(fdBaca, 128);
+    tutupBerkas(fdBaca);
+
+    tulisKonsol("[SYSCALL] sys_file_read('/etc/motd') -> '" + konten + "'");
+
+    // 4. Yield thread
+    yieldThread();
+    tulisKonsol("[SYSCALL] sys_thread_yield() -> Berhasil.");
+
+    kembalikan 0;
+}
+
+uji_sistem();

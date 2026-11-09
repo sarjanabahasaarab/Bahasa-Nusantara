@@ -1,0 +1,34 @@
+// ==========================================
+// CONTOH NUSANTARA OS - Pengujian Alokasi Memori
+// Phase 48: Minimal Kernel Interface (v0.48.0)
+// ==========================================
+
+gunakan std:os;
+
+fungsi uji_alokasi() {
+    tulisKonsol("[MEMORI] Menguji alokasi heap dinamis kernel...");
+
+    // Alokasi 1: Buffer 1024 byte dengan perataan 16 byte
+    ptr1 = alokasiMemori(1024, 16);
+    tulisKonsol("[MEMORI] Alokasi 1 (1024 bytes, align 16) -> Offset: " + ptr1);
+
+    // Alokasi 2: Buffer 4096 byte (1 Page) dengan perataan 4096 byte
+    ptr2 = alokasiMemori(4096, 4096);
+    tulisKonsol("[MEMORI] Alokasi 2 (4096 bytes, align 4096) -> Offset: " + ptr2);
+
+    // Tampilkan diagnostik memori
+    laporan = laporanMemori();
+    tulisKonsol("[MEMORI] Diagnostik: " + laporan);
+
+    // Pembebasan memori
+    hasilBebas1 = bebaskanMemori(ptr1);
+    tulisKonsol("[MEMORI] Pembebasan alokasi 1 berhasil: " + hasilBebas1);
+
+    hasilBebas2 = bebaskanMemori(ptr2);
+    tulisKonsol("[MEMORI] Pembebasan alokasi 2 berhasil: " + hasilBebas2);
+
+    tulisKonsol("[MEMORI] Uji alokasi dan pembebasan memori selesai.");
+    kembalikan 0;
+}
+
+uji_alokasi();

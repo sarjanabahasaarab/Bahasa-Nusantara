@@ -2,12 +2,13 @@
 
 > **Bahasa Pemrograman 100% Bahasa Indonesia untuk Komputasi Modern, Terbuka, dan Berkelanjutan.**
 
-[![Status](https://img.shields.io/badge/status-fase_47:_game_development_kit_(game_sdk)-blue.svg)](ROADMAP.md)
-[![Versi](https://img.shields.io/badge/versi-v0.47.0-emerald.svg)](PERUBAHAN.md)
+[![Status](https://img.shields.io/badge/status-fase_48:_nusantara_os_minimal_kernel_interface-blue.svg)](ROADMAP.md)
+[![Versi](https://img.shields.io/badge/versi-v0.48.0-emerald.svg)](PERUBAHAN.md)
 [![CI/CD](https://img.shields.io/badge/CI%2FCD-passing-brightgreen.svg)](.github/workflows/ci.yml)
 [![Lisensi](https://img.shields.io/badge/lisensi-Apache_2.0-blue.svg)](LISENSI)
 [![Tata Bahasa](https://img.shields.io/badge/grammar-EBNF_ISO--14977-purple.svg)](dokumentasi/GRAMMAR-EBNF.md)
-[![Testing](https://img.shields.io/badge/testing-43_suites_lulus_100%25-green.svg)](pengujian/README.md)
+[![Testing](https://img.shields.io/badge/testing-44_suites_lulus_100%25-green.svg)](pengujian/README.md)
+[![Nusantara OS](https://img.shields.io/badge/os_kernel-x86__64_freestanding_multiboot2-blue.svg)](docs/os/01-arsitektur-kernel.md)
 [![Game SDK](https://img.shields.io/badge/game_sdk-2d%2F3d_ecs_physics_audio-blue.svg)](docs/game-sdk/01_pendahuluan_arsitektur.md)
 [![Actor Concurrency](https://img.shields.io/badge/concurrency-actor_model_&_structured_async-blue.svg)](docs/runtime/actor-model.md)
 [![Linker](https://img.shields.io/badge/linker-advanced_&_standalone-blue.svg)](docs/compiler/linker.md)

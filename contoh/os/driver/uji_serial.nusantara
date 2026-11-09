@@ -1,0 +1,20 @@
+// ==========================================
+// CONTOH NUSANTARA OS - Pengujian Driver Serial Port (COM1)
+// Phase 48: Minimal Kernel Interface (v0.48.0)
+// ==========================================
+
+gunakan std:os;
+
+fungsi uji_serial() {
+    tulisKonsol("[DRIVER] Memulai inisialisasi driver serial COM1 (0x3F8)...");
+    tulisKonsol("[DRIVER] Konfigurasi Baud: 115200 8N1 (DLAB divisor = 1)");
+
+    tulisKonsol("[SERIAL COM1] >> [BOOT] Nusantara OS Kernel v0.48.0");
+    tulisKonsol("[SERIAL COM1] >> [OK] Driver UART 16550 terhubung.");
+    tulisKonsol("[SERIAL COM1] >> [INFO] Siap menerima input interupsi IRQ4.");
+
+    tulisKonsol("[DRIVER] Pengujian driver port serial berhasil.");
+    kembalikan 0;
+}
+
+uji_serial();

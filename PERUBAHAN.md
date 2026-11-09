@@ -4,6 +4,65 @@ Seluruh perubahan penting pada proyek bahasa pemrograman NUSANTARA dicatat dalam
 
 Format penomoran versi mengacu pada **Semantic Versioning** (`vMAJOR.MINOR.PATCH`). Pada masa pengembangan awal, versi minor mencerminkan tahapan fase roadmap (misal `v0.1.0` untuk Phase 1, `v0.2.0` untuk Phase 2, `v0.3.0` untuk Phase 3, `v0.4.0` untuk Phase 4, `v0.5.0` untuk Phase 5, `v0.6.0` untuk Phase 6, `v0.7.0` untuk Phase 7, `v0.8.0` untuk Phase 8, `v0.9.0` untuk Phase 9, `v0.10.0` untuk Phase 10).
 
+## [v0.48.0] — 2026-11-09
+### Phase 48: Nusantara OS Minimal Kernel Interface
+
+Fase ini mengimplementasikan fondasi antarmuka kernel sistem operasi mandiri (NUSANTARA OS Minimal Kernel Interface) berbasis kompilasi freestanding arsitektur x86_64 higher-half (-2 GiB). Implementasi ini menyediakan manajemen perangkat keras tingkat rendah, manajemen memori fisik dan virtual, sistem panggilan (syscalls), penanganan interupsi dan exception, penjadwalan proses/thread preemptive, driver perangkat periferal esensial, sistem berkas in-memory (RamFS & VFS), integrasi bootloader spesifikasi Multiboot2, pembangun biner ELF64 x86_64, modul pustaka standar `std:os` (alias: `kernel`, `sistem_operasi`), perkakas baris perintah `nusantara os`, 15 dokumentasi panduan teknis, dan suite pengujian Quality Gate 44 dengan 42 pengujian berstatus 100% lulus.
+
+#### Ditambahkan:
+- **Kernel Core Engine (`src/runtime/os/kernel/`):**
+  - `KernelCore`: Manajemen siklus hidup transisi status (`UNINITIALIZED -> BOOTING -> RUNNING -> HALTED -> PANICKED`), konfigurasi batas memori, uptime ticks, dan integrasi komponen sistem.
+  - `KernelLogger`: Sistem logging konsol kernel hierarkis dengan tingkat log (DEBUG, INFO, WARN, ERROR, PANIC).
+  - `KernelPanic`: Penanganan kondisi panik fatal kernel dengan pelaporan subsistem, pencatatan alasan, dan dump register konteks CPU 64-bit.
+  - `KernelDiagnostics`: Pengumpulan metrik real-time alokasi memori, total interupsi, total syscall, dan riwayat kesalahan sistem.
+- **Kernel ABI & Kontrak Arsitektur (`src/runtime/os/abi/`):**
+  - `KernelABI`: Peta memori higher-half kanonikal x86_64 (Userspace 128TB, Non-canonical Hole, Direct Physical Map, Kernel Heap, Kernel Text Base `-2 GiB`).
+  - Isolasi Keamanan Batas Pointer: `isUserPointerValid` mencegah serangan eskalasi hak akses (*privilege escalation* / pointer injection) dari ruang pengguna ke ruang kernel.
+  - Perataan Stack: Penegakan perataan batas 16-byte (`isAligned`, `alignUp`, `alignDown`) dan penonaktifan red-zone (`-mno-red-zone`).
+  - Konvensi Simbol: Skema mangling simbol kernel Nusantara `_NK_<modul>_<nama>`.
+  - Register Context: Representasi lengkap 16 register umum x86_64, `RIP`, `RFLAGS`, `CS`, `SS`, dan `CR3`.
+- **System Call Interface (`src/runtime/os/syscall/`):**
+  - `SyscallTable`: Registri 11 panggilan sistem standar dengan validasi jumlah minimum argumen.
+  - `SyscallDispatcher`: Validator pointer memori pengguna (`EFAULT`) dan pencatat riwayat penelusuran panggilan sistem (*syscall tracing*).
+  - 11 System Call Resmi: `sys_process_exit`, `sys_process_id`, `sys_thread_yield`, `sys_memory_allocate`, `sys_memory_release`, `sys_console_write`, `sys_clock_get`, `sys_file_open`, `sys_file_read`, `sys_file_write`, `sys_file_close`.
+- **Manajemen Memori Komprehensif (`src/runtime/os/memory/`):**
+  - **Physical Memory Manager (`physical-memory.ts`):** Bitmap frame allocator 4 KiB, alokasi frame berurutan (`allocateContiguous`), pembebasan frame dengan pencegahan double-free, dan reservasi wilayah memori firmware (`reserveRegion`).
+  - **Virtual Memory Manager (`virtual-memory.ts`):** Arsitektur 4-level paging x86_64 (PML4, PDPT, PD, PT), translasi alamat virtual ke fisik, penegakan hak akses halaman (`checkAccess` untuk Read, Write, Supervisor/User, dan No-Execute).
+  - **Kernel Heap Allocator (`kernel-heap.ts`):** Alokasi memori dinamis terarah dengan dukungan perataan pangkat dua (8..4096 byte), header magic `0x4E555341` ('NUSA'), pendaurulangan blok bebas (*free-list recycling*), pencegahan double-free, dan deteksi kehabisan memori (OOM).
+  - **MemoryDiagnostics (`memory-diagnostics.ts`):** Pembangkit laporan status memori fisik, halaman terpetakan, dan fragmentasi heap.
+- **Interupsi & Exception (`src/runtime/os/interrupt/`):**
+  - `InterruptDescriptorTable` (IDT): Tabel 256 gerbang 64-bit dengan limit IDTR dan selector segmen kernel.
+  - `ExceptionHandler`: Penanganan terdaftar untuk exception kunci CPU x86_64 (#DE Divide-by-Zero, #UD Invalid Opcode, #DF Double Fault, #GP General Protection Fault, #PF Page Fault dengan analisis bit CR2).
+  - `InterruptController`: Remapping pengontrol interupsi PIC 8259 ke vektor 32..47 dan masking/unmasking jalur IRQ.
+- **Hardware Abstraction Layer (`src/runtime/os/hal/`):**
+  - `X86_64HAL`: Abstraksi instruksi privileged CPU (`cli`, `sti`, `halt`), emulasi register port I/O (`inb`, `outb`, `inw`, `outw`, `inl`, `outl`), akses byte memori fisik, register pewaktu PIT, konsol UART, dan antrean scancode keyboard.
+  - `HALManager`: Akses singleton terisolasi ke instansi HAL yang aktif.
+- **Driver Perangkat Inti (`src/runtime/os/drivers/`):**
+  - `SerialDriver`: Driver port serial UART 16550 COM1 (`0x3F8`) kecepatan 115200 baud format 8N1.
+  - `TimerDriver`: Driver pewaktu periodik PIT 8254 (`0x40`/`0x43`) frekuensi 100 Hz (10 ms time slice).
+  - `KeyboardDriver`: Driver pengontrol keyboard PS/2 dengan penerjemah scancode set 1.
+  - `FramebufferDriver`: Driver konsol VGA text mode 80x25 (`0xB8000`) dengan penanganan warna atribut dan scroll baris otomatis.
+  - `DriverRegistry`: Manajemen registri terpusat dengan batch lifecycle `initAll()` dan `shutdownAll()`.
+- **Manajemen Proses, Thread & Penjadwal (`src/runtime/os/process/` & `src/runtime/os/scheduler/`):**
+  - `Process`: Process Control Block (PCB) dengan tabel deskriptor berkas VFS terisolasi dan pengelola thread.
+  - `Thread`: Thread Control Block (TCB) dengan prioritas 1..5, kuantum waktu proporsional, dan register context.
+  - `ContextSwitch`: Kontrak peralihan konteks CPU antar-thread.
+  - `KernelScheduler`: Penjadwal preemptive berbasis antrean siap bertingkat (Multi-Level Ready Queue levels 1..5) dan kebijakan Round-Robin/Cooperative.
+- **Sistem Berkas VFS & RamFS (`src/runtime/os/filesystem/`):**
+  - `RamFS`: Sistem berkas in-memory berbasis pohon simpul direktori dan berkas reguler dengan operasi `create`, `read`, `write`, `remove`, `readdir`, dan `stat`.
+  - `VirtualFileSystem`: Abstraksi tabel mount hierarki tunggal, resolusi berkas terpanjang (*longest match*), serta pemetaan nomor deskriptor berkas terbuka (fd >= 3).
+- **Target Kompilasi & Bootloader (`src/compiler/targets/kernel/`):**
+  - `X86_64_KERNEL_TARGET`: Target triple `x86_64-unknown-none-elf` dengan bendera freestanding lengkap.
+  - `Multiboot2HeaderBuilder`: Generator header bootloader spesifikasi Multiboot2 (magic `0xE85250D6`, architecture 0, checksum zero-sum, dan tag framebuffer).
+  - `generateKernelLinkerScript`: Pembangkit linker script higher-half x86_64 dengan segmen `.boot` (1 MiB fisikal) dan `.text` (virtual base `-2 GiB`).
+  - `KernelELFBuilder`: Pembangkit biner ELF64 x86_64 autentik (`\x7fELF`, ET_EXEC, EM_X86_64, segmen `PT_LOAD`, seksi `.multiboot`, `.text`, `.rodata`, `.data`, `.bss`, `.shstrtab`, `.symtab`, `.strtab`, dan simbol `_start` / `kernel_main`).
+- **Standard Library & CLI Integration:**
+  - Modul standar `std:os` (alias: `kernel`, `sistem_operasi`) dengan fungsi bawaan `versiKernel`, `statusKernel`, `alokasiMemori`, `bebaskanMemori`, `laporanMemori`, `tulisKonsol`, `dapatkanPid`, `yieldThread`, `bukaBerkas`, `bacaBerkas`, `tulisBerkas`, `tutupBerkas`.
+  - Perintah CLI `nusantara os`: `new` (scaffolder proyek kernel lengkap), `build` (sintesis biner ELF64 kernel), `inspect` (inspeksi header dan segmen ELF), `run` (peluncuran pada emulator QEMU dengan penanganan deteksi transparan jika belum terpasang), `test` (validasi kernel), `debug` (panduan konfigurasi GDB/QEMU), `targets` (daftar target kernel), `memory` (peta memori x86_64), dan `syscalls` (tabel system call).
+- **Contoh Program & Dokumentasi:**
+  - 4 contoh program Nusantara: `contoh/os/minimal/kernel_minimal.nusantara`, `contoh/os/memory/uji_memori.nusantara`, `contoh/os/syscall/uji_syscall.nusantara`, `contoh/os/driver/uji_serial.nusantara`.
+  - 15 panduan teknis berbahasa Indonesia dalam direktori `docs/os/` (01 s/d 15).
+
 ## [v0.47.0] — 2026-11-08
 ### Phase 47: Nusantara Game Development Kit (Game SDK)
 
