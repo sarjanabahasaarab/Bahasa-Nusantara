@@ -10,11 +10,36 @@
  * eksekusi QEMU sesungguhnya dengan Simulator internal.
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
-import { execSync, spawn } from 'child_process';
+import { safeFS, safePath, safeCP } from '../../../compiler/llvm/node-compat';
 import { ToolchainDetector } from './toolchain-detector';
-import { PengemasArsip } from '../../../build/pengemasArsip';
+
+function hitungHashSederhana(str: string): string {
+  let hash1 = 0x811c9dc5;
+  let hash2 = 0x53c5;
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    hash1 ^= code;
+    hash1 = (hash1 * 0x01000193) >>> 0;
+    hash2 = ((hash2 << 5) - hash2 + code) >>> 0;
+  }
+  return hash1.toString(16).padStart(8, '0') + hash2.toString(16).padStart(8, '0');
+}
+
+function getRuntimeSpawn() {
+  if (typeof window !== 'undefined') return null;
+  try {
+    if (typeof require === 'function') {
+      return require('child_process').spawn;
+    }
+    const proc = (globalThis as any).process;
+    if (proc && typeof proc.getBuiltinModule === 'function') {
+      return proc.getBuiltinModule('child_process')?.spawn;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
 
 export type BootValidationStatus =
   | 'QEMU_BOOT_PASS'
@@ -84,7 +109,7 @@ export class QEMURunner {
       };
     }
 
-    if (!fs.existsSync(options.kernelPath)) {
+    if (!safeFS.existsSync(options.kernelPath)) {
       return {
         status: 'QEMU_BOOT_FAIL',
         success: false,
@@ -97,16 +122,17 @@ export class QEMURunner {
       };
     }
 
-    const kernelBytes = fs.readFileSync(options.kernelPath);
-    const kernelSha256 = PengemasArsip.hitungHashSederhana(kernelBytes.toString('binary'));
+    const kernelBytes = safeFS.readFileSync(options.kernelPath);
+    const kernelSha256 = hitungHashSederhana(typeof kernelBytes === 'string' ? kernelBytes : '');
 
     const memoryMb = options.memoryMb ?? 512;
     const timeoutMs = options.timeoutMs ?? 10000;
 
-    const logFile = path.join(process.cwd(), 'qemu-serial.log');
-    if (fs.existsSync(logFile)) {
+    const cwd = typeof process !== 'undefined' && process.cwd ? process.cwd() : '.';
+    const logFile = safePath.join(cwd, 'qemu-serial.log');
+    if (safeFS.existsSync(logFile)) {
       try {
-        fs.unlinkSync(logFile);
+        safeFS.rmSync(logFile);
       } catch {}
     }
 
@@ -116,22 +142,25 @@ export class QEMURunner {
     // Jika diberikan berkas .elf dan mode bukan 'kernel', gunakan CD-ROM ISO via GRUB
     if (!isCDROM && options.mode !== 'kernel') {
       const possibleIso = options.kernelPath.replace(/\.elf$/, '.iso');
-      if (fs.existsSync(possibleIso)) {
+      if (safeFS.existsSync(possibleIso)) {
         bootMedia = possibleIso;
         isCDROM = true;
       } else if (toolchain.hasGRUB && toolchain.hasXorriso) {
         try {
-          const isoDir = path.join(process.cwd(), 'build', 'isodir');
-          const grubDir = path.join(isoDir, 'boot', 'grub');
-          fs.mkdirSync(grubDir, { recursive: true });
-          fs.copyFileSync(options.kernelPath, path.join(isoDir, 'boot', 'kernel.elf'));
-          fs.writeFileSync(
-            path.join(grubDir, 'grub.cfg'),
+          const isoDir = safePath.join(cwd, 'build', 'isodir');
+          const grubDir = safePath.join(isoDir, 'boot', 'grub');
+          safeFS.mkdirSync(grubDir, { recursive: true });
+          safeFS.writeFileSync(
+            safePath.join(isoDir, 'boot', 'kernel.elf'),
+            safeFS.readFileSync(options.kernelPath)
+          );
+          safeFS.writeFileSync(
+            safePath.join(grubDir, 'grub.cfg'),
             `serial --unit=0 --speed=115200\nterminal_input serial console\nterminal_output serial console\nset timeout=0\nset default=0\nmenuentry "NUSANTARA OS" {\n  multiboot2 /boot/kernel.elf\n  boot\n}\n`
           );
-          const genIso = path.join(process.cwd(), 'build', 'nusantara-kernel.iso');
-          fs.mkdirSync(path.dirname(genIso), { recursive: true });
-          execSync(`grub-mkrescue -o "${genIso}" "${isoDir}" >/dev/null 2>&1`);
+          const genIso = safePath.join(cwd, 'build', 'nusantara-kernel.iso');
+          safeFS.mkdirSync(safePath.dirname(genIso), { recursive: true });
+          safeCP.spawnSync('grub-mkrescue', ['-o', genIso, isoDir]);
           bootMedia = genIso;
           isCDROM = true;
         } catch {
@@ -197,9 +226,9 @@ export class QEMURunner {
         clearTimeout(timer);
 
         let serialContent = '';
-        if (fs.existsSync(logFile)) {
+        if (safeFS.existsSync(logFile)) {
           try {
-            serialContent = fs.readFileSync(logFile, 'utf-8');
+            serialContent = safeFS.readFileSync(logFile, 'utf-8');
           } catch {}
         }
 
@@ -226,7 +255,12 @@ export class QEMURunner {
       };
 
       try {
-        proc = spawn('qemu-system-x86_64', qemuArgs, {
+        const spawnFn = getRuntimeSpawn();
+        if (!spawnFn) {
+          finish(-1, 'Eksekusi emulator QEMU tidak didukung pada lingkungan peramban (browser).');
+          return;
+        }
+        proc = spawnFn('qemu-system-x86_64', qemuArgs, {
           stdio: ['ignore', 'pipe', 'pipe'],
         });
 

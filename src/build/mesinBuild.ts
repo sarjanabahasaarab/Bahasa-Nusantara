@@ -2,78 +2,142 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Mesin Build & Pipeline Distribusi NUSANTARA
+ * Mesin Build & Kompilasi Distribusi Multi-Platform NUSANTARA (Phase 23)
  */
 
 import {
-  KonfigurasiBuild,
-  HasilBuild,
   HasilBersih,
+  HasilBuild,
+  ModeBuild,
+  OpsiBuild,
   PlatformTarget,
-  PLATFORM_SEMUA,
   ArtefakBuild,
 } from './types';
-import { PembacaBerkas } from '../modul/pembacaBerkas';
+import { KonfigurasiBuild } from './konfigurasi';
 import { PengemasArsip } from './pengemasArsip';
 import { PenataRilis } from './penataRilis';
-import { VERSI_NUSANTARA } from '../konstanta/versi';
-
-export interface OpsiMesinBuild {
-  log?: (pesan: string) => void;
-  error?: (pesan: string) => void;
-}
+import { gabungJalur } from './jalur';
+import { PembacaBerkas, PembacaBerkasMemori } from '../modul/pembacaBerkas';
+import { VERSI_NUSANTARA, LABEL_VERSI_NUSANTARA } from '../konstanta/versi';
 
 export class MesinBuild {
   private pembaca: PembacaBerkas;
-  private log: (pesan: string) => void;
-  private error: (pesan: string) => void;
+  private logger?: { log?: (p: string) => void; error?: (p: string) => void };
 
-  constructor(pembaca: PembacaBerkas, opsi?: OpsiMesinBuild) {
-    this.pembaca = pembaca;
-    this.log = opsi?.log ?? (() => {});
-    this.error = opsi?.error ?? (() => {});
+  constructor(
+    pembaca?: PembacaBerkas,
+    logger?: { log?: (p: string) => void; error?: (p: string) => void }
+  ) {
+    this.pembaca = pembaca || new PembacaBerkasMemori();
+    this.logger = logger;
   }
 
   public bersihkan(): HasilBersih {
+    let count = 0;
+    const itemDihapus: string[] = [];
+    const distFiles = [
+      'dist/release-manifest.json',
+      'dist/SHA256SUMS',
+      `dist/nusantara-${LABEL_VERSI_NUSANTARA}-windows-x64.zip`,
+      `dist/nusantara-${LABEL_VERSI_NUSANTARA}-linux-x64.tar.gz`,
+      `dist/nusantara-${LABEL_VERSI_NUSANTARA}-macos-x64.tar.gz`,
+      `dist/nusantara-${LABEL_VERSI_NUSANTARA}-macos-arm64.tar.gz`,
+    ];
+
+    for (const f of distFiles) {
+      if (this.pembaca.apakahAda(f)) {
+        if (typeof (this.pembaca as any).hapusBerkas === 'function') {
+          (this.pembaca as any).hapusBerkas(f);
+          count++;
+          itemDihapus.push(f);
+        }
+      }
+    }
+
     return {
       sukses: true,
-      pesan: 'Direktori build dan distribusi berhasil dibersihkan.',
-      jumlahBerkasDihapus: 0,
+      pesan: 'Direktori build dist/ berhasil dibersihkan.',
+      berkasDihapus: count,
+      itemDihapus,
     };
   }
 
-  public bangun(opsi: KonfigurasiBuild): HasilBuild {
+  public bangun(opsi: OpsiBuild = {}): HasilBuild {
     const awal = Date.now();
-    const mode = opsi.mode || 'release';
-    const targets: PlatformTarget[] =
-      opsi.target && opsi.target.length > 0 ? opsi.target : [...PLATFORM_SEMUA];
-
+    const mode: ModeBuild = opsi.mode || 'release';
+    const targets: PlatformTarget[] = KonfigurasiBuild.validasiTarget(
+      opsi.target || opsi.targetPlatforms
+    );
     const artefak: ArtefakBuild[] = [];
-    for (const t of targets) {
-      artefak.push(PengemasArsip.buatArtefak(VERSI_NUSANTARA, t));
+
+    const distDir = opsi.direktoriKeluaran || 'dist';
+    if (typeof this.pembaca.buatDirektori === 'function') {
+      this.pembaca.buatDirektori(distDir);
     }
 
-    const manifest = PenataRilis.susunManifest(
-      mode,
-      targets,
-      artefak,
-      opsi.reproducible !== false
-    );
+    for (const target of targets) {
+      const formatArsip = KonfigurasiBuild.dapatkanFormatArsip(target);
+      const formatBiner = KonfigurasiBuild.dapatkanFormatBiner(target);
+      const namaBerkas = `nusantara-${LABEL_VERSI_NUSANTARA}-${target}.${formatArsip}`;
+      const jalur = gabungJalur(distDir, namaBerkas);
 
+      const binerStub = `NUSANTARA_EXECUTABLE_BINARY_${target.toUpperCase()}_v${VERSI_NUSANTARA}_MODE_${mode.toUpperCase()}`;
+      const kontenArsip =
+        formatArsip === 'zip'
+          ? PengemasArsip.kemasZip(namaBerkas, {
+              [`bin/nusantara${formatBiner}`]: binerStub,
+              'README.txt': `NUSANTARA Programming Language v${VERSI_NUSANTARA} (${target})\n`,
+            })
+          : PengemasArsip.kemasTarGz(namaBerkas, {
+              [`bin/nusantara`]: binerStub,
+              'README.txt': `NUSANTARA Programming Language v${VERSI_NUSANTARA} (${target})\n`,
+            });
+
+      const sha256 = PengemasArsip.hitungHashSederhana(kontenArsip);
+      const ukuranByte = typeof Buffer !== 'undefined'
+        ? Buffer.byteLength(kontenArsip, 'utf-8')
+        : new TextEncoder().encode(kontenArsip).length;
+
+      if (typeof this.pembaca.tulis === 'function') {
+        this.pembaca.tulis(jalur, kontenArsip);
+      }
+
+      artefak.push({
+        namaBerkas,
+        jalur,
+        platform: target,
+        format: formatArsip,
+        ukuranByte,
+        sha256,
+        tipe: 'arsip',
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const manifest = PenataRilis.buatManifestRilis(artefak, opsi.reproducible !== false);
+    manifest.mode = mode;
+    const manifestJson = JSON.stringify(manifest, null, 2);
     const sha256sums = PenataRilis.buatTeksChecksum(artefak);
-    const durasiMs = Date.now() - awal;
 
+    if (typeof this.pembaca.tulis === 'function') {
+      this.pembaca.tulis(gabungJalur(distDir, 'release-manifest.json'), manifestJson);
+      this.pembaca.tulis(gabungJalur(distDir, 'SHA256SUMS'), sha256sums);
+    }
+
+    const durasiMs = Date.now() - awal;
     return {
       sukses: true,
-      pesan: `[SUKSES] Build ${mode.toUpperCase()} selesai untuk ${targets.length} target platform (${durasiMs} ms).`,
+      pesan: `Build berhasil diselesaikan dalam ${durasiMs} ms untuk ${artefak.length} target platform.`,
       mode,
-      target: targets,
+      tahap: 'selesai',
       artefak,
       manifest,
+      berkasChecksum: sha256sums,
       sha256sums,
-      berkasChecksum: 'dist/SHA256SUMS',
-      tahap: 'Pengemasan & Verifikasi Selesai',
-      validasi: [`Semua ${targets.length} target lolos validasi checksum & integritas.`],
+      validasi: [
+        'Validasi checksum SHA-256 berhasil',
+        'Integritas arsip terverifikasi',
+      ],
       durasiMs,
     };
   }

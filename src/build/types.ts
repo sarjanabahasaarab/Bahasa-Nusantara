@@ -2,7 +2,8 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Definisi Tipe dan Kontrak Sistem Build Distribusi & Rilis Multiplatform NUSANTARA
+ * NUSANTARA Programming Language
+ * Definisi Tipe Data Sistem Build & Distribusi Multi-Platform
  */
 
 export type PlatformTarget =
@@ -11,7 +12,10 @@ export type PlatformTarget =
   | 'windows-x64'
   | 'macos-x64'
   | 'macos-arm64'
-  | 'web-wasm';
+  | 'darwin-x64'
+  | 'darwin-arm64';
+
+export type ModeBuild = 'debug' | 'release';
 
 export const PLATFORM_SEMUA: PlatformTarget[] = [
   'linux-x64',
@@ -19,39 +23,39 @@ export const PLATFORM_SEMUA: PlatformTarget[] = [
   'windows-x64',
   'macos-x64',
   'macos-arm64',
-  'web-wasm',
 ];
 
-export type ModeBuild = 'debug' | 'release';
-
 export interface ArtefakBuild {
-  platform: PlatformTarget;
   namaBerkas: string;
-  jalurRelatif: string;
+  jalur: string;
+  platform: PlatformTarget;
+  format: string;
   ukuranByte: number;
   sha256: string;
-  tipe: 'biner' | 'arsip' | 'pustaka' | 'wasm';
-  format?: string;
+  tipe?: 'biner' | 'arsip';
+  timestamp?: number | string;
 }
 
 export interface ManifestRilis {
   versi: string;
-  labelVersi: string;
-  waktuBuild: string;
-  mode: ModeBuild;
-  targetPlatforms: PlatformTarget[];
+  labelVersi?: string;
+  mode?: ModeBuild;
+  tanggalRilis?: string;
+  waktuDibuat?: string;
   artefak: ArtefakBuild[];
-  checksumFile: string;
-  reproducible: boolean;
+  totalUkuranByte?: number;
+  reproducible?: boolean;
+  metadata?: Record<string, any>;
 }
 
-export interface KonfigurasiBuild {
-  mode: ModeBuild;
+export interface OpsiBuild {
+  mode?: ModeBuild;
   target?: PlatformTarget[];
+  targetPlatforms?: PlatformTarget[];
   verifikasiUji?: boolean;
   tanpaUji?: boolean;
-  verbose?: boolean;
   reproducible?: boolean;
+  verbose?: boolean;
   direktoriKeluaran?: string;
 }
 
@@ -59,19 +63,19 @@ export interface HasilBuild {
   sukses: boolean;
   pesan: string;
   mode: ModeBuild;
-  target: PlatformTarget[];
+  tahap: string;
   artefak: ArtefakBuild[];
   manifest?: ManifestRilis;
-  sha256sums?: string;
   berkasChecksum?: string;
-  tahap?: string;
+  sha256sums?: string;
   validasi?: string[];
+  durasiMs?: number;
   galat?: string;
-  durasiMs: number;
 }
 
 export interface HasilBersih {
   sukses: boolean;
   pesan: string;
-  jumlahBerkasDihapus: number;
+  itemDihapus?: string[];
+  berkasDihapus?: number;
 }

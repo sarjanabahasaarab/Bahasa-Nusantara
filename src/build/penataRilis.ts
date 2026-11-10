@@ -2,36 +2,47 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Penata Berkas Rilis & Checksum SHA256SUMS
+ * Penata Rilis & Generator Manifest Distribusi (Phase 23)
  */
 
-import { ManifestRilis, ArtefakBuild, ModeBuild, PlatformTarget } from './types';
+import { ArtefakBuild, ManifestRilis, ModeBuild } from './types';
 import { VERSI_NUSANTARA, LABEL_VERSI_NUSANTARA } from '../konstanta/versi';
 
 export class PenataRilis {
-  public static susunManifest(
-    mode: ModeBuild,
-    targets: PlatformTarget[],
-    artefak: ArtefakBuild[],
-    reproducible: boolean = true
+  public static buatManifestRilis(
+    arg1: ArtefakBuild[] | string,
+    arg2?: boolean | ModeBuild,
+    arg3?: ArtefakBuild[]
   ): ManifestRilis {
+    let versi = VERSI_NUSANTARA;
+    let mode: ModeBuild = 'release';
+    let artefak: ArtefakBuild[] = [];
+    let reproducible = true;
+
+    if (typeof arg1 === 'string') {
+      versi = arg1;
+      mode = (arg2 as ModeBuild) || 'release';
+      artefak = arg3 || [];
+    } else {
+      artefak = arg1;
+      reproducible = typeof arg2 === 'boolean' ? arg2 : true;
+    }
+
+    const totalUkuran = artefak.reduce((sum, a) => sum + (a.ukuranByte || 0), 0);
+    const now = new Date().toISOString();
     return {
-      versi: VERSI_NUSANTARA,
+      versi,
       labelVersi: LABEL_VERSI_NUSANTARA,
-      waktuBuild: new Date().toISOString(),
       mode,
-      targetPlatforms: targets,
+      tanggalRilis: now,
+      waktuDibuat: now,
       artefak,
-      checksumFile: 'dist/SHA256SUMS',
+      totalUkuranByte: totalUkuran,
       reproducible,
     };
   }
 
   public static buatTeksChecksum(artefak: ArtefakBuild[]): string {
-    return (
-      artefak
-        .map(a => `${a.sha256}  ${a.namaBerkas}`)
-        .join('\n') + '\n'
-    );
+    return artefak.map((a) => `${a.sha256}  ${a.namaBerkas}`).join('\n') + '\n';
   }
 }

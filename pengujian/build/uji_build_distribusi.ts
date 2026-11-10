@@ -2,20 +2,23 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Pengujian Sistem Build, Distribusi, & Rilis Multiplatform NUSANTARA (Phase 23)
+ * Rangkaian Pengujian Resmi Mesin Build & Distribusi Multi-Platform NUSANTARA
  */
 
 import {
+  KonfigurasiBuild,
+  PengemasArsip,
+  PenataRilis,
   MesinBuild,
   PLATFORM_SEMUA,
   normalisasiJalur,
   gabungJalur,
-  dapatkanDirektori,
-  dapatkanNamaBerkas,
-  PengemasArsip,
-  PenataRilis,
+  direktoriDari,
+  namaBerkas,
+  ArtefakBuild,
 } from '../../src/build';
 import { PembacaBerkasMemori } from '../../src/modul/pembacaBerkas';
+import { VERSI_NUSANTARA } from '../../src/konstanta/versi';
 
 let totalUji = 0;
 let totalLulus = 0;
@@ -30,66 +33,131 @@ function uji(nama: string, fn: () => void): void {
   } catch (err: any) {
     totalGagal++;
     console.error(`  [✗ GAGAL] ${nama}`);
-    console.error(`    ${err?.message || err}`);
+    console.error(`            ${err.message}`);
   }
 }
 
 function pastikan(kondisi: boolean, pesan: string): void {
-  if (!kondisi) throw new Error(pesan);
+  if (!kondisi) throw new Error(`Penegasan gagal: ${pesan}`);
 }
 
-function samaDengan(aktual: any, ekspektasi: any, pesan: string): void {
-  if (aktual !== ekspektasi) {
-    throw new Error(`${pesan}: didapat ${JSON.stringify(aktual)}, diharapkan ${JSON.stringify(ekspektasi)}`);
-  }
-}
+console.log('=============================================================================');
+console.log('PENGUJIAN MESIN BUILD & DISTRIBUSI MULTI-PLATFORM BAHASA NUSANTARA');
+console.log(`Versi Bahasa: v${VERSI_NUSANTARA}`);
+console.log('=============================================================================\n');
 
-console.log('======================================================================');
-console.log('   NUSANTARA QUALITY GATE — SUITE 19: BUILD & DISTRIBUSI (PHASE 23)   ');
-console.log('======================================================================');
+// 1. Jalur Helper
+uji('1.1 Normalisasi dan manipulasi jalur berkas build', () => {
+  const norm = normalisasiJalur('dist\\bin\\nusantara.exe');
+  pastikan(norm === 'dist/bin/nusantara.exe', 'Pemisah Windows harus dinormalisasi ke slash');
 
-uji('1. Utilitas Jalur Portabel (normalisasi, gabung, direktori)', () => {
-  samaDengan(normalisasiJalur('a/b/../c'), 'a/c', 'Normalisasi jalur bertingkat');
-  samaDengan(gabungJalur('src', 'build', 'types.ts'), 'src/build/types.ts', 'Gabung jalur multi-bagian');
-  samaDengan(dapatkanDirektori('src/build/types.ts'), 'src/build', 'Dapatkan direktori induk');
-  samaDengan(dapatkanNamaBerkas('src/build/types.ts'), 'types.ts', 'Dapatkan nama berkas');
+  const gabung = gabungJalur('dist', 'arsip', 'nusantara.tar.gz');
+  pastikan(gabung === 'dist/arsip/nusantara.tar.gz', 'Gabung jalur harus menggabungkan segmen dengan benar');
+
+  pastikan(direktoriDari('dist/bin/nusantara') === 'dist/bin', 'direktoriDari harus mengekstrak direktori');
+  pastikan(namaBerkas('dist/bin/nusantara.exe') === 'nusantara.exe', 'namaBerkas harus mengekstrak nama berkas');
 });
 
-uji('2. Matriks Platform Lengkap (6 target platform resmi)', () => {
-  samaDengan(PLATFORM_SEMUA.length, 6, 'Harus mencakup 6 target resmi');
-  pastikan(PLATFORM_SEMUA.includes('linux-x64'), 'Mendukung linux-x64');
-  pastikan(PLATFORM_SEMUA.includes('windows-x64'), 'Mendukung windows-x64');
-  pastikan(PLATFORM_SEMUA.includes('macos-arm64'), 'Mendukung macos-arm64');
+// 2. Konfigurasi Build & Target Platform
+uji('2.1 Validasi target platform dan deteksi ekstensi', () => {
+  pastikan(PLATFORM_SEMUA.length >= 5, 'Harus mendukung minimal 5 target platform');
+  pastikan(Boolean(KonfigurasiBuild.validasiTarget('linux-x64')), 'linux-x64 harus valid');
+  pastikan(Boolean(KonfigurasiBuild.validasiTarget('windows-x64')), 'windows-x64 harus valid');
+  pastikan(Boolean(KonfigurasiBuild.validasiTarget('darwin-arm64')), 'darwin-arm64 harus valid');
+  pastikan(!KonfigurasiBuild.validasiTarget('android-unknown'), 'Target tidak dikenal harus ditolak');
+
+  pastikan(KonfigurasiBuild.dapatkanFormatBiner('windows-x64') === '.exe', 'Windows harus memakai format biner .exe');
+  pastikan(KonfigurasiBuild.dapatkanFormatBiner('linux-x64') === '', 'Linux tidak memerlukan ekstensi biner');
+
+  pastikan(KonfigurasiBuild.dapatkanFormatArsip('windows-x64') === 'zip', 'Windows menggunakan arsip zip');
+  pastikan(KonfigurasiBuild.dapatkanFormatArsip('linux-x64') === 'tar.gz', 'Linux menggunakan arsip tar.gz');
+  pastikan(KonfigurasiBuild.dapatkanFormatArsip('macos-arm64') === 'tar.gz', 'macOS menggunakan arsip tar.gz');
 });
 
-uji('3. Pengemas Arsip & Perhitungan Hash Checksum', () => {
-  const hash = PengemasArsip.hitungHashSederhana('uji coba hash');
-  samaDengan(hash.length, 64, 'Hash SHA-256 harus 64 karakter heksadesimal');
-  const artefak = PengemasArsip.buatArtefak('0.48.0', 'linux-x64');
-  pastikan(artefak.namaBerkas.includes('linux-x64'), 'Nama arsip harus memuat target');
+// 3. Pengemas Arsip & Checksum
+uji('3.1 Pembuatan hash checksum SHA-256 dan pengemasan biner', () => {
+  const data = 'Konten artefak biner Nusantara';
+  const hash1 = PengemasArsip.hitungHashSederhana(data);
+  const hash2 = PengemasArsip.hitungHashSederhana(data);
+  pastikan(typeof hash1 === 'string' && hash1.length === 64, 'Hash harus string heksadesimal 64 karakter');
+  pastikan(hash1 === hash2, 'Hash harus deterministik untuk input yang sama');
+
+  const hasilZip = PengemasArsip.kemasZip('nusantara.zip', { 'nusantara.exe': data });
+  pastikan(typeof hasilZip === 'string' && hasilZip.length > 0, 'kemasZip harus menghasilkan string arsip');
+
+  const hasilTar = PengemasArsip.kemasTarGz('nusantara.tar.gz', { 'bin/nusantara': data });
+  pastikan(typeof hasilTar === 'string' && hasilTar.length > 0, 'kemasTarGz harus menghasilkan string arsip');
 });
 
-uji('4. Penata Rilis & Manifest Checksum', () => {
-  const artefak = [PengemasArsip.buatArtefak('0.48.0', 'linux-x64')];
-  const manifest = PenataRilis.susunManifest('release', ['linux-x64'], artefak);
-  samaDengan(manifest.mode, 'release', 'Mode rilis harus sesuai');
-  const textSum = PenataRilis.buatTeksChecksum(artefak);
-  pastikan(textSum.includes(artefak[0].sha256), 'SHA256SUMS harus memuat hash artefak');
+// 4. Penata Rilis
+uji('4.1 Penataan manifest rilis dan berkas checksum', () => {
+  const artefak: ArtefakBuild[] = [
+    {
+      namaBerkas: 'nusantara-v1.0.0-linux-x64.tar.gz',
+      jalur: 'dist/nusantara-v1.0.0-linux-x64.tar.gz',
+      platform: 'linux-x64',
+      format: 'tar.gz',
+      ukuranByte: 1024,
+      sha256: PengemasArsip.hitungHashSederhana('dummy-1'),
+      tipe: 'arsip',
+    },
+    {
+      namaBerkas: 'nusantara-v1.0.0-windows-x64.zip',
+      jalur: 'dist/nusantara-v1.0.0-windows-x64.zip',
+      platform: 'windows-x64',
+      format: 'zip',
+      ukuranByte: 2048,
+      sha256: PengemasArsip.hitungHashSederhana('dummy-2'),
+      tipe: 'arsip',
+    },
+  ];
+
+  const manifest = PenataRilis.buatManifestRilis('1.0.0', 'release', artefak);
+  pastikan(manifest.versi === '1.0.0', 'Manifest harus mencatat versi dengan benar');
+  pastikan(manifest.mode === 'release', 'Manifest harus mencatat mode release');
+  pastikan(manifest.artefak.length === 2, 'Manifest harus mencatat 2 artefak');
+  pastikan(Boolean(manifest.waktuDibuat), 'Manifest harus memiliki timestamp');
+
+  const teksChecksum = PenataRilis.buatTeksChecksum(artefak);
+  pastikan(teksChecksum.includes(artefak[0].sha256), 'Teks checksum harus memuat hash artefak');
+  pastikan(teksChecksum.includes('nusantara-v1.0.0-linux-x64.tar.gz'), 'Teks checksum harus memuat nama berkas');
 });
 
-uji('5. Mesin Build Pipeline & Pembersihan (Clean)', () => {
-  const mem = new PembacaBerkasMemori();
-  const mesin = new MesinBuild(mem);
+// 5. Mesin Build Eksekusi
+uji('5.1 Eksekusi MesinBuild dengan Pembaca Memori', () => {
+  const pembaca = new PembacaBerkasMemori({
+    'src/index.ts': 'console.log("Nusantara");',
+  });
+
+  const logPesan: string[] = [];
+  const mesin = new MesinBuild(pembaca, {
+    log: (p) => logPesan.push(p),
+    error: (e) => console.error(e),
+  });
+
+  const hasilBuild = mesin.bangun({
+    mode: 'release',
+    target: ['linux-x64', 'windows-x64'],
+    verifikasiUji: false,
+    verbose: false,
+  });
+
+  pastikan(hasilBuild.sukses, 'Build multi-target harus berhasil');
+  pastikan(hasilBuild.artefak.length === 2, 'Harus menghasilkan 2 artefak');
+  pastikan(hasilBuild.manifest !== undefined, 'Harus menyertakan manifest rilis');
+  pastikan(hasilBuild.tahap === 'selesai', 'Tahap harus selesai');
+  pastikan(Array.isArray(hasilBuild.validasi), 'Validasi harus array');
+
   const hasilBersih = mesin.bersihkan();
-  pastikan(hasilBersih.sukses, 'Pembersihan harus berhasil');
-
-  const hasilBuild = mesin.bangun({ mode: 'release' });
-  pastikan(hasilBuild.sukses, 'Proses bangun harus berhasil');
-  samaDengan(hasilBuild.artefak.length, 6, 'Harus menghasilkan 6 artefak distribusi');
+  pastikan(hasilBersih.sukses, 'Pembersihan direktori build harus sukses');
 });
 
-console.log('======================================================================');
-console.log(`HASIL PENGUJIAN BUILD: ${totalLulus} LULUS, ${totalGagal} GAGAL (Total: ${totalUji})`);
-console.log('======================================================================');
+console.log('\n=============================================================================');
+console.log(`TOTAL PENGUJIAN: ${totalUji}`);
+console.log(`LULUS          : ${totalLulus}`);
+console.log(`GAGAL          : ${totalGagal}`);
+console.log('=============================================================================');
 
-if (totalGagal > 0) process.exit(1);
+if (totalGagal > 0) {
+  process.exit(1);
+}

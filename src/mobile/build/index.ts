@@ -2,7 +2,8 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Pintu Ekspor Utama Subsistem Build Mobile Nusantara
+ * NUSANTARA Programming Language - Phase 37
+ * Ekspor Modul Build Mobile
  */
 
 export * from './android';

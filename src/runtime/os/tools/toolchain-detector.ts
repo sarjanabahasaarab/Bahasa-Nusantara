@@ -8,7 +8,7 @@
  * bare-metal dan eksekusi emulator x86_64 secara transparan tanpa klaim palsu.
  */
 
-import { execSync } from 'child_process';
+import { safeCP } from '../../../compiler/llvm/node-compat';
 
 export interface ToolchainStatus {
   hasQEMU: boolean;
@@ -35,12 +35,18 @@ export class ToolchainDetector {
   private static cachedStatus?: ToolchainStatus;
 
   /**
-   * Jalankan command dengan aman tanpa melempar exception fatal.
+   * Jalankan command dengan aman tanpa melempar exception fatal atau gagal di browser.
    */
   private static runProbe(cmd: string): string | null {
     try {
-      const out = execSync(cmd, { stdio: ['pipe', 'pipe', 'pipe'], timeout: 3000 });
-      return out.toString().trim();
+      const parts = cmd.split(' ');
+      const bin = parts[0];
+      const args = parts.slice(1);
+      const res = safeCP.spawnSync(bin, args, { timeout: 3000 });
+      if (res.status === 0 && res.stdout) {
+        return res.stdout.trim();
+      }
+      return null;
     } catch {
       return null;
     }

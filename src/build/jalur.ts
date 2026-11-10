@@ -2,43 +2,24 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Utilitas Manipulasi Jalur Berkas Portabel (Cross-Platform Path Helpers)
+ * Utilitas Jalur Berkas Portabel (Path Utilities) untuk Sistem Build
  */
 
 export function normalisasiJalur(jalur: string): string {
   if (!jalur) return '';
-  let hasil = jalur.replace(/\\/g, '/');
-  // Hapus dobel slash
-  hasil = hasil.replace(/\/+/g, '/');
-  // Selesaikan dot dan double dot
-  const bagian = hasil.split('/');
-  const stack: string[] = [];
-  const adalahAbsolut = hasil.startsWith('/');
-
-  for (const b of bagian) {
-    if (b === '' || b === '.') continue;
-    if (b === '..') {
-      if (stack.length > 0 && stack[stack.length - 1] !== '..') {
-        stack.pop();
-      } else if (!adalahAbsolut) {
-        stack.push('..');
-      }
-    } else {
-      stack.push(b);
-    }
+  let j = jalur.replace(/\\/g, '/').replace(/\/+/g, '/');
+  if (j.length > 1 && j.endsWith('/')) {
+    j = j.slice(0, -1);
   }
-
-  const res = (adalahAbsolut ? '/' : '') + stack.join('/');
-  return res || (adalahAbsolut ? '/' : '.');
+  return j;
 }
 
 export function gabungJalur(...bagian: string[]): string {
-  const difilter = bagian.filter(b => typeof b === 'string' && b.length > 0);
-  if (difilter.length === 0) return '.';
+  const difilter = bagian.filter(Boolean);
   return normalisasiJalur(difilter.join('/'));
 }
 
-export function dapatkanDirektori(jalur: string): string {
+export function direktoriDari(jalur: string): string {
   const norm = normalisasiJalur(jalur);
   const idx = norm.lastIndexOf('/');
   if (idx === -1) return '.';
@@ -46,16 +27,8 @@ export function dapatkanDirektori(jalur: string): string {
   return norm.substring(0, idx);
 }
 
-export function dapatkanNamaBerkas(jalur: string): string {
+export function namaBerkas(jalur: string): string {
   const norm = normalisasiJalur(jalur);
   const idx = norm.lastIndexOf('/');
-  if (idx === -1) return norm;
-  return norm.substring(idx + 1);
-}
-
-export function dapatkanEkstensi(jalur: string): string {
-  const nama = dapatkanNamaBerkas(jalur);
-  const idx = nama.lastIndexOf('.');
-  if (idx <= 0) return '';
-  return nama.substring(idx);
+  return idx === -1 ? norm : norm.substring(idx + 1);
 }

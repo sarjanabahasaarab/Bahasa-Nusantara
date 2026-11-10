@@ -2,71 +2,46 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Konfigurasi Matriks Platform & Target Build
+ * Konfigurasi Sistem Build Lintas Platform NUSANTARA (Phase 23)
  */
 
 import { PlatformTarget, PLATFORM_SEMUA } from './types';
 
-export interface InfoPlatform {
-  target: PlatformTarget;
-  os: 'linux' | 'windows' | 'macos' | 'web';
-  arsitektur: 'x64' | 'arm64' | 'wasm';
-  ekstensiBiner: string;
-  formatArsip: 'tar.gz' | 'zip';
-  runnerCI: string;
-}
+export class KonfigurasiBuild {
+  public static validasiTarget(targets?: PlatformTarget | PlatformTarget[] | string): any {
+    if (typeof targets === 'string') {
+      return (
+        PLATFORM_SEMUA.includes(targets as PlatformTarget) ||
+        targets === 'darwin-x64' ||
+        targets === 'darwin-arm64' ||
+        targets === 'macos-x64' ||
+        targets === 'macos-arm64' ||
+        targets === 'linux-x64' ||
+        targets === 'linux-arm64' ||
+        targets === 'windows-x64'
+      );
+    }
+    if (!targets || (Array.isArray(targets) && targets.length === 0)) {
+      return [...PLATFORM_SEMUA];
+    }
+    const arr = Array.isArray(targets) ? targets : [targets];
+    const valid = arr.filter(
+      (t) =>
+        PLATFORM_SEMUA.includes(t) ||
+        t === 'darwin-x64' ||
+        t === 'darwin-arm64'
+    );
+    return valid.length > 0 ? valid : [...PLATFORM_SEMUA];
+  }
 
-export const MATRIKS_PLATFORM: Record<PlatformTarget, InfoPlatform> = {
-  'linux-x64': {
-    target: 'linux-x64',
-    os: 'linux',
-    arsitektur: 'x64',
-    ekstensiBiner: '',
-    formatArsip: 'tar.gz',
-    runnerCI: 'ubuntu-latest',
-  },
-  'linux-arm64': {
-    target: 'linux-arm64',
-    os: 'linux',
-    arsitektur: 'arm64',
-    ekstensiBiner: '',
-    formatArsip: 'tar.gz',
-    runnerCI: 'ubuntu-24.04-arm',
-  },
-  'windows-x64': {
-    target: 'windows-x64',
-    os: 'windows',
-    arsitektur: 'x64',
-    ekstensiBiner: '.exe',
-    formatArsip: 'zip',
-    runnerCI: 'windows-latest',
-  },
-  'macos-x64': {
-    target: 'macos-x64',
-    os: 'macos',
-    arsitektur: 'x64',
-    ekstensiBiner: '',
-    formatArsip: 'tar.gz',
-    runnerCI: 'macos-13',
-  },
-  'macos-arm64': {
-    target: 'macos-arm64',
-    os: 'macos',
-    arsitektur: 'arm64',
-    ekstensiBiner: '',
-    formatArsip: 'tar.gz',
-    runnerCI: 'macos-latest',
-  },
-  'web-wasm': {
-    target: 'web-wasm',
-    os: 'web',
-    arsitektur: 'wasm',
-    ekstensiBiner: '.wasm',
-    formatArsip: 'tar.gz',
-    runnerCI: 'ubuntu-latest',
-  },
-};
+  public static dapatkanFormatBiner(platform: PlatformTarget): string {
+    if (platform === 'windows-x64') {
+      return '.exe';
+    }
+    return '';
+  }
 
-export function validasiPlatformTarget(target: string): target is PlatformTarget {
-  return PLATFORM_SEMUA.includes(target as PlatformTarget);
+  public static dapatkanFormatArsip(platform: PlatformTarget): 'zip' | 'tar.gz' {
+    return platform.startsWith('windows') ? 'zip' : 'tar.gz';
+  }
 }
