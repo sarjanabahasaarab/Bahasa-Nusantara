@@ -1,8 +1,8 @@
 # Peta Jalan Pengembangan (ROADMAP) Bahasa Pemrograman NUSANTARA
 
 > **Peta Jalan Strategis, Hasil Audit Implementasi Nyata, dan Rencana Kerja Menuju NusantaraOS**  
-> **Tanggal Audit Terakhir:** 9 November 2026
-> **Versi Rilis Saat Ini:** `v0.48.0` (Phase 48: Nusantara OS Minimal Kernel Interface)
+> **Tanggal Audit Terakhir:** 10 November 2026
+> **Versi Rilis Saat Ini:** `v0.49.0` (Phase 49: Nusantara OS Bootable Kernel & Hardware Validation)
 
 Dokumen ini memetakan seluruh pencapaian rekayasa piranti lunak (*engineering milestones*) bahasa pemrograman **NUSANTARA**, dari fondasi awal tata bahasa hingga terwujudnya sistem operasi **NusantaraOS**. Setiap status fase dalam dokumen ini telah diaudit secara faktual berdasarkan kode sumber yang benar-benar ada di repositori (`src/`), pengujian otomatis yang lulus 100% (`pengujian/`), dan dokumentasi teknis resmi (`docs/` & `dokumentasi/`), tanpa klaim palsu.
 
@@ -15,14 +15,14 @@ Sesuai standar audit transparan dan kejujuran teknis proyek NUSANTARA, status se
 | Simbol | Status | Definisi Operasional |
 |---|---|---|
 | 🟢 | **SELESAI** | Seluruh kriteria penerimaan fase sudah diimplementasikan penuh dalam source code dan diverifikasi oleh pengujian otomatis yang relevan. |
-| 🟠 | **SELESAI SEBAGIAN** | Implementasi inti tersedia dan teruji, namun sebagian kemampuan (misal: bytecode DEX, biner Mach-O, atau layanan cloud produksi) belum terpenuhi. |
+| 🟠 | **SELESAI SEBAGIAN** | Implementasi inti tersedia dan teruji, namun sebagian kemampuan (misal: bytecode DEX, biner Mach-O, atau eksekusi emulator QEMU pada lingkungan tanpa toolchain) belum terpenuhi. |
 | 🟡 | **SIMULASI** | Implementasi arsitektur dan kontrak API tersedia, namun eksekusi dan pengujian baru berjalan melalui simulator, mock, atau in-memory message bus. |
 | 🟣 | **BELUM DIVERIFIKASI** | Implementasi kode atau kontrak tersedia, namun belum ada bukti pengujian yang memadai pada lingkungan target (misal: perangkat fisik nyata). |
 | 🔵 | **BELUM DIIMPLEMENTASIKAN** | Fitur baru berupa gagasan, rancangan arsitektur, atau proposal spesifikasi (NIP) untuk masa depan (dalam perencanaan). |
 
 ---
 
-## 2. Tabel Audit Komprehensif Fase Proyek (Phase 1 s/d Phase 48)
+## 2. Tabel Audit Komprehensif Fase Proyek (Phase 1 s/d Phase 50)
 
 | Phase | Nama Fase | Target Versi | Status | Implementasi Nyata | Pengujian Otomatis |
 |:---:|---|:---:|:---:|---|---|
@@ -73,9 +73,9 @@ Sesuai standar audit transparan dan kejujuran teknis proyek NUSANTARA, status se
 | **45** | **Linker & Standalone Executable** | `v0.45.0` | 🟢 SELESAI | `src/compiler/linker/`, `src/compiler/executable/`, `src/compiler/runtime/` (Tabel Simbol, Name Mangling `_N_*`, Resolusi Simbol Kuat/Lemah, Relocation Engine ELF/PE/Mach-O, Library Manager statis/dinamis, Dependency Inspector, Binary Inspector, Runtime Packager Profil Bundled/Minimal/Shared, Standalone Packager, CLI `nusantara link`, `nusantara inspect`, `nusantara package`). | `pengujian/linker/uji_linker_fase45.ts` (21 skenario uji tabel simbol, resolusi, relokasi, pustaka, dependensi, format biner, runtime & pengemasan terverifikasi). |
 | **46** | **High-Performance Concurrency (Actor Model)** | `v0.46.0` | 🟢 SELESAI | `src/runtime/actor/`, `src/runtime/async/`, `src/runtime/concurrency/` (Sistem Actor, isolasi state penuh, bounded mailbox FIFO, backpressure, Ask-Reply pattern, Dead Letter Queue, `Task<T>`, `TaskGroup`, `CancellationToken`, `withTimeout`, `ResourceManager`, `ConcurrencyDiagnostics`, parser `aktor`/`kirim`/`hentikan`/`await`, NIR opcodes, LLVM native stubs, CLI `nusantara actor` & `concurrency`). | `pengujian/actor/uji_actor_fase46.ts` (32 skenario pengujian siklus hidup, pengiriman pesan, backpressure, fairness scheduler, structured concurrency, supervisi, stress test 5.000 pesan throughput 40k–52k msg/sec, parser, NIR verifier/serializer, LLVM lowering & CLI lulus 100%). |
 | **47** | **Nusantara Game Development Kit (Game SDK)** | `v0.47.0` | 🟢 SELESAI | `src/runtime/game/`, `src/stdlib/game.ts` (Vector2/3, Color, Rect, GameLoop deterministik, Virtual/DOM 2D Renderer, Camera 2D/3D, Mesh, Material, Texture, Shader, Light, ECS World/Scene/Entity/Transform/Sprite/RigidBody/Collider/Audio/Particle/UI, Collision detection & impulse resolution, AssetManager aman, SaveManager checksum SHA-256, Multiplayer sync, integrasi ActorComponent via Phase 46, CLI `nusantara game`). | `pengujian/game/uji_game_sdk_fase47.ts` (33 pengujian Game SDK lulus 100%). |
-| **48** | **Nusantara OS: Minimal Kernel Interface** | `v0.48.0` | 🟢 SELESAI | `src/runtime/os/` (KernelCore, KernelABI, SyscallDispatcher & Table 11 syscalls, PMM frame bitmap allocator, VMM 4-level paging x86_64, KernelHeap dinamis recycling & double-free guard, IDT 256 gerbang, Exception handlers #DE/#UD/#DF/#GP/#PF, PIC 8259 remap, HAL x86_64 port I/O emulasi, Driver COM1 UART 16550, PIT 8254, PS/2 Keyboard, VGA Text 80x25, DriverRegistry, Process PCB & Thread TCB, KernelScheduler multi-level priority queue 1..5, VFS & in-memory RamFS, Multiboot2 boot header `0xE85250D6`, linker script higher-half -2GB, sintesis biner ELF64 x86_64, scaffolder `nusantara os new`, CLI `nusantara os`, modul `std:os`). | `pengujian/os/uji_kernel_fase48.ts` (42 pengujian Quality Gate lulus 100%). Deteksi QEMU dilaporkan transparan tanpa klaim palsu. |
-| **49** | **NusantaraOS User Space & GUI Shell** | `v0.49.0` | 🔵 BELUM DIIMPLEMENTASIKAN | Antarmuka grafis desktop pengguna, Compositor Wayland/DirectFB, dan shell desktop NusantaraOS. | Tahap perencanaan arsitektur. |
-| **50** | **NusantaraOS Kedaulatan Digital Penuh** | `v1.0.0` | 🔵 BELUM DIIMPLEMENTASIKAN | Visi puncak kedaulatan teknologi: Sistem Operasi mandiri komprehensif berdaulat penuh. | Visi jangka panjang proyek. |
+| **48** | **Nusantara OS: Minimal Kernel Interface** | `v0.48.0` | 🟢 SELESAI | `src/runtime/os/` (KernelCore, KernelABI, SyscallDispatcher & Table 11 syscalls, PMM frame bitmap allocator, VMM 4-level paging x86_64, KernelHeap dinamis recycling & double-free guard, IDT 256 gerbang, Exception handlers #DE/#UD/#DF/#GP/#PF, PIC 8259 remap, HAL x86_64 port I/O emulasi, Driver COM1 UART 16550, PIT 8254, PS/2 Keyboard, VGA Text 80x25, DriverRegistry, Process PCB & Thread TCB, KernelScheduler multi-level priority queue 1..5, VFS & in-memory RamFS, Multiboot2 boot header `0xE85250D6`, linker script higher-half -2GB, sintesis biner ELF64 x86_64, scaffolder `nusantara os new`, CLI `nusantara os`, modul `std:os`). | `pengujian/os/uji_kernel_fase48.ts` (42 pengujian Quality Gate lulus 100%). |
+| **49** | **Nusantara OS: Bootable Kernel & Hardware Validation** | `v0.49.0` | 🟠 SELESAI SEBAGIAN | `src/compiler/targets/kernel/x86-bootstrap-encoder.ts` (Sintesis machine code 32-bit Multiboot2 entry, CPUID, Long Mode bit 29, 4-level paging PML4/PDPT/PD 2MB huge page, CR3/CR4.PAE/EFER.LME/CR0.PG, GDT64, far jump 64-bit, UART COM1 init & transmisi sentinel `NUSANTARA_KERNEL_BOOT_OK`), `multiboot2-validator.ts` (Parser & validator header spesifikasi Multiboot2 `0xE85250D6`, checksum `(sum) % 2^32 === 0`, 8-byte alignment, 32 KiB offset window, tag parsing), `elf64-validator.ts` (Validator biner ELF64 x86_64 System V, `PT_LOAD`, perataan halaman 4 KiB), `src/runtime/os/tools/toolchain-detector.ts` (Detektor qemu, clang, ld.lld, xorriso, grub-mkrescue, gdb dengan panduan multi-OS), `src/runtime/os/tools/qemu-runner.ts` (Runner QEMU headless dengan batas waktu & deteksi sentinel), `project-generator.ts` (Scaffolding lengkap boot.S, kernel_entry.S, freestanding.c, grub.cfg, linker.ld, Makefile, skrip otomasi), `.github/workflows/kernel-boot-qemu.yml` (CI boot QEMU otomatis), CLI `nusantara os inspect-boot` & `nusantara os toolchain`, 13 dokumen panduan teknis `docs/os/`. | `pengujian/os/uji_boot_fase49.ts` (22 pengujian Quality Gate lulus 100%). Status eksekusi QEMU lokal dilaporkan jujur sebagai `QEMU_NOT_AVAILABLE` / `SIMULATION_ONLY` karena ketiadaan biner qemu pada container cloud saat ini. |
+| **50** | **NusantaraOS Kedaulatan Digital Penuh** | `v1.0.0` | 🔵 BELUM DIIMPLEMENTASIKAN | Visi puncak kedaulatan teknologi: Sistem Operasi mandiri komprehensif berdaulat penuh dengan ruang pengguna dan shell GUI. | Visi jangka panjang proyek. |
 
 ---
 
@@ -137,10 +137,10 @@ Seluruh 42 skrip pengujian berikut (1 skrip audit 167 berkas fondasi + 41 suite 
 | **Audit Fondasi** | **1 Skrip** | Skrip eksekutor Node.js (`skrip/periksa_fondasi.js`) |
 | **Suite Pengujian TypeScript** | **41 Suite** | 41 berkas suite pengujian TypeScript di direktori `pengujian/` |
 | **Pemeriksaan Dokumen Fondasi** | **167 Berkas** | Integritas dokumen EBNF, spesifikasi tata bahasa, lisensi, dan contoh (Phase 1–5) |
-| **Kasus Pengujian TypeScript** | **1.127 Kasus** | Total skenario uji (`uji(...)` / `test(...)`) yang dieksekusi oleh 41 suite TypeScript (1.124 Lulus, 3 Skipped transparan) |
-| **Total Pemeriksaan Gabungan** | **1.294 Pemeriksaan** | **167 pemeriksaan dokumen fondasi + 1.127 kasus uji TypeScript = 1.294 pemeriksaan** |
+| **Kasus Pengujian TypeScript** | **1.149 Kasus** | Total skenario uji (`uji(...)` / `test(...)`) yang dieksekusi oleh 42 suite TypeScript (1.146 Lulus, 3 Skipped transparan) |
+| **Total Pemeriksaan Gabungan** | **1.316 Pemeriksaan** | **167 pemeriksaan dokumen fondasi + 1.149 kasus uji TypeScript = 1.316 pemeriksaan** |
 
-> *Catatan:* Angka **1.294** adalah total pemeriksaan gabungan (167 pemeriksaan berkas fondasi ditambah 1.127 kasus pengujian TypeScript), bukan jumlah test case tunggal.
+> *Catatan:* Angka **1.316** adalah total pemeriksaan gabungan (167 pemeriksaan berkas fondasi ditambah 1.149 kasus pengujian TypeScript), bukan jumlah test case tunggal.
 
 ```bash
 npm test
@@ -190,21 +190,18 @@ Daftar suite pengujian terverifikasi:
 - `test:linker-v45` — Suite uji Linker, Symbol Table, Relocation Engine, Library Manager, Runtime Packager, Binary Inspector & Standalone Packaging (Phase 45).
 - `test:actor-v46` — Suite uji Concurrency & Actor Model, Mailbox Backpressure, Fairness, Async Tasks, NIR Opcodes, LLVM Lowering & CLI (Phase 46).
 - `test:game-v47` — Suite uji Nusantara Game Development Kit (Game SDK): Loop, Renderer 2D/3D, Kamera, ECS, Fisika 2D, Input, Audio, Partikel, Animasi, UI, Jaringan, Save System, Aktor & CLI `nusantara game` (Phase 47).
+- `test:kernel-v48` — Suite uji Nusantara OS Minimal Kernel Interface: Kernel Core, Memory PMM/VMM/Heap, IDT/Exception/PIC, HAL, Drivers Serial/Timer/VGA/Keyboard, Process/Thread/Scheduler, VFS/RamFS, ELF64, CLI `nusantara os` (Phase 48).
+- `test:boot-v49` — Suite uji Nusantara OS Bootable Kernel & Hardware Validation: Multiboot2 validation, ELF64 verification, X86BootstrapEncoder Long Mode, Toolchain Detector, QEMU Runner headless, Project Generator boot scaffolding, CLI `inspect-boot` / `toolchain` (Phase 49).
 
 ---
 
 ## 6. Jadwal & Prioritas Rilis Mendatang
 
 - **Fase Selesai Terbaru:**
-  - **Phase 43 (v0.43.0)**: Nusantara Intermediate Representation (NIR), SSA Form (Mem2Reg), CFG Dominator Tree, Optimizer Pass & CLI `nusantara nir` (🟢 Selesai).
-  - **Phase 44 (v0.44.0)**: LLVM Native Compiler Backend, Toolchain Manager, Target Triple & Data Layout, Type Mapping, LLVM IR Gen, IR Validator & Optimizer, Object Generator, Linker, Runtime C Stubs, AOT Pipeline & CLI `nusantara toolchain` / `nusantara aot` (🟢 Selesai).
-  - **Phase 45 (v0.45.0)**: Nusantara Linker, Symbol Table System (`_N_*`), Strong/Weak Symbol Resolution, Relocation Engine ELF/PE/Mach-O, Static & Dynamic Linking, Library Manager, Dependency Inspector, Binary Inspector, Runtime Packager Profil Bundled/Minimal/Shared, Standalone Application Packager & CLI `nusantara link` / `inspect` / `package` (🟢 Selesai).
-  - **Phase 46 (v0.46.0)**: High-Performance Concurrency (Actor Model), State Isolation, Bounded FIFO Mailbox & Backpressure, Ask-Reply, Dead Letter Queue, Task<T>, TaskGroup, CancellationToken, withTimeout, ResourceManager, ConcurrencyDiagnostics, Fair Scheduling, Parser & AST Concurrency, NIR Concurrency Opcodes, LLVM Native Stubs & CLI `nusantara actor` / `concurrency` (🟢 Selesai).
-  - **Phase 47 (v0.47.0)**: Nusantara Game Development Kit (Game SDK), Core Loop deterministik & Time, Canvas2DRenderer & IRenderer Command Buffer, Camera 2D/3D & Mesh Generation, Entity Component System (ECS) dengan sparse indexing & state serialization, 2D Physics Engine (impulse solver, AABB/Circle collision, raycasting), Input Manager (keyboard/mouse/action mapping), Audio Manager (volume hierarki & multi-category), Sprite Animation & Particle System, Game UI Modular, Asset Manager (anti path-traversal shield), Network Multiplayer (Client-Server packet serialization), Save System (checksum SHA-256 integrity & version migration), ActorComponent Integration (Phase 46), Project Scaffolder & CLI `nusantara game` (🟢 Selesai).
+  - **Phase 48 (v0.48.0)**: Nusantara OS: Minimal Kernel Interface (🟢 Selesai).
+  - **Phase 49 (v0.49.0)**: Nusantara OS: Bootable Kernel & Hardware Validation (🟠 Selesai Sebagian — Implementasi & Quality Gate lulus 100%, boot QEMU siap diverifikasi pada runner CI).
 - **Target Rilis Mendatang:**
-  - **Phase 48 (v0.48.0)**: Advanced Native Graphics (Vulkan / WebGPU Native Backend) & Spatial 3D Audio.
-  - **Phase 49 (v0.49.0)**: Advanced Compiler Optimizations (LTO, Inlining, Loop Unrolling, Vectorization).
-  - **Phase 50 (v1.0.0)**: Nusantara Sovereign Computing & Complete Production Ecosystem.
+  - **Phase 50 (v1.0.0)**: NusantaraOS Kedaulatan Digital Penuh & Complete Production Ecosystem.
 
 *Dokumen ROADMAP ini dirilis secara berkala dan disinkronkan secara ketat dengan hasil pengujian aktual repositori NUSANTARA.*
 

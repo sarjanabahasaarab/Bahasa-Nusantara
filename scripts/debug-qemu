@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -e
+
+KERNEL_ELF="${1:-bin/nusantara-kernel.elf}"
+GDB_PORT="${2:-1234}"
+
+if [ ! -f "$KERNEL_ELF" ]; then
+    ./scripts/build-kernel "$KERNEL_ELF"
+fi
+
+if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
+    echo "[GALAT] QEMU tidak ditemukan."
+    exit 1
+fi
+
+echo "======================================================================"
+echo "          SESI GDB REMOTE DEBUGGING KERNEL NUSANTARA OS               "
+echo "======================================================================"
+echo "1. Memulai QEMU terhenti pada instruksi awal (-S) dan GDB stub (-s port $GDB_PORT)..."
+echo "2. Pada terminal baru, jalankan:"
+echo "   gdb -ex 'target remote localhost:$GDB_PORT' -ex 'symbol-file $KERNEL_ELF'"
+echo "======================================================================"
+
+qemu-system-x86_64 -kernel "$KERNEL_ELF" -m 128M -serial stdio -display none -s -S

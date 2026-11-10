@@ -118,6 +118,10 @@ export class KernelABI {
     return pointer >= this.MEMORY_LAYOUT.kernelSpaceStart;
   }
 
+  public static isUserPointer(pointer: bigint): boolean {
+    return pointer <= this.MEMORY_LAYOUT.userSpaceEnd;
+  }
+
   /**
    * Konvensi Penamaan Simbol Kernel NUSANTARA
    */

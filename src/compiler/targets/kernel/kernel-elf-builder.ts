@@ -4,6 +4,7 @@
  */
 
 import { Multiboot2HeaderBuilder, MULTIBOOT2_HEADER_MAGIC } from './boot-headers.js';
+import { X86BootstrapEncoder } from './x86-bootstrap-encoder.js';
 
 export interface KernelELFOptions {
   entryPoint?: bigint;
@@ -13,17 +14,16 @@ export interface KernelELFOptions {
 }
 
 export class KernelELFBuilder {
-  private entryPoint: bigint;
+  private entryPoint?: bigint;
   private kernelName: string;
   private multibootBytes: Uint8Array;
-  private textPayload: Uint8Array;
+  private textPayload?: Uint8Array;
 
   constructor(options: KernelELFOptions = {}) {
-    this.entryPoint = options.entryPoint ?? 0x0010_0000n; // 1 MiB physical boot entry
+    this.entryPoint = options.entryPoint;
     this.kernelName = options.kernelName ?? 'nusantara-kernel';
     this.multibootBytes = options.multibootHeader ?? new Multiboot2HeaderBuilder().build();
-    // Default payload: instruksi hlt x86_64 loop (cli; hlt; jmp $-1) -> FA F4 EB FD
-    this.textPayload = options.textPayload ?? new Uint8Array([0xFA, 0xF4, 0xEB, 0xFD]);
+    this.textPayload = options.textPayload;
   }
 
   /**
@@ -79,10 +79,17 @@ export class KernelELFBuilder {
     const multibootSize = this.multibootBytes.byteLength;
 
     const textOffset = multibootOffset + Math.ceil(multibootSize / 16) * 16;
-    const textSize = this.textPayload.byteLength;
+    const textPhysAddr = 0x0010_0000n + BigInt(textOffset - multibootOffset);
+    const actualPayload =
+      this.textPayload ??
+      X86BootstrapEncoder.generateBootstrapBinary({
+        loadAddress: Number(textPhysAddr),
+      }).codeBytes;
+    const textSize = actualPayload.byteLength;
+    const effectiveEntryPoint = this.entryPoint ?? textPhysAddr;
 
     const rodataOffset = textOffset + Math.ceil(textSize / 16) * 16;
-    const rodataData = new TextEncoder().encode(`Nusantara OS Kernel v0.48.0 (${this.kernelName})\0`);
+    const rodataData = new TextEncoder().encode(`Nusantara OS Kernel v0.49.0 (${this.kernelName})\0`);
     const rodataSize = rodataData.byteLength;
 
     const dataOffset = rodataOffset + Math.ceil(rodataSize / 16) * 16;
@@ -130,7 +137,7 @@ export class KernelELFBuilder {
     view.setUint16(16, 2, true);      // e_type = ET_EXEC
     view.setUint16(18, 0x3E, true);   // e_machine = EM_X86_64 (62)
     view.setUint32(20, 1, true);      // e_version = EV_CURRENT
-    view.setBigUint64(24, this.entryPoint, true); // e_entry
+    view.setBigUint64(24, effectiveEntryPoint, true); // e_entry
     view.setBigUint64(32, BigInt(elfHeaderSize), true); // e_phoff
     view.setBigUint64(40, BigInt(shdrOffset), true);    // e_shoff
     view.setUint32(48, 0, true);      // e_flags
@@ -170,7 +177,7 @@ export class KernelELFBuilder {
     // 6. Tulis Data Payload
     // ==========================================
     buffer.set(this.multibootBytes, multibootOffset);
-    buffer.set(this.textPayload, textOffset);
+    buffer.set(actualPayload, textOffset);
     buffer.set(rodataData, rodataOffset);
     buffer.set(dataPayload, dataOffset);
     buffer.set(shstrtabData, shstrtabOffset);
@@ -188,7 +195,7 @@ export class KernelELFBuilder {
     buffer[symOff + 4] = (1 << 4) | 2;             // st_info -> STB_GLOBAL | STT_FUNC
     buffer[symOff + 5] = 0;                        // st_other
     view.setUint16(symOff + 6, 2, true);           // st_shndx -> .text
-    view.setBigUint64(symOff + 8, this.entryPoint, true); // st_value
+    view.setBigUint64(symOff + 8, effectiveEntryPoint, true); // st_value
     view.setBigUint64(symOff + 16, BigInt(textSize), true); // st_size
     symOff += symEntrySize;
 
@@ -245,7 +252,7 @@ export class KernelELFBuilder {
     writeShdr(1, shstrtabOffsets[1], 1, 2n, 0x0010_0000n, multibootOffset, multibootSize, 0, 0, 8);
 
     // [2] .text (SHT_PROGBITS = 1, SHF_ALLOC | SHF_EXECINSTR = 6)
-    writeShdr(2, shstrtabOffsets[2], 1, 6n, 0x0010_0100n, textOffset, textSize, 0, 0, 16);
+    writeShdr(2, shstrtabOffsets[2], 1, 6n, textPhysAddr, textOffset, textSize, 0, 0, 16);
 
     // [3] .rodata (SHT_PROGBITS = 1, SHF_ALLOC = 2)
     writeShdr(3, shstrtabOffsets[3], 1, 2n, 0xFFFF_FFFF_8010_0000n, rodataOffset, rodataSize, 0, 0, 16);

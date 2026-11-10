@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -e
+
+KERNEL_ELF="${1:-bin/nusantara-kernel.elf}"
+LOG_FILE="qemu-serial.log"
+TIMEOUT_SEC=5
+
+if [ ! -f "$KERNEL_ELF" ]; then
+    echo "Membangun kernel untuk pengujian..."
+    ./scripts/build-kernel "$KERNEL_ELF" >/dev/null 2>&1
+fi
+
+if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
+    echo "[SKIPPED] QEMU tidak terpasang di host container ini."
+    echo "STATUS: SIMULATION_ONLY"
+    exit 0
+fi
+
+rm -f "$LOG_FILE"
+echo "Menjalankan QEMU headless dengan monitor serial..."
+qemu-system-x86_64 -kernel "$KERNEL_ELF" -m 128M -serial file:"$LOG_FILE" -display none -no-reboot -device isa-debug-exit,iobase=0xf4,iosize=0x04 &
+PID=$!
+
+sleep "$TIMEOUT_SEC"
+kill "$PID" 2>/dev/null || true
+
+if [ -f "$LOG_FILE" ] && grep -q "NUSANTARA_KERNEL_BOOT_OK" "$LOG_FILE"; then
+    echo "======================================================================"
+    echo "             [QEMU_BOOT_PASS] BOOT KERNEL NATIVE BERHASIL!            "
+    echo "======================================================================"
+    echo "Bukti log serial UART:"
+    cat "$LOG_FILE"
+    echo "======================================================================"
+    exit 0
+else
+    echo "[QEMU_BOOT_FAIL] Sentinel 'NUSANTARA_KERNEL_BOOT_OK' tidak ditemukan di serial log."
+    exit 1
+fi

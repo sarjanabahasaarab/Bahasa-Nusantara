@@ -125,15 +125,20 @@ export class VirtualMemoryManager {
   /**
    * Memeriksa apakah operasi tertentu (READ, WRITE, EXECUTE, USER) diizinkan pada alamat virtual
    */
-  public checkAccess(virtAddr: bigint, requiredPerm: PagePermissions | 'read' | 'write' | 'execute', isUserMode: boolean): boolean {
+  public checkAccess(
+    virtAddr: bigint,
+    requiredPerm: PagePermissions | 'read' | 'write' | 'execute' | 'READ' | 'WRITE' | 'EXECUTE',
+    isUserMode: boolean = false
+  ): boolean {
     const perms = this.getPermissions(virtAddr);
     if (perms === null) return false; // Not present -> Page Fault
 
     let req: PagePermissions = PagePermissions.READ_ONLY;
     if (typeof requiredPerm === 'string') {
-      if (requiredPerm === 'write') req = PagePermissions.READ_WRITE;
-      else if (requiredPerm === 'execute') req = PagePermissions.EXECUTE;
-      else req = PagePermissions.READ_ONLY;
+      const lower = requiredPerm.toLowerCase();
+      if (lower === 'write') req = PagePermissions.WRITE;
+      else if (lower === 'execute') req = PagePermissions.EXECUTE;
+      else req = PagePermissions.READ;
     } else {
       req = requiredPerm;
     }

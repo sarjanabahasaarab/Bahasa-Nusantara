@@ -4,6 +4,58 @@ Seluruh perubahan penting pada proyek bahasa pemrograman NUSANTARA dicatat dalam
 
 Format penomoran versi mengacu pada **Semantic Versioning** (`vMAJOR.MINOR.PATCH`). Pada masa pengembangan awal, versi minor mencerminkan tahapan fase roadmap (misal `v0.1.0` untuk Phase 1, `v0.2.0` untuk Phase 2, `v0.3.0` untuk Phase 3, `v0.4.0` untuk Phase 4, `v0.5.0` untuk Phase 5, `v0.6.0` untuk Phase 6, `v0.7.0` untuk Phase 7, `v0.8.0` untuk Phase 8, `v0.9.0` untuk Phase 9, `v0.10.0` untuk Phase 10).
 
+## [v0.49.0] — 2026-11-10
+### Phase 49: Nusantara OS: Bootable Kernel & Hardware Validation
+
+Fase ini memvalidasi dan mewujudkan kemampuan boot mandiri (*bare-metal bootable kernel*) sistem operasi NUSANTARA pada arsitektur x86_64 dengan kepatuhan penuh terhadap spesifikasi Multiboot2 dan System V AMD64 ABI. Seluruh komponen bootloader, transisi proteksi ke Long Mode 64-bit, sintesis instruksi mesin autentik, generator perancah proyek OS, dan validasi biner ELF64 diimplementasikan dan diverifikasi oleh Quality Gate Test Suite 45 dengan 22 skenario pengujian berstatus 100% lulus.
+
+Keterbatasan fisik dilaporkan secara transparan: emulator `qemu-system-x86_64` belum terpasang pada container cloud saat ini, sehingga perintah `nusantara os run` secara jujur menolak pemalsuan hasil boot dan memberikan kode keluar `QEMU_NOT_AVAILABLE` serta instruksi instalasi lengkap untuk pengguna. Alur CI GitHub Actions `.github/workflows/kernel-boot-qemu.yml` disediakan untuk memverifikasi boot headless otomatis di lingkungan runner yang memiliki toolchain lengkap.
+
+#### Ditambahkan:
+- **x86_64 Bootstrap Machine Code Synthesizer (`src/compiler/targets/kernel/x86-bootstrap-encoder.ts`):**
+  - Titik masuk 32-bit Multiboot2 autentik (`0x100000` / 1 MiB physical boundary).
+  - Verifikasi kapabilitas CPU via `CPUID` dan deteksi bit Long Mode (bit 29 EDX ekstensi CPUID `0x80000001`).
+  - Penyiapan struktur tabel paginasi 4-tingkat (`PML4`, `PDPT`, `PD` menggunakan 2 MiB huge page identity mapping).
+  - Pemuatan register kontrol `CR3`, aktivasi Physical Address Extension (`CR4.PAE` bit 5), pengaktifan Long Mode Enable (`IA32_EFER.LME` bit 8 MSR `0xC0000080`), dan pengaktifan paging (`CR0.PG` bit 31).
+  - Definisi dan pemuatan Global Descriptor Table 64-bit (`GDT64`) dengan penyeleksi kode 64-bit (`0x08`) dan data (`0x10`).
+  - Far jump ke titik masuk 64-bit (`kernel_entry64`), inisialisasi port serial COM1 UART 16550 (`0x3F8`) 115200 8N1, dan transmisi berulang sentinel boot mandatory: `NUSANTARA_KERNEL_BOOT_OK\r\n`.
+  - Penulisan visual ke framebuffer teks VGA (`0xB8000`) dan loop penghentian aman CPU `hlt`.
+- **Multiboot2 Header Inspector & Validator (`src/compiler/targets/kernel/multiboot2-validator.ts`):**
+  - Pemeriksaan nomor ajaib Multiboot2 `0xE85250D6`.
+  - Pemeriksaan arsitektur target `0` (i386 32-bit protected mode entry).
+  - Validasi panjang header dan integritas checksum: `(magic + architecture + header_length + checksum) mod 2^32 === 0`.
+  - Penegakan perataan batas 8-byte (*8-byte alignment*) dan lokasi header berada di dalam 32 KiB pertama berkas.
+  - Parsing tag lengkap: Tag Akhir (Type 0), Tag Framebuffer (Type 5), Tag Alamat Informasi (Type 1), Tag Titik Masuk (Type 3).
+  - Diagnostik struktur kesalahan dan peringatan yang dapat dibaca manusia.
+- **ELF64 System V AMD64 Validator (`src/compiler/targets/kernel/elf64-validator.ts`):**
+  - Verifikasi magic bytes `\x7fELF`.
+  - Verifikasi kelas 64-bit (`ELFCLASS64`), format little-endian (`ELFDATA2LSB`), tipe berkas eksekutabel (`ET_EXEC` = 2), dan set instruksi AMD x86_64 (`EM_X86_64` = 0x3E).
+  - Pemeriksaan segmen program `PT_LOAD`, penegakan batas perataan memori 4 KiB (`0x1000`), hak akses segmen (`PF_R | PF_X`), dan validitas alamat virtual titik masuk.
+- **Detektor Toolchain Host (`src/runtime/os/tools/toolchain-detector.ts`):**
+  - Pelacakan ketersediaan biner sistem: `qemu-system-x86_64`, `clang`, `ld.lld`, `gcc`, `xorriso`, `grub-mkrescue`, `gdb`.
+  - Pembangkit panduan instalasi otomatis berbasis paket distro: Debian/Ubuntu (`apt-get install qemu-system-x86 ...`), Arch Linux (`pacman -S ...`), macOS (`brew install ...`), dan Windows Scoop/Chocolatey.
+- **QEMU Headless Runner (`src/runtime/os/tools/qemu-runner.ts`):**
+  - Peluncur QEMU tanpa GUI (`-nographic -serial file:serial.log -no-reboot -no-shutdown`).
+  - Integrasi port exit debug ISA (`-device isa-debug-exit,iobase=0xf4,iosize=0x04`) untuk terminasi deterministik.
+  - Penangkapan log serial dan verifikasi string sentinel `NUSANTARA_KERNEL_BOOT_OK`.
+  - Penanganan batas waktu aman (*timeout protection*) pencegah proses menggantung.
+- **Pembangkit Perancah Proyek Kernel (`src/runtime/os/tools/project-generator.ts`):**
+  - Menghasilkan struktur direktori proyek kernel: `src/boot/boot.S`, `src/boot/kernel_entry.S`, `src/kernel/main.nusantara`, `src/runtime/freestanding.c`, `boot/grub/grub.cfg`, `linker.ld`, `Makefile`, `nusantara.toml`.
+  - Pembangkit skrip pembantu di direktori `scripts/`: `check-toolchain`, `build-kernel`, `make-iso`, `run-qemu`, `test-qemu`, `debug-qemu` (dengan hak eksekusi `chmod +x`).
+- **Otomasi CI/CD GitHub Actions (`.github/workflows/kernel-boot-qemu.yml`):**
+  - Workflow pengujian boot QEMU mandiri pada runner Ubuntu.
+  - Instalasi paket `qemu-system-x86`, `xorriso`, `grub-pc-bin`, `clang`, `lld`.
+  - Pembangunan kernel, pembuatan berkas ISO bootable, peluncuran QEMU headless, pemindaian log serial untuk string sentinel, dan pengunggahan log serial sebagai artefak CI.
+- **Perluasan CLI Subperintah (`src/paket/cli.ts`):**
+  - `nusantara os inspect-boot <berkas>`: Memvalidasi kepatuhan spesifikasi Multiboot2 dan header ELF64.
+  - `nusantara os toolchain`: Menampilkan tabel status deteksi perkakas fisik lokal.
+  - `nusantara os simulate`: Menjalankan simulasi logika kernel in-memory secara eksplisit (`SIMULATION_ONLY`).
+  - `nusantara os run`: Menjalankan emulator QEMU nyata dengan penolakan jujur jika biner QEMU tidak ditemukan.
+- **13 Panduan Dokumentasi Teknis (`docs/os/`):**
+  - Panduan komprehensif Bahasa Indonesia mengenai arsitektur boot, spesifikasi Multiboot2, Long Mode, paginasi 4-tingkat, UART 16550, debug exit QEMU, integrasi CI/CD, dan pemecahan masalah bootloader.
+- **Suite Pengujian Quality Gate 45 (`pengujian/os/uji_boot_fase49.ts`):**
+  - 22 skenario pengujian mendalam yang memvalidasi sintesis machine code x86, validasi Multiboot2, validasi ELF64, deteksi toolchain, runner QEMU, pemisahan simulasi vs QEMU, dan integrasi CLI.
+
 ## [v0.48.0] — 2026-11-09
 ### Phase 48: Nusantara OS Minimal Kernel Interface
 

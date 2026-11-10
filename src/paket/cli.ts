@@ -56,6 +56,10 @@ import {
   KernelCore,
   KernelELFBuilder,
   Multiboot2HeaderBuilder,
+  Multiboot2Validator,
+  ELF64Validator,
+  ToolchainDetector,
+  QEMURunner,
   X86_64_KERNEL_TARGET,
   SyscallNumber,
   SYSCALL_NAMES,
@@ -125,6 +129,10 @@ export class NusantaraCLI {
    * Menjalankan perintah baris perintah berdasarkan argumen array string.
    * Mengembalikan kode status keluar (0 untuk sukses, non-nol untuk gagal).
    */
+  public eksekusi(args: string[]): number {
+    return this.jalankan(args);
+  }
+
   public jalankan(args: string[]): number {
     if (!args || args.length === 0) {
       this.cetakBantuan();
@@ -1833,15 +1841,18 @@ export class NusantaraCLI {
 
     if (!subPerintah || subPerintah === 'bantuan' || subPerintah === '--help' || subPerintah === '-h') {
       this.log('======================================================');
-      this.log('     NUSANTARA OS - MINIMAL KERNEL INTERFACE (Fase 48) ');
+      this.log('     NUSANTARA OS - BOOTABLE KERNEL & RUNTIME (Fase 49) ');
       this.log('======================================================');
       this.log('Perintah yang tersedia:');
       this.log('  nusantara os new <nama> [--target=x86_64-kernel] [--boot=multiboot2]');
       this.log('  nusantara os build [berkas/dir] [--output=kernel.elf]');
       this.log('  nusantara os inspect [berkas.elf]');
+      this.log('  nusantara os inspect-boot [berkas.elf]');
+      this.log('  nusantara os simulate [berkas.elf]');
       this.log('  nusantara os run [berkas.elf] [--mem=128M]');
       this.log('  nusantara os test');
       this.log('  nusantara os debug [berkas.elf]');
+      this.log('  nusantara os toolchain');
       this.log('  nusantara os targets');
       this.log('  nusantara os memory');
       this.log('  nusantara os syscalls');
@@ -1892,8 +1903,9 @@ export class NusantaraCLI {
         this.log('\nLangkah selanjutnya:');
         this.log(`  1. cd ${nama}`);
         this.log('  2. nusantara os build');
-        this.log('  3. nusantara os inspect biner/kernel.elf');
-        this.log('  4. nusantara os run biner/kernel.elf');
+        this.log('  3. nusantara os inspect-boot biner/kernel.elf');
+        this.log('  4. nusantara os simulate');
+        this.log('  5. nusantara os run biner/kernel.elf');
         return 0;
       }
 
@@ -1903,13 +1915,13 @@ export class NusantaraCLI {
         const outputPath = outputArg ? outputArg.slice(9) : 'biner/kernel.elf';
 
         this.log(`[NUSANTARA OS] Membangun kernel freestanding x86_64...`);
-        this.log(`[+] Mengompilasi kode sumber kernel Nusantara...`);
+        this.log(`[+] Mengompilasi kode sumber bootstrap 32-bit & transisi Long Mode...`);
         this.log(`[+] Menyematkan Multiboot2 boot header (magic: 0xE85250D6)...`);
-        this.log(`[+] Menautkan segmen higher-half (-2 GiB, virtual base 0xFFFFFFFF80000000)...`);
+        this.log(`[+] Mengonfigurasi UART 16550 serial COM1 sentinel: NUSANTARA_KERNEL_BOOT_OK...`);
+        this.log(`[+] Menautkan segmen higher-half (virtual base 0xFFFF800000000000)...`);
 
         const builder = new KernelELFBuilder({
           kernelName: 'nusantara-os-kernel',
-          entryPoint: 0x0010_0000n,
         });
         const elfBytes = builder.build();
 
@@ -1936,57 +1948,74 @@ export class NusantaraCLI {
         return 0;
       }
 
+      case 'inspect-boot':
+      case 'inspeksi-boot': {
+        const berkasTarget = sisaArgs[0] || 'biner/kernel.elf';
+        let bytes: Uint8Array;
+        if (this.pembaca.apakahAda(berkasTarget)) {
+          const raw = typeof (this.pembaca as any).bacaBerkas === 'function'
+            ? (this.pembaca as any).bacaBerkas(berkasTarget)
+            : this.pembaca.baca(berkasTarget);
+          bytes = typeof raw === 'string' ? Buffer.from(raw, 'binary') : raw;
+        } else {
+          // Buat biner default untuk inspeksi
+          const builder = new KernelELFBuilder({ kernelName: 'nusantara-os-kernel' });
+          bytes = builder.build();
+        }
+
+        const hasil = Multiboot2Validator.inspect(bytes);
+        if (opsi.json || args.includes('--json')) {
+          this.log(JSON.stringify(hasil, null, 2));
+          return hasil.valid ? 0 : 1;
+        }
+        this.log(Multiboot2Validator.formatReport(hasil));
+        return hasil.valid ? 0 : 1;
+      }
+
       case 'inspect':
       case 'inspeksi': {
         const berkasTarget = sisaArgs[0] || 'biner/kernel.elf';
-        this.log('======================================================');
-        this.log('      INSPEKSI BINER KERNEL NUSANTARA OS (ELF64)      ');
-        this.log('======================================================');
-
-        const info = {
-          file: berkasTarget,
-          format: 'ELF64 (Little Endian, System V)',
-          architecture: 'x86_64 (AMD64 / EM_X86_64: 62)',
-          entryPoint: '0x00100000 (Physical 1 MiB)',
-          higherHalfBase: '0xFFFFFFFF80000000 (-2 GiB)',
-          bootProtocol: 'Multiboot2 (Magic: 0xE85250D6, Checksum: VALID)',
-          segments: [
-            { type: 'PT_LOAD', flags: 'R-X', paddr: '0x00100000', vaddr: '0x00100000', align: '4KB' },
-            { type: 'PT_LOAD', flags: 'RW-', paddr: '0x00102000', vaddr: '0xFFFFFFFF80100000', align: '4KB' },
-          ],
-          sections: ['.multiboot', '.text', '.rodata', '.data', '.bss', '.shstrtab', '.symtab', '.strtab'],
-          symbols: ['_start', 'kernel_main', 'multiboot_header'],
-        };
-
-        if (opsi.json || args.includes('--json')) {
-          this.log(JSON.stringify(info, null, 2));
-          return 0;
+        let bytes: Uint8Array;
+        if (this.pembaca.apakahAda(berkasTarget)) {
+          const raw = typeof (this.pembaca as any).bacaBerkas === 'function'
+            ? (this.pembaca as any).bacaBerkas(berkasTarget)
+            : this.pembaca.baca(berkasTarget);
+          bytes = typeof raw === 'string' ? Buffer.from(raw, 'binary') : raw;
+        } else {
+          const builder = new KernelELFBuilder({ kernelName: 'nusantara-os-kernel' });
+          bytes = builder.build();
         }
 
-        this.log(`Berkas Target       : ${info.file}`);
-        this.log(`Format Biner        : ${info.format}`);
-        this.log(`Arsitektur          : ${info.architecture}`);
-        this.log(`Titik Masuk (Entry) : ${info.entryPoint}`);
-        this.log(`Higher-Half Base    : ${info.higherHalfBase}`);
-        this.log(`Header Bootloader   : ${info.bootProtocol}`);
-        this.log(`Segmen Program      : ${info.segments.length} PT_LOAD segments`);
-        this.log(`Tabel Bagian        : ${info.sections.join(', ')}`);
-        this.log(`Simbol Kunci        : ${info.symbols.join(', ')}`);
-        this.log('======================================================');
+        const hasil = ELF64Validator.inspect(bytes);
+        if (opsi.json || args.includes('--json')) {
+          this.log(JSON.stringify(hasil, null, 2));
+          return hasil.valid ? 0 : 1;
+        }
+        this.log(ELF64Validator.formatReport(hasil));
+        return hasil.valid ? 0 : 1;
+      }
+
+      case 'simulate':
+      case 'simulasi': {
+        this.log('[NUSANTARA OS] Menjalankan simulator virtual kernel internal...');
+        const kernel = new KernelCore({ name: 'nusantara-os-virtual' });
+        kernel.boot();
+        this.log(`[✓] State Kernel    : ${kernel.getContext().state}`);
+        this.log(`[✓] Scheduler Ready : ${kernel.getScheduler().getProcessCount()} proses, ${kernel.getScheduler().getThreadCount()} thread aktif`);
+        this.log(`[✓] Heap Terpasang  : ${kernel.getHeap().getAllocatedBytes()} bytes teralokasi, ${kernel.getHeap().getFreeBytes()} bytes bebas`);
+        this.log(`[✓ STATUS] SIMULATION_ONLY — Simulasi virtual kernel berhasil.`);
         return 0;
       }
 
       case 'run':
       case 'jalankan': {
         const berkasTarget = sisaArgs[0] || 'biner/kernel.elf';
-        this.log(`[NUSANTARA OS] Menyiapkan peluncuran kernel pada emulator...`);
+        this.log(`[NUSANTARA OS] Menyiapkan peluncuran kernel pada emulator QEMU...`);
 
-        // Periksa apakah qemu-system-x86_64 tersedia
-        const qemuCheck = safeCP.spawnSync('which', ['qemu-system-x86_64']);
-        const adaQEMU = qemuCheck.status === 0 && qemuCheck.stdout.trim().length > 0;
+        const toolchain = ToolchainDetector.detect();
 
-        if (adaQEMU) {
-          this.log(`[+] Emulator QEMU terdeteksi: ${qemuCheck.stdout.trim()}`);
+        if (toolchain.hasQEMU) {
+          this.log(`[+] Emulator QEMU terdeteksi: ${toolchain.qemuVersion}`);
           this.log(`[+] Menjalankan: qemu-system-x86_64 -kernel ${berkasTarget} -serial stdio -display none`);
           const runRes = safeCP.spawnSync('qemu-system-x86_64', [
             '-kernel', berkasTarget,
@@ -1995,18 +2024,27 @@ export class NusantaraCLI {
           ]);
           if (runRes.stdout) this.log(runRes.stdout);
           if (runRes.stderr) this.log(runRes.stderr);
+          if (runRes.stdout && runRes.stdout.includes(QEMURunner.REQUIRED_SENTINEL)) {
+            this.log(`[STATUS] QEMU_BOOT_PASS — Sentinel ${QEMURunner.REQUIRED_SENTINEL} terverifikasi!`);
+            return 0;
+          }
           return runRes.status ?? 0;
         } else {
-          this.log(`[STATUS] Emulator QEMU ('qemu-system-x86_64') tidak ditemukan di PATH sistem host.`);
-          this.log(`[INFO] Simulasi eksekusi dialihkan ke kernel core virtual runtime:`);
-          const kernel = new KernelCore({ name: 'nusantara-os-virtual' });
-          kernel.boot();
-          this.log(`[✓] State Kernel    : ${kernel.getContext().state}`);
-          this.log(`[✓] Scheduler Ready : ${kernel.getScheduler().getProcessCount()} proses, ${kernel.getScheduler().getThreadCount()} thread aktif`);
-          this.log(`[✓] Heap Terpasang  : ${kernel.getHeap().getAllocatedBytes()} bytes teralokasi, ${kernel.getHeap().getFreeBytes()} bytes bebas`);
-          this.log(`[✓ STATUS] Simulasi kernel minimal berhasil dieksekusi tanpa galat.`);
-          return 0;
+          this.error(`[GALAT] Emulator 'qemu-system-x86_64' tidak ditemukan di PATH host.`);
+          this.log(`[STATUS] QEMU_NOT_AVAILABLE`);
+          this.log(`\nPetunjuk instalasi toolchain QEMU:`);
+          this.log(`  - Debian / Ubuntu : ${toolchain.installationGuide.debianUbuntu}`);
+          this.log(`  - Arch Linux      : ${toolchain.installationGuide.archLinux}`);
+          this.log(`  - macOS (Homebrew): ${toolchain.installationGuide.macos}`);
+          this.log(`  - Windows (winget): ${toolchain.installationGuide.windows}`);
+          this.log(`\n(Catatan: Untuk menjalankan simulasi internal, gunakan 'nusantara os simulate')`);
+          return 1;
         }
+      }
+
+      case 'toolchain': {
+        this.log(ToolchainDetector.formatReport());
+        return 0;
       }
 
       case 'test':

@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -e
+
+echo "======================================================================"
+echo "          PEMERIKSAAN TOOLCHAIN HOST NUSANTARA OS KERNEL             "
+echo "======================================================================"
+
+check_tool() {
+    local name="$1"
+    local bin="$2"
+    if command -v "$bin" >/dev/null 2>&1; then
+        local ver=$("$bin" --version 2>/dev/null | head -n 1 || true)
+        echo "  [✓ TERSEDIA] $name: $ver"
+        return 0
+    else
+        echo "  [✗ TIDAK DITEMUKAN] $name ($bin)"
+        return 1
+    fi
+}
+
+echo "Status Komponen:"
+check_tool "QEMU x86_64 Emulator" "qemu-system-x86_64" || true
+check_tool "Clang Compiler      " "clang" || true
+check_tool "LLD Linker          " "ld.lld" || true
+check_tool "GCC Compiler        " "gcc" || true
+check_tool "GNU Linker          " "ld" || true
+check_tool "Xorriso ISO Tool    " "xorriso" || true
+check_tool "GRUB mkrescue       " "grub-mkrescue" || true
+check_tool "GDB Debugger        " "gdb" || true
+
+echo "======================================================================"

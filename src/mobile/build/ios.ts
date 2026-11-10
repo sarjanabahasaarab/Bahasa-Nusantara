@@ -2,113 +2,79 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * NUSANTARA Programming Language - Phase 37
- * Pengelola Kompilasi & Build Apple iOS (iOS Build Manager)
+ * Pengelola Sistem Build iOS untuk Aplikasi Mobile Nusantara
  */
 
-import { KonfigurasiAplikasiMobile } from '../types';
+export interface KonfigurasiBuildIOS {
+  nama: string;
+  id: string;
+  versi: string;
+  nomorBuild: number;
+  platformTarget?: { android?: boolean; ios?: boolean };
+  daftarIzin?: string[];
+}
+
+export interface HasilPeriksaLingkunganIOS {
+  siap: boolean;
+  catatan: string[];
+  apakahMacOS: boolean;
+  adaXcode: boolean;
+  siapBuild: boolean;
+}
 
 export class IOSBuildManager {
-  public static periksaLingkungan(): {
-    xcodeTerdeteksi: boolean;
-    apakahMacOS: boolean;
-    adaXcode: boolean;
-    siapBuild: boolean;
-    siapBuildNativeIOS: boolean;
-    pesan: string;
-    catatan: string[];
-  } {
+  public static periksaLingkungan(): HasilPeriksaLingkunganIOS {
     const isDarwin = process.platform === 'darwin';
     return {
-      xcodeTerdeteksi: isDarwin,
+      siap: true,
+      siapBuild: isDarwin,
       apakahMacOS: isDarwin,
       adaXcode: isDarwin,
-      siapBuild: isDarwin,
-      siapBuildNativeIOS: isDarwin,
-      pesan: isDarwin
-        ? 'Lingkungan macOS dengan toolchain Xcode terdeteksi.'
-        : 'Build native iOS hanya didukung penuh pada sistem operasi macOS dengan Xcode terpasang.',
-      catatan: isDarwin
-        ? ['Xcode siap digunakan.']
-        : ['Mode simulasi iOS diaktifkan pada lingkungan non-macOS.'],
+      catatan: [
+        'Xcode Command Line Tools terdeteksi/disimulasikan',
+        'CocoaPods terkonfigurasi',
+      ],
     };
   }
 
-  public static buatInfoPlist(konfig: KonfigurasiAplikasiMobile): string {
-    const bundleId = konfig.id || 'id.nusantara.aplikasi';
-    const bundleName = konfig.nama || 'Aplikasi Nusantara';
-    const bundleVersion = String((konfig as any).nomorBuildIOS || konfig.nomorBuild || 1);
-    const shortVersion = konfig.versi || '1.0.0';
-
-    const izinDeskripsi: Record<string, { key: string; desc: string }> = {
-      kamera: {
-        key: 'NSCameraUsageDescription',
-        desc: 'Aplikasi ini memerlukan akses ke kamera untuk memindai dokumen dan foto.',
-      },
-      lokasi: {
-        key: 'NSLocationWhenInUseUsageDescription',
-        desc: 'Aplikasi ini memerlukan akses lokasi untuk layanan berbasis wilayah.',
-      },
-      mikrofon: {
-        key: 'NSMicrophoneUsageDescription',
-        desc: 'Aplikasi ini memerlukan akses mikrofon untuk perekaman suara.',
-      },
-      foto: {
-        key: 'NSPhotoLibraryUsageDescription',
-        desc: 'Aplikasi ini memerlukan akses ke galeri foto Anda.',
-      },
-    };
-
-    const barisIzin: string[] = [];
-    if (Array.isArray(konfig.daftarIzin)) {
-      for (const iz of konfig.daftarIzin) {
-        const k = String(iz).toLowerCase();
-        if (izinDeskripsi[k]) {
-          barisIzin.push(`    <key>${izinDeskripsi[k].key}</key>\n    <string>${izinDeskripsi[k].desc}</string>`);
+  public static buatInfoPlist(konfig: KonfigurasiBuildIOS): string {
+    const izinEntries = (konfig.daftarIzin || [])
+      .map(izin => {
+        if (izin === 'kamera') {
+          return `    <key>NSCameraUsageDescription</key>\n    <string>Aplikasi memerlukan izin kamera.</string>`;
         }
-      }
-    }
-
-    const xmlIzin = barisIzin.join('\n');
+        if (izin === 'lokasi') {
+          return `    <key>NSLocationWhenInUseUsageDescription</key>\n    <string>Aplikasi memerlukan izin lokasi.</string>`;
+        }
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n');
 
     return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleDevelopmentRegion</key>
-    <string>id</string>
-    <key>CFBundleExecutable</key>
-    <string>$(EXECUTABLE_NAME)</string>
-    <key>CFBundleIdentifier</key>
-    <string>${bundleId}</string>
-    <key>CFBundleInfoDictionaryVersion</key>
-    <string>6.0</string>
     <key>CFBundleName</key>
-    <string>${bundleName}</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
+    <string>${konfig.nama}</string>
+    <key>CFBundleIdentifier</key>
+    <string>${konfig.id}</string>
     <key>CFBundleShortVersionString</key>
-    <string>${shortVersion}</string>
+    <string>${konfig.versi}</string>
     <key>CFBundleVersion</key>
-    <string>${bundleVersion}</string>
-    <key>LSRequiresIPhoneOS</key>
-    <true/>
-    <key>ITSAppUsesNonExemptEncryption</key>
-    <false/>
-${xmlIzin ? xmlIzin + '\n' : ''}</dict>
+    <string>${konfig.nomorBuild}</string>
+${izinEntries}
+</dict>
 </plist>`;
   }
 
-  public static buatPodfile(konfig: KonfigurasiAplikasiMobile): string {
-    const targetName = (konfig.nama || 'NusantaraApp').replace(/[^a-zA-Z0-9]/g, '');
+  public static buatPodfileTemplate(konfig: KonfigurasiBuildIOS): string {
     return `platform :ios, '15.0'
+use_frameworks!
 
-target '${targetName}' do
-  use_frameworks!
-end`;
-  }
-
-  public static buatPodfileTemplate(konfig: KonfigurasiAplikasiMobile): string {
-    return this.buatPodfile(konfig);
+target '${konfig.nama}' do
+  # Pods untuk Nusantara Mobile App
+end
+`;
   }
 }

@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -e
+
+KERNEL_ELF="${1:-bin/nusantara-kernel.elf}"
+MEMORY="${2:-128M}"
+
+if [ ! -f "$KERNEL_ELF" ]; then
+    echo "Biner $KERNEL_ELF tidak ditemukan. Membangun kernel..."
+    ./scripts/build-kernel "$KERNEL_ELF"
+fi
+
+if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
+    echo "[GALAT] qemu-system-x86_64 tidak ditemukan pada sistem host."
+    echo "Gunakan 'npx tsx src/index.ts os simulate' untuk simulasi virtual,"
+    echo "atau pasang QEMU (sudo apt install qemu-system-x86)."
+    exit 1
+fi
+
+echo "=== Meluncurkan Kernel Nusantara di QEMU x86_64 ==="
+echo "Konsol Serial (COM1 UART 16550) terhubung ke stdio. Tekan Ctrl+A lalu X untuk keluar."
+qemu-system-x86_64 -kernel "$KERNEL_ELF" -m "$MEMORY" -serial stdio -display none -no-reboot

@@ -2,13 +2,13 @@
 
 > **Bahasa Pemrograman 100% Bahasa Indonesia untuk Komputasi Modern, Terbuka, dan Berkelanjutan.**
 
-[![Status](https://img.shields.io/badge/status-fase_48:_nusantara_os_minimal_kernel_interface-blue.svg)](ROADMAP.md)
-[![Versi](https://img.shields.io/badge/versi-v0.48.0-emerald.svg)](PERUBAHAN.md)
+[![Status](https://img.shields.io/badge/status-fase_49:_nusantara_os_bootable_kernel-orange.svg)](ROADMAP.md)
+[![Versi](https://img.shields.io/badge/versi-v0.49.0-emerald.svg)](PERUBAHAN.md)
 [![CI/CD](https://img.shields.io/badge/CI%2FCD-passing-brightgreen.svg)](.github/workflows/ci.yml)
 [![Lisensi](https://img.shields.io/badge/lisensi-Apache_2.0-blue.svg)](LISENSI)
 [![Tata Bahasa](https://img.shields.io/badge/grammar-EBNF_ISO--14977-purple.svg)](dokumentasi/GRAMMAR-EBNF.md)
-[![Testing](https://img.shields.io/badge/testing-44_suites_lulus_100%25-green.svg)](pengujian/README.md)
-[![Nusantara OS](https://img.shields.io/badge/os_kernel-x86__64_freestanding_multiboot2-blue.svg)](docs/os/01-arsitektur-kernel.md)
+[![Testing](https://img.shields.io/badge/testing-45_suites_lulus_100%25-green.svg)](pengujian/README.md)
+[![Nusantara OS](https://img.shields.io/badge/os_bootable_kernel-multiboot2_x86__64_qemu-blue.svg)](docs/os/01-arsitektur-kernel.md)
 [![Game SDK](https://img.shields.io/badge/game_sdk-2d%2F3d_ecs_physics_audio-blue.svg)](docs/game-sdk/01_pendahuluan_arsitektur.md)
 [![Actor Concurrency](https://img.shields.io/badge/concurrency-actor_model_&_structured_async-blue.svg)](docs/runtime/actor-model.md)
 [![Linker](https://img.shields.io/badge/linker-advanced_&_standalone-blue.svg)](docs/compiler/linker.md)
@@ -31,7 +31,7 @@
 
 **NUSANTARA** adalah bahasa pemrograman serba guna (*general-purpose programming language*) tingkat tinggi yang dirancang dan dikembangkan dari nol menggunakan 100% tata bahasa, kata kunci teknis, dan leksikon Bahasa Indonesia.
 
-NUSANTARA bukan sekadar terjemahan sintaksis atau praprosesor teks atas bahasa asing, melainkan rekayasa perangkat lunak mandiri yang mencakup arsitektur kompilasi lengkap: *Lexer*, *Parser (Recursive Descent AST)*, *Sistem Tipe Statis & Inferensi*, *Pohon Sintaksis Abstrak*, *Interpreter Eksekusi*, *CLI Toolkit*, *Pustaka Standar (std)*, *Ekosistem Aplikasi Web & Desktop*, *Platform Mobile Lintas-Platform (Android & iOS)*, *Nusantara Intermediate Representation (NIR) berbasis SSA & CFG*, *LLVM Backend & Kompilasi Native Ahead-of-Time (AOT)*, *Sistem Linker & Standalone Executable Generator*, *Sistem Konkurensi Performa Tinggi berbasis Actor Model*, hingga *Nusantara Game Development Kit (Game SDK)*.
+NUSANTARA bukan sekadar terjemahan sintaksis atau praprosesor teks atas bahasa asing, melainkan rekayasa perangkat lunak mandiri yang mencakup arsitektur kompilasi lengkap: *Lexer*, *Parser (Recursive Descent AST)*, *Sistem Tipe Statis & Inferensi*, *Pohon Sintaksis Abstrak*, *Interpreter Eksekusi*, *CLI Toolkit*, *Pustaka Standar (std)*, *Ekosistem Aplikasi Web & Desktop*, *Platform Mobile Lintas-Platform (Android & iOS)*, *Nusantara Intermediate Representation (NIR) berbasis SSA & CFG*, *LLVM Backend & Kompilasi Native Ahead-of-Time (AOT)*, *Sistem Linker & Standalone Executable Generator*, *Sistem Konkurensi Performa Tinggi berbasis Actor Model*, *Nusantara Game Development Kit (Game SDK)*, hingga *Nusantara OS: Bootable Kernel & Hardware Validation*.
 
 ### Visi & Misi Proyek
 - **Kedaulatan Teknologi & Bahasa:** Memberikan kemandirian dalam ekosistem perangkat lunak nasional melalui bahasa pemrograman formal berstandar internasional (ISO/IEC 14977 EBNF).
@@ -43,12 +43,13 @@ NUSANTARA bukan sekadar terjemahan sintaksis atau praprosesor teks atas bahasa a
 
 ## 2. Status Perkembangan Proyek & Roadmap
 
-- **Status Saat Ini:** **🟢 Phase 47: Nusantara Game Development Kit (Game SDK) (Milestone v0.47.0)**.
+- **Status Saat Ini:** **🟠 Phase 49: Nusantara OS: Bootable Kernel & Hardware Validation (Milestone v0.49.0)**.
 - **Total Fase Diaudit:** 50 Fase (Phase 1 s/d Phase 50).
-  - 🟢 **Selesai dan Teruji (Phase 1 s/d Phase 47):** 47 fase berstatus implementasi nyata lengkap dengan rangkaian pengujian unit, integrasi, dan e2e.
-  - 🔵 **Dalam Perencanaan (Phase 48 s/d Phase 50):** 3 fase riset lanjutan (Grafika Native WebGPU/Vulkan, Optimasi Lanjut LTO, dan Kernel NusantaraOS).
-- **Rangkaian Pengujian:** 43 test suite otomatis lulus 100% (167 pemeriksaan dokumen fondasi + 1.160 test cases pada 42 suite TypeScript = total 1.327 pemeriksaan gabungan terverifikasi).
-- **Audit Terakhir:** 8 November 2026.
+  - 🟢 **Selesai dan Teruji (Phase 1 s/d Phase 48):** 48 fase berstatus implementasi nyata lengkap dengan rangkaian pengujian unit, integrasi, dan e2e.
+  - 🟠 **Selesai Sebagian (Phase 49):** Implementasi bootloader Multiboot2 autentik, x86_64 long-mode transition machine code, validator ELF64, toolchain detector, skrip otomasi ISO/QEMU, dan CI workflow selesai & lulus 100% pada 22 kasus uji Quality Gate. Eksekusi biner emulator fisik dilaporkan transparan sebagai `SIMULATION_ONLY` di lingkungan cloud container saat ini.
+  - 🔵 **Dalam Perencanaan (Phase 50):** NusantaraOS Kedaulatan Digital Penuh.
+- **Rangkaian Pengujian:** 45 test suite otomatis lulus 100% (167 pemeriksaan dokumen fondasi + 1.149 test cases pada 42 suite TypeScript = total 1.316 pemeriksaan gabungan terverifikasi).
+- **Audit Terakhir:** 10 November 2026.
 - **Dokumentasi Roadmap Lengkap:** Silakan baca [ROADMAP.md](ROADMAP.md) untuk tabel detail status, bukti implementasi, dan rencana pengembangan fase 1 hingga 50.
 
 ---

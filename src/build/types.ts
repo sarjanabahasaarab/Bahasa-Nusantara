@@ -2,70 +2,76 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * NUSANTARA Programming Language - Phase 23
- * Tipe Data Sistem Build & Distribusi
+ * Definisi Tipe dan Kontrak Sistem Build Distribusi & Rilis Multiplatform NUSANTARA
  */
 
 export type PlatformTarget =
-  | 'windows'
-  | 'linux'
-  | 'macos'
-  | 'semua'
   | 'linux-x64'
+  | 'linux-arm64'
   | 'windows-x64'
   | 'macos-x64'
-  | 'macos-arm64';
+  | 'macos-arm64'
+  | 'web-wasm';
 
 export const PLATFORM_SEMUA: PlatformTarget[] = [
-  'windows',
-  'linux',
-  'macos',
   'linux-x64',
+  'linux-arm64',
   'windows-x64',
   'macos-x64',
   'macos-arm64',
+  'web-wasm',
 ];
 
 export type ModeBuild = 'debug' | 'release';
 
 export interface ArtefakBuild {
-  namaBerkas: string;
   platform: PlatformTarget;
+  namaBerkas: string;
+  jalurRelatif: string;
   ukuranByte: number;
   sha256: string;
-  jalur: string;
+  tipe: 'biner' | 'arsip' | 'pustaka' | 'wasm';
   format?: string;
 }
 
 export interface ManifestRilis {
-  versiNusantara: string;
-  namaPaket: string;
   versi: string;
-  stempelWaktu: string;
+  labelVersi: string;
+  waktuBuild: string;
   mode: ModeBuild;
+  targetPlatforms: PlatformTarget[];
   artefak: ArtefakBuild[];
+  checksumFile: string;
+  reproducible: boolean;
 }
 
-export interface OpsiBuild {
-  mode?: ModeBuild;
+export interface KonfigurasiBuild {
+  mode: ModeBuild;
   target?: PlatformTarget[];
   verifikasiUji?: boolean;
-  verbose?: boolean;
-  direktoriKeluaran?: string;
   tanpaUji?: boolean;
+  verbose?: boolean;
   reproducible?: boolean;
+  direktoriKeluaran?: string;
 }
 
 export interface HasilBuild {
   sukses: boolean;
   pesan: string;
+  mode: ModeBuild;
+  target: PlatformTarget[];
   artefak: ArtefakBuild[];
   manifest?: ManifestRilis;
-  galat?: string;
   sha256sums?: string;
   berkasChecksum?: string;
-  durasiMs?: number;
-  mode?: ModeBuild;
-  tahap?: string[];
-  validasi?: any[];
+  tahap?: string;
+  validasi?: string[];
+  galat?: string;
+  durasiMs: number;
+}
+
+export interface HasilBersih {
+  sukses: boolean;
+  pesan: string;
+  jumlahBerkasDihapus: number;
 }

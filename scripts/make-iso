@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -e
+
+KERNEL_ELF="${1:-bin/nusantara-kernel.elf}"
+ISO_OUT="${2:-bin/nusantara-kernel.iso}"
+
+if [ ! -f "$KERNEL_ELF" ]; then
+    echo "Biner kernel belum ada. Membangun terlebih dahulu..."
+    ./scripts/build-kernel "$KERNEL_ELF"
+fi
+
+if ! command -v grub-mkrescue >/dev/null 2>&1; then
+    echo "[PERINGATAN] grub-mkrescue tidak ditemukan. Tidak dapat membuat berkas ISO bootable fisik."
+    echo "Pasang paket grub-pc-bin dan xorriso terlebih dahulu."
+    exit 1
+fi
+
+ISODIR=$(mktemp -d)
+mkdir -p "$ISODIR/boot/grub"
+cp "$KERNEL_ELF" "$ISODIR/boot/kernel.elf"
+
+cat << 'EOF' > "$ISODIR/boot/grub/grub.cfg"
+set timeout=0
+set default=0
+
+menuentry "NUSANTARA OS (x86_64 Bootable Kernel)" {
+    multiboot2 /boot/kernel.elf
+    boot
+}
+EOF
+
+mkdir -p "$(dirname "$ISO_OUT")"
+grub-mkrescue -o "$ISO_OUT" "$ISODIR"
+rm -rf "$ISODIR"
+
+echo "[✓ SUKSES] Image ISO Bootable berhasil dibuat: $ISO_OUT"

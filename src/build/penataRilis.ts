@@ -2,31 +2,36 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * NUSANTARA Programming Language - Phase 23
- * Penata Berkas Rilis & Checksum
+ * Penata Berkas Rilis & Checksum SHA256SUMS
  */
 
-import { ManifestRilis, ArtefakBuild, ModeBuild } from './types';
-import { VERSI_NUSANTARA } from '../konstanta/versi';
+import { ManifestRilis, ArtefakBuild, ModeBuild, PlatformTarget } from './types';
+import { VERSI_NUSANTARA, LABEL_VERSI_NUSANTARA } from '../konstanta/versi';
 
 export class PenataRilis {
   public static susunManifest(
-    namaPaket: string,
-    versi: string,
     mode: ModeBuild,
-    artefak: ArtefakBuild[]
+    targets: PlatformTarget[],
+    artefak: ArtefakBuild[],
+    reproducible: boolean = true
   ): ManifestRilis {
     return {
-      versiNusantara: VERSI_NUSANTARA,
-      namaPaket,
-      versi,
-      stempelWaktu: new Date().toISOString(),
+      versi: VERSI_NUSANTARA,
+      labelVersi: LABEL_VERSI_NUSANTARA,
+      waktuBuild: new Date().toISOString(),
       mode,
+      targetPlatforms: targets,
       artefak,
+      checksumFile: 'dist/SHA256SUMS',
+      reproducible,
     };
   }
 
   public static buatTeksChecksum(artefak: ArtefakBuild[]): string {
-    return artefak.map((a) => `${a.sha256}  ${a.namaBerkas}`).join('\n');
+    return (
+      artefak
+        .map(a => `${a.sha256}  ${a.namaBerkas}`)
+        .join('\n') + '\n'
+    );
   }
 }

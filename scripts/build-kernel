@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -e
+
+OUTPUT_PATH="${1:-bin/nusantara-kernel.elf}"
+mkdir -p "$(dirname "$OUTPUT_PATH")"
+
+echo "=== Membangun Kernel Nusantara ELF64 (Target: x86_64) ==="
+npx tsx src/index.ts os build --output="$OUTPUT_PATH"
+
+echo "=== Memvalidasi Header Multiboot2 ==="
+npx tsx src/index.ts os inspect-boot "$OUTPUT_PATH"
+
+echo "=== Memvalidasi Format ELF64 ==="
+npx tsx src/index.ts os inspect "$OUTPUT_PATH"
+
+echo "Selesai. Biner siap di: $OUTPUT_PATH"

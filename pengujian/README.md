@@ -82,13 +82,15 @@ Setiap fitur dan subsistem diklasifikasikan secara jujur dan transparan berdasar
 | 41 | Phase 45 | Linker, Symbol Table, Relocation & Standalone Executable | `npx tsx pengujian/linker/uji_linker_fase45.ts` | 21 uji | LULUS | INTEGRATION TEST PASSED |
 | 42 | Phase 46 | High-Performance Concurrency (Actor Model) | `npx tsx pengujian/actor/uji_actor_fase46.ts` | 32 uji | LULUS | INTEGRATION TEST PASSED |
 | 43 | Phase 47 | Nusantara Game Development Kit (Game SDK) | `npx tsx pengujian/game/uji_game_sdk_fase47.ts` | 33 uji | LULUS | INTEGRATION TEST PASSED |
+| 44 | Phase 48 | Nusantara OS: Minimal Kernel Interface | `npx tsx pengujian/os/uji_kernel_fase48.ts` | 42 uji | LULUS | INTEGRATION TEST PASSED |
+| 45 | Phase 49 | Nusantara OS: Bootable Kernel & Hardware Validation | `npx tsx pengujian/os/uji_boot_fase49.ts` | 22 uji | LULUS | INTEGRATION TEST PASSED |
 
 ---
 
 ## 4. Cara Menjalankan Pengujian
 
 ### 4.1 Menjalankan Seluruh Rangkaian Pengujian
-Jalankan perintah standar npm untuk mengeksekusi ke-43 suite secara berurutan:
+Jalankan perintah standar npm untuk mengeksekusi ke-45 suite secara berurutan:
 
 ```bash
 npm test
@@ -101,12 +103,15 @@ Setiap fase memiliki target skrip mandiri pada `package.json`:
 # Pengujian Fondasi (Phase 1–5)
 node skrip/periksa_fondasi.js
 
-# Pengujian Kompiler, IR, LLVM, Linker, Aktor & Game SDK (Phase 43–47)
+# Pengujian Kompiler, IR, LLVM, Linker, Aktor, Game SDK & Kernel OS (Phase 43–49)
 npm run test:nir-v43
 npm run test:llvm-v44
 npm run test:linker-v45
 npm run test:actor-v46
 npm run test:game-v47
+npm run test:os-v48
+npm run test:boot-v49
+```
 
 # Pengujian Kompiler Inti (Phase 6–10)
 npm run test:lexer

@@ -2,8 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * NUSANTARA Programming Language - Phase 23
- * Titik Ekspor Utama Modul Build & Distribusi
+ * Pintu Ekspor Utama Subsistem Build & Distribusi NUSANTARA
  */
 
 export * from './types';

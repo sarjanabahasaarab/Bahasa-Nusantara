@@ -2,50 +2,60 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * NUSANTARA Programming Language - Phase 23
- * Utilitas Jalur (Path Utilities) Lintas Platform untuk Sistem Build
+ * Utilitas Manipulasi Jalur Berkas Portabel (Cross-Platform Path Helpers)
  */
 
 export function normalisasiJalur(jalur: string): string {
   if (!jalur) return '';
   let hasil = jalur.replace(/\\/g, '/');
-  // Menghilangkan duplikasi slash berurutan kecuali di awal
-  hasil = hasil.replace(/\/{2,}/g, '/');
-  // Menghilangkan ./
-  hasil = hasil.replace(/\/\.\//g, '/');
-  if (hasil.startsWith('./')) {
-    hasil = hasil.slice(2);
+  // Hapus dobel slash
+  hasil = hasil.replace(/\/+/g, '/');
+  // Selesaikan dot dan double dot
+  const bagian = hasil.split('/');
+  const stack: string[] = [];
+  const adalahAbsolut = hasil.startsWith('/');
+
+  for (const b of bagian) {
+    if (b === '' || b === '.') continue;
+    if (b === '..') {
+      if (stack.length > 0 && stack[stack.length - 1] !== '..') {
+        stack.pop();
+      } else if (!adalahAbsolut) {
+        stack.push('..');
+      }
+    } else {
+      stack.push(b);
+    }
   }
-  return hasil;
+
+  const res = (adalahAbsolut ? '/' : '') + stack.join('/');
+  return res || (adalahAbsolut ? '/' : '.');
 }
 
 export function gabungJalur(...bagian: string[]): string {
-  const bersih = bagian
-    .filter(Boolean)
-    .map((b) => b.replace(/\\/g, '/'))
-    .join('/');
-  return normalisasiJalur(bersih);
+  const difilter = bagian.filter(b => typeof b === 'string' && b.length > 0);
+  if (difilter.length === 0) return '.';
+  return normalisasiJalur(difilter.join('/'));
 }
 
-export function ekstensiJalur(jalur: string): string {
-  const norm = normalisasiJalur(jalur);
-  const idx = norm.lastIndexOf('.');
-  if (idx === -1 || idx === norm.lastIndexOf('/')) return '';
-  return norm.slice(idx);
-}
-
-export function namaBerkasJalur(jalur: string, sertakanEkstensi = true): string {
-  const norm = normalisasiJalur(jalur);
-  const idx = norm.lastIndexOf('/');
-  const berkas = idx === -1 ? norm : norm.slice(idx + 1);
-  if (sertakanEkstensi) return berkas;
-  const dotIdx = berkas.lastIndexOf('.');
-  return dotIdx === -1 ? berkas : berkas.slice(0, dotIdx);
-}
-
-export function direktoriJalur(jalur: string): string {
+export function dapatkanDirektori(jalur: string): string {
   const norm = normalisasiJalur(jalur);
   const idx = norm.lastIndexOf('/');
   if (idx === -1) return '.';
-  return norm.slice(0, idx) || '/';
+  if (idx === 0) return '/';
+  return norm.substring(0, idx);
+}
+
+export function dapatkanNamaBerkas(jalur: string): string {
+  const norm = normalisasiJalur(jalur);
+  const idx = norm.lastIndexOf('/');
+  if (idx === -1) return norm;
+  return norm.substring(idx + 1);
+}
+
+export function dapatkanEkstensi(jalur: string): string {
+  const nama = dapatkanNamaBerkas(jalur);
+  const idx = nama.lastIndexOf('.');
+  if (idx <= 0) return '';
+  return nama.substring(idx);
 }

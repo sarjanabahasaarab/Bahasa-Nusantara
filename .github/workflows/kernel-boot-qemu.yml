@@ -1,0 +1,80 @@
+name: "NUSANTARA OS — Bootable Kernel & QEMU Validation"
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  kernel-qemu-boot:
+    name: "QEMU x86_64 Bare-Metal Boot & Sentinel Verification"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: "Checkout Repository"
+        uses: actions/checkout@v4
+
+      - name: "Setup Node.js Runtime"
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: "Install System Dependencies (QEMU, Clang, LLD, Xorriso, GRUB)"
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qemu-system-x86 \
+            clang \
+            lld \
+            xorriso \
+            grub-pc-bin \
+            grub-common \
+            mtools
+
+      - name: "Install Project Dependencies"
+        run: npm ci
+
+      - name: "Lint & Static Verification"
+        run: npm run lint
+
+      - name: "Execute Regression Test Suites (Phase 1–48)"
+        run: npm test
+
+      - name: "Verify Toolchain Status"
+        run: |
+          chmod +x scripts/*
+          ./scripts/check-toolchain
+
+      - name: "Build Kernel ELF64"
+        run: |
+          ./scripts/build-kernel bin/nusantara-kernel.elf
+
+      - name: "Validate Multiboot2 Header"
+        run: |
+          npx tsx src/index.ts os inspect-boot bin/nusantara-kernel.elf
+
+      - name: "Validate ELF64 Binary Structure"
+        run: |
+          npx tsx src/index.ts os inspect bin/nusantara-kernel.elf
+
+      - name: "Build Bootable GRUB ISO Image"
+        run: |
+          ./scripts/make-iso bin/nusantara-kernel.elf bin/nusantara-kernel.iso
+
+      - name: "Execute Native QEMU Boot Test"
+        run: |
+          ./scripts/test-qemu bin/nusantara-kernel.elf
+
+      - name: "Upload Kernel Artifacts and Serial Boot Logs"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nusantara-kernel-qemu-artifacts
+          path: |
+            bin/nusantara-kernel.elf
+            bin/nusantara-kernel.iso
+            qemu-serial.log
