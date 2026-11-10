@@ -158,8 +158,9 @@ export class KernelELFBuilder {
     view.setBigUint64(phOffset + 8, BigInt(multibootOffset), true); // p_offset
     view.setBigUint64(phOffset + 16, 0x0010_0000n, true);          // p_vaddr
     view.setBigUint64(phOffset + 24, 0x0010_0000n, true);          // p_paddr
-    view.setBigUint64(phOffset + 32, BigInt(multibootSize + textSize), true); // p_filesz
-    view.setBigUint64(phOffset + 40, BigInt(multibootSize + textSize), true); // p_memsz
+    const seg0Size = (textOffset - multibootOffset) + textSize;
+    view.setBigUint64(phOffset + 32, BigInt(seg0Size), true); // p_filesz
+    view.setBigUint64(phOffset + 40, BigInt(seg0Size), true); // p_memsz
     view.setBigUint64(phOffset + 48, 0x1000n, true);               // p_align = 4KB
 
     // Phdr 1: PT_LOAD untuk Higher-Half Kernel Data (RW-)

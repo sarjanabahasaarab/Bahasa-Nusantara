@@ -1953,10 +1953,14 @@ export class NusantaraCLI {
         const berkasTarget = sisaArgs[0] || 'biner/kernel.elf';
         let bytes: Uint8Array;
         if (this.pembaca.apakahAda(berkasTarget)) {
-          const raw = typeof (this.pembaca as any).bacaBerkas === 'function'
-            ? (this.pembaca as any).bacaBerkas(berkasTarget)
-            : this.pembaca.baca(berkasTarget);
-          bytes = typeof raw === 'string' ? Buffer.from(raw, 'binary') : raw;
+          if (typeof (this.pembaca as any).bacaBiner === 'function') {
+            bytes = (this.pembaca as any).bacaBiner(berkasTarget);
+          } else {
+            const raw = typeof (this.pembaca as any).bacaBerkas === 'function'
+              ? (this.pembaca as any).bacaBerkas(berkasTarget)
+              : this.pembaca.baca(berkasTarget);
+            bytes = typeof raw === 'string' ? Buffer.from(raw, 'binary') : raw;
+          }
         } else {
           // Buat biner default untuk inspeksi
           const builder = new KernelELFBuilder({ kernelName: 'nusantara-os-kernel' });
@@ -1977,10 +1981,14 @@ export class NusantaraCLI {
         const berkasTarget = sisaArgs[0] || 'biner/kernel.elf';
         let bytes: Uint8Array;
         if (this.pembaca.apakahAda(berkasTarget)) {
-          const raw = typeof (this.pembaca as any).bacaBerkas === 'function'
-            ? (this.pembaca as any).bacaBerkas(berkasTarget)
-            : this.pembaca.baca(berkasTarget);
-          bytes = typeof raw === 'string' ? Buffer.from(raw, 'binary') : raw;
+          if (typeof (this.pembaca as any).bacaBiner === 'function') {
+            bytes = (this.pembaca as any).bacaBiner(berkasTarget);
+          } else {
+            const raw = typeof (this.pembaca as any).bacaBerkas === 'function'
+              ? (this.pembaca as any).bacaBerkas(berkasTarget)
+              : this.pembaca.baca(berkasTarget);
+            bytes = typeof raw === 'string' ? Buffer.from(raw, 'binary') : raw;
+          }
         } else {
           const builder = new KernelELFBuilder({ kernelName: 'nusantara-os-kernel' });
           bytes = builder.build();

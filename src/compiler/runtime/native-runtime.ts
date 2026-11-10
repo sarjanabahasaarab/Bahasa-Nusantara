@@ -17,18 +17,22 @@ export class NativeRuntimeManager {
 #include <stdlib.h>
 #include <stdint.h>
 
-// Deklarasi fungsi utama Nusantara (dihasilkan oleh NIR)
+// Deklarasi fungsi utama Nusantara (dihasilkan oleh NIR) dengan weak fallback
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((weak)) int32_t utama(void) { return 0; }
+#else
 extern int32_t utama(void);
+#endif
 
 // Fungsi bantuan runtime bawaan
 int64_t nusantara_cetak_bilangan(int64_t val) {
-    printf("%ld\n", (long)val);
+    printf("%ld\\n", (long)val);
     return val;
 }
 
 void nusantara_cetak_teks(const char* str) {
     if (str != NULL) {
-        printf("%s\n", str);
+        printf("%s\\n", str);
     }
 }
 

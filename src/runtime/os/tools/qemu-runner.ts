@@ -24,10 +24,12 @@ export type BootValidationStatus =
 
 export interface QEMURunOptions {
   kernelPath: string;
+  isoPath?: string;
   memoryMb?: number;
   timeoutMs?: number;
   useISADebugExit?: boolean;
   extraArgs?: string[];
+  mode?: 'cdrom' | 'kernel';
 }
 
 export interface QEMUBootResult {
@@ -37,6 +39,7 @@ export interface QEMUBootResult {
   qemuVersion?: string;
   serialLog: string;
   sentinelFound: boolean;
+  stagesCompleted?: string[];
   exitCode?: number;
   durationMs: number;
   kernelSha256?: string;
@@ -45,6 +48,20 @@ export interface QEMUBootResult {
 
 export class QEMURunner {
   public static readonly REQUIRED_SENTINEL = 'NUSANTARA_KERNEL_BOOT_OK';
+
+  // 10 Tahapan Diagnostik Serial Wajib (Phase 49)
+  public static readonly STAGES = [
+    'NUSANTARA_BOOT_START',
+    'NUSANTARA_MULTIBOOT2_OK',
+    'NUSANTARA_CPU_LONG_MODE_OK',
+    'NUSANTARA_PAGING_OK',
+    'NUSANTARA_GDT64_OK',
+    'NUSANTARA_LONG_MODE_ENTERED',
+    'NUSANTARA_IDT_OK',
+    'NUSANTARA_MEMORY_MANAGER_OK',
+    'NUSANTARA_KERNEL_MAIN_ENTERED',
+    'NUSANTARA_KERNEL_BOOT_OK',
+  ];
 
   /**
    * Menjalankan kernel di QEMU dan memverifikasi boot native secara nyata.
@@ -83,7 +100,7 @@ export class QEMURunner {
     const kernelBytes = fs.readFileSync(options.kernelPath);
     const kernelSha256 = PengemasArsip.hitungHashSederhana(kernelBytes.toString('binary'));
 
-    const memoryMb = options.memoryMb ?? 128;
+    const memoryMb = options.memoryMb ?? 512;
     const timeoutMs = options.timeoutMs ?? 10000;
 
     const logFile = path.join(process.cwd(), 'qemu-serial.log');
@@ -93,26 +110,71 @@ export class QEMURunner {
       } catch {}
     }
 
-    // Argumen QEMU standar headless untuk pengujian otomatis:
-    // -kernel: Direct Multiboot kernel loader
-    // -m: RAM size
-    // -display none / -nographic: Headless
-    // -serial file:<logFile>: Simpan output port COM1 ke berkas
-    // -no-reboot -no-shutdown
-    // -device isa-debug-exit,iobase=0xf4,iosize=0x04 (jika diminta)
-    const qemuArgs = [
-      '-kernel',
-      options.kernelPath,
-      '-m',
-      `${memoryMb}M`,
-      '-display',
-      'none',
-      '-nographic',
-      '-serial',
-      `file:${logFile}`,
-      '-no-reboot',
-      '-no-shutdown',
-    ];
+    let bootMedia = options.isoPath || options.kernelPath;
+    let isCDROM = options.mode === 'cdrom' || options.kernelPath.endsWith('.iso') || !!options.isoPath;
+
+    // Jika diberikan berkas .elf dan mode bukan 'kernel', gunakan CD-ROM ISO via GRUB
+    if (!isCDROM && options.mode !== 'kernel') {
+      const possibleIso = options.kernelPath.replace(/\.elf$/, '.iso');
+      if (fs.existsSync(possibleIso)) {
+        bootMedia = possibleIso;
+        isCDROM = true;
+      } else if (toolchain.hasGRUB && toolchain.hasXorriso) {
+        try {
+          const isoDir = path.join(process.cwd(), 'build', 'isodir');
+          const grubDir = path.join(isoDir, 'boot', 'grub');
+          fs.mkdirSync(grubDir, { recursive: true });
+          fs.copyFileSync(options.kernelPath, path.join(isoDir, 'boot', 'kernel.elf'));
+          fs.writeFileSync(
+            path.join(grubDir, 'grub.cfg'),
+            `serial --unit=0 --speed=115200\nterminal_input serial console\nterminal_output serial console\nset timeout=0\nset default=0\nmenuentry "NUSANTARA OS" {\n  multiboot2 /boot/kernel.elf\n  boot\n}\n`
+          );
+          const genIso = path.join(process.cwd(), 'build', 'nusantara-kernel.iso');
+          fs.mkdirSync(path.dirname(genIso), { recursive: true });
+          execSync(`grub-mkrescue -o "${genIso}" "${isoDir}" >/dev/null 2>&1`);
+          bootMedia = genIso;
+          isCDROM = true;
+        } catch {
+          // Fallback ke direct kernel
+        }
+      }
+    }
+
+    const qemuArgs: string[] = [];
+
+    if (isCDROM) {
+      qemuArgs.push(
+        '-machine',
+        'q35',
+        '-m',
+        `${memoryMb}M`,
+        '-cdrom',
+        bootMedia,
+        '-boot',
+        'd',
+        '-display',
+        'none',
+        '-nographic',
+        '-serial',
+        `file:${logFile}`,
+        '-no-reboot',
+        '-no-shutdown'
+      );
+    } else {
+      qemuArgs.push(
+        '-kernel',
+        options.kernelPath,
+        '-m',
+        `${memoryMb}M`,
+        '-display',
+        'none',
+        '-nographic',
+        '-serial',
+        `file:${logFile}`,
+        '-no-reboot',
+        '-no-shutdown'
+      );
+    }
 
     if (options.useISADebugExit !== false) {
       qemuArgs.push('-device', 'isa-debug-exit,iobase=0xf4,iosize=0x04');
@@ -142,7 +204,11 @@ export class QEMURunner {
         }
 
         const sentinelFound = serialContent.includes(QEMURunner.REQUIRED_SENTINEL);
-        const isPass = sentinelFound;
+        const stagesCompleted = QEMURunner.STAGES.filter(s => serialContent.includes(s.trim()));
+        // Jika memakai isa-debug-exit, exit code 1 adalah sukses deterministik ((0 << 1) | 1 = 1)
+        const isPass =
+          sentinelFound &&
+          (options.useISADebugExit === false ? exitCode === 0 : exitCode === 1 || exitCode === 0);
 
         resolve({
           status: isPass ? 'QEMU_BOOT_PASS' : 'QEMU_BOOT_FAIL',
@@ -151,6 +217,7 @@ export class QEMURunner {
           qemuVersion: toolchain.qemuVersion,
           serialLog: serialContent,
           sentinelFound,
+          stagesCompleted,
           exitCode,
           durationMs: Date.now() - awal,
           kernelSha256,

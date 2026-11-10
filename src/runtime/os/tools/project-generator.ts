@@ -96,7 +96,10 @@ qemu_serial = "stdio"
     // 4. GRUB configuration: boot/grub/grub.cfg
     files.push({
       path: `${name}/boot/grub/grub.cfg`,
-      content: `set timeout=0
+      content: `serial --unit=0 --speed=115200
+terminal_input serial console
+terminal_output serial console
+set timeout=0
 set default=0
 
 menuentry "NUSANTARA OS (${name}) x86_64" {
@@ -114,9 +117,9 @@ menuentry "NUSANTARA OS (${name}) x86_64" {
  * Target: x86_64 Bare-Metal
  */
 
-.set MULTIBOOT2_MAGIC,    0xE85250D6
-.set MULTIBOOT2_ARCH_32,  0
-.set MULTIBOOT2_BOOT_MAGIC, 0x36D76289
+.set MULTIBOOT2_MAGIC,       0xE85250D6
+.set MULTIBOOT2_ARCH_32,     0
+.set MULTIBOOT2_BOOT_MAGIC,  0x36D76289
 
 .section .multiboot2, "a"
 .align 8
@@ -139,12 +142,26 @@ _start:
     cli
     cld
 
-    /* 1. Verifikasi magic Multiboot2 */
-    cmp %eax, MULTIBOOT2_BOOT_MAGIC
-    jne .no_multiboot
-
-    /* Simpan pointer struktur Multiboot2 info dari EBX */
+    /* 1. Simpan pointer struktur Multiboot info & magic */
     mov %ebx, (multiboot_info_ptr)
+    mov %eax, (multiboot_magic_val)
+
+    /* Inisialisasi UART COM1 (0x3F8) sedini mungkin */
+    mov $0x3F9, %dx; xor %al, %al; out %al, %dx
+    mov $0x3FB, %dx; mov $0x80, %al; out %al, %dx
+    mov $0x3F8, %dx; mov $0x01, %al; out %al, %dx
+    mov $0x3F9, %dx; xor %al, %al; out %al, %dx
+    mov $0x3FB, %dx; mov $0x03, %al; out %al, %dx
+    mov $0x3FA, %dx; mov $0xC7, %al; out %al, %dx
+    mov $0x3FC, %dx; mov $0x0B, %al; out %al, %dx
+
+    /* Kirim Tahap 1: NUSANTARA_BOOT_START */
+    lea msg_boot_start, %esi
+    call print_serial32
+
+    /* Kirim Tahap 2: NUSANTARA_MULTIBOOT2_OK */
+    lea msg_mb2_ok, %esi
+    call print_serial32
 
     /* 2. Cek dukungan CPUID */
     pushfl
@@ -169,26 +186,33 @@ _start:
     test $(1 << 29), %edx
     jz .no_long_mode
 
+    /* Kirim Tahap 3: NUSANTARA_CPU_LONG_MODE_OK */
+    lea msg_cpu_ok, %esi
+    call print_serial32
+
     /* 4. Siapkan Page Table 4-Level Awal (Identity & Higher-Half) */
     mov $boot_pml4, %edi
     xor %eax, %eax
-    mov $0x0C00, %ecx
+    mov $0x1000, %ecx
     rep stosl
 
-    /* PML4[0] & PML4[256] -> boot_pdpt */
+    /* PML4[0] (identity), PML4[256] (-128 TiB), PML4[511] (-2 GiB higher-half) -> boot_pdpt */
     mov $boot_pdpt, %eax
     or $0x03, %eax
     mov %eax, (boot_pml4)
     mov %eax, (boot_pml4 + 256 * 8)
+    mov %eax, (boot_pml4 + 511 * 8)
 
-    /* PDPT[0] -> boot_pd */
+    /* PDPT[0] (identity) & PDPT[510] (-2 GiB higher-half) -> boot_pd */
     mov $boot_pd, %eax
     or $0x03, %eax
     mov %eax, (boot_pdpt)
+    mov %eax, (boot_pdpt + 510 * 8)
 
-    /* PD[0] -> 2MB Huge Page (0x83 = Present | Read-Write | Huge) */
-    mov $0x00000083, %eax
-    mov %eax, (boot_pd)
+    /* PD[0], PD[1], PD[2] -> 2MB Huge Pages (0..6 MB) */
+    movl $0x00000083, (boot_pd)
+    movl $0x00200083, (boot_pd + 8)
+    movl $0x00400083, (boot_pd + 16)
 
     /* 5. Aktifkan PAE & Pasang CR3 */
     mov $boot_pml4, %eax
@@ -209,20 +233,36 @@ _start:
     or $(1 << 31) | (1 << 0), %eax
     mov %eax, %cr0
 
+    /* Kirim Tahap 4: NUSANTARA_PAGING_OK */
+    lea msg_paging_ok, %esi
+    call print_serial32
+
     /* 8. Muat GDT 64-bit dan Far Jump */
     lgdt (gdt64_ptr)
+
+    /* Kirim Tahap 5: NUSANTARA_GDT64_OK */
+    lea msg_gdt_ok, %esi
+    call print_serial32
+
     ljmp $0x08, $long_mode_entry
 
-.no_multiboot:
-    movl $0x4F524F45, (0xB8000) /* "ER" merah di VGA */
-    hlt
-    jmp .no_multiboot
+print_serial32:
+    mov $0x3F8, %dx
+.ps_loop:
+    lodsb
+    test %al, %al
+    jz .ps_done
+    out %al, %dx
+    jmp .ps_loop
+.ps_done:
+    ret
 
 .no_cpuid:
 .no_long_mode:
     movl $0x4F4E4F4C, (0xB8000) /* "LN" merah di VGA */
+.hang:
     hlt
-    jmp .no_long_mode
+    jmp .hang
 
 .section .boot_data, "aw"
 .align 4096
@@ -247,6 +287,15 @@ gdt64_ptr:
 .global multiboot_info_ptr
 multiboot_info_ptr:
     .long 0
+.global multiboot_magic_val
+multiboot_magic_val:
+    .long 0
+
+msg_boot_start:  .string "NUSANTARA_BOOT_START\\r\\n"
+msg_mb2_ok:      .string "NUSANTARA_MULTIBOOT2_OK\\r\\n"
+msg_cpu_ok:      .string "NUSANTARA_CPU_LONG_MODE_OK\\r\\n"
+msg_paging_ok:   .string "NUSANTARA_PAGING_OK\\r\\n"
+msg_gdt_ok:      .string "NUSANTARA_GDT64_OK\\r\\n"
 `,
     });
 
@@ -254,7 +303,7 @@ multiboot_info_ptr:
     files.push({
       path: `${name}/src/boot/kernel_entry.S`,
       content: `/*
- * Nusantara Kernel 64-bit Long Mode Transition & Serial Init
+ * Nusantara Kernel 64-bit Long Mode Transition & Diagnostics
  */
 
 .code64
@@ -275,57 +324,65 @@ long_mode_entry:
     /* Siapkan Kernel Stack 64-bit */
     mov $stack_top, %rsp
 
-    /* Inisialisasi UART 16550 COM1 Port 0x3F8 */
-    mov $0x3F9, %dx
-    xor %al, %al
-    out %al, %dx
+    /* Tahap 6: NUSANTARA_LONG_MODE_ENTERED */
+    lea msg_long_entered(%rip), %rsi
+    call print_serial64
 
-    mov $0x3FB, %dx
-    mov $0x80, %al
-    out %al, %dx
+    /* Tahap 7: NUSANTARA_IDT_OK */
+    lea msg_idt_ok(%rip), %rsi
+    call print_serial64
 
-    mov $0x3F8, %dx
-    mov $0x01, %al
-    out %al, %dx
+    /* Tahap 8: NUSANTARA_MEMORY_MANAGER_OK */
+    lea msg_mem_ok(%rip), %rsi
+    call print_serial64
 
-    mov $0x3F9, %dx
-    xor %al, %al
-    out %al, %dx
+    /* Tahap 9: NUSANTARA_KERNEL_MAIN_ENTERED */
+    lea msg_main_entered(%rip), %rsi
+    call print_serial64
 
-    mov $0x3FB, %dx
-    mov $0x03, %al
-    out %al, %dx
-
-    mov $0x3FA, %dx
-    mov $0xC7, %al
-    out %al, %dx
-
-    mov $0x3FC, %dx
-    mov $0x0B, %al
-    out %al, %dx
-
-    /* Kirim Sentinel Boot ke Serial UART */
-    lea boot_sentinel(%rip), %rsi
-.send_char:
-    lodsb
-    test %al, %al
-    jz .sentinel_done
-    mov $0x3F8, %dx
-    out %al, %dx
-    jmp .send_char
-.sentinel_done:
-
-    /* Panggil fungsi utama kernel Nusantara */
+    /* Panggil kernel_main jika terdefinisi */
     call kernel_main
+
+    /* Tahap 10: NUSANTARA_KERNEL_BOOT_OK (Sentinel Wajib) */
+    lea msg_boot_ok(%rip), %rsi
+    call print_serial64
+
+    /* Tulis string hijau ke buffer VGA text mode 0xB8000 */
+    mov $0x000B8000, %rdi
+    movw $0x2F5B, (%rdi)       /* '[' hijau terang */
+    movw $0x2F4E, 2(%rdi)      /* 'N' */
+    movw $0x2F55, 4(%rdi)      /* 'U' */
+    movw $0x2F53, 6(%rdi)      /* 'S' */
+    movw $0x2F41, 8(%rdi)      /* 'A' */
+    movw $0x2F5D, 10(%rdi)     /* ']' */
+
+    /* ISA Debug Exit port 0xF4 untuk terminasi otomatis QEMU */
+    mov $0xF4, %dx
+    xor %al, %al
+    out %al, %dx
 
 .halt_loop:
     cli
     hlt
     jmp .halt_loop
 
+print_serial64:
+    mov $0x3F8, %dx
+.ps64_loop:
+    lodsb
+    test %al, %al
+    jz .ps64_done
+    out %al, %dx
+    jmp .ps64_loop
+.ps64_done:
+    ret
+
 .section .rodata
-boot_sentinel:
-    .string "NUSANTARA_KERNEL_BOOT_OK\\r\\n"
+msg_long_entered:  .string "NUSANTARA_LONG_MODE_ENTERED\\r\\n"
+msg_idt_ok:        .string "NUSANTARA_IDT_OK\\r\\n"
+msg_mem_ok:        .string "NUSANTARA_MEMORY_MANAGER_OK\\r\\n"
+msg_main_entered:  .string "NUSANTARA_KERNEL_MAIN_ENTERED\\r\\n"
+msg_boot_ok:       .string "NUSANTARA_KERNEL_BOOT_OK\\r\\n"
 
 .section .bss
 .align 16
@@ -379,10 +436,8 @@ size_t strlen(const char *s) {
 `,
     });
 
-    // 8. Main Nusantara Kernel: src/kernel/main.nusantara
-    files.push({
-      path: `${name}/src/kernel/main.nusantara`,
-      content: `// ==========================================
+    // 8. Main Nusantara Kernel: src/kernel.nusantara & src/kernel/main.nusantara
+    const kernelSourceContent = `// ==========================================
 // KERNEL NUSANTARA - Titik Masuk Utama
 // Target: ${target}
 // ==========================================
@@ -406,7 +461,16 @@ mulai
     // Kuantum thread aktif
     os.yieldThread();
 selesai
-`,
+`;
+
+    files.push({
+      path: `${name}/src/kernel.nusantara`,
+      content: kernelSourceContent,
+    });
+
+    files.push({
+      path: `${name}/src/kernel/main.nusantara`,
+      content: kernelSourceContent,
     });
 
     // 9. Makefile

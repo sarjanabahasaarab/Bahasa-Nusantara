@@ -6,10 +6,12 @@
 export interface PembacaBerkas {
   apakahAda(jalur: string): boolean;
   baca(jalur: string): string;
+  bacaBiner?(jalur: string): Uint8Array;
   tulis?(jalur: string, konten: string): void;
   tulisBerkas?(jalur: string, konten: string): void;
   daftarDirektori?(jalur: string): string[];
   apakahDirektori?(jalur: string): boolean;
+  buatDirektori?(jalur: string): void;
   jalurAbsolut(jalur: string): string;
   direktoriDari(jalur: string): string;
   gabungJalur(...bagian: string[]): string;
@@ -39,6 +41,10 @@ export class PembacaBerkasMemori implements PembacaBerkas {
   public tulisBerkas(jalur: string, konten: string): void {
     const absolut = this.jalurAbsolut(jalur);
     this.berkas.set(absolut, konten);
+  }
+
+  public buatDirektori(_jalur: string): void {
+    // In-memory virtual directory no-op
   }
 
   public hapusBerkas(jalur: string): void {
@@ -102,6 +108,34 @@ export class PembacaBerkasMemori implements PembacaBerkas {
       if (k.endsWith(targetTail)) return v;
     }
     throw new Error(`Berkas '${jalur}' tidak ditemukan pada sistem memori.`);
+  }
+
+  public bacaBiner(jalur: string): Uint8Array {
+    const absolut = this.jalurAbsolut(jalur);
+    let val: any = undefined;
+    if (this.berkas.has(absolut)) val = this.berkas.get(absolut);
+    else if (this.berkas.has(jalur)) val = this.berkas.get(jalur);
+    else {
+      const norm = this.normalisasiJalur(jalur);
+      if (this.berkas.has(norm)) val = this.berkas.get(norm);
+      else {
+        const targetTail = '/' + norm.replace(/^\/+/, '');
+        for (const [k, v] of this.berkas.entries()) {
+          if (k.endsWith(targetTail)) {
+            val = v;
+            break;
+          }
+        }
+      }
+    }
+    if (val === undefined) {
+      throw new Error(`Berkas '${jalur}' tidak ditemukan pada sistem memori.`);
+    }
+    if (val instanceof Uint8Array) return val;
+    if (typeof Buffer !== 'undefined' && Buffer.isBuffer(val)) {
+      return new Uint8Array(val.buffer, val.byteOffset, val.byteLength);
+    }
+    return new TextEncoder().encode(String(val));
   }
 
   public jalurAbsolut(jalur: string): string {
@@ -193,9 +227,28 @@ export class PembacaBerkasNode implements PembacaBerkas {
     return this.fs.readFileSync(jalur, 'utf-8');
   }
 
+  public bacaBiner(jalur: string): Uint8Array {
+    if (!this.fs) {
+      throw new Error(`Sistem berkas Node.js tidak tersedia pada lingkungan saat ini.`);
+    }
+    const buf = this.fs.readFileSync(jalur);
+    return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+  }
+
+  public buatDirektori(jalur: string): void {
+    if (!this.fs) return;
+    try {
+      this.fs.mkdirSync(jalur, { recursive: true });
+    } catch {}
+  }
+
   public tulis(jalur: string, konten: string): void {
     if (!this.fs) {
       throw new Error(`Sistem berkas Node.js tidak tersedia pada lingkungan saat ini.`);
+    }
+    const dir = this.direktoriDari(jalur);
+    if (dir && !this.apakahAda(dir)) {
+      this.buatDirektori(dir);
     }
     this.fs.writeFileSync(jalur, konten, 'utf-8');
   }

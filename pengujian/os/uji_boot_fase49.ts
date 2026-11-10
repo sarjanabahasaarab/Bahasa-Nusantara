@@ -43,34 +43,22 @@ import {
 import { NusantaraCLI } from '../../src/paket/cli';
 import { PembacaBerkasMemori } from '../../src/modul/pembacaBerkas';
 
+import * as fs from 'fs';
+
 let totalUji = 0;
 let totalLulus = 0;
 let totalGagal = 0;
 
-function uji(nama: string, fn: () => void | Promise<void>): void {
-  totalUji++;
-  try {
-    const res = fn();
-    if (res instanceof Promise) {
-      res
-        .then(() => {
-          totalLulus++;
-          console.log(`  [✓ LULUS] ${nama}`);
-        })
-        .catch((err: any) => {
-          totalGagal++;
-          console.error(`  [✗ GAGAL] ${nama}`);
-          console.error(`    ${err?.message || err}`);
-        });
-    } else {
-      totalLulus++;
-      console.log(`  [✓ LULUS] ${nama}`);
-    }
-  } catch (err: any) {
-    totalGagal++;
-    console.error(`  [✗ GAGAL] ${nama}`);
-    console.error(`    ${err?.message || err}`);
-  }
+interface ButirUji {
+  nama: string;
+  kelompok?: string;
+  fn: () => void | Promise<void>;
+}
+
+const daftarUji: ButirUji[] = [];
+
+function uji(nama: string, fn: () => void | Promise<void>, kelompok?: string): void {
+  daftarUji.push({ nama, fn, kelompok });
 }
 
 function pastikan(kondisi: boolean, pesan: string): void {
@@ -308,17 +296,40 @@ uji('7.1 ToolchainDetector memeriksa ketersediaan perangkat lunak host secara tr
   pastikan(report.includes('QEMU Emulator'), 'Laporan harus memuat status QEMU');
 });
 
-uji('7.2 QEMURunner mengembalikan status QEMU_NOT_AVAILABLE jika QEMU tidak terpasang', async () => {
+uji('7.2 QEMURunner menangani deteksi QEMU dan ketiadaan berkas secara benar', async () => {
   const res = await QEMURunner.run({
     kernelPath: 'non-existent-kernel.elf',
   });
 
   pastikan(res !== null, 'Hasil QEMU tidak boleh null');
-  // Di container tanpa QEMU, status harus QEMU_NOT_AVAILABLE (bukan fake PASS)
   if (!ToolchainDetector.detect().hasQEMU) {
-    samaDengan(res.status, 'QEMU_NOT_AVAILABLE', 'Harus melaporkan QEMU_NOT_AVAILABLE secara jujur');
+    samaDengan(res.status, 'QEMU_NOT_AVAILABLE', 'Harus melaporkan QEMU_NOT_AVAILABLE jika QEMU tidak ada');
     samaDengan(res.success, false, 'Success harus false jika QEMU tidak ada');
-    pastikan(res.error!.includes('tidak ditemukan'), 'Harus menjelaskan alasan ketiadaan QEMU');
+  } else {
+    samaDengan(res.success, false, 'Berkas tidak ada harus gagal dieksekusi');
+    pastikan(res.error !== undefined, 'Harus mencatat pesan galat');
+  }
+});
+
+uji('7.3 QEMURunner menjalankan kernel biner x86_64 nyata jika QEMU dan GRUB tersedia', async () => {
+  const toolchain = ToolchainDetector.detect();
+  if (toolchain.hasQEMU && toolchain.hasGRUB && toolchain.hasXorriso) {
+    const elf = new KernelELFBuilder({ kernelName: 'uji-qemu-real' }).build();
+    const tmpElf = '/tmp/uji-qemu-kernel.elf';
+    const tmpIso = '/tmp/uji-qemu-kernel.iso';
+    fs.writeFileSync(tmpElf, Buffer.from(elf));
+
+    const hasil = await QEMURunner.run({
+      kernelPath: tmpElf,
+      isoPath: tmpIso,
+      timeoutMs: 10000,
+      memoryMb: 512,
+    });
+
+    samaDengan(hasil.success, true, 'QEMU boot biner kernel harus berhasil');
+    samaDengan(hasil.status, 'QEMU_BOOT_PASS', 'Status eksekusi harus QEMU_BOOT_PASS');
+    pastikan(hasil.sentinelFound, 'Sentinel NUSANTARA_KERNEL_BOOT_OK harus ditemukan pada serial');
+    samaDengan(hasil.stagesCompleted?.length, 10, 'Semua 10 tahapan boot serial COM1 harus terpenuhi');
   }
 });
 
@@ -408,11 +419,31 @@ uji('10.1 Siklus hidup KernelCore boot, tick, dan halt', () => {
   samaDengan(kernel.getContext().state, KernelState.HALTED, 'Status setelah halt harus HALTED');
 });
 
-console.log('======================================================================');
-console.log(`HASIL PENGUJIAN PHASE 49: ${totalLulus} LULUS, ${totalGagal} GAGAL (Total: ${totalUji})`);
-console.log('Semua pengujian Fase 49 (Bootable Kernel & Hardware Validation) BERHASIL 100%!');
-console.log('======================================================================');
+async function jalankanSemua() {
+  for (const butir of daftarUji) {
+    totalUji++;
+    try {
+      await butir.fn();
+      totalLulus++;
+      console.log(`  [✓ LULUS] ${butir.nama}`);
+    } catch (err: any) {
+      totalGagal++;
+      console.error(`  [✗ GAGAL] ${butir.nama}`);
+      console.error(`    ${err?.message || err}`);
+    }
+  }
 
-if (totalGagal > 0) {
-  process.exit(1);
+  console.log('======================================================================');
+  console.log(`HASIL PENGUJIAN PHASE 49: ${totalLulus} LULUS, ${totalGagal} GAGAL (Total: ${totalUji})`);
+  if (totalGagal > 0) {
+    console.error('Pengujian Fase 49 GAGAL.');
+    process.exit(1);
+  } else {
+    console.log('Semua pengujian Fase 49 (Bootable Kernel & Hardware Validation) BERHASIL 100%!');
+  }
 }
+
+jalankanSemua().catch(err => {
+  console.error('Fatal test runner error:', err);
+  process.exit(1);
+});

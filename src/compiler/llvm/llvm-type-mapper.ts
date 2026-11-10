@@ -61,7 +61,13 @@ export class LLVMTypeMapper {
     }
   }
 
-  public getPointerType(): string {
-    return this.useOpaquePointers ? 'ptr' : 'i8*';
+  public getPointerType(elementType?: NIRType): string {
+    if (this.useOpaquePointers) {
+      return 'ptr';
+    }
+    if (elementType) {
+      return `${this.map(elementType)}*`;
+    }
+    return 'i8*';
   }
 }

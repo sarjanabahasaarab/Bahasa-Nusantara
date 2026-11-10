@@ -64,13 +64,14 @@ export class LLVMIRGenerator {
     }
 
     // Deklarasi Eksternal Standar C / Nusantara Runtime
+    const ptrType = this.typeMapper.getPointerType();
     lines.push('; Deklarasi Runtime Nusantara & Libc Eksternal');
-    lines.push('declare i32 @printf(ptr, ...)');
-    lines.push('declare ptr @malloc(i64)');
-    lines.push('declare void @free(ptr)');
+    lines.push(`declare i32 @printf(${ptrType}, ...)`);
+    lines.push(`declare ${ptrType} @malloc(i64)`);
+    lines.push(`declare void @free(${ptrType})`);
     lines.push('declare void @exit(i32)');
     lines.push('declare i64 @nusantara_cetak_bilangan(i64)');
-    lines.push('declare void @nusantara_cetak_teks(ptr)');
+    lines.push(`declare void @nusantara_cetak_teks(${ptrType})`);
     lines.push('');
 
     // Emisi Fungsi

@@ -76,7 +76,7 @@ export class LLVMInstructionEmitter {
         const load = inst as NIRLoadInst;
         const resTypeStr = this.typeMapper.map(load.type);
         const ptrVal = this.formatValue(load.pointer);
-        const ptrTypeStr = this.typeMapper.getPointerType();
+        const ptrTypeStr = this.typeMapper.getPointerType(load.type);
         return `${inst.id} = load ${resTypeStr}, ${ptrTypeStr} ${ptrVal}, align 8`;
       }
 
@@ -85,7 +85,7 @@ export class LLVMInstructionEmitter {
         const valTypeStr = this.typeMapper.map(store.value.type);
         const valStr = this.formatValue(store.value);
         const ptrVal = this.formatValue(store.pointer);
-        const ptrTypeStr = this.typeMapper.getPointerType();
+        const ptrTypeStr = this.typeMapper.getPointerType(store.value.type);
         return `store ${valTypeStr} ${valStr}, ${ptrTypeStr} ${ptrVal}, align 8`;
       }
 
@@ -96,7 +96,8 @@ export class LLVMInstructionEmitter {
         const indices = gep.indices
           .map((i) => `${this.typeMapper.map(i.type)} ${this.formatValue(i)}`)
           .join(', ');
-        return `${inst.id} = getelementptr inbounds ${elemTypeStr}, ptr ${basePtr}, ${indices}`;
+        const ptrTypeStr = this.typeMapper.getPointerType(gep.basePtr.type.elementType || gep.basePtr.type);
+        return `${inst.id} = getelementptr inbounds ${elemTypeStr}, ${ptrTypeStr} ${basePtr}, ${indices}`;
       }
 
       case NIROpcode.ADD:
@@ -201,32 +202,37 @@ export class LLVMInstructionEmitter {
 
       // Concurrency & Actor LLVM Lowering (Phase 46)
       case NIROpcode.ACTOR_CREATE: {
-        return `${inst.id} = call ptr @nusantara_actor_create(ptr null)`;
+        const pt = this.typeMapper.getPointerType();
+        return `${inst.id} = call ${pt} @nusantara_actor_create(${pt} null)`;
       }
 
       case NIROpcode.ACTOR_SEND: {
+        const pt = this.typeMapper.getPointerType();
         const ops = (inst as any).operands || [];
         const target = ops[0] ? this.formatValue(ops[0]) : 'null';
         const msg = ops[1] ? this.formatValue(ops[1]) : 'null';
-        return `call i32 @nusantara_actor_send(ptr ${target}, i64 0, ptr ${msg})`;
+        return `call i32 @nusantara_actor_send(${pt} ${target}, i64 0, ${pt} ${msg})`;
       }
 
       case NIROpcode.ACTOR_STOP: {
+        const pt = this.typeMapper.getPointerType();
         const ops = (inst as any).operands || [];
         const target = ops[0] ? this.formatValue(ops[0]) : 'null';
-        return `call void @nusantara_actor_stop(ptr ${target})`;
+        return `call void @nusantara_actor_stop(${pt} ${target})`;
       }
 
       case NIROpcode.ASYNC_START: {
+        const pt = this.typeMapper.getPointerType();
         const ops = (inst as any).operands || [];
         const callee = ops[0] ? this.formatValue(ops[0]) : 'null';
-        return `${inst.id} = call ptr @nusantara_task_spawn(ptr ${callee}, ptr null)`;
+        return `${inst.id} = call ${pt} @nusantara_task_spawn(${pt} ${callee}, ${pt} null)`;
       }
 
       case NIROpcode.AWAIT: {
+        const pt = this.typeMapper.getPointerType();
         const ops = (inst as any).operands || [];
         const task = ops[0] ? this.formatValue(ops[0]) : 'null';
-        return `${inst.id} = call ptr @nusantara_task_wait(ptr ${task})`;
+        return `${inst.id} = call ${pt} @nusantara_task_wait(${pt} ${task})`;
       }
 
       default:

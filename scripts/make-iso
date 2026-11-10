@@ -23,6 +23,10 @@ cat << 'EOF' > "$ISODIR/boot/grub/grub.cfg"
 set timeout=0
 set default=0
 
+serial --unit=0 --speed=115200
+terminal_input serial console
+terminal_output serial console
+
 menuentry "NUSANTARA OS (x86_64 Bootable Kernel)" {
     multiboot2 /boot/kernel.elf
     boot

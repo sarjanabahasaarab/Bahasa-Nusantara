@@ -105,6 +105,13 @@ export class ObjectGenerator {
         } else {
           const err = (res.stderr || res.stdout || '').trim();
           this.diag.error('CLANG_OBJ_ERROR', err || 'Gagal menghasilkan berkas objek via clang.');
+          return {
+            success: false,
+            targetFormat,
+            diagnostics: [
+              `Gagal menghasilkan berkas objek via clang: ${err || 'galat tidak diketahui'}`,
+            ],
+          };
         }
       } finally {
         try {
