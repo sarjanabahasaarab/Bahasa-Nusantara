@@ -176,7 +176,7 @@ export class MesinCI {
           : target === 'linux-x64'
           ? 'ubuntu-latest'
           : target === 'macos-x64'
-          ? 'macos-13'
+          ? 'macos-15-intel'
           : 'macos-latest';
 
       if (artefakTarget.length > 0) {

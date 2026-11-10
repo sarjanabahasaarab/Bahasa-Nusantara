@@ -27,7 +27,7 @@ import {
 } from '../../src/compiler/executable';
 import { NusantaraCLI } from '../../src/paket/cli';
 import { LLVMToolchainManager } from '../../src/compiler/llvm';
-import { safeFS, safePath, safeOS } from '../../src/compiler/llvm/node-compat';
+import { safeCP, safeFS, safePath, safeOS } from '../../src/compiler/llvm/node-compat';
 
 function pastikan(kondisi: boolean, pesan: string): void {
   if (!kondisi) {
@@ -467,7 +467,7 @@ console.log('\n[KELOMPOK 10] Verifikasi Eksekusi Linker Native');
 
 uji('10.1 Pengujian tautan biner native nyata via Clang/LLD', () => {
   const toolchain = new LLVMToolchainManager().detect();
-  if (!toolchain.binaries.clang.found && !toolchain.binaries.lld.found) {
+  if (!toolchain.binaries.clang.found) {
     return 'SKIPPED';
   }
 
@@ -477,12 +477,23 @@ uji('10.1 Pengujian tautan biner native nyata via Clang/LLD', () => {
   const outExe = safePath.join(tmpDir, 'test_program');
 
   try {
-    const res = linkerMgr.link({
-      objectFiles: [],
-      outputExecutable: outExe,
-      isStatic: true,
+    // Runtime C memanggil `utama`, jadi sediakan objek yang mendefinisikannya
+    const utamaC = safePath.join(tmpDir, 'utama.c');
+    const utamaObj = safePath.join(tmpDir, 'utama.o');
+    safeFS.writeFileSync(utamaC, '#include <stdint.h>\nint32_t utama(void) { return 0; }\n', 'utf-8');
+    const kompilasi = safeCP.spawnSync(toolchain.binaries.clang.command, ['-c', utamaC, '-o', utamaObj], {
+      encoding: 'utf-8',
+      shell: false,
     });
-    pastikan(res.success, 'Linker native harus berhasil jika toolchain terpasang');
+    pastikan(kompilasi.status === 0, `Kompilasi objek uji harus berhasil: ${kompilasi.stderr}`);
+
+    const res = linkerMgr.link({
+      objectFiles: [utamaObj],
+      outputExecutable: outExe,
+      // Static linking penuh hanya didukung di Linux (macOS & Windows memakai pustaka sistem dinamis)
+      isStatic: process.platform === 'linux',
+    });
+    pastikan(res.success, `Linker native harus berhasil jika toolchain terpasang: ${res.diagnostics.join(' ')}`);
   } finally {
     safeFS.rmSync(tmpDir, { recursive: true, force: true });
   }

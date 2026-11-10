@@ -114,10 +114,10 @@ export class LLVMToolchainManager {
       if (typeof process !== 'undefined' && process.platform === 'win32') {
         candidatePaths.push(safePath.join(this.customBinDir, `${tool}.exe`));
       }
+    } else {
+      // Default PATH, hanya jika jalur kustom tidak dikonfigurasi
+      candidatePaths.push(tool);
     }
-
-    // Default PATH
-    candidatePaths.push(tool);
 
     for (const p of candidatePaths) {
       try {

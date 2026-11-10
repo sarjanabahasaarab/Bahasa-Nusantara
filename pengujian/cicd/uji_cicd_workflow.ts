@@ -173,7 +173,7 @@ uji('5.2 Runner GitHub Actions dipetakan dengan tepat tanpa runner fiktif', () =
   const kontenCI = pembacaReal.baca('.github/workflows/ci.yml');
   pastikan(kontenCI.includes('windows-latest'), 'Runner Windows sah');
   pastikan(kontenCI.includes('ubuntu-latest'), 'Runner Linux sah');
-  pastikan(kontenCI.includes('macos-13'), 'Runner macOS x64 sah');
+  pastikan(kontenCI.includes('macos-15-intel'), 'Runner macOS x64 sah');
   pastikan(kontenCI.includes('macos-latest'), 'Runner macOS ARM64 sah');
 });
 

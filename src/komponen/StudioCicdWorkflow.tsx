@@ -96,7 +96,7 @@ jobs:
           - target: linux-x64
             os: ubuntu-latest
           - target: macos-x64
-            os: macos-13
+            os: macos-15-intel
           - target: macos-arm64
             os: macos-latest
     steps:

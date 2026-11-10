@@ -56,7 +56,7 @@ Build matrix mencakup 4 platform target utama:
 | :--- | :--- | :--- | :--- |
 | **`windows-x64`** | `windows-latest` | `.zip` | Executable `.cmd`, `install.bat`, validasi ZIP |
 | **`linux-x64`** | `ubuntu-latest` | `.tar.gz`, `.zip` | Shell launcher, `install.sh`, SHA256SUMS |
-| **`macos-x64`** | `macos-13` (Intel) | `.tar.gz`, `.zip` | Validasi UStar TAR & ZIP portable |
+| **`macos-x64`** | `macos-15-intel` (Intel) | `.tar.gz`, `.zip` | Validasi UStar TAR & ZIP portable |
 | **`macos-arm64`** | `macos-latest` (Apple Silicon) | `.tar.gz`, `.zip` | Validasi arsitektur ARM64 |
 
 ---

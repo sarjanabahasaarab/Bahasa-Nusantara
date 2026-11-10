@@ -33,7 +33,7 @@ jobs:
       - name: Pasang Lingkungan Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Pasang Dependensi Proyek (Reproducible)
@@ -62,7 +62,7 @@ jobs:
       - name: Pasang Lingkungan Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Pasang Dependensi
@@ -87,7 +87,7 @@ jobs:
       - name: Pasang Lingkungan Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Pasang Dependensi
@@ -115,7 +115,7 @@ jobs:
           - target: linux-x64
             os: ubuntu-latest
           - target: macos-x64
-            os: macos-13
+            os: macos-15-intel
           - target: macos-arm64
             os: macos-latest
     steps:
@@ -125,7 +125,7 @@ jobs:
       - name: Pasang Lingkungan Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Pasang Dependensi
