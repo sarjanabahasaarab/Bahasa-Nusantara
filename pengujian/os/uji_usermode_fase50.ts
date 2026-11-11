@@ -230,6 +230,29 @@ async function main(): Promise<void> {
     pastikan(!badCopy, 'copyFromUser dengan alamat kernel harus gagal');
   });
 
+  await uji('3.4 Validasi batas buffer: overflow, ukuran > 16MB, dan halaman unmapped', () => {
+    // 1. Buffer negatif / overflow
+    const negCheck = UserPointerSecurity.validateUserBuffer(0x0040_1000n, -5);
+    pastikan(!negCheck.valid, 'Panjang buffer negatif harus ditolak');
+
+    // 2. Buffer melebihi 16MB
+    const bigCheck = UserPointerSecurity.validateUserBuffer(0x0040_1000n, 17 * 1024 * 1024);
+    pastikan(!bigCheck.valid, 'Buffer > 16MB harus ditolak');
+    pastikan(bigCheck.error === UserSecurityError.BUFFER_TOO_LARGE, 'Galat harus BUFFER_TOO_LARGE');
+
+    // 3. Integer overflow pada batas akhir buffer
+    const overflowCheck = UserPointerSecurity.validateUserBuffer(0xFFFF_FFFF_FFFF_F000n, 0x2000);
+    pastikan(!overflowCheck.valid, 'Integer overflow alamat buffer harus ditolak');
+
+    // 4. Buffer melintasi halaman yang belum dipetakan
+    const as = new AddressSpace();
+    as.mapPage(0x0040_1000n, 0x0100_0000n, PagePermissions.USER_READ_WRITE, true);
+    // Halaman berikutnya 0x0040_2000n sengaja TIDAK dipetakan
+    const crossPageCheck = UserPointerSecurity.validateUserBuffer(0x0040_1FF0n, 32, false, as);
+    pastikan(!crossPageCheck.valid, 'Buffer yang melintasi ke halaman unmapped harus ditolak');
+    pastikan(crossPageCheck.error === UserSecurityError.UNMAPPED_MEMORY, 'Galat harus UNMAPPED_MEMORY');
+  });
+
   // =========================================================================
   // KELOMPOK 4: ELF64 USER APPLICATION LOADER
   // =========================================================================
@@ -264,6 +287,32 @@ async function main(): Promise<void> {
     const as = new AddressSpace();
     const result = ELF64UserLoader.load(badElf, as);
     pastikan(!result.success, 'ELF dengan entry point kernel harus ditolak');
+  });
+
+  await uji('4.3 Penolakan biner ELF cacat (Truncated, Magic salah, W^X, Overlap, Non-x86_64)', () => {
+    const as = new AddressSpace();
+
+    // 1. Header terpotong (< 64 bytes)
+    const truncatedElf = new Uint8Array(32);
+    pastikan(!ELF64UserLoader.load(truncatedElf, as).success, 'Header terpotong harus ditolak');
+
+    // 2. Magic salah
+    const validElf = UserELFBuilder.buildUserTestProgram();
+    const badMagicElf = new Uint8Array(validElf);
+    badMagicElf[0] = 0x00; // Rusak magic byte
+    pastikan(!ELF64UserLoader.load(badMagicElf, as).success, 'Magic salah harus ditolak');
+
+    // 3. Arsitektur selain x86_64 (e_machine != 0x3E)
+    const wrongArchElf = new Uint8Array(validElf);
+    wrongArchElf[18] = 0x28; // ARM 32-bit
+    wrongArchElf[19] = 0x00;
+    pastikan(!ELF64UserLoader.load(wrongArchElf, as).success, 'Arsitektur selain x86_64 harus ditolak');
+
+    // 4. Pelanggaran W^X pada Program Header (PF_W | PF_X)
+    const wxElf = new Uint8Array(validElf);
+    const phOffset = 64; // e_phoff
+    wxElf[phOffset + 4] = 1 | 2; // PF_X | PF_W
+    pastikan(!ELF64UserLoader.load(wxElf, as).success, 'Segmen W^X harus ditolak');
   });
 
   // =========================================================================

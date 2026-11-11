@@ -133,10 +133,26 @@ export class ELF64UserLoader {
       }
 
       const segmentEnd = pVaddr + pMemsz;
+      // Cek integer overflow
+      if (segmentEnd < pVaddr) {
+        return {
+          success: false,
+          error: `Integer overflow terdeteksi pada batas segmen #${i}: p_vaddr + p_memsz`,
+        };
+      }
+
       if (!KernelABI.isUserPointer(segmentEnd)) {
         return {
           success: false,
           error: `Segmen PT_LOAD #${i} melintasi batas ruang pengguna: 0x${segmentEnd.toString(16)}`,
+        };
+      }
+
+      // Validasi batas ukuran berkas biner
+      if (pFileOffset + pFilesz > BigInt(elfBytes.length)) {
+        return {
+          success: false,
+          error: `Segmen PT_LOAD #${i} offset berkas (${pFileOffset} + ${pFilesz}) melebihi ukuran biner (${elfBytes.length})`,
         };
       }
 
@@ -145,6 +161,37 @@ export class ELF64UserLoader {
           success: false,
           error: `p_filesz (${pFilesz}) lebih besar daripada p_memsz (${pMemsz}) pada segmen #${i}`,
         };
+      }
+
+      // Validasi Alignment (p_align harus kelipatan dua dan valid)
+      if (pAlign > 1n) {
+        if ((pAlign & (pAlign - 1n)) !== 0n) {
+          return {
+            success: false,
+            error: `p_align (${pAlign}) bukan merupakan perpangkatan 2 pada segmen #${i}`,
+          };
+        }
+      }
+
+      // Penegakan Prinsip Keamanan W^X (Write XOR Execute):
+      // Segmen pengguna tidak diizinkan memiliki izin tulis dan eksekusi secara simultan
+      if ((pFlags & this.PF_W) !== 0 && (pFlags & this.PF_X) !== 0) {
+        return {
+          success: false,
+          error: `Pelanggaran W^X pada segmen #${i}: segmen tidak boleh sekaligus Writable dan Executable`,
+        };
+      }
+
+      // Deteksi Tumpang Tindih Segmen (Segment Overlap):
+      for (const existing of addressSpace.getAllRegions()) {
+        const existStart = existing.virtualAddress;
+        const existEnd = existStart + BigInt(existing.sizeBytes);
+        if (pVaddr < existEnd && segmentEnd > existStart) {
+          return {
+            success: false,
+            error: `Tumpang tindih segmen terdeteksi antara segmen #${i} (0x${pVaddr.toString(16)}) dan region ${existing.id} (0x${existStart.toString(16)})`,
+          };
+        }
       }
 
       // Konversi p_flags (PF_R, PF_W, PF_X) ke PagePermissions

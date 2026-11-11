@@ -5,11 +5,11 @@ Seluruh perubahan penting pada proyek bahasa pemrograman NUSANTARA dicatat dalam
 Format penomoran versi mengacu pada **Semantic Versioning** (`vMAJOR.MINOR.PATCH`). Pada masa pengembangan awal, versi minor mencerminkan tahapan fase roadmap (misal `v0.1.0` untuk Phase 1, `v0.2.0` untuk Phase 2, `v0.3.0` untuk Phase 3, `v0.4.0` untuk Phase 4, `v0.5.0` untuk Phase 5, `v0.6.0` untuk Phase 6, `v0.7.0` untuk Phase 7, `v0.8.0` untuk Phase 8, `v0.9.0` untuk Phase 9, `v0.10.0` untuk Phase 10).
 
 ## [v0.50.0] — 2026-11-11
-### Phase 50: Nusantara OS: Process Isolation & User Mode
+### Phase 50: Nusantara OS: Process Isolation & User Mode (PARTIAL - CI_READY)
 
 Fase ini mengimplementasikan pemisahan hak istimewa (*privilege separation*) antara Kernel (CPU Ring 0) dan User Mode (CPU Ring 3) serta isolasi proses (*process isolation*) penuh pada sistem operasi NUSANTARA untuk arsitektur x86_64. Implementasi ini menjamin bahwa setiap proses memiliki ruang alamat (*Address Space*) independen yang dilindungi oleh perangkat keras MMU/Paging, instruksi istimewa kernel tidak dapat dieksekusi oleh aplikasi pengguna, akses langsung ke memori kernel ditolak dengan galat `EFAULT` atau Page Fault `#PF`, serta kegagalan/crash pada aplikasi ruang pengguna ditangani secara aman oleh `ProcessFaultHandler` tanpa menyebabkan kepanikan seluruh kernel (`KernelPanic`).
 
-Seluruh arsitektur diverifikasi oleh Quality Gate Test Suite 46 (`pengujian/os/uji_usermode_fase50.ts`) dengan 21 skenario pengujian berstatus 100% lulus.
+Seluruh arsitektur diverifikasi oleh Quality Gate Test Suite 46 (`pengujian/os/uji_usermode_fase50.ts`) dengan 25 skenario pengujian berstatus 100% lulus. Status pengujian bare-metal QEMU dicatat sebagai `PARTIAL (CI_READY)` karena keterbatasan toolchain qemu di container lokal, dengan pipeline GitHub Actions siap mengeksekusi ISO bootable secara otomatis.
 
 #### Ditambahkan:
 - **Tabel Deskriptor Global & Task State Segment 64-bit (`src/runtime/os/hal/gdt-tss.ts`):**
@@ -75,7 +75,9 @@ Seluruh arsitektur diverifikasi oleh Quality Gate Test Suite 46 (`pengujian/os/u
 - **Program Contoh Pengguna (`contoh/os/hello-user.nusantara`):**
   - Aplikasi ruang pengguna yang mendemonstrasikan eksekusi Ring 3, pemanggilan syscall `sys_console_write`, `sys_process_id`, dan `sys_process_exit`.
 - **Suite Pengujian Otomatis Suite 46 (`pengujian/os/uji_usermode_fase50.ts`):**
-  - 21 skenario pengujian komprehensif yang menguji GDT, TSS, Address Space, User Pointer Security, ELF Loader, User Stack, CPU Privilege Transition, PCB/TCB Lifecycle, System Calls, Fault Isolation, IPC, dan Serial Sentinels.
+  - 25 skenario pengujian komprehensif yang menguji GDT, TSS, Address Space, User Pointer Security, ELF Loader, User Stack, CPU Privilege Transition, PCB/TCB Lifecycle, System Calls, Fault Isolation, IPC, dan Serial Sentinels (100% Lulus).
+- **Generator & Manifes Artefak Fase 50 (`scripts/generate-phase50-artifacts.ts`):**
+  - Sintesis biner `kernel.elf`, `user-test.elf`, `user-fault-test.elf`, `nusantara-phase50.iso` dan kalkulasi manifes integritas SHA-256 (`artifacts/phase50/SHA256SUMS`).
 
 ## [v0.49.0] — 2026-11-10
 ### Phase 49: Nusantara OS: Bootable Kernel & Hardware Validation

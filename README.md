@@ -43,10 +43,11 @@ NUSANTARA bukan sekadar terjemahan sintaksis atau praprosesor teks atas bahasa a
 
 ## 2. Status Perkembangan Proyek & Roadmap
 
-- **Status Saat Ini:** **🟢 Phase 50: Nusantara OS: Process Isolation & User Mode (Milestone v0.50.0)**.
+- **Status Saat Ini:** **🟠 Phase 50: Nusantara OS: Process Isolation & User Mode — PARTIAL (CI_READY) (Milestone v0.50.0)**.
 - **Total Fase Diaudit:** 50 Fase (Phase 1 s/d Phase 50).
-  - 🟢 **Selesai dan Teruji (Phase 1 s/d Phase 50):** 50 fase berstatus implementasi nyata lengkap dengan rangkaian pengujian unit, integrasi, dan e2e.
-- **Rangkaian Pengujian:** 46 test suite otomatis lulus 100% (167 pemeriksaan dokumen fondasi + 1.170 test cases pada 43 suite TypeScript = total 1.337 pemeriksaan gabungan terverifikasi).
+  - 🟢 **Selesai dan Teruji (Phase 1 s/d Phase 48):** 48 fase berstatus implementasi nyata lengkap dengan rangkaian pengujian unit, integrasi, dan e2e.
+  - 🟠 **Selesai Sebagian (Phase 49 & Phase 50):** Implementasi arsitektur Ring 0/Ring 3, GDT64, TSS, PML4/CR3 hardware memory isolation, user pointer security, pemuat ELF64, dan fault guard selesai dan lulus 100% pada 25 kasus uji Quality Gate. Eksekusi bare-metal QEMU lokal berstatus `NOT EXECUTED / SIMULATION_ONLY` akibat ketiadaan biner QEMU pada container cloud saat ini dan siap disertifikasi penuh melalui alur GitHub Actions runner.
+- **Rangkaian Pengujian:** 46 test suite otomatis lulus 100% (167 pemeriksaan dokumen fondasi + 1.172 test cases pada 43 suite TypeScript = total 1.339 pemeriksaan gabungan terverifikasi).
 - **Audit Terakhir:** 11 November 2026.
 - **Dokumentasi Roadmap Lengkap:** Silakan baca [ROADMAP.md](ROADMAP.md) untuk tabel detail status, bukti implementasi, dan rencana pengembangan fase 1 hingga 50.
 
