@@ -75,7 +75,7 @@ export class QEMURunner {
   public static readonly REQUIRED_SENTINEL = 'NUSANTARA_KERNEL_BOOT_OK';
   public static readonly USERMODE_SENTINEL = 'NUSANTARA_USERMODE_TEST_PASS';
 
-  // 16 Tahapan Diagnostik Serial Wajib (Phase 49 & Phase 50)
+  // 18 Tahapan Diagnostik Serial Wajib (Phase 49 & Phase 50)
   public static readonly STAGES = [
     'NUSANTARA_BOOT_START',
     'NUSANTARA_MULTIBOOT2_OK',
@@ -92,6 +92,8 @@ export class QEMURunner {
     'NUSANTARA_SYSCALL_OK',
     'NUSANTARA_PROCESS_EXIT_OK',
     'NUSANTARA_PROCESS_ISOLATION_OK',
+    'NUSANTARA_USER_FAULT_ISOLATED',
+    'NUSANTARA_KERNEL_SURVIVED_USER_FAULT',
     'NUSANTARA_USERMODE_TEST_PASS',
   ];
 

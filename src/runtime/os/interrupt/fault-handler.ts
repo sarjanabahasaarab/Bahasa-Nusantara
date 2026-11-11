@@ -70,6 +70,10 @@ export class ProcessFaultHandler {
         `[PID ${activePid}] Pengecualian ${faultName} pada RIP=0x${rip.toString(16)} (CR2=${cr2 ? '0x' + cr2.toString(16) : 'N/A'}, ErrCode=0x${errorCode.toString(16)}). Menghentikan proses pengguna secara aman.`
       );
 
+      // Emisi sentinel serial diagnostik
+      logger.info('UART', 'NUSANTARA_USER_FAULT_ISOLATED');
+      logger.info('UART', 'NUSANTARA_KERNEL_SURVIVED_USER_FAULT');
+
       // Terminasi proses pengguna
       ProcessManager.getInstance().process_terminate(activePid, `EXCEPTION_${faultName}`);
 

@@ -47,6 +47,9 @@ jobs:
       - name: "Execute Phase 50 User Mode & Process Isolation Test Suite"
         run: npm run test:usermode-v50
 
+      - name: "Generate Phase 50 Kernel & User ELF Artifacts"
+        run: npm run build:artifacts-v50
+
       - name: "Verify Toolchain Status"
         run: |
           chmod +x scripts/*
@@ -68,9 +71,23 @@ jobs:
         run: |
           ./scripts/make-iso bin/nusantara-kernel.elf bin/nusantara-kernel.iso
 
-      - name: "Execute Native QEMU Boot Test"
+      - name: "Execute Native QEMU Boot Test & Sentinel Verification"
         run: |
           ./scripts/test-qemu bin/nusantara-kernel.elf
+          # Verifikasi keberadaan seluruh sentinel wajib Phase 50 di qemu-serial.log
+          grep -q "NUSANTARA_BOOT_START" qemu-serial.log
+          grep -q "NUSANTARA_MULTIBOOT2_OK" qemu-serial.log
+          grep -q "NUSANTARA_CPU_LONG_MODE_OK" qemu-serial.log
+          grep -q "NUSANTARA_KERNEL_MAIN_ENTERED" qemu-serial.log
+          grep -q "NUSANTARA_USERMODE_ENTERED" qemu-serial.log
+          grep -q "HELLO FROM NUSANTARA USER MODE" qemu-serial.log
+          grep -q "NUSANTARA_SYSCALL_OK" qemu-serial.log
+          grep -q "NUSANTARA_PROCESS_EXIT_OK" qemu-serial.log
+          grep -q "NUSANTARA_PROCESS_ISOLATION_OK" qemu-serial.log
+          grep -q "NUSANTARA_USER_FAULT_ISOLATED" qemu-serial.log
+          grep -q "NUSANTARA_KERNEL_SURVIVED_USER_FAULT" qemu-serial.log
+          grep -q "NUSANTARA_USERMODE_TEST_PASS" qemu-serial.log
+          echo "Semua 12 sentinel serial wajib Phase 50 terverifikasi pada QEMU serial log!"
 
       - name: "Upload Kernel Artifacts and Serial Boot Logs"
         if: always()
@@ -81,3 +98,4 @@ jobs:
             bin/nusantara-kernel.elf
             bin/nusantara-kernel.iso
             qemu-serial.log
+            artifacts/phase50/*

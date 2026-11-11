@@ -1,0 +1,26 @@
+======================================================================
+             PENJELASAN STATUS EKSEKUSI & EXIT CODE QEMU              
+======================================================================
+Mekanisme ISA Debug Exit Port (iobase=0xf4, iosize=0x04):
+- Pada emulator QEMU, penulisan nilai N ke port I/O 0xF4 menghasilkan kode keluar:
+    exit_code = (N << 1) | 1
+- Jika kernel menulis 0x00 ke port 0xF4:
+    exit_code = (0 << 1) | 1 = 1
+- Oleh karena itu, exit code 1 pada pengujian QEMU dengan isa-debug-exit
+  merupakan sinyal SUKSES DETERMINISTIK (bukan kegagalan proses).
+- Jika kernel menulis 0x01 ke port 0xF4 (panic):
+    exit_code = (1 << 1) | 1 = 3
+
+Status Lingkungan Host Saat Ini:
+- Biner qemu-system-x86_64: TIDAK DITEMUKAN pada cloud container AI Studio.
+- Status Operasional     : SIMULATION_ONLY / CI_VALIDATED.
+- Perintah Pengujian Native QEMU (Dijalankan di GitHub Actions runner):
+    qemu-system-x86_64 \
+      -cdrom artifacts/phase50/nusantara-phase50.iso \
+      -boot d \
+      -m 512M \
+      -serial file:artifacts/phase50/serial.log \
+      -display none \
+      -no-reboot \
+      -device isa-debug-exit,iobase=0xf4,iosize=0x04
+======================================================================

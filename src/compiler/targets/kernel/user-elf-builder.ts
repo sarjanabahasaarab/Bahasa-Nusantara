@@ -95,4 +95,115 @@ export class UserELFBuilder {
 
     return buffer;
   }
+
+  /**
+   * Menghasilkan biner ELF64 x86_64 otentik 'phase50-usermode-test.elf'
+   * Program memeriksa CPL == 3 dari register CS, memanggil sys_process_id,
+   * sys_console_write dengan pesan "HELLO FROM NUSANTARA USER MODE\r\n",
+   * lalu sys_process_exit(0).
+   */
+  public static buildUserTestProgram(entryPoint: bigint = UserELFBuilder.DEFAULT_USER_ENTRY): Uint8Array {
+    const stringData = new TextEncoder().encode('HELLO FROM NUSANTARA USER MODE\r\n');
+    const stringVAddr = entryPoint + 0x80n;
+
+    const payload = new Uint8Array(256);
+    let offset = 0;
+
+    // 1. Verifikasi CPL == 3 (Ring 3):
+    // mov ax, cs (0x66, 0x8c, 0xc8)
+    payload[offset++] = 0x66; payload[offset++] = 0x8c; payload[offset++] = 0xc8;
+    // and al, 3 (0x24, 0x03)
+    payload[offset++] = 0x24; payload[offset++] = 0x03;
+    // cmp al, 3 (0x3c, 0x03)
+    payload[offset++] = 0x3c; payload[offset++] = 0x03;
+    // je +2 (0x74, 0x02) - lewati ud2 jika CPL == 3
+    payload[offset++] = 0x74; payload[offset++] = 0x02;
+    // ud2 (0x0f, 0x0b) - panic jika dieksekusi di Ring 0!
+    payload[offset++] = 0x0f; payload[offset++] = 0x0b;
+
+    // 2. Syscall 2: sys_process_id()
+    // mov rax, 2 (0x48, 0xc7, 0xc0, 0x02, 0x00, 0x00, 0x00)
+    payload[offset++] = 0x48; payload[offset++] = 0xc7; payload[offset++] = 0xc0;
+    payload[offset++] = 0x02; payload[offset++] = 0x00; payload[offset++] = 0x00; payload[offset++] = 0x00;
+    // syscall (0x0f, 0x05)
+    payload[offset++] = 0x0f; payload[offset++] = 0x05;
+
+    // 3. Syscall 6: sys_console_write(ptr: stringVAddr, len: 32)
+    // mov rax, 6 (0x48, 0xc7, 0xc0, 0x06, 0x00, 0x00, 0x00)
+    payload[offset++] = 0x48; payload[offset++] = 0xc7; payload[offset++] = 0xc0;
+    payload[offset++] = 0x06; payload[offset++] = 0x00; payload[offset++] = 0x00; payload[offset++] = 0x00;
+    // mov rdi, stringVAddr (0x48, 0xbf, ...)
+    payload[offset++] = 0x48; payload[offset++] = 0xbf;
+    const view = new DataView(payload.buffer);
+    view.setBigUint64(offset, stringVAddr, true);
+    offset += 8;
+    // mov rsi, stringData.length (0x48, 0xc7, 0xc6, len, 0, 0, 0)
+    payload[offset++] = 0x48; payload[offset++] = 0xc7; payload[offset++] = 0xc6;
+    payload[offset++] = stringData.length & 0xff;
+    payload[offset++] = (stringData.length >> 8) & 0xff;
+    payload[offset++] = 0x00; payload[offset++] = 0x00;
+    // syscall (0x0f, 0x05)
+    payload[offset++] = 0x0f; payload[offset++] = 0x05;
+
+    // 4. Syscall 1: sys_process_exit(0)
+    // mov rax, 1 (0x48, 0xc7, 0xc0, 0x01, 0x00, 0x00, 0x00)
+    payload[offset++] = 0x48; payload[offset++] = 0xc7; payload[offset++] = 0xc0;
+    payload[offset++] = 0x01; payload[offset++] = 0x00; payload[offset++] = 0x00; payload[offset++] = 0x00;
+    // xor rdi, rdi (0x48, 0x31, 0xff)
+    payload[offset++] = 0x48; payload[offset++] = 0x31; payload[offset++] = 0xff;
+    // syscall (0x0f, 0x05)
+    payload[offset++] = 0x0f; payload[offset++] = 0x05;
+    // hlt (0xf4)
+    payload[offset++] = 0xf4;
+
+    // Tempatkan string data pada offset 0x80
+    payload.set(stringData, 0x80);
+
+    return this.build({
+      entryPoint,
+      programPayload: payload.subarray(0, 0x80 + stringData.length),
+      programName: 'phase50-usermode-test',
+    });
+  }
+
+  /**
+   * Menghasilkan biner ELF64 x86_64 otentik 'user-fault-test.elf'
+   * Program memeriksa CPL == 3 lalu sengaja mengakses memori kernel Higher-Half
+   * (0xFFFFFFFF80000000n) untuk membuktikan proteksi hardware paging Page Fault (#PF).
+   */
+  public static buildUserFaultProgram(entryPoint: bigint = UserELFBuilder.DEFAULT_USER_ENTRY): Uint8Array {
+    const payload = new Uint8Array(64);
+    let offset = 0;
+
+    // 1. Verifikasi CPL == 3 (Ring 3):
+    // mov ax, cs; and al, 3; cmp al, 3; je +2; ud2
+    payload[offset++] = 0x66; payload[offset++] = 0x8c; payload[offset++] = 0xc8;
+    payload[offset++] = 0x24; payload[offset++] = 0x03;
+    payload[offset++] = 0x3c; payload[offset++] = 0x03;
+    payload[offset++] = 0x74; payload[offset++] = 0x02;
+    payload[offset++] = 0x0f; payload[offset++] = 0x0b;
+
+    // 2. Upaya membaca memori higher-half kernel (0xFFFFFFFF80000000n)
+    // mov rax, 0xffffffff80000000 (0x48, 0xb8, 0x00, 0x00, 0x00, 0x80, 0xff, 0xff, 0xff, 0xff)
+    payload[offset++] = 0x48; payload[offset++] = 0xb8;
+    payload[offset++] = 0x00; payload[offset++] = 0x00; payload[offset++] = 0x00; payload[offset++] = 0x80;
+    payload[offset++] = 0xff; payload[offset++] = 0xff; payload[offset++] = 0xff; payload[offset++] = 0xff;
+    // mov rbx, [rax] (0x48, 0x8b, 0x18) -> Memicu Hardware Page Fault (#PF)!
+    payload[offset++] = 0x48; payload[offset++] = 0x8b; payload[offset++] = 0x18;
+
+    // 3. Jika instruksi lolos (seharusnya ditolak oleh MMU), keluar dengan error
+    // mov rax, 1; mov rdi, 1; syscall; hlt
+    payload[offset++] = 0x48; payload[offset++] = 0xc7; payload[offset++] = 0xc0;
+    payload[offset++] = 0x01; payload[offset++] = 0x00; payload[offset++] = 0x00; payload[offset++] = 0x00;
+    payload[offset++] = 0x48; payload[offset++] = 0xc7; payload[offset++] = 0xc7;
+    payload[offset++] = 0x01; payload[offset++] = 0x00; payload[offset++] = 0x00; payload[offset++] = 0x00;
+    payload[offset++] = 0x0f; payload[offset++] = 0x05;
+    payload[offset++] = 0xf4;
+
+    return this.build({
+      entryPoint,
+      programPayload: payload.subarray(0, offset),
+      programName: 'user-fault-test',
+    });
+  }
 }

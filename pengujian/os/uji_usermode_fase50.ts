@@ -459,13 +459,39 @@ async function main(): Promise<void> {
     pastikan(text.includes('NUSANTARA_SYSCALL_OK'), 'Biner bootstrap harus memuat NUSANTARA_SYSCALL_OK');
     pastikan(text.includes('NUSANTARA_PROCESS_EXIT_OK'), 'Biner bootstrap harus memuat NUSANTARA_PROCESS_EXIT_OK');
     pastikan(text.includes('NUSANTARA_PROCESS_ISOLATION_OK'), 'Biner bootstrap harus memuat NUSANTARA_PROCESS_ISOLATION_OK');
+    pastikan(text.includes('NUSANTARA_USER_FAULT_ISOLATED'), 'Biner bootstrap harus memuat NUSANTARA_USER_FAULT_ISOLATED');
+    pastikan(text.includes('NUSANTARA_KERNEL_SURVIVED_USER_FAULT'), 'Biner bootstrap harus memuat NUSANTARA_KERNEL_SURVIVED_USER_FAULT');
     pastikan(text.includes('NUSANTARA_USERMODE_TEST_PASS'), 'Biner bootstrap harus memuat NUSANTARA_USERMODE_TEST_PASS');
   });
 
-  await uji('11.2 QEMURunner mengenali seluruh 16 tahapan diagnostik Fase 49 & 50', () => {
-    pastikan(QEMURunner.STAGES.length === 16, 'QEMURunner harus mendefinisikan 16 tahapan diagnostik serial');
+  await uji('11.2 QEMURunner mengenali seluruh 18 tahapan diagnostik Fase 49 & 50', () => {
+    pastikan(QEMURunner.STAGES.length === 18, 'QEMURunner harus mendefinisikan 18 tahapan diagnostik serial');
     pastikan(QEMURunner.STAGES.includes('NUSANTARA_USERMODE_ENTERED'), 'Harus menyertakan NUSANTARA_USERMODE_ENTERED');
+    pastikan(QEMURunner.STAGES.includes('NUSANTARA_USER_FAULT_ISOLATED'), 'Harus menyertakan NUSANTARA_USER_FAULT_ISOLATED');
+    pastikan(QEMURunner.STAGES.includes('NUSANTARA_KERNEL_SURVIVED_USER_FAULT'), 'Harus menyertakan NUSANTARA_KERNEL_SURVIVED_USER_FAULT');
     pastikan(QEMURunner.STAGES.includes('NUSANTARA_USERMODE_TEST_PASS'), 'Harus menyertakan NUSANTARA_USERMODE_TEST_PASS');
+  });
+
+  await uji('11.3 UserELFBuilder menghasilkan biner phase50-usermode-test.elf dengan verifikasi Ring 3', () => {
+    const userTestElf = UserELFBuilder.buildUserTestProgram();
+    pastikan(userTestElf.length > 0x1000, 'Ukuran biner ELF pengguna harus > 4KB');
+
+    // Validasi magic \x7fELF
+    pastikan(userTestElf[0] === 0x7f && userTestElf[1] === 0x45 && userTestElf[2] === 0x4c && userTestElf[3] === 0x46, 'Magic ELF harus valid');
+
+    const as = new AddressSpace();
+    const loadRes = ELF64UserLoader.load(userTestElf, as);
+    pastikan(loadRes.success, 'Pemuatan user test ELF ke AddressSpace harus berhasil');
+    pastikan(loadRes.program?.entryPoint === 0x0040_0000n, 'Entry point harus 0x00400000');
+  });
+
+  await uji('11.4 UserELFBuilder menghasilkan biner user-fault-test.elf untuk isolasi fault', () => {
+    const faultElf = UserELFBuilder.buildUserFaultProgram();
+    pastikan(faultElf.length > 0x1000, 'Ukuran biner user-fault-test.elf harus > 4KB');
+
+    const as = new AddressSpace();
+    const loadRes = ELF64UserLoader.load(faultElf, as);
+    pastikan(loadRes.success, 'Pemuatan fault test ELF ke AddressSpace harus berhasil');
   });
 
   console.log('\n======================================================================');

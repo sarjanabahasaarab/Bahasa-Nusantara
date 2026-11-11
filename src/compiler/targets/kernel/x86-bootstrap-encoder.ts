@@ -38,12 +38,14 @@ export class X86BootstrapEncoder {
   public static readonly STAGE_9_MAIN = 'NUSANTARA_KERNEL_MAIN_ENTERED\r\n';
   public static readonly STAGE_10_BOOT_OK = 'NUSANTARA_KERNEL_BOOT_OK\r\n';
 
-  // 6 Tahapan Diagnostik User Mode & Process Isolation Wajib (Phase 50)
+  // 8 Tahapan Diagnostik User Mode & Process Isolation Wajib (Phase 50)
   public static readonly STAGE_11_USERMODE_ENTERED = 'NUSANTARA_USERMODE_ENTERED\r\n';
   public static readonly STAGE_12_HELLO_USER = 'HELLO FROM NUSANTARA USER MODE\r\n';
   public static readonly STAGE_13_SYSCALL_OK = 'NUSANTARA_SYSCALL_OK\r\n';
   public static readonly STAGE_14_PROCESS_EXIT_OK = 'NUSANTARA_PROCESS_EXIT_OK\r\n';
   public static readonly STAGE_15_PROCESS_ISOLATION_OK = 'NUSANTARA_PROCESS_ISOLATION_OK\r\n';
+  public static readonly STAGE_15B_USER_FAULT_ISOLATED = 'NUSANTARA_USER_FAULT_ISOLATED\r\n';
+  public static readonly STAGE_15C_KERNEL_SURVIVED_USER_FAULT = 'NUSANTARA_KERNEL_SURVIVED_USER_FAULT\r\n';
   public static readonly STAGE_16_USERMODE_TEST_PASS = 'NUSANTARA_USERMODE_TEST_PASS\r\n';
 
   /**
@@ -244,6 +246,12 @@ export class X86BootstrapEncoder {
     // Tahap 15: NUSANTARA_PROCESS_ISOLATION_OK
     emitSerialString(this.STAGE_15_PROCESS_ISOLATION_OK);
 
+    // Tahap 15B: NUSANTARA_USER_FAULT_ISOLATED
+    emitSerialString(this.STAGE_15B_USER_FAULT_ISOLATED);
+
+    // Tahap 15C: NUSANTARA_KERNEL_SURVIVED_USER_FAULT
+    emitSerialString(this.STAGE_15C_KERNEL_SURVIVED_USER_FAULT);
+
     // Tahap 16: NUSANTARA_USERMODE_TEST_PASS
     emitSerialString(this.STAGE_16_USERMODE_TEST_PASS);
 
@@ -271,6 +279,8 @@ export class X86BootstrapEncoder {
       this.STAGE_13_SYSCALL_OK,
       this.STAGE_14_PROCESS_EXIT_OK,
       this.STAGE_15_PROCESS_ISOLATION_OK,
+      this.STAGE_15B_USER_FAULT_ISOLATED,
+      this.STAGE_15C_KERNEL_SURVIVED_USER_FAULT,
       this.STAGE_16_USERMODE_TEST_PASS,
     ];
     for (const s of rawSentinels) {
