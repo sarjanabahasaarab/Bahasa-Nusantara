@@ -23,7 +23,7 @@ jobs:
           node-version: "20"
           cache: "npm"
 
-      - name: "Install System Dependencies (QEMU, Clang, LLD, Xorriso, GRUB)"
+      - name: "Install System Dependencies (QEMU, Clang, LLD, Xorriso, GRUB, Make, GCC, NASM)"
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -33,13 +33,23 @@ jobs:
             xorriso \
             grub-pc-bin \
             grub-common \
-            mtools
+            mtools \
+            make \
+            gcc \
+            nasm
 
       - name: "Install Project Dependencies"
         run: npm ci
 
+      - name: "Verify Host Toolchain Status"
+        run: |
+          chmod +x scripts/*
+          ./scripts/check-toolchain.sh
+
       - name: "Lint & Static Verification"
-        run: npm run lint
+        run: |
+          npm run lint
+          npx tsc --noEmit
 
       - name: "Execute Regression Test Suites (Phase 1–50)"
         run: npm test
@@ -47,55 +57,138 @@ jobs:
       - name: "Execute Phase 50 User Mode & Process Isolation Test Suite"
         run: npm run test:usermode-v50
 
-      - name: "Generate Phase 50 Kernel & User ELF Artifacts"
+      - name: "Execute Phase 49 Boot & Phase 48 Kernel Regression Suites"
+        run: |
+          npm run test:boot-v49
+          npm run test:os-v48
+
+      - name: "Generate Phase 50 Kernel, User ELFs, and Bootable ISO"
         run: npm run build:artifacts-v50
 
-      - name: "Verify Toolchain Status"
+      - name: "Validate Kernel & User ELF Binaries"
         run: |
-          chmod +x scripts/*
-          ./scripts/check-toolchain
+          npx tsx src/index.ts os inspect-boot artifacts/phase50/kernel.elf
+          npx tsx src/index.ts os inspect artifacts/phase50/kernel.elf
+          npx tsx src/index.ts os inspect artifacts/phase50/user-test.elf
+          npx tsx src/index.ts os inspect artifacts/phase50/user-fault-test.elf
 
-      - name: "Build Kernel ELF64"
+      - name: "Execute Native QEMU Headless Boot & Sequential 18-Sentinel Verification"
         run: |
-          ./scripts/build-kernel bin/nusantara-kernel.elf
+          mkdir -p artifacts/phase50
+          LOG_FILE="artifacts/phase50/serial.log"
+          EXIT_FILE="artifacts/phase50/qemu-exit-code.txt"
+          ISO_FILE="artifacts/phase50/nusantara-phase50.iso"
+          TIMEOUT_SEC=15
 
-      - name: "Validate Multiboot2 Header"
+          echo "Menjalankan QEMU x86_64 headless dengan serial monitor dan isa-debug-exit..."
+          rm -f "$LOG_FILE"
+          QEMU_EXIT=0
+          timeout --kill-after=2s "${TIMEOUT_SEC}s" qemu-system-x86_64 \
+            -cdrom "$ISO_FILE" \
+            -boot d \
+            -m 512M \
+            -serial file:"$LOG_FILE" \
+            -display none \
+            -no-reboot \
+            -no-shutdown \
+            -device isa-debug-exit,iobase=0xf4,iosize=0x04 || QEMU_EXIT=$?
+
+          echo "QEMU raw exit code: $QEMU_EXIT"
+          echo "QEMU_RAW_EXIT_CODE: $QEMU_EXIT" > "$EXIT_FILE"
+
+          # Evaluasi exit code berdasarkan port 0xF4: exit_code = (val << 1) | 1
+          # val = 0x00 (SUCCESS) -> exit_code = 1
+          # val = 0x01 (PANIC)   -> exit_code = 3
+          # timeout              -> exit_code = 124
+          if [ "$QEMU_EXIT" -eq 1 ]; then
+            echo "ANALYSIS: EXPECTED_SUCCESS (Port 0xF4 val=0x00)" >> "$EXIT_FILE"
+            echo "[✓] Exit Code Evaluasi: SUKSES (val=0x00 diterjemahkan menjadi 1)"
+          elif [ "$QEMU_EXIT" -eq 3 ]; then
+            echo "ANALYSIS: KERNEL_PANIC (Port 0xF4 val=0x01)" >> "$EXIT_FILE"
+            echo "[✗] Exit Code Evaluasi: KERNEL_PANIC (val=0x01)"
+            exit 1
+          elif [ "$QEMU_EXIT" -eq 124 ]; then
+            echo "ANALYSIS: TIMEOUT" >> "$EXIT_FILE"
+            echo "[✗] Exit Code Evaluasi: TIMEOUT (Kernel menggantung lebih dari ${TIMEOUT_SEC}s)"
+            exit 1
+          else
+            echo "ANALYSIS: UNEXPECTED_EXIT ($QEMU_EXIT)" >> "$EXIT_FILE"
+            echo "[✗] Exit Code Evaluasi: Tidak terduga ($QEMU_EXIT)"
+            exit 1
+          fi
+
+          # Tampilkan serial log mentah
+          echo "=== SERIAL LOG MENTAH DARI QEMU ==="
+          cat "$LOG_FILE"
+          echo "==================================="
+
+          # Validasi ke-18 sentinel serial secara ketat dan berurutan
+          SENTINELS=(
+            "NUSANTARA_BOOT_START"
+            "NUSANTARA_MULTIBOOT2_OK"
+            "NUSANTARA_CPU_LONG_MODE_OK"
+            "NUSANTARA_PAGING_OK"
+            "NUSANTARA_GDT64_OK"
+            "NUSANTARA_LONG_MODE_ENTERED"
+            "NUSANTARA_IDT_OK"
+            "NUSANTARA_MEMORY_MANAGER_OK"
+            "NUSANTARA_KERNEL_MAIN_ENTERED"
+            "NUSANTARA_KERNEL_BOOT_OK"
+            "NUSANTARA_USERMODE_ENTERED"
+            "HELLO FROM NUSANTARA USER MODE"
+            "NUSANTARA_SYSCALL_OK"
+            "NUSANTARA_PROCESS_EXIT_OK"
+            "NUSANTARA_PROCESS_ISOLATION_OK"
+            "NUSANTARA_USER_FAULT_ISOLATED"
+            "NUSANTARA_KERNEL_SURVIVED_USER_FAULT"
+            "NUSANTARA_USERMODE_TEST_PASS"
+          )
+
+          LAST_LINE=0
+          ORDER_OK=true
+          FOUND_COUNT=0
+          TOTAL_SENTINELS=${#SENTINELS[@]}
+
+          for s in "${SENTINELS[@]}"; do
+            MATCH_LINE=$(awk -v last="$LAST_LINE" -v pattern="$s" 'NR > last && index($0, pattern) { print NR; exit }' "$LOG_FILE")
+            if [ -n "$MATCH_LINE" ]; then
+              ((FOUND_COUNT++))
+              LAST_LINE=$MATCH_LINE
+              echo "  [✓] Sentinel #$FOUND_COUNT (Baris $MATCH_LINE): $s"
+            else
+              echo "  [✗] Sentinel TIDAK DITEMUKAN SECARA BERURUTAN (setelah baris $LAST_LINE): $s"
+              ORDER_OK=false
+            fi
+          done
+
+          echo "Sentinel Ditemukan Berurutan: $FOUND_COUNT / $TOTAL_SENTINELS"
+          if [ "$FOUND_COUNT" -ne "$TOTAL_SENTINELS" ] || [ "$ORDER_OK" != true ]; then
+            echo "[GAGAL] Tidak semua 18 sentinel ditemukan secara berurutan pada log QEMU!"
+            exit 1
+          fi
+          echo "[SUKSES] Seluruh 18 sentinel terverifikasi secara berurutan dari QEMU serial log!"
+
+      - name: "Re-calculate SHA-256 Checksums"
         run: |
-          npx tsx src/index.ts os inspect-boot bin/nusantara-kernel.elf
+          cd artifacts/phase50
+          sha256sum kernel.elf user-test.elf user-fault-test.elf nusantara-phase50.iso serial.log qemu-exit-code.txt elf-validation.txt isolation-test-report.txt toolchain-versions.txt test-report.txt FINAL-CERTIFICATION.md > SHA256SUMS
+          sha256sum -c SHA256SUMS
 
-      - name: "Validate ELF64 Binary Structure"
-        run: |
-          npx tsx src/index.ts os inspect bin/nusantara-kernel.elf
-
-      - name: "Build Bootable GRUB ISO Image"
-        run: |
-          ./scripts/make-iso bin/nusantara-kernel.elf bin/nusantara-kernel.iso
-
-      - name: "Execute Native QEMU Boot Test & Sentinel Verification"
-        run: |
-          ./scripts/test-qemu bin/nusantara-kernel.elf
-          # Verifikasi keberadaan seluruh sentinel wajib Phase 50 di qemu-serial.log
-          grep -q "NUSANTARA_BOOT_START" qemu-serial.log
-          grep -q "NUSANTARA_MULTIBOOT2_OK" qemu-serial.log
-          grep -q "NUSANTARA_CPU_LONG_MODE_OK" qemu-serial.log
-          grep -q "NUSANTARA_KERNEL_MAIN_ENTERED" qemu-serial.log
-          grep -q "NUSANTARA_USERMODE_ENTERED" qemu-serial.log
-          grep -q "HELLO FROM NUSANTARA USER MODE" qemu-serial.log
-          grep -q "NUSANTARA_SYSCALL_OK" qemu-serial.log
-          grep -q "NUSANTARA_PROCESS_EXIT_OK" qemu-serial.log
-          grep -q "NUSANTARA_PROCESS_ISOLATION_OK" qemu-serial.log
-          grep -q "NUSANTARA_USER_FAULT_ISOLATED" qemu-serial.log
-          grep -q "NUSANTARA_KERNEL_SURVIVED_USER_FAULT" qemu-serial.log
-          grep -q "NUSANTARA_USERMODE_TEST_PASS" qemu-serial.log
-          echo "Semua 12 sentinel serial wajib Phase 50 terverifikasi pada QEMU serial log!"
-
-      - name: "Upload Kernel Artifacts and Serial Boot Logs"
+      - name: "Upload Phase 50 Verified Artifacts"
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: nusantara-kernel-qemu-artifacts
+          name: nusantara-os-phase50-certified-artifacts
           path: |
-            bin/nusantara-kernel.elf
-            bin/nusantara-kernel.iso
-            qemu-serial.log
-            artifacts/phase50/*
+            artifacts/phase50/kernel.elf
+            artifacts/phase50/user-test.elf
+            artifacts/phase50/user-fault-test.elf
+            artifacts/phase50/nusantara-phase50.iso
+            artifacts/phase50/serial.log
+            artifacts/phase50/qemu-exit-code.txt
+            artifacts/phase50/elf-validation.txt
+            artifacts/phase50/isolation-test-report.txt
+            artifacts/phase50/toolchain-versions.txt
+            artifacts/phase50/test-report.txt
+            artifacts/phase50/SHA256SUMS
+            artifacts/phase50/FINAL-CERTIFICATION.md

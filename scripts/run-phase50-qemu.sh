@@ -35,10 +35,6 @@ if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
     echo "Status Eksekusi Hardware : NOT EXECUTED / SIMULATION_ONLY"
     echo "Status Kesiapan CI       : CI_READY (.github/workflows/kernel-boot-qemu.yml)"
     echo "Sertifikasi QEMU aktual akan dijalankan pada runner CI Ubuntu GitHub Actions."
-    echo "======================================================================"
-    
-    echo "STATUS: NOT EXECUTED (Toolchain missing on host container)" > "$EXIT_CODE_FILE"
-    echo "REASON: qemu-system-x86_64 is not installed in the local environment." >> "$EXIT_CODE_FILE"
     exit 0
 fi
 
@@ -114,22 +110,28 @@ if [ -f "$LOG_FILE" ]; then
     cat "$LOG_FILE"
     echo "======================================================================"
 
+    LAST_LINE=0
+    ORDER_OK=true
     for s in "${SENTINELS[@]}"; do
-        if grep -F -q "$s" "$LOG_FILE"; then
+        MATCH_LINE=$(awk -v last="$LAST_LINE" -v pattern="$s" 'NR > last && index($0, pattern) { print NR; exit }' "$LOG_FILE")
+        if [ -n "$MATCH_LINE" ]; then
             ((FOUND_COUNT++))
-            echo "  [✓] $s"
+            LAST_LINE=$MATCH_LINE
+            echo "  [✓] Sentinel #$FOUND_COUNT (Baris $MATCH_LINE): $s"
         else
-            echo "  [✗] $s (TIDAK DITEMUKAN)"
+            echo "  [✗] Sentinel TIDAK DITEMUKAN SECARA BERURUTAN (setelah baris $LAST_LINE): $s"
+            ORDER_OK=false
         fi
     done
 else
     echo "[PERINGATAN] Berkas serial log tidak ditemukan."
+    ORDER_OK=false
 fi
 
 echo "----------------------------------------------------------------------"
-echo "Sentinel Ditemukan: $FOUND_COUNT / $TOTAL_SENTINELS"
+echo "Sentinel Ditemukan Berurutan: $FOUND_COUNT / $TOTAL_SENTINELS"
 
-if [ "$FOUND_COUNT" -eq "$TOTAL_SENTINELS" ] && [ "$QEMU_EXIT" -eq 1 ]; then
+if [ "$FOUND_COUNT" -eq "$TOTAL_SENTINELS" ] && [ "$ORDER_OK" = true ] && [ "$QEMU_EXIT" -eq 1 ]; then
     echo "======================================================================"
     echo "     [QEMU_CERTIFICATION_PASS] SELURUH TAHAPAN KERNEL & USER MODE OK! "
     echo "======================================================================"
