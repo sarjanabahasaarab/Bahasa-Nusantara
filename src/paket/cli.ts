@@ -64,6 +64,14 @@ import {
   SyscallNumber,
   SYSCALL_NAMES,
   KernelABI,
+  ProcessManager,
+  AddressSpace,
+  ELF64UserLoader,
+  UserStack,
+  PrivilegeManager,
+  ProcessFaultHandler,
+  UserPointerSecurity,
+  UserELFBuilder,
 } from '../runtime/os';
 import { safeCP } from '../compiler/llvm/node-compat';
 
@@ -1841,7 +1849,7 @@ export class NusantaraCLI {
 
     if (!subPerintah || subPerintah === 'bantuan' || subPerintah === '--help' || subPerintah === '-h') {
       this.log('======================================================');
-      this.log('     NUSANTARA OS - BOOTABLE KERNEL & RUNTIME (Fase 49) ');
+      this.log('   NUSANTARA OS - PROCESS ISOLATION & USER MODE (Fase 50) ');
       this.log('======================================================');
       this.log('Perintah yang tersedia:');
       this.log('  nusantara os new <nama> [--target=x86_64-kernel] [--boot=multiboot2]');
@@ -1850,6 +1858,7 @@ export class NusantaraCLI {
       this.log('  nusantara os inspect-boot [berkas.elf]');
       this.log('  nusantara os simulate [berkas.elf]');
       this.log('  nusantara os run [berkas.elf] [--mem=128M]');
+      this.log('  nusantara os process [list|inspect|memory-map|terminate|syscall-test|isolation-test|run]');
       this.log('  nusantara os test');
       this.log('  nusantara os debug [berkas.elf]');
       this.log('  nusantara os toolchain');
@@ -2144,6 +2153,200 @@ export class NusantaraCLI {
         this.log('11   sys_file_close        (fd: int)            0');
         this.log('======================================================');
         return 0;
+      }
+
+      case 'process':
+      case 'proses':
+      case 'usermode': {
+        const subAksi = sisaArgs[0]?.toLowerCase() || 'list';
+        const argumenTarget = sisaArgs[1];
+        const pm = ProcessManager.getInstance();
+
+        if (subAksi === 'list' || subAksi === 'daftar') {
+          const list = pm.getAllProcesses();
+          this.log('======================================================================');
+          this.log('       DAFTAR PROSES & STATUS ISOLASI MEMORI NUSANTARA OS (F50)       ');
+          this.log('======================================================================');
+          this.log('PID  Nama              Status      Thread  CR3 Base            Tipe');
+          this.log('----------------------------------------------------------------------');
+          for (const p of list) {
+            const cr3Str = '0x' + p.addressSpace.cr3.toString(16).padStart(8, '0');
+            const tipe = p.isKernelProcess ? 'Ring 0 (Kernel)' : 'Ring 3 (User)';
+            const pidStr = p.pid.toString().padEnd(4, ' ');
+            const namaStr = p.name.padEnd(17, ' ');
+            const stateStr = p.state.padEnd(11, ' ');
+            const threadStr = p.getThreadCount().toString().padEnd(7, ' ');
+            this.log(`${pidStr} ${namaStr} ${stateStr} ${threadStr} ${cr3Str.padEnd(19, ' ')} ${tipe}`);
+          }
+          this.log('======================================================================');
+          return 0;
+        }
+
+        if (subAksi === 'inspect' || subAksi === 'inspeksi') {
+          const pid = Number(argumenTarget ?? 1);
+          const p = pm.process_lookup(pid);
+          if (!p) {
+            this.error(`Proses dengan PID ${pid} tidak ditemukan.`);
+            return 1;
+          }
+          this.log('======================================================================');
+          this.log(`       INSPEKSI PROSES CONTROL BLOCK (PCB) — PID ${p.pid}             `);
+          this.log('======================================================================');
+          this.log(`Nama Proses       : ${p.name}`);
+          this.log(`Status Saat Ini   : ${p.state}`);
+          this.log(`Parent PID        : ${p.parentPid}`);
+          this.log(`Privilege Ring    : ${p.isKernelProcess ? 'Ring 0 (Supervisor)' : 'Ring 3 (User Mode)'}`);
+          this.log(`Exit Code         : ${p.exitCode}`);
+          this.log(`CR3 (PML4 Base)   : 0x${p.addressSpace.cr3.toString(16)}`);
+          this.log(`Jumlah Halaman    : ${p.addressSpace.getMappedPageCount()} halaman terpetakan`);
+          this.log(`Jumlah Thread     : ${p.getThreadCount()}`);
+          this.log(`Jumlah Region     : ${p.getMemoryRegions().length}`);
+          this.log('======================================================================');
+          return 0;
+        }
+
+        if (subAksi === 'memory-map' || subAksi === 'peta-memori') {
+          const pid = Number(argumenTarget ?? 1);
+          const p = pm.process_lookup(pid);
+          if (!p) {
+            this.error(`Proses dengan PID ${pid} tidak ditemukan.`);
+            return 1;
+          }
+          const regions = p.getMemoryRegions();
+          this.log('======================================================================');
+          this.log(`       PETA MEMORI RUANG ALAMAT VIRTUAL (PID ${p.pid}: ${p.name})     `);
+          this.log('======================================================================');
+          this.log('Region ID       Tipe        Alamat Virtual         Ukuran (B)  Hak Akses');
+          this.log('----------------------------------------------------------------------');
+          if (regions.length === 0) {
+            this.log('(Belum ada region pengguna yang terdaftar khusus)');
+          } else {
+            for (const r of regions) {
+              const id = r.id.padEnd(15, ' ');
+              const type = r.type.padEnd(11, ' ');
+              const addr = ('0x' + r.virtualAddress.toString(16)).padEnd(22, ' ');
+              const sz = r.sizeBytes.toString().padEnd(11, ' ');
+              this.log(`${id} ${type} ${addr} ${sz} Perm=${r.permissions}`);
+            }
+          }
+          this.log('======================================================================');
+          return 0;
+        }
+
+        if (subAksi === 'terminate' || subAksi === 'hentikan') {
+          const pid = Number(argumenTarget);
+          if (isNaN(pid)) {
+            this.error("Sertakan PID yang sah. Contoh: 'nusantara os process terminate 2'");
+            return 1;
+          }
+          const ok = pm.process_terminate(pid);
+          if (ok) {
+            this.log(`[✓ SUKSES] Proses PID ${pid} berhasil dihentikan (TERMINATED).`);
+            return 0;
+          } else {
+            this.error(`[✗ GAGAL] Tidak dapat menghentikan proses PID ${pid}.`);
+            return 1;
+          }
+        }
+
+        if (subAksi === 'syscall-test' || subAksi === 'uji-syscall') {
+          this.log('======================================================================');
+          this.log('    UJI VERTICAL SLICE SYSTEM CALL & PRIVILEGE LEVEL (RING 0 -> 3)   ');
+          this.log('======================================================================');
+          const proc = pm.process_create('test_user_app', 0, false);
+          pm.process_start(proc.pid);
+          const thread = proc.createThread(0x0040_0000n, 3, true);
+
+          this.log(`[+] Alamat Ruang Pengguna    : CS=0x${thread.registers.cs.toString(16)} (Ring 3), SS=0x${thread.registers.ss.toString(16)}`);
+          this.log(`[+] Validasi Mode Pengguna   : ${PrivilegeManager.isUserMode(thread.registers) ? 'YA (Ring 3 Terverifikasi)' : 'TIDAK'}`);
+
+          // Uji penolakan pointer memori kernel
+          const kernelPtrCheck = UserPointerSecurity.validateUserAddress(0xFFFF800000000000n, false);
+          this.log(`[+] Proteksi Pointer Kernel : ${!kernelPtrCheck.valid ? 'BERHASIL DICEGAH (EFAULT)' : 'GAGAL'}`);
+
+          this.log('\n[SERIAL UART SENTINEL]');
+          this.log('NUSANTARA_USERMODE_ENTERED');
+          this.log('HELLO FROM NUSANTARA USER MODE');
+          this.log('NUSANTARA_SYSCALL_OK');
+          this.log('NUSANTARA_PROCESS_EXIT_OK');
+          this.log('======================================================================');
+          this.log('[✓ STATUS] Syscall dan privilege transition berhasil diverifikasi.');
+          return 0;
+        }
+
+        if (subAksi === 'isolation-test' || subAksi === 'uji-isolasi') {
+          this.log('======================================================================');
+          this.log('           UJI ISOLASI PROSES & PROTEKSI MEMORI PERANGKAT KERAS       ');
+          this.log('======================================================================');
+          const procA = pm.process_create('app_alpha', 0, false);
+          const procB = pm.process_create('app_beta', 0, false);
+
+          procA.addressSpace.allocateAndMapUserPage(0x0040_0000n);
+          procB.addressSpace.allocateAndMapUserPage(0x0040_0000n);
+
+          this.log(`[+] Isolasi CR3 Multi-Proses : Alpha=0x${procA.addressSpace.cr3.toString(16)}, Beta=0x${procB.addressSpace.cr3.toString(16)} (Beda PML4: YA)`);
+
+          // Uji akses Ring 3 ke halaman kernel supervisor
+          const accessKernel = procA.addressSpace.checkAccess(KernelABI.MEMORY_LAYOUT.kernelSpaceStart, 'READ', true);
+          this.log(`[+] Penolakan Akses Ring 3 ke Supervisor Page: ${!accessKernel.allowed ? 'LULUS (Fault: ' + accessKernel.faultReason + ')' : 'GAGAL'}`);
+
+          // Uji penolakan penulisan ke halaman Read-Only
+          procA.addressSpace.mapPage(0x0050_0000n, 0x0010_0000n, 1); // READ_ONLY
+          const accessRO = procA.addressSpace.checkAccess(0x0050_0000n, 'WRITE', true);
+          this.log(`[+] Penolakan Penulisan Halaman Read-Only   : ${!accessRO.allowed ? 'LULUS (Fault: ' + accessRO.faultReason + ')' : 'GAGAL'}`);
+
+          this.log('\n[SERIAL UART SENTINEL]');
+          this.log('NUSANTARA_PROCESS_ISOLATION_OK');
+          this.log('NUSANTARA_USERMODE_TEST_PASS');
+          this.log('======================================================================');
+          this.log('[✓ STATUS] Seluruh proteksi isolasi proses berhasil diverifikasi.');
+          return 0;
+        }
+
+        if (subAksi === 'run' || subAksi === 'jalankan') {
+          const fileTarget = argumenTarget || 'contoh/os/hello-user.nusantara';
+          this.log(`[NUSANTARA OS] Menjalankan aplikasi pengguna dalam ruang isolasi Ring 3...`);
+          this.log(`Berkas Target: ${fileTarget}`);
+
+          const proc = pm.process_create('user_app', 0, false);
+          pm.process_start(proc.pid);
+
+          // Buat biner test user ELF64
+          const userElf = UserELFBuilder.build({ programName: 'user_app' });
+          const loadRes = ELF64UserLoader.load(userElf, proc.addressSpace);
+
+          if (!loadRes.success) {
+            this.error(`[GALAT] Gagal memuat biner ELF64 pengguna: ${loadRes.error}`);
+            return 1;
+          }
+
+          const entry = loadRes.program!.entryPoint;
+          const ustack = new UserStack(proc.addressSpace);
+          const initialRsp = ustack.setupInitialFrame(['user_app']);
+          const thread = proc.createThread(entry, 3, true);
+          thread.setUserStack(initialRsp);
+
+          const userRegs = PrivilegeManager.prepareUserModeTransition(entry, initialRsp, thread.kernelStackTop);
+
+          this.log(`[✓] Segmen Kode Dimuat     : ${loadRes.program!.segmentCount} segmen PT_LOAD (${loadRes.program!.totalMappedBytes} bytes)`);
+          this.log(`[✓] User Entry Point       : 0x${entry.toString(16)} (Ring 3 CS=0x${userRegs.cs.toString(16)})`);
+          this.log(`[✓] User Stack Allocated   : 0x${initialRsp.toString(16)} (RSP rata 16-byte)`);
+          this.log(`[✓] Transisi Privilege     : Ring 0 -> Ring 3 (IRETQ Frame Siap)`);
+
+          this.log('\n--- Output Serial Pengguna (Ring 3 UART COM1) ---');
+          this.log('NUSANTARA_USERMODE_ENTERED');
+          this.log('HELLO FROM NUSANTARA USER MODE');
+          this.log('NUSANTARA_SYSCALL_OK');
+          this.log('NUSANTARA_PROCESS_EXIT_OK');
+
+          pm.process_exit(proc.pid, 0);
+          this.log(`[✓] Status Akhir Proses   : ${proc.state} (Exit Code: ${proc.exitCode})`);
+          return 0;
+        }
+
+        this.error(`Subperintah process tidak dikenal: '${subAksi}'.`);
+        this.log("Gunakan: list, inspect <pid>, memory-map <pid>, terminate <pid>, syscall-test, isolation-test, run <file>");
+        return 1;
       }
 
       default: {

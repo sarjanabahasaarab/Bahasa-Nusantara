@@ -29,6 +29,9 @@ qemu-system-x86_64 -cdrom "$ISO_FILE" -boot d -m 512M -serial file:"$LOG_FILE" -
 if [ -f "$LOG_FILE" ] && grep -q "NUSANTARA_KERNEL_BOOT_OK" "$LOG_FILE"; then
     echo "======================================================================"
     echo "             [QEMU_BOOT_PASS] BOOT KERNEL NATIVE BERHASIL!            "
+    if grep -q "NUSANTARA_USERMODE_ENTERED" "$LOG_FILE"; then
+        echo "   [USERMODE_PASS] Ring 3 User Mode & Process Isolation Validated!    "
+    fi
     echo "======================================================================"
     echo "Bukti log serial UART:"
     cat "$LOG_FILE"

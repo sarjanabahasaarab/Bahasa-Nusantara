@@ -10,6 +10,7 @@ import { FaultType, FAULT_NAMES, InterruptFrame } from './types';
 import { InterruptDescriptorTable } from './idt';
 import { KernelPanic } from '../kernel/kernel-panic';
 import { KernelLogger } from '../kernel/kernel-logger';
+import { ProcessFaultHandler } from './fault-handler';
 
 export class ExceptionHandler {
   private readonly customHandlers: Map<FaultType, (frame: any) => boolean> = new Map();
@@ -46,6 +47,10 @@ export class ExceptionHandler {
 
     // 6. Invalid Opcode (#UD)
     idt.registerHandler(FaultType.INVALID_OPCODE, (frame) => {
+      if ((Number(frame.registers?.cs ?? 0x08) & 3) === 3 || frame.isUserMode) {
+        ProcessFaultHandler.handleException({ ...frame, faultType: FaultType.INVALID_OPCODE });
+        return;
+      }
       logger.error('FAULT', `Pengecualian: ${FAULT_NAMES[FaultType.INVALID_OPCODE]} pada RIP=0x${frame.registers.rip.toString(16)}`);
       KernelPanic.trigger({
         reason: 'Invalid opcode executed',
@@ -66,6 +71,10 @@ export class ExceptionHandler {
 
     // 13. General Protection Fault (#GP)
     idt.registerHandler(FaultType.GENERAL_PROTECTION_FAULT, (frame) => {
+      if ((Number(frame.registers?.cs ?? 0x08) & 3) === 3 || frame.isUserMode) {
+        ProcessFaultHandler.handleException({ ...frame, faultType: FaultType.GENERAL_PROTECTION_FAULT });
+        return;
+      }
       logger.error('FAULT', `Pengecualian: ${FAULT_NAMES[FaultType.GENERAL_PROTECTION_FAULT]}, Kode Galat: 0x${frame.errorCode.toString(16)}`);
       KernelPanic.trigger({
         reason: `General protection fault (error code: 0x${frame.errorCode.toString(16)})`,
@@ -76,11 +85,15 @@ export class ExceptionHandler {
 
     // 14. Page Fault (#PF)
     idt.registerHandler(FaultType.PAGE_FAULT, (frame) => {
+      const isUser = (frame.errorCode & 4n) !== 0n || (Number(frame.registers?.cs ?? 0x08) & 3) === 3 || frame.isUserMode;
+      if (isUser) {
+        ProcessFaultHandler.handleException({ ...frame, faultType: FaultType.PAGE_FAULT, isUserMode: true });
+        return;
+      }
       const cr2 = frame.cr2FaultAddress ?? 0n;
       const isPresent = (frame.errorCode & 1n) !== 0n;
       const isWrite = (frame.errorCode & 2n) !== 0n;
-      const isUser = (frame.errorCode & 4n) !== 0n;
-      const desc = `Page fault pada alamat 0x${cr2.toString(16)} (P=${isPresent ? 1 : 0}, W/R=${isWrite ? 'W' : 'R'}, U/S=${isUser ? 'U' : 'S'})`;
+      const desc = `Page fault pada alamat 0x${cr2.toString(16)} (P=${isPresent ? 1 : 0}, W/R=${isWrite ? 'W' : 'R'}, U/S=S)`;
       logger.error('FAULT', desc);
       KernelPanic.trigger({
         reason: desc,

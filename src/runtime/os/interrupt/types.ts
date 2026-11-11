@@ -57,6 +57,7 @@ export interface InterruptFrame {
   errorCode: bigint;
   registers: RegisterContext;
   cr2FaultAddress?: bigint; // Khusus Page Fault (#PF)
+  isUserMode?: boolean;
 }
 
 export type InterruptHandler = (frame: InterruptFrame) => void;

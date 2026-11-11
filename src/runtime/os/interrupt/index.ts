@@ -7,3 +7,4 @@ export * from './types';
 export * from './idt';
 export * from './interrupt-controller';
 export * from './exception-handler';
+export * from './fault-handler';

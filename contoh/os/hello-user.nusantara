@@ -1,0 +1,29 @@
+# ==============================================================================
+# NUSANTARA OS - Contoh Aplikasi User Mode Ring 3
+# Fase 50: Isolasi Proses & User Mode (v0.50.0)
+# ==============================================================================
+
+gunakan "std:os"
+
+fungsi utama() mulai
+    # 1. Tandai masuk ke User Mode
+    tulis("NUSANTARA_USERMODE_ENTERED\r\n")
+
+    # 2. Cetak pesan sambutan aplikasi pengguna
+    tulis("HELLO FROM NUSANTARA USER MODE\r\n")
+
+    # 3. Panggil system call sys_process_id (ID: 2)
+    pid : bulat = dapatkanPid()
+    tulis("Proses Pengguna Aktif dengan PID: ")
+    tulis(teks(pid))
+    tulis("\r\n")
+
+    # 4. Validasi keberhasilan system call
+    tulis("NUSANTARA_SYSCALL_OK\r\n")
+
+    # 5. Keluar melalui system call sys_process_exit (ID: 1)
+    tulis("NUSANTARA_PROCESS_EXIT_OK\r\n")
+    keluar(0)
+selesai
+
+utama()

@@ -6,10 +6,10 @@
  * Target Milestone: Phase 25 (v0.25.0)
  */
 
-export const VERSI_NUSANTARA = '0.49.0';
-export const LABEL_VERSI_NUSANTARA = 'v0.49.0';
-export const FASE_TERAKHIR = 49;
-export const NAMA_FASE_TERAKHIR = 'Nusantara OS: Bootable Kernel & Hardware Validation';
+export const VERSI_NUSANTARA = '0.50.0';
+export const LABEL_VERSI_NUSANTARA = 'v0.50.0';
+export const FASE_TERAKHIR = 50;
+export const NAMA_FASE_TERAKHIR = 'Nusantara OS: Process Isolation & User Mode';
 
 export interface InfoRilisNUSANTARA {
   versi: string;

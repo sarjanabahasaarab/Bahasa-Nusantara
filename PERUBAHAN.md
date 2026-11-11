@@ -4,6 +4,79 @@ Seluruh perubahan penting pada proyek bahasa pemrograman NUSANTARA dicatat dalam
 
 Format penomoran versi mengacu pada **Semantic Versioning** (`vMAJOR.MINOR.PATCH`). Pada masa pengembangan awal, versi minor mencerminkan tahapan fase roadmap (misal `v0.1.0` untuk Phase 1, `v0.2.0` untuk Phase 2, `v0.3.0` untuk Phase 3, `v0.4.0` untuk Phase 4, `v0.5.0` untuk Phase 5, `v0.6.0` untuk Phase 6, `v0.7.0` untuk Phase 7, `v0.8.0` untuk Phase 8, `v0.9.0` untuk Phase 9, `v0.10.0` untuk Phase 10).
 
+## [v0.50.0] — 2026-11-11
+### Phase 50: Nusantara OS: Process Isolation & User Mode
+
+Fase ini mengimplementasikan pemisahan hak istimewa (*privilege separation*) antara Kernel (CPU Ring 0) dan User Mode (CPU Ring 3) serta isolasi proses (*process isolation*) penuh pada sistem operasi NUSANTARA untuk arsitektur x86_64. Implementasi ini menjamin bahwa setiap proses memiliki ruang alamat (*Address Space*) independen yang dilindungi oleh perangkat keras MMU/Paging, instruksi istimewa kernel tidak dapat dieksekusi oleh aplikasi pengguna, akses langsung ke memori kernel ditolak dengan galat `EFAULT` atau Page Fault `#PF`, serta kegagalan/crash pada aplikasi ruang pengguna ditangani secara aman oleh `ProcessFaultHandler` tanpa menyebabkan kepanikan seluruh kernel (`KernelPanic`).
+
+Seluruh arsitektur diverifikasi oleh Quality Gate Test Suite 46 (`pengujian/os/uji_usermode_fase50.ts`) dengan 21 skenario pengujian berstatus 100% lulus.
+
+#### Ditambahkan:
+- **Tabel Deskriptor Global & Task State Segment 64-bit (`src/runtime/os/hal/gdt-tss.ts`):**
+  - Segment Selector Ring 0: `KERNEL_CODE_SELECTOR` (`0x08`), `KERNEL_DATA_SELECTOR` (`0x10`).
+  - Segment Selector Ring 3: `USER_CODE_SELECTOR` (`0x23` = `0x20 | 3`), `USER_DATA_SELECTOR` (`0x1B` = `0x18 | 3`).
+  - Task State Segment 64-bit (`TSS64`) dengan konfigurasi `RSP0` untuk peralihan stack aman saat interupsi/syscall dari Ring 3, serta Interrupt Stack Table (`IST1` untuk `#DF` Double Fault, `IST2` untuk `#NM` NMI).
+  - Pembangkit deskriptor TSS 16-byte (`GDT64Manager`) yang memenuhi spesifikasi AMD64 Architecture Programmer's Manual.
+- **Ruang Alamat Terisolasi Per-Proses (`src/runtime/os/memory/address-space.ts`):**
+  - Struktur PML4/CR3 independen untuk setiap proses, mencegah proses membaca atau memodifikasi memori proses lain.
+  - Pembagian ruang memori: Lower-Half Canonical (`0x0000000000010000` .. `0x00007FFFFFFFFFFF`) untuk User Space, dan Higher-Half Canonical (`0xFFFF800000000000` .. `0xFFFFFFFFFFFFFFFF`) untuk Kernel Space.
+  - Penegakan izin halaman (`PagePermissions`): Read-Only, Read-Write, Executable, User-Accessible, dan Supervisor-Only.
+  - Penegakan prinsip keamanan W^X (Write XOR Execute) dan No-Execute (NX) bit pada level paginasi.
+  - Validasi ketat alamat kanonikal x86_64 48-bit sign-extended (`AddressSpace.isCanonical`).
+  - Metode `getPermissions` untuk inspeksi izin halaman virtual proses.
+- **Keamanan Pointer Pengguna & Validasi Batas (`src/runtime/os/security/user-pointer.ts`):**
+  - Validasi pointer pengguna (`validateUserAddress`, `validateUserBuffer`, `validateUserString`).
+  - Penolakan pointer NULL dan proteksi Zero-Page (alamat `< 0x10000` / 64 KiB pertama).
+  - Pencegahan injeksi alamat Higher-Half kernel dari User Mode (menghasilkan galat `EFAULT`).
+  - Penyalinan data aman antara kernel dan user mode: `copyFromUser` dan `copyToUser` dengan batas ukuran maksimum (`MAX_SAFE_BUFFER_SIZE` = 16 MiB).
+- **Pemuat Biner Aplikasi Pengguna ELF64 (`src/runtime/os/process/elf-loader.ts`):**
+  - Parsing biner ELF64 x86_64 pengguna (`ELF64UserLoader`).
+  - Validasi header ELF: magic bytes `\x7fELF`, 64-bit class, little-endian, arsitektur AMD64.
+  - Verifikasi bahwa seluruh segmen `PT_LOAD` dan titik masuk berada di dalam User Space kanonikal (`< 0x0000_8000_0000_0000`).
+  - Pemetaan otomatis segmen ELF ke dalam `AddressSpace` proses target dengan hak akses presisi (`PF_R`, `PF_W`, `PF_X`).
+- **Pembangun Biner ELF Pengguna Mandiri (`src/compiler/targets/kernel/user-elf-builder.ts`):**
+  - Generator biner ELF64 mandiri untuk aplikasi User Mode dengan segmen `.text`, `.rodata`, `.data`.
+- **Manajemen Stack Pengguna (`src/runtime/os/process/user-stack.ts`):**
+  - Alokasi stack pengguna berukuran 2 MiB dengan Guard Page di bagian bawah tumpukan untuk menangani stack overflow.
+  - Penegakan perataan 16-byte (*16-byte alignment*) sesuai standar System V AMD64 ABI.
+  - Pembentukan frame inisialisasi stack: `argc`, `argv`, `envp`, dan pointer terminasi NULL.
+- **Peralihan Tingkat Hak Istimewa CPU (`src/runtime/os/process/privilege.ts`):**
+  - Struktur frame transisi `IRETQ` (`PrivilegeManager.createIretFrame`): `RIP`, `CS` (`0x23`), `RFLAGS` (`0x202`), `RSP`, `SS` (`0x1B`).
+  - Penyiapan register System Call `SYSRET` / `SYSCALL` x86_64.
+  - Pembaruan dinamis `TSS.RSP0` saat perpindahan konteks thread/proses.
+- **Manajemen Siklus Hidup Proses & Thread PCB/TCB (`src/runtime/os/process/manager.ts`, `process.ts`, `thread.ts`):**
+  - State transisi lengkap: `CREATED`, `READY`, `RUNNING`, `BLOCKED`, `ZOMBIE`, `TERMINATED`.
+  - Struktur `ProcessControlBlock` (PCB) dengan `AddressSpace`, PID, PPID, tabel sumber daya, dan kode keluar.
+  - Struktur `ThreadControlBlock` (TCB) dengan status mode (`isUserMode`), stack tumpukan kernel (`kernelStackTop`), stack pengguna (`userStackTop`), dan penyeleksi segmen.
+  - Manajer proses tersentralisasi (`ProcessManager`): `process_create`, `process_start`, `process_exit`, `process_wait`, `process_terminate`, `thread_create`.
+- **Penanganan Kesalahan & Isolasi Fault (`src/runtime/os/interrupt/fault-handler.ts`, `exception-handler.ts`):**
+  - `ProcessFaultHandler` mengisolasi pengecualian User Mode (`#UD` Invalid Opcode, `#GP` General Protection Fault, `#PF` Page Fault).
+  - Proses yang melanggar terminasi secara anggun dengan kode keluar `SIGSEGV` / `SIGILL` tanpa memicu `KernelPanic`.
+  - Pengecualian pada Ring 0 tetap memicu `KernelPanic` lengkap dengan register dump untuk integritas sistem.
+- **Komunikasi Antar-Proses / IPC (`src/runtime/os/ipc/`):**
+  - Antrean Pesan Kernel Berbatas (`KernelMessageQueue`): pengiriman pesan berprioritas terisolasi antar-PID.
+  - Pipa Aliran Byte Terarah (`KernelPipe`): transfer aliran data dengan kapasitas buffer sirkular 64 KiB.
+  - Manajer Memori Bersama Berizin (`SharedMemoryManager`): pemetaan region memori bersama dengan hak akses eksplisit.
+- **Integrasi Serial UART Sentinel & Diagnostik Tahapan 11–16 (`src/compiler/targets/kernel/x86-bootstrap-encoder.ts`):**
+  - Tahap 11: `NUSANTARA_USERMODE_ENTERED`
+  - Tahap 12: `HELLO FROM NUSANTARA USER MODE`
+  - Tahap 13: `NUSANTARA_SYSCALL_OK`
+  - Tahap 14: `NUSANTARA_PROCESS_EXIT_OK`
+  - Tahap 15: `NUSANTARA_PROCESS_ISOLATION_OK`
+  - Tahap 16: `NUSANTARA_USERMODE_TEST_PASS`
+- **Perluasan CLI Subperintah (`src/paket/cli.ts`):**
+  - `nusantara os process list`: Menampilkan tabel proses aktif, status isolasi CR3, dan tingkat hak istimewa (Ring 0 / Ring 3).
+  - `nusantara os process inspect <pid>`: Memeriksa detail PCB, address space, dan thread proses tertentu.
+  - `nusantara os process memory-map <pid>`: Menampilkan peta segmen memori (text, data, heap, stack) dari proses.
+  - `nusantara os process terminate <pid>`: Menghentikan proses secara paksa.
+  - `nusantara os process syscall-test`: Menjalankan verifikasi vertical slice pemanggilan system call dari Ring 3.
+  - `nusantara os process isolation-test`: Menguji proteksi perangkat keras isolasi memori dan pencegahan EFAULT.
+  - `nusantara os process run <berkas.elf>`: Menjalankan berkas biner ELF pengguna ke dalam lingkungan proses terisolasi.
+- **Program Contoh Pengguna (`contoh/os/hello-user.nusantara`):**
+  - Aplikasi ruang pengguna yang mendemonstrasikan eksekusi Ring 3, pemanggilan syscall `sys_console_write`, `sys_process_id`, dan `sys_process_exit`.
+- **Suite Pengujian Otomatis Suite 46 (`pengujian/os/uji_usermode_fase50.ts`):**
+  - 21 skenario pengujian komprehensif yang menguji GDT, TSS, Address Space, User Pointer Security, ELF Loader, User Stack, CPU Privilege Transition, PCB/TCB Lifecycle, System Calls, Fault Isolation, IPC, dan Serial Sentinels.
+
 ## [v0.49.0] — 2026-11-10
 ### Phase 49: Nusantara OS: Bootable Kernel & Hardware Validation
 

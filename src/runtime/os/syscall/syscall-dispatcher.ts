@@ -11,6 +11,7 @@ import { SyscallTable } from './syscall-table';
 import { SyscallContext, SyscallError, SyscallTraceEvent } from './types';
 import { KernelABI } from '../abi/kernel-abi';
 import { RegisterContext } from '../abi/types';
+import { UserPointerSecurity } from '../security/user-pointer';
 
 export class SyscallDispatcher {
   private readonly table: SyscallTable;
@@ -131,10 +132,8 @@ export class SyscallDispatcher {
     if (syscallNumber === SyscallNumber.CONSOLE_WRITE) {
       const bufferPtr = args[0];
       const count = Number(args[1]);
-      if (count < 0 || count > 64 * 1024 * 1024) {
-        return SyscallError.K_EINVAL;
-      }
-      if (count > 0 && !KernelABI.isUserPointerValid(bufferPtr, count)) {
+      const res = UserPointerSecurity.validateUserBuffer(bufferPtr, count, false);
+      if (!res.valid) {
         return SyscallError.K_EFAULT;
       }
     }
@@ -143,10 +142,8 @@ export class SyscallDispatcher {
     if (syscallNumber === SyscallNumber.FILE_WRITE) {
       const bufferPtr = args[1];
       const count = Number(args[2]);
-      if (count < 0 || count > 64 * 1024 * 1024) {
-        return SyscallError.K_EINVAL;
-      }
-      if (count > 0 && !KernelABI.isUserPointerValid(bufferPtr, count)) {
+      const res = UserPointerSecurity.validateUserBuffer(bufferPtr, count, false);
+      if (!res.valid) {
         return SyscallError.K_EFAULT;
       }
     }
@@ -155,10 +152,8 @@ export class SyscallDispatcher {
     if (syscallNumber === SyscallNumber.FILE_READ) {
       const bufferPtr = args[1];
       const count = Number(args[2]);
-      if (count < 0 || count > 64 * 1024 * 1024) {
-        return SyscallError.K_EINVAL;
-      }
-      if (count > 0 && !KernelABI.isUserPointerValid(bufferPtr, count)) {
+      const res = UserPointerSecurity.validateUserBuffer(bufferPtr, count, true);
+      if (!res.valid) {
         return SyscallError.K_EFAULT;
       }
     }
@@ -166,7 +161,8 @@ export class SyscallDispatcher {
     // FILE_OPEN(pathPtr, flags, mode)
     if (syscallNumber === SyscallNumber.FILE_OPEN) {
       const pathPtr = args[0];
-      if (!KernelABI.isUserPointerValid(pathPtr, 1)) {
+      const res = UserPointerSecurity.validateUserAddress(pathPtr, false);
+      if (!res.valid) {
         return SyscallError.K_EFAULT;
       }
     }
@@ -175,7 +171,8 @@ export class SyscallDispatcher {
     if (syscallNumber === SyscallNumber.MEMORY_RELEASE) {
       const ptr = args[0];
       const size = Number(args[1]);
-      if (!KernelABI.isUserPointerValid(ptr, size)) {
+      const res = UserPointerSecurity.validateUserBuffer(ptr, size, false);
+      if (!res.valid) {
         return SyscallError.K_EFAULT;
       }
     }

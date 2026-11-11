@@ -6,3 +6,4 @@
 export * from './types';
 export * from './x86_64-hal';
 export * from './hal-manager';
+export * from './gdt-tss';

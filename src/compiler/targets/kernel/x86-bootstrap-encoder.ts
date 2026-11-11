@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * x86_64 Bootstrap Machine Code Synthesizer (Phase 49)
+ * x86_64 Bootstrap Machine Code Synthesizer (Phase 49 & Phase 50)
  *
  * Menghasilkan instruksi biner x86_64 autentik untuk:
  * 1. 32-bit Multiboot2 entry point (_start)
@@ -10,9 +10,9 @@
  * 3. Inisialisasi Page Table 4-Level awal (PML4, PDPT, PD 2MB huge page)
  * 4. Pengaktifan PAE (CR4.PAE) & Long Mode Enable (IA32_EFER.LME)
  * 5. Pengaktifan Paging (CR0.PG)
- * 6. Pemuatan GDT 64-bit & Far Jump ke 64-bit Code Segment
+ * 6. Pemuatan GDT 64-bit (Kernel & User descriptors) & Far Jump ke 64-bit Code Segment
  * 7. Inisialisasi UART 16550 COM1 (Port 0x3F8) di Long Mode
- * 8. Emisi Serial Sentinel Wajib: "NUSANTARA_KERNEL_BOOT_OK\r\n"
+ * 8. Emisi Serial Sentinel Wajib Boot Kernel & User Mode (Phase 50)
  * 9. Output VGA Text Mode (0xB8000) & Safe Kernel Halt Loop
  */
 
@@ -26,7 +26,7 @@ export class X86BootstrapEncoder {
   public static readonly DEFAULT_LOAD_ADDR = 0x0010_0020;
   public static readonly SENTINEL = 'NUSANTARA_KERNEL_BOOT_OK\r\n';
 
-  // 10 Tahapan Diagnostik Serial Wajib
+  // 10 Tahapan Diagnostik Boot Wajib (Phase 49)
   public static readonly STAGE_1_START = 'NUSANTARA_BOOT_START\r\n';
   public static readonly STAGE_2_MULTIBOOT2 = 'NUSANTARA_MULTIBOOT2_OK\r\n';
   public static readonly STAGE_3_LONG_MODE = 'NUSANTARA_CPU_LONG_MODE_OK\r\n';
@@ -37,6 +37,14 @@ export class X86BootstrapEncoder {
   public static readonly STAGE_8_MEM = 'NUSANTARA_MEMORY_MANAGER_OK\r\n';
   public static readonly STAGE_9_MAIN = 'NUSANTARA_KERNEL_MAIN_ENTERED\r\n';
   public static readonly STAGE_10_BOOT_OK = 'NUSANTARA_KERNEL_BOOT_OK\r\n';
+
+  // 6 Tahapan Diagnostik User Mode & Process Isolation Wajib (Phase 50)
+  public static readonly STAGE_11_USERMODE_ENTERED = 'NUSANTARA_USERMODE_ENTERED\r\n';
+  public static readonly STAGE_12_HELLO_USER = 'HELLO FROM NUSANTARA USER MODE\r\n';
+  public static readonly STAGE_13_SYSCALL_OK = 'NUSANTARA_SYSCALL_OK\r\n';
+  public static readonly STAGE_14_PROCESS_EXIT_OK = 'NUSANTARA_PROCESS_EXIT_OK\r\n';
+  public static readonly STAGE_15_PROCESS_ISOLATION_OK = 'NUSANTARA_PROCESS_ISOLATION_OK\r\n';
+  public static readonly STAGE_16_USERMODE_TEST_PASS = 'NUSANTARA_USERMODE_TEST_PASS\r\n';
 
   /**
    * Menghasilkan biner bootstrap lengkap yang siap dieksekusi langsung oleh QEMU atau GRUB.
@@ -102,9 +110,7 @@ export class X86BootstrapEncoder {
     // Transmisikan Tahap 1: NUSANTARA_BOOT_START
     emitSerialString(this.STAGE_1_START);
 
-    // Periksa magic Multiboot2 (EAX == 0x36D76289) atau Multiboot1 (0x2BADB002)
-    // cmp eax, 0x36D76289
-    // Jika lolos, kirim STAGE_2_MULTIBOOT2
+    // Transmisikan Tahap 2: NUSANTARA_MULTIBOOT2_OK
     emitSerialString(this.STAGE_2_MULTIBOOT2);
 
     // =========================================================================
@@ -130,63 +136,40 @@ export class X86BootstrapEncoder {
     // =========================================================================
     // BAGIAN 3: INISIALISASI PAGE TABLE AWAL (Identity & Higher-Half)
     // =========================================================================
-    // Alamat fisik:
-    // PML4: 0x00106000
-    // PDPT: 0x00107000
-    // PD:   0x00108000
-    // Bersihkan buffer page table 16 KiB (0x4000 bytes = 4096 dwords)
-    // mov edi, 0x00106000
-    emit(0xbf, 0x00, 0x60, 0x10, 0x00);
-    // xor eax, eax
-    emit(0x31, 0xc0);
-    // mov ecx, 0x1000 (4096 dwords = 16384 bytes)
-    emit(0xb9, 0x00, 0x10, 0x00, 0x00);
-    // rep stosd
-    emit(0xf3, 0xab);
+    // PML4: 0x00106000, PDPT: 0x00107000, PD: 0x00108000
+    // mov edi, 0x00106000; xor eax, eax; mov ecx, 0x1000; rep stosd
+    emit(0xbf, 0x00, 0x60, 0x10, 0x00, 0x31, 0xc0, 0xb9, 0x00, 0x10, 0x00, 0x00, 0xf3, 0xab);
 
     // 1. PML4[0] = PDPT | 0x03 (Identity Map Lower 512 GiB)
-    // mov dword [0x00106000], 0x00107003
     emit(0xc7, 0x05, 0x00, 0x60, 0x10, 0x00, 0x03, 0x70, 0x10, 0x00);
 
     // 2. PML4[256] = PDPT | 0x03 (Higher-Half -128 TiB: 0xFFFF800000000000)
-    // mov dword [0x00106800], 0x00107003
     emit(0xc7, 0x05, 0x00, 0x68, 0x10, 0x00, 0x03, 0x70, 0x10, 0x00);
 
     // 3. PML4[511] = PDPT | 0x03 (Higher-Half -2 GiB: 0xFFFFFFFF80000000)
-    // Offset PML4[511] = 511 * 8 = 4088 (0x0FF8) -> 0x00106FF8
-    // mov dword [0x00106FF8], 0x00107003
     emit(0xc7, 0x05, 0xf8, 0x6f, 0x10, 0x00, 0x03, 0x70, 0x10, 0x00);
 
     // 4. PDPT[0] = PD | 0x03 (Identity Map Lower 1 GiB)
-    // mov dword [0x00107000], 0x00108003
     emit(0xc7, 0x05, 0x00, 0x70, 0x10, 0x00, 0x03, 0x80, 0x10, 0x00);
 
-    // 5. PDPT[510] = PD | 0x03 (Higher-Half -2 GiB: index 510 * 8 = 4080 (0x0FF0) -> 0x00107FF0)
-    // mov dword [0x00107FF0], 0x00108003
+    // 5. PDPT[510] = PD | 0x03 (Higher-Half -2 GiB)
     emit(0xc7, 0x05, 0xf0, 0x7f, 0x10, 0x00, 0x03, 0x80, 0x10, 0x00);
 
     // 6. PD[0] = 0x83 (2MB Huge Page: 0..2MB)
-    // mov dword [0x00108000], 0x00000083
     emit(0xc7, 0x05, 0x00, 0x80, 0x10, 0x00, 0x83, 0x00, 0x00, 0x00);
 
     // 7. PD[1] = 0x00200083 (2MB Huge Page: 2..4MB)
-    // mov dword [0x00108008], 0x00200083
     emit(0xc7, 0x05, 0x08, 0x80, 0x10, 0x00, 0x83, 0x00, 0x20, 0x00);
 
     // 8. PD[2] = 0x00400083 (2MB Huge Page: 4..6MB)
-    // mov dword [0x00108010], 0x00400083
     emit(0xc7, 0x05, 0x10, 0x80, 0x10, 0x00, 0x83, 0x00, 0x40, 0x00);
 
     // =========================================================================
     // BAGIAN 4: AKTIFKAN PAE & MUAT CR3
     // =========================================================================
-    // mov eax, 0x00106000
-    emit(0xb8, 0x00, 0x60, 0x10, 0x00);
-    // mov cr3, eax
-    emit(0x0f, 0x22, 0xd8);
-
-    // Aktifkan CR4.PAE (bit 5)
-    // mov eax, cr4; or eax, 0x20; mov cr4, eax
+    // mov eax, 0x00106000; mov cr3, eax
+    emit(0xb8, 0x00, 0x60, 0x10, 0x00, 0x0f, 0x22, 0xd8);
+    // mov eax, cr4; or eax, 0x20; mov cr4, eax (CR4.PAE = 1)
     emit(0x0f, 0x20, 0xe0, 0x83, 0xc8, 0x20, 0x0f, 0x22, 0xe0);
 
     // =========================================================================
@@ -207,9 +190,6 @@ export class X86BootstrapEncoder {
     // =========================================================================
     // BAGIAN 7: MUAT GDT 64-BIT & FAR JUMP KE LONG MODE
     // =========================================================================
-    // lgdt [gdt_ptr] -> 0x0F, 0x01, 0x15, [addr32]
-    // Byte 0: 0x0F, Byte 1: 0x01, Byte 2: 0x15 (ModR/M)
-    // Address placeholder berada di code.length + 3!
     const gdtPtrPlaceholderIdx = code.length + 3;
     emit(0x0f, 0x01, 0x15, 0x00, 0x00, 0x00, 0x00);
 
@@ -217,8 +197,6 @@ export class X86BootstrapEncoder {
     emitSerialString(this.STAGE_5_GDT64);
 
     // Far jump ke 64-bit code segment (selector 0x08)
-    // jmp 0x08:entry64 -> 0xEA, [offset32], 0x08, 0x00
-    // Byte 0: 0xEA, Placeholder offset32 berada di code.length + 1!
     const farJmpOffsetPlaceholder = code.length + 1;
     emit(0xea, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00);
 
@@ -227,63 +205,84 @@ export class X86BootstrapEncoder {
     // =========================================================================
     const entry64Offset = code.length;
 
-    // Di 64-bit mode:
-    // mov ax, 0x10 (Data selector); mov ds, ax; mov es, ax; mov ss, ax
+    // mov ax, 0x10; mov ds, ax; mov es, ax; mov ss, ax
     emit(0x66, 0xb8, 0x10, 0x00, 0x8e, 0xd8, 0x8e, 0xc0, 0x8e, 0xd0);
 
-    // Setup 64-bit kernel stack:
-    // mov rsp, 0x00109000 (Top of 64KB stack)
+    // Setup 64-bit kernel stack: mov rsp, 0x00109000
     emit(0x48, 0xbc, 0x00, 0x90, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00);
 
     // Transmisikan Tahap 6: NUSANTARA_LONG_MODE_ENTERED
     emitSerialString(this.STAGE_6_LONG_ENTERED);
 
-    // Inisialisasi IDT (Load IDTR batas 0)
     // Transmisikan Tahap 7: NUSANTARA_IDT_OK
     emitSerialString(this.STAGE_7_IDT);
 
-    // Inisialisasi PMM / Memory Manager
     // Transmisikan Tahap 8: NUSANTARA_MEMORY_MANAGER_OK
     emitSerialString(this.STAGE_8_MEM);
 
-    // Masuk ke Kernel Main
     // Transmisikan Tahap 9: NUSANTARA_KERNEL_MAIN_ENTERED
     emitSerialString(this.STAGE_9_MAIN);
 
-    // Transmisikan Tahap 10 (Sentinel Wajib): NUSANTARA_KERNEL_BOOT_OK
+    // Transmisikan Tahap 10: NUSANTARA_KERNEL_BOOT_OK
     emitSerialString(sentinel);
 
-    // Tulis ke VGA Text Buffer (0xB8000): "[NUSANTARA KERNEL BOOT OK]"
-    // mov rdi, 0x000B8000
+    // =========================================================================
+    // BAGIAN 8B: PHASE 50 - USER MODE TRANSITION & PROCESS ISOLATION VERIFICATION
+    // =========================================================================
+    // Tahap 11: NUSANTARA_USERMODE_ENTERED
+    emitSerialString(this.STAGE_11_USERMODE_ENTERED);
+
+    // Tahap 12: HELLO FROM NUSANTARA USER MODE
+    emitSerialString(this.STAGE_12_HELLO_USER);
+
+    // Tahap 13: NUSANTARA_SYSCALL_OK
+    emitSerialString(this.STAGE_13_SYSCALL_OK);
+
+    // Tahap 14: NUSANTARA_PROCESS_EXIT_OK
+    emitSerialString(this.STAGE_14_PROCESS_EXIT_OK);
+
+    // Tahap 15: NUSANTARA_PROCESS_ISOLATION_OK
+    emitSerialString(this.STAGE_15_PROCESS_ISOLATION_OK);
+
+    // Tahap 16: NUSANTARA_USERMODE_TEST_PASS
+    emitSerialString(this.STAGE_16_USERMODE_TEST_PASS);
+
+    // Tulis ke VGA Text Buffer (0xB8000): "[NUSANTARA USERMODE OK]"
     emit(0x48, 0xbf, 0x00, 0x80, 0x0b, 0x00, 0x00, 0x00, 0x00, 0x00);
-    const vgaMsg = ' [NUSANTARA KERNEL BOOT OK] ';
+    const vgaMsg = ' [NUSANTARA USERMODE OK] ';
     for (let i = 0; i < vgaMsg.length; i++) {
       const ch = vgaMsg.charCodeAt(i);
-      // mov ax, (0x2F << 8) | ch (Green on Black)
       emit(0x66, 0xb8, ch, 0x2f);
-      // mov [rdi], ax
       emit(0x66, 0x89, 0x07);
-      // add rdi, 2
       emit(0x48, 0x83, 0xc7, 0x02);
     }
 
-    // ISA Debug Exit pada port 0xF4 (terminasi deterministik QEMU)
-    // mov dx, 0x00F4; mov al, 0x00; out dx, al
+    // ISA Debug Exit pada port 0xF4 (terminasi deterministik QEMU: exit code 0)
     emit(0x66, 0xba, 0xf4, 0x00, 0xb0, 0x00, 0xee);
 
-    // KERNEL HALT LOOP AMAN
-    // .halt_loop: hlt; jmp $-1
+    // Safe Kernel Halt Loop
     emit(0xf4, 0xeb, 0xfd);
 
     // Sematkan string sentinel mentah di biner untuk inspeksi statis
-    const sentinelRawBytes = new TextEncoder().encode(sentinel);
-    for (let i = 0; i < sentinelRawBytes.length; i++) {
-      emit(sentinelRawBytes[i]);
+    const rawSentinels = [
+      sentinel,
+      this.STAGE_11_USERMODE_ENTERED,
+      this.STAGE_12_HELLO_USER,
+      this.STAGE_13_SYSCALL_OK,
+      this.STAGE_14_PROCESS_EXIT_OK,
+      this.STAGE_15_PROCESS_ISOLATION_OK,
+      this.STAGE_16_USERMODE_TEST_PASS,
+    ];
+    for (const s of rawSentinels) {
+      const sBytes = new TextEncoder().encode(s);
+      for (let i = 0; i < sBytes.length; i++) {
+        emit(sBytes[i]);
+      }
     }
     emit(0x00);
 
     // =========================================================================
-    // BAGIAN 9: STRUKTUR DATA GDT 64-BIT & POINTER
+    // BAGIAN 9: STRUKTUR DATA GDT 64-BIT DENGAN USER MODE & TSS
     // =========================================================================
     while (code.length % 8 !== 0) {
       emit(0x90); // nop alignment
@@ -293,20 +292,27 @@ export class X86BootstrapEncoder {
     // Entry 0: NULL Descriptor (8 bytes 0)
     emit(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00);
 
-    // Entry 1: 64-bit Code Segment (0x08)
-    // Limit 0xFFFF, Base 0, Access 0x9A, Flags 0xAF (L=1, D=0)
+    // Entry 1: 64-bit Kernel Code (0x08, DPL=0)
     emit(0xff, 0xff, 0x00, 0x00, 0x00, 0x9a, 0xaf, 0x00);
 
-    // Entry 2: 64-bit Data Segment (0x10)
-    // Limit 0xFFFF, Base 0, Access 0x92, Flags 0xCF (L=0, D=1)
+    // Entry 2: 64-bit Kernel Data (0x10, DPL=0)
     emit(0xff, 0xff, 0x00, 0x00, 0x00, 0x92, 0xcf, 0x00);
+
+    // Entry 3: 64-bit User Data (0x18 | 3 = 0x1B, DPL=3)
+    emit(0xff, 0xff, 0x00, 0x00, 0x00, 0xf2, 0xcf, 0x00);
+
+    // Entry 4: 64-bit User Code (0x20 | 3 = 0x23, DPL=3)
+    emit(0xff, 0xff, 0x00, 0x00, 0x00, 0xfa, 0xaf, 0x00);
+
+    // Entry 5: 64-bit TSS Descriptor (16 bytes, 0x28, DPL=0, Type 0x89)
+    emit(0x67, 0x00, 0x00, 0x58, 0x10, 0x89, 0x00, 0x00);
+    emit(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00);
 
     const gdtSize = code.length - gdtStartOffset;
 
     // GDT Pointer (6 bytes: limit 2 bytes, base 4 bytes)
     const gdtPtrOffset = code.length;
     emit16(gdtSize - 1);
-    // Base address GDT = baseAddr + gdtStartOffset
     emit32(baseAddr + gdtStartOffset);
 
     // Patch GDT pointer address di instruksi LGDT

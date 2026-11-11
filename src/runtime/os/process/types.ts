@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * NUSANTARA OS - Process & Thread Interface Types
- * Target Milestone: Phase 48 (v0.48.0)
+ * Target Milestone: Phase 50 (v0.50.0)
  */
 
 import { RegisterContext } from '../abi/types';
@@ -16,6 +16,7 @@ export enum ProcessState {
   READY = 'READY',
   RUNNING = 'RUNNING',
   BLOCKED = 'BLOCKED',
+  ZOMBIE = 'ZOMBIE',
   TERMINATED = 'TERMINATED',
 }
 
@@ -24,6 +25,7 @@ export enum ThreadState {
   READY = 'READY',
   RUNNING = 'RUNNING',
   WAITING = 'WAITING',
+  BLOCKED = 'BLOCKED',
   TERMINATED = 'TERMINATED',
 }
 

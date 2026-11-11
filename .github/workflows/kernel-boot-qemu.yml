@@ -41,8 +41,11 @@ jobs:
       - name: "Lint & Static Verification"
         run: npm run lint
 
-      - name: "Execute Regression Test Suites (Phase 1–48)"
+      - name: "Execute Regression Test Suites (Phase 1–50)"
         run: npm test
+
+      - name: "Execute Phase 50 User Mode & Process Isolation Test Suite"
+        run: npm run test:usermode-v50
 
       - name: "Verify Toolchain Status"
         run: |

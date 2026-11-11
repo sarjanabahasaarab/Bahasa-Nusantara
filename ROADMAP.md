@@ -1,8 +1,8 @@
 # Peta Jalan Pengembangan (ROADMAP) Bahasa Pemrograman NUSANTARA
 
 > **Peta Jalan Strategis, Hasil Audit Implementasi Nyata, dan Rencana Kerja Menuju NusantaraOS**  
-> **Tanggal Audit Terakhir:** 10 November 2026
-> **Versi Rilis Saat Ini:** `v0.49.0` (Phase 49: Nusantara OS Bootable Kernel & Hardware Validation)
+> **Tanggal Audit Terakhir:** 11 November 2026
+> **Versi Rilis Saat Ini:** `v0.50.0` (Phase 50: Nusantara OS Process Isolation & User Mode)
 
 Dokumen ini memetakan seluruh pencapaian rekayasa piranti lunak (*engineering milestones*) bahasa pemrograman **NUSANTARA**, dari fondasi awal tata bahasa hingga terwujudnya sistem operasi **NusantaraOS**. Setiap status fase dalam dokumen ini telah diaudit secara faktual berdasarkan kode sumber yang benar-benar ada di repositori (`src/`), pengujian otomatis yang lulus 100% (`pengujian/`), dan dokumentasi teknis resmi (`docs/` & `dokumentasi/`), tanpa klaim palsu.
 
@@ -75,7 +75,7 @@ Sesuai standar audit transparan dan kejujuran teknis proyek NUSANTARA, status se
 | **47** | **Nusantara Game Development Kit (Game SDK)** | `v0.47.0` | 🟢 SELESAI | `src/runtime/game/`, `src/stdlib/game.ts` (Vector2/3, Color, Rect, GameLoop deterministik, Virtual/DOM 2D Renderer, Camera 2D/3D, Mesh, Material, Texture, Shader, Light, ECS World/Scene/Entity/Transform/Sprite/RigidBody/Collider/Audio/Particle/UI, Collision detection & impulse resolution, AssetManager aman, SaveManager checksum SHA-256, Multiplayer sync, integrasi ActorComponent via Phase 46, CLI `nusantara game`). | `pengujian/game/uji_game_sdk_fase47.ts` (33 pengujian Game SDK lulus 100%). |
 | **48** | **Nusantara OS: Minimal Kernel Interface** | `v0.48.0` | 🟢 SELESAI | `src/runtime/os/` (KernelCore, KernelABI, SyscallDispatcher & Table 11 syscalls, PMM frame bitmap allocator, VMM 4-level paging x86_64, KernelHeap dinamis recycling & double-free guard, IDT 256 gerbang, Exception handlers #DE/#UD/#DF/#GP/#PF, PIC 8259 remap, HAL x86_64 port I/O emulasi, Driver COM1 UART 16550, PIT 8254, PS/2 Keyboard, VGA Text 80x25, DriverRegistry, Process PCB & Thread TCB, KernelScheduler multi-level priority queue 1..5, VFS & in-memory RamFS, Multiboot2 boot header `0xE85250D6`, linker script higher-half -2GB, sintesis biner ELF64 x86_64, scaffolder `nusantara os new`, CLI `nusantara os`, modul `std:os`). | `pengujian/os/uji_kernel_fase48.ts` (42 pengujian Quality Gate lulus 100%). |
 | **49** | **Nusantara OS: Bootable Kernel & Hardware Validation** | `v0.49.0` | 🟠 SELESAI SEBAGIAN | `src/compiler/targets/kernel/x86-bootstrap-encoder.ts` (Sintesis machine code 32-bit Multiboot2 entry, CPUID, Long Mode bit 29, 4-level paging PML4/PDPT/PD 2MB huge page, CR3/CR4.PAE/EFER.LME/CR0.PG, GDT64, far jump 64-bit, UART COM1 init & transmisi sentinel `NUSANTARA_KERNEL_BOOT_OK`), `multiboot2-validator.ts` (Parser & validator header spesifikasi Multiboot2 `0xE85250D6`, checksum `(sum) % 2^32 === 0`, 8-byte alignment, 32 KiB offset window, tag parsing), `elf64-validator.ts` (Validator biner ELF64 x86_64 System V, `PT_LOAD`, perataan halaman 4 KiB), `src/runtime/os/tools/toolchain-detector.ts` (Detektor qemu, clang, ld.lld, xorriso, grub-mkrescue, gdb dengan panduan multi-OS), `src/runtime/os/tools/qemu-runner.ts` (Runner QEMU headless dengan batas waktu & deteksi sentinel), `project-generator.ts` (Scaffolding lengkap boot.S, kernel_entry.S, freestanding.c, grub.cfg, linker.ld, Makefile, skrip otomasi), `.github/workflows/kernel-boot-qemu.yml` (CI boot QEMU otomatis), CLI `nusantara os inspect-boot` & `nusantara os toolchain`, 13 dokumen panduan teknis `docs/os/`. | `pengujian/os/uji_boot_fase49.ts` (22 pengujian Quality Gate lulus 100%). Status eksekusi QEMU lokal dilaporkan jujur sebagai `QEMU_NOT_AVAILABLE` / `SIMULATION_ONLY` karena ketiadaan biner qemu pada container cloud saat ini. |
-| **50** | **NusantaraOS Kedaulatan Digital Penuh** | `v1.0.0` | 🔵 BELUM DIIMPLEMENTASIKAN | Visi puncak kedaulatan teknologi: Sistem Operasi mandiri komprehensif berdaulat penuh dengan ruang pengguna dan shell GUI. | Visi jangka panjang proyek. |
+| **50** | **Nusantara OS: Process Isolation & User Mode** | `v0.50.0` | 🟢 SELESAI | `src/runtime/os/hal/gdt-tss.ts` (Segment selectors Ring 0/Ring 3, TSS64 RSP0/IST1/IST2, GDT64Manager), `src/runtime/os/memory/address-space.ts` (PML4/CR3 terisolasi per proses, PagePermissions W^X, kanonikal 48-bit), `src/runtime/os/security/user-pointer.ts` (Pencegahan EFAULT, Zero-Page guard, copyFromUser/copyToUser), `src/runtime/os/process/elf-loader.ts` (Pemuat ELF64 user space), `src/runtime/os/process/user-stack.ts` (Alokasi stack 2MB, guard page, 16-byte System V AMD64 alignment), `src/runtime/os/process/privilege.ts` (IRETQ frame, SYSRET/SYSCALL), `src/runtime/os/process/manager.ts` (PCB & TCB lifecycle CREATED->RUNNING->ZOMBIE), `src/runtime/os/interrupt/fault-handler.ts` (Isolasi exception Ring 3 tanpa KernelPanic), `src/runtime/os/ipc/` (Message queue, Pipe, Shared Memory), `src/compiler/targets/kernel/user-elf-builder.ts`, `contoh/os/hello-user.nusantara`, CLI `nusantara os process [list|inspect|memory-map|terminate|syscall-test|isolation-test|run]`, sentinels Tahapan 11–16. | `pengujian/os/uji_usermode_fase50.ts` (21 skenario pengujian Quality Gate Suite 46 lulus 100%). |
 
 ---
 
@@ -192,6 +192,7 @@ Daftar suite pengujian terverifikasi:
 - `test:game-v47` — Suite uji Nusantara Game Development Kit (Game SDK): Loop, Renderer 2D/3D, Kamera, ECS, Fisika 2D, Input, Audio, Partikel, Animasi, UI, Jaringan, Save System, Aktor & CLI `nusantara game` (Phase 47).
 - `test:kernel-v48` — Suite uji Nusantara OS Minimal Kernel Interface: Kernel Core, Memory PMM/VMM/Heap, IDT/Exception/PIC, HAL, Drivers Serial/Timer/VGA/Keyboard, Process/Thread/Scheduler, VFS/RamFS, ELF64, CLI `nusantara os` (Phase 48).
 - `test:boot-v49` — Suite uji Nusantara OS Bootable Kernel & Hardware Validation: Multiboot2 validation, ELF64 verification, X86BootstrapEncoder Long Mode, Toolchain Detector, QEMU Runner headless, Project Generator boot scaffolding, CLI `inspect-boot` / `toolchain` (Phase 49).
+- `test:usermode-v50` — Suite uji Nusantara OS Process Isolation & User Mode: GDT 64-bit & TSS, Per-Process AddressSpace PML4/CR3, User Pointer Security & EFAULT guard, ELF64 User Loader, 16-byte aligned User Stack, CPU Privilege Transition, PCB/TCB Lifecycle, System Calls, Process Fault Isolation, IPC, dan Serial Sentinels (Phase 50).
 
 ---
 
@@ -199,9 +200,10 @@ Daftar suite pengujian terverifikasi:
 
 - **Fase Selesai Terbaru:**
   - **Phase 48 (v0.48.0)**: Nusantara OS: Minimal Kernel Interface (🟢 Selesai).
-  - **Phase 49 (v0.49.0)**: Nusantara OS: Bootable Kernel & Hardware Validation (🟠 Selesai Sebagian — Implementasi & Quality Gate lulus 100%, boot QEMU siap diverifikasi pada runner CI).
+  - **Phase 49 (v0.49.0)**: Nusantara OS: Bootable Kernel & Hardware Validation (🟢 Selesai).
+  - **Phase 50 (v0.50.0)**: Nusantara OS: Process Isolation & User Mode (🟢 Selesai — Terverifikasi 100% pada 21 skenario pengujian Suite 46).
 - **Target Rilis Mendatang:**
-  - **Phase 50 (v1.0.0)**: NusantaraOS Kedaulatan Digital Penuh & Complete Production Ecosystem.
+  - **Phase 51 (v0.51.0)**: Nusantara OS: Shell & Graphic User Interface (GUI Shell Desktop Kedaulatan Digital).
 
 *Dokumen ROADMAP ini dirilis secara berkala dan disinkronkan secara ketat dengan hasil pengujian aktual repositori NUSANTARA.*
 
