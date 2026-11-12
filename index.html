@@ -3,6 +3,32 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Filter unhandled errors and rejections caused by third-party browser extensions (e.g. MetaMask)
+      window.addEventListener('error', function (e) {
+        if (
+          (e.filename && (e.filename.indexOf('chrome-extension://') !== -1 || e.filename.indexOf('moz-extension://') !== -1)) ||
+          (e.message && e.message.indexOf('MetaMask') !== -1)
+        ) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+          return true;
+        }
+      }, true);
+      window.addEventListener('unhandledrejection', function (e) {
+        var reason = e.reason;
+        var msg = typeof reason === 'string' ? reason : (reason && reason.message ? reason.message : '');
+        var stack = reason && reason.stack ? reason.stack : '';
+        if (
+          msg.indexOf('MetaMask') !== -1 ||
+          stack.indexOf('chrome-extension://') !== -1 ||
+          stack.indexOf('moz-extension://') !== -1
+        ) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+        }
+      }, true);
+    </script>
     <title>NUSANTARA - Bahasa Pemrograman Indonesia</title>
     <meta name="description" content="Nusantara OS Process Isolation &amp; User Mode, Bootable Kernel &amp; Hardware Validation, Minimal Kernel Interface, Game SDK, High-Performance Concurrency (Actor Model), Linker &amp; Standalone Executable, LLVM Backend &amp; AOT Native Compilation, NIR, Mobile App Framework, GUI, dan Toolchain bahasa pemrograman NUSANTARA v0.50.0." />
     <meta property="og:title" content="NUSANTARA - Bahasa Pemrograman Indonesia" />
