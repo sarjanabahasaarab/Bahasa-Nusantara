@@ -171,7 +171,7 @@ jobs:
       - name: "Re-calculate SHA-256 Checksums"
         run: |
           cd artifacts/phase50
-          sha256sum kernel.elf user-test.elf user-fault-test.elf nusantara-phase50.iso serial.log qemu-exit-code.txt elf-validation.txt isolation-test-report.txt toolchain-versions.txt test-report.txt FINAL-CERTIFICATION.md > SHA256SUMS
+          sha256sum kernel.elf user.elf user-test.elf user-fault-test.elf nusantara-os.iso nusantara-phase50.iso boot.log qemu.log serial.log qemu-exit-code.txt elf-validation.txt isolation-test-report.txt toolchain-versions.txt test-report.txt test-results.txt FINAL-CERTIFICATION.md > SHA256SUMS
           sha256sum -c SHA256SUMS
 
       - name: "Upload Phase 50 Verified Artifacts"
@@ -181,14 +181,19 @@ jobs:
           name: nusantara-os-phase50-certified-artifacts
           path: |
             artifacts/phase50/kernel.elf
+            artifacts/phase50/user.elf
             artifacts/phase50/user-test.elf
             artifacts/phase50/user-fault-test.elf
+            artifacts/phase50/nusantara-os.iso
             artifacts/phase50/nusantara-phase50.iso
+            artifacts/phase50/boot.log
+            artifacts/phase50/qemu.log
             artifacts/phase50/serial.log
             artifacts/phase50/qemu-exit-code.txt
             artifacts/phase50/elf-validation.txt
             artifacts/phase50/isolation-test-report.txt
             artifacts/phase50/toolchain-versions.txt
             artifacts/phase50/test-report.txt
+            artifacts/phase50/test-results.txt
             artifacts/phase50/SHA256SUMS
             artifacts/phase50/FINAL-CERTIFICATION.md

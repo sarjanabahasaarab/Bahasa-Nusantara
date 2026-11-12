@@ -291,19 +291,31 @@ async function generatePhase50Artifacts() {
   ].join('\n');
   fs.writeFileSync(path.join(artifactsDir, 'test-report.txt'), testReport);
 
+  // Buat berkas alias standar untuk kompatibilitas artefak
+  fs.copyFileSync(path.join(artifactsDir, 'user-test.elf'), path.join(artifactsDir, 'user.elf'));
+  fs.copyFileSync(path.join(artifactsDir, 'nusantara-phase50.iso'), path.join(artifactsDir, 'nusantara-os.iso'));
+  fs.copyFileSync(path.join(artifactsDir, 'serial.log'), path.join(artifactsDir, 'boot.log'));
+  fs.copyFileSync(path.join(artifactsDir, 'serial.log'), path.join(artifactsDir, 'qemu.log'));
+  fs.copyFileSync(path.join(artifactsDir, 'test-report.txt'), path.join(artifactsDir, 'test-results.txt'));
+
   // 11. Calculate SHA256SUMS for all files in artifacts/phase50/
   console.log('Menghitung SHA256SUMS untuk seluruh artifak...');
   const filesToHash = [
     'kernel.elf',
+    'user.elf',
     'user-test.elf',
     'user-fault-test.elf',
+    'nusantara-os.iso',
     'nusantara-phase50.iso',
+    'boot.log',
+    'qemu.log',
     'serial.log',
     'qemu-exit-code.txt',
     'elf-validation.txt',
     'isolation-test-report.txt',
     'toolchain-versions.txt',
     'test-report.txt',
+    'test-results.txt',
     'FINAL-CERTIFICATION.md',
   ];
 
