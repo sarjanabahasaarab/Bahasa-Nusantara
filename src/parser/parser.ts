@@ -570,20 +570,25 @@ export class Parser {
           // Sintaks deklarasi variabel: definisi x = 10
           this.stream.next(); // lewati 'definisi'
           const namaTok = this.stream.next();
-          let tipeData = 'bilangan';
+          let tipeData: string | undefined;
           if (this.cocok(JenisToken.TITIK_DUA)) {
             const tipeTok = this.harapkanNamaTipe();
             tipeData = tipeTok.nilai;
           }
           this.harapkan(JenisToken.OP_SAMA_DENGAN, "tanda '=' setelah nama variabel dalam definisi");
           const nilaiAwal = this.parseEkspresi();
-          if (nilaiAwal.jenis === JenisNodeAST.LITERAL) {
-            const lit = nilaiAwal as NodeLiteral;
-            if (lit.tipeLiteral === 'bilangan') tipeData = 'bilangan';
-            else if (lit.tipeLiteral === 'desimal') tipeData = 'desimal';
-            else if (lit.tipeLiteral === 'teks') tipeData = 'teks';
-            else if (lit.tipeLiteral === 'logika') tipeData = 'logika';
-            else if (lit.tipeLiteral === 'karakter') tipeData = 'karakter';
+          // Tanpa anotasi tipe: simpulkan dari literal, selain itu terima tipe apa pun.
+          // Anotasi eksplisit tidak boleh ditimpa oleh tipe literal.
+          if (tipeData === undefined) {
+            tipeData = 'apapun';
+            if (nilaiAwal.jenis === JenisNodeAST.LITERAL) {
+              const lit = nilaiAwal as NodeLiteral;
+              if (lit.tipeLiteral === 'bilangan') tipeData = 'bilangan';
+              else if (lit.tipeLiteral === 'desimal') tipeData = 'desimal';
+              else if (lit.tipeLiteral === 'teks') tipeData = 'teks';
+              else if (lit.tipeLiteral === 'logika') tipeData = 'logika';
+              else if (lit.tipeLiteral === 'karakter') tipeData = 'karakter';
+            }
           }
           return {
             jenis: JenisNodeAST.DEKLARASI_VARIABEL,

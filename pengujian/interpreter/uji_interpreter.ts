@@ -278,6 +278,35 @@ uji('Menangani variabel belum didefinisikan', () => {
   samaDengan(terjadiGalat, true, 'Harus membangkitkan galat saat variabel tidak ditemukan');
 });
 
+uji('definisi tanpa anotasi menerima nilai non-literal (teks, daftar, kosong)', () => {
+  const sumber = `
+  definisi depan = "Halo"
+  definisi sapaan = depan + " Dunia"
+  definisi angka = [1, 2, 3]
+  definisi hasil = kosong
+  hasil = panjang(angka)
+  tampilkan(sapaan)
+  tampilkan(angka)
+  tampilkan(hasil)`;
+  const output = jalankan(sumber);
+  samaDengan(output[0], 'Halo Dunia');
+  samaDengan(output[1], '[1, 2, 3]');
+  samaDengan(output[2], '3');
+});
+
+uji('definisi dengan anotasi tipe tidak ditimpa oleh tipe literal', () => {
+  const sumber = `
+  definisi nama: teks = 5
+  tampilkan(nama)`;
+  let terjadiGalat = false;
+  try {
+    jalankan(sumber);
+  } catch (e: any) {
+    terjadiGalat = true;
+  }
+  samaDengan(terjadiGalat, true, "Harus membangkitkan galat tipe saat 'teks' diisi bilangan");
+});
+
 // REKAPITULASI HASIL
 console.log('\n-----------------------------------------------------------------------------');
 const jumlahLulus = daftarHasil.filter(h => h.lulus).length;
