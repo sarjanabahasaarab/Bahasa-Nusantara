@@ -39,7 +39,8 @@ Operator logika berbahasa Indonesia mematuhi aturan evaluasi hubung singkat seca
 
 | Operasi | Tipe Operan yang Diharapkan | Tipe Hasil Evaluasi |
 |---|---|---|
-| Aritmetika (`+`, `-`, `*`, `/`, `%`) | `bilangan` atau `desimal` | `bilangan` (jika kedua operan bulat) atau `desimal` |
+| Aritmetika (`+`, `-`, `*`, `%`) | `bilangan` atau `desimal` | `bilangan` (jika kedua operan bulat) atau `desimal` |
+| Pembagian (`/`) | `bilangan` atau `desimal` | Selalu `desimal` (misal `7 / 2` menghasilkan `3.5`) |
 | Penggabungan Teks (`+`) | Salah satu atau kedua operan `teks` | `teks` |
 | Relasional (`<`, `<=`, `>`, `>=`) | `bilangan` atau `desimal` | `logika` (`benar` / `salah`) |
 | Kesetaraan (`==`, `!=`) | Sepadan tipe datanya | `logika` (`benar` / `salah`) |

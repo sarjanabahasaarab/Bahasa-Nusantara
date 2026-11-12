@@ -270,6 +270,29 @@ uji('Menolak perbandingan relasional lebih besar antara teks dan bilangan', () =
   samaDengan(galat[0].jenis, JenisGalatTipe.OPERATOR_TIDAK_DIDUKUNG);
 });
 
+uji('Hasil pembagian bilangan bertipe desimal, sama dengan runtime', () => {
+  const sumber = `
+  program UjiTipePembagian
+  mulai
+      rata : desimal = 7 / 2
+      genap : desimal = 8 / 2
+      tampilkan(rata, genap)
+  selesai`;
+
+  const galat = periksaTipeProgram(sumber);
+  samaDengan(galat.length, 0, 'Pembagian bilangan harus diterima sebagai desimal');
+
+  const output = jalankanProgram(sumber);
+  samaDengan(output[0], '3.5 4');
+
+  const galatBilangan = periksaTipeProgram(`
+  program UjiTipePembagianBulat
+  mulai
+      hasil : bilangan = 7 / 2
+  selesai`);
+  samaDengan(galatBilangan.length > 0, true, 'Hasil pembagian tidak boleh disimpan ke bilangan');
+});
+
 // 9. REKAPITULASI HASIL
 console.log('\n-----------------------------------------------------------------------------');
 const jumlahLulus = daftarHasil.filter(h => h.lulus).length;
