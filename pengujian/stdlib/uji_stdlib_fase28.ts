@@ -41,7 +41,10 @@ import {
 } from '../../src/interpreter/nilai';
 import { Interpreter } from '../../src/interpreter/interpreter';
 import { PenulisOutputBuffer } from '../../src/interpreter/outputWriter';
-import { PembacaBerkasMemori } from '../../src/modul/pembacaBerkas';
+import { PembacaBerkasMemori, PembacaBerkasNode } from '../../src/modul/pembacaBerkas';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 let totalUji = 0;
 let ujiBerhasil = 0;
@@ -455,6 +458,24 @@ uji('sistem.infoHost dan sistem.alokasiMemori', () => {
 // ----------------------------------------------------------------------------
 console.log('\n9. Pengujian Ekspansi Modul Berkas (hapus, salin, metadata):');
 
+uji('berkas.tulis, berkas.baca, dan berkas.hapus pada sistem berkas Node.js asli', () => {
+  const dirSementara = mkdtempSync(join(tmpdir(), 'nusantara-berkas-'));
+  try {
+    const b = buatEksporBerkas(new SandboxBerkas(new PembacaBerkasNode(), dirSementara));
+    const fnTulis = b.get('tulis') as NilaiFungsiBawaan;
+    const fnBaca = b.get('baca') as NilaiFungsiBawaan;
+    const fnHapus = b.get('hapus') as NilaiFungsiBawaan;
+    const fnAda = b.get('ada') as NilaiFungsiBawaan;
+
+    benar((fnTulis.eksekusi([buatTeks('catatan.txt'), buatTeks('Halo')]) as any).nilai);
+    samaDengan((fnBaca.eksekusi([buatTeks('catatan.txt')]) as any).nilai, 'Halo');
+    benar((fnHapus.eksekusi([buatTeks('catatan.txt')]) as any).nilai);
+    salah((fnAda.eksekusi([buatTeks('catatan.txt')]) as any).nilai);
+  } finally {
+    rmSync(dirSementara, { recursive: true, force: true });
+  }
+});
+
 uji('berkas.salin, berkas.metadata, dan berkas.hapus dalam sandbox aman', () => {
   const fsMemori = new PembacaBerkasMemori({
     '/proyek/awal.txt': 'Halo Nusantara!',
@@ -574,6 +595,18 @@ uji('kripto.sha256 dan kripto.md5 menghasilkan digest heksadesimal sah', () => {
 
   const hMd5: any = fnMd5.eksekusi([buatTeks('nusantara')]);
   samaDengan(hMd5.nilai.length, 32, 'MD5 harus 32 karakter heksadesimal');
+
+  // Vektor uji resmi FIPS 180-2 (SHA-256) dan RFC 1321 (MD5) untuk "abc"
+  samaDengan(
+    (fnSha256.eksekusi([buatTeks('abc')]) as any).nilai,
+    'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+    'SHA-256("abc") harus sesuai vektor uji FIPS 180-2'
+  );
+  samaDengan(
+    (fnMd5.eksekusi([buatTeks('abc')]) as any).nilai,
+    '900150983cd24fb0d6963f7d28e17f72',
+    'MD5("abc") harus sesuai vektor uji RFC 1321'
+  );
 });
 
 uji('kripto.byteAcak, kripto.bilanganAcak, dan kripto.bandingkanWaktuKonstan', () => {

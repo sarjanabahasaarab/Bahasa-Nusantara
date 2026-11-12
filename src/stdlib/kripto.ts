@@ -12,6 +12,7 @@ import {
   NilaiFungsiBawaan,
 } from '../interpreter/nilai';
 import { GalatRuntime, JenisGalatRuntime } from '../interpreter/galat';
+import { muatModulNode } from './modulNode';
 import { InfoSimbolModul } from '../modul/jenisModul';
 
 /**
@@ -75,8 +76,7 @@ export const simbolEksporKripto: Map<string, InfoSimbolModul> = new Map([
 
 function hitungHashNode(algoritma: string, pesan: string): string {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const crypto = typeof window === 'undefined' ? require('crypto') : null;
+    const crypto = muatModulNode('crypto');
     if (crypto && crypto.createHash) {
       return crypto.createHash(algoritma).update(pesan, 'utf-8').digest('hex');
     }
@@ -149,8 +149,7 @@ export function buatEksporKripto(): Map<string, NilaiRuntime> {
       }
       const len = Math.max(1, args[0].nilai);
       try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const crypto = typeof window === 'undefined' ? require('crypto') : null;
+        const crypto = muatModulNode('crypto');
         if (crypto && crypto.randomBytes) {
           return buatTeks(crypto.randomBytes(len).toString('hex'));
         }
@@ -187,8 +186,7 @@ export function buatEksporKripto(): Map<string, NilaiRuntime> {
       const max = Math.max(args[0].nilai, args[1].nilai);
       const range = max - min + 1;
       try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const crypto = typeof window === 'undefined' ? require('crypto') : null;
+        const crypto = muatModulNode('crypto');
         if (crypto && crypto.randomInt) {
           return buatBilangan(crypto.randomInt(min, max + 1));
         }
@@ -214,8 +212,7 @@ export function buatEksporKripto(): Map<string, NilaiRuntime> {
       const b = args[1].nilai;
 
       try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const crypto = typeof window === 'undefined' ? require('crypto') : null;
+        const crypto = muatModulNode('crypto');
         if (crypto && crypto.timingSafeEqual && Buffer) {
           const bufA = Buffer.from(a, 'utf-8');
           const bufB = Buffer.from(b, 'utf-8');
