@@ -9,6 +9,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { execFileSync } from 'child_process';
 import {
   DistributionManager,
   AndroidDistributionManager,
@@ -361,6 +362,41 @@ async function jalankanSemuaUji(): Promise<void> {
     const out = buf.dapatkanSeluruhTeks().join('\n');
     pastikan(out.includes('Aplikasi demonstrasi distribusi mobile berhasil dijalankan.'), 'Program .nusantara harus selesai');
     pastikan(out.includes('Application ID     : id.nusantara.aplikasi'), 'Harus menampilkan application ID');
+  });
+
+  // ---------------------------------------------------------------------------
+  // [11] Validasi Arsip PKZIP Nyata pada APK & AAB + Deteksi Binary SDK
+  // ---------------------------------------------------------------------------
+  console.log('\n[11] Validasi Integritas Arsip PKZIP & Deteksi Toolchain SDK Nyata');
+  uji('11.1 Berkas .apk dan .aab memiliki header PKZIP + Central Directory sah & lulus python3 zipfile.testzip()', () => {
+    const mgr = DistributionManager.dapatkanInstance();
+    const cfg = mgr.dapatkanKonfigurasi();
+    const resApk = AndroidDistributionManager.bangunDebugAPK(cfg);
+    const resAab = AndroidDistributionManager.bangunReleaseAAB(cfg);
+    pastikan(resApk.sukses && Boolean(resApk.artefak?.jalurLokal), 'Build APK harus sukses');
+    pastikan(resAab.sukses && Boolean(resAab.artefak?.jalurLokal), 'Build AAB harus sukses');
+
+    const pyCheck = execFileSync(
+      'python3',
+      [
+        '-c',
+        `import sys, zipfile
+for p in sys.argv[1:]:
+    with zipfile.ZipFile(p, 'r') as zf:
+        bad = zf.testzip()
+        assert bad is None, f'Bad CRC: {bad}'
+        names = zf.namelist()
+        assert len(names) >= 3, names
+print('ZIP_OK')`,
+        resApk.artefak!.jalurLokal,
+        resAab.artefak!.jalurLokal,
+      ],
+      { encoding: 'utf-8' }
+    );
+    pastikan(pyCheck.includes('ZIP_OK'), 'APK & AAB harus valid terhadap python3 zipfile CRC32 verification');
+
+    const envAndroid = AndroidDistributionManager.periksaLingkungan();
+    pastikan(typeof envAndroid.adaAapt2 === 'boolean' && typeof envAndroid.adaD8 === 'boolean', 'Probe biner SDK Android harus terisi');
   });
 
   console.log('\n======================================================================');

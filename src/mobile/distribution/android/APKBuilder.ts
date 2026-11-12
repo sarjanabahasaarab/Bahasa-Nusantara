@@ -12,6 +12,7 @@ import * as path from 'path';
 import { ArtefakHasilDistribusi, KonfigurasiDistribusiLengkap, TipeBuildAndroid } from '../types';
 import { AndroidManifestManager } from './AndroidManifestManager';
 import { AndroidSigningManager } from './AndroidSigning';
+import { ZipBuilder } from '../core/ZipBuilder';
 
 export interface HasilBuildAPK {
   sukses: boolean;
@@ -95,17 +96,15 @@ export class APKBuilder {
       let sha256 = '';
 
       if (typeof Buffer !== 'undefined') {
-        const headerAPK = Buffer.from('PK\x03\x04\x14\x00\x08\x00\x08\x00', 'binary');
-        const kontenManifest = Buffer.from(manifestXml, 'utf-8');
-        const kontenMetadata = Buffer.from(JSON.stringify(metadataBuild, null, 2), 'utf-8');
-        const signatureBlock = Buffer.from(`NUSANTARA-SIG-BLOCK-V2-${cekSigning.sidikJariSha256 || 'DEBUG'}`, 'utf-8');
-
-        const bufferGabungan = Buffer.concat([
-          headerAPK,
-          kontenManifest,
-          kontenMetadata,
-          signatureBlock,
+        const zipBytes = ZipBuilder.buatArsipZip([
+          { nama: 'AndroidManifest.xml', konten: manifestXml },
+          { nama: 'META-INF/NUSANTARA.json', konten: JSON.stringify(metadataBuild, null, 2) },
+          {
+            nama: 'META-INF/CERT.SF',
+            konten: `Signature-Version: 1.0\nCreated-By: Nusantara Distribution Engine\nSHA256-Signing-Digest: ${cekSigning.sidikJariSha256 || 'DEBUG'}\n`,
+          },
         ]);
+        const bufferGabungan = Buffer.from(zipBytes);
 
         if (typeof (fs as any)?.writeFileSync === 'function') {
           (fs as any).writeFileSync(jalurLokal, bufferGabungan);

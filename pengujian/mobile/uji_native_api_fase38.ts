@@ -8,6 +8,7 @@
  */
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import {
   RegistriNativeAPI,
@@ -17,6 +18,8 @@ import {
   AdaptorSimulatorMobile,
   AdaptorAndroidMobile,
   AdaptorIOSMobile,
+  PemeriksaHardwareHost,
+  GeneratorPluginPerangkatNative,
   dapatkanAdaptorPlatformAktif,
   tetapkanAdaptorPlatform,
 } from '../../src/mobile/native';
@@ -276,6 +279,78 @@ async function jalankanSemuaPengujianFase38(): Promise<void> {
     const kodeSumber = fs.readFileSync(jalurBerkas, 'utf-8');
     const interpreter = new Interpreter();
     await interpreter.jalankanKode(kodeSumber);
+  });
+
+  // 9. Probe Hardware Host Nyata, Sandbox Disk I/O, & Codegen Plugin Native
+  console.log('\n[9] Probe Hardware Host Nyata, Disk Sandbox I/O, & Plugin Native');
+
+  await uji('9.1 PemeriksaHardwareHost membaca telemetri OS & status ADB secara jujur', async () => {
+    const probe = PemeriksaHardwareHost.periksaHost();
+    pastikan(probe.nodeRuntime === true, 'Harus berjalan di Node runtime');
+    pastikan(probe.arsitektur.length > 0, 'Arsitektur host harus terdeteksi');
+    pastikan(probe.memoriTotalMB > 0, 'Memori total host harus > 0 MB');
+    pastikan(probe.jaringan.sumber === 'OS_NETWORK_INTERFACES', 'Harus membaca interface jaringan OS nyata');
+    pastikan(probe.jaringan.antarmukaAktif.length > 0, 'Harus mendeteksi setidaknya antarmuka loopback OS');
+
+    const sim = new AdaptorSimulatorMobile();
+    const info = await sim.dapatkanInfoPerangkat();
+    pastikan(info.data.sumberData === 'HOST_OS_REAL', 'Info perangkat harus menyertakan provenance HOST_OS_REAL');
+    const net = await sim.dapatkanStatusJaringan();
+    pastikan(net.data.sumberData === 'OS_NETWORK_INTERFACES', 'Status jaringan harus berasal dari OS_NETWORK_INTERFACES');
+  });
+
+  await uji('9.2 Sistem Berkas Sandbox Disk Nyata (Tulis -> Baca -> Hapus & Anti-Traversal)', async () => {
+    const tmpSandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'nusantara-p38-sandbox-'));
+    try {
+      const adapter = new AdaptorSimulatorMobile(tmpSandbox);
+      const konten = 'Data Persisten Nusantara Phase 38\nBaris 2';
+
+      const w = await adapter.tulisBerkas('sub/catatan.txt', konten);
+      pastikan(w.sukses && w.data.sumberData === 'DISK_SANDBOX_REAL', 'Harus menulis berkas nyata ke disk');
+      pastikan(fs.existsSync(path.join(tmpSandbox, 'sub/catatan.txt')), 'Berkas fisik harus ada di disk');
+
+      const r = await adapter.bacaBerkas('sub/catatan.txt');
+      pastikan(r.sukses && r.data.konten === konten, 'Isi berkas bacaan disk harus identik');
+
+      const d = await adapter.hapusBerkas('sub/catatan.txt');
+      pastikan(d.sukses && d.data.terhapus === true, 'Berkas fisik harus terhapus');
+      pastikan(!fs.existsSync(path.join(tmpSandbox, 'sub/catatan.txt')), 'Berkas harus hilang dari disk');
+
+      const trav = await adapter.bacaBerkas('../rahasia.txt');
+      pastikan(!trav.sukses && trav.kodeGalat === KodeGalatNative.PATH_TIDAK_AMAN, 'Traversal ../ harus ditolak');
+      const absTrav = await adapter.tulisBerkas('/etc/shadow', 'x');
+      pastikan(!absTrav.sukses && absTrav.kodeGalat === KodeGalatNative.PATH_TIDAK_AMAN, 'Path absolut harus ditolak');
+    } finally {
+      fs.rmSync(tmpSandbox, { recursive: true, force: true });
+    }
+  });
+
+  await uji('9.3 Codegen Plugin Perangkat Kotlin Android & Swift iOS + Output CLI build', () => {
+    const kt = GeneratorPluginPerangkatNative.hasilkanPluginAndroid('id.nusantara.uji38');
+    pastikan(kt.includes('class NusantaraDeviceApiPlugin'), 'Harus menghasilkan kelas Kotlin NusantaraDeviceApiPlugin');
+    pastikan(kt.includes('SensorManager') && kt.includes('BatteryManager') && kt.includes('ConnectivityManager'), 'Plugin Kotlin harus mengikat API Android nyata');
+    pastikan(!kt.includes('${undefined'), 'Tidak boleh ada interpolasi rusak di template Kotlin');
+
+    const swift = GeneratorPluginPerangkatNative.hasilkanPluginIOS('id.nusantara.uji38');
+    pastikan(swift.includes('final class NusantaraDeviceApiPlugin'), 'Harus menghasilkan kelas Swift NusantaraDeviceApiPlugin');
+    pastikan(swift.includes('CMMotionManager') && swift.includes('NWPathMonitor') && swift.includes('CLLocationManager'), 'Plugin Swift harus mengikat framework iOS nyata');
+
+    const outTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusantara-p38-build-'));
+    try {
+      const codeA = MobileCLI.jalankan(['build', 'android', `--out=${outTmp}/android`]);
+      const codeI = MobileCLI.jalankan(['build', 'ios', `--out=${outTmp}/ios`]);
+      pastikan(codeA === 0 && codeI === 0, 'CLI build android/ios harus sukses');
+      pastikan(
+        fs.existsSync(path.join(outTmp, 'android/android/app/src/main/java/id/nusantara/app/NusantaraDeviceApiPlugin.kt')),
+        'CLI build android harus memancarkan NusantaraDeviceApiPlugin.kt'
+      );
+      pastikan(
+        fs.existsSync(path.join(outTmp, 'ios/ios/NusantaraApp/NusantaraDeviceApiPlugin.swift')),
+        'CLI build ios harus memancarkan NusantaraDeviceApiPlugin.swift'
+      );
+    } finally {
+      fs.rmSync(outTmp, { recursive: true, force: true });
+    }
   });
 
   // Ringkasan Akhir

@@ -8,12 +8,14 @@
 
 import { OperasiOffline, StatusOperasiOffline } from '../types';
 import { PenyimpananAmanMobile } from '../../security/secure_storage';
+import { muatModulNode, apakahNodeRuntime } from '../../../gui/platform/node_bridge';
 
 export class PengelolaOperasiOffline {
   private static instance: PengelolaOperasiOffline;
   private antrean: OperasiOffline[] = [];
   private readonly batasMaksimal: number = 200;
   private readonly kunciPenyimpanan = 'nusantara_mobile_antrean_offline_v1';
+  private jalurDiskPersistensi?: string;
 
   private constructor() {
     this.muatDariPenyimpanan();
@@ -124,15 +126,53 @@ export class PengelolaOperasiOffline {
     };
   }
 
+  public aturJalurPersistensi(jalurBerkas?: string): void {
+    this.jalurDiskPersistensi = jalurBerkas;
+    if (jalurBerkas) {
+      this.muatUlangDariDisk();
+    }
+  }
+
+  public muatUlangDariDisk(): void {
+    if (!this.jalurDiskPersistensi || !apakahNodeRuntime()) return;
+    const fs = muatModulNode<any>('fs');
+    if (!fs || !fs.existsSync(this.jalurDiskPersistensi)) return;
+    try {
+      const isi = fs.readFileSync(this.jalurDiskPersistensi, 'utf-8');
+      const parsed = JSON.parse(isi);
+      if (Array.isArray(parsed)) {
+        this.antrean = parsed;
+      }
+    } catch {
+      // Abaikan JSON korup
+    }
+  }
+
   public reset(): void {
     this.antrean = [];
     PenyimpananAmanMobile.hapus(this.kunciPenyimpanan);
+    if (this.jalurDiskPersistensi && apakahNodeRuntime()) {
+      const fs = muatModulNode<any>('fs');
+      if (fs && fs.existsSync(this.jalurDiskPersistensi)) {
+        try {
+          fs.unlinkSync(this.jalurDiskPersistensi);
+        } catch {}
+      }
+    }
   }
 
   private simpanKePenyimpanan(): void {
     try {
       const serial = JSON.stringify(this.antrean);
       PenyimpananAmanMobile.simpan(this.kunciPenyimpanan, serial);
+      if (this.jalurDiskPersistensi && apakahNodeRuntime()) {
+        const fs = muatModulNode<any>('fs');
+        const path = muatModulNode<any>('path');
+        if (fs && path) {
+          fs.mkdirSync(path.dirname(this.jalurDiskPersistensi), { recursive: true });
+          fs.writeFileSync(this.jalurDiskPersistensi, serial, 'utf-8');
+        }
+      }
     } catch {
       // Abaikan jika penyimpanan aman belum terinisialisasi di browser
     }

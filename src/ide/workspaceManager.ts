@@ -6,8 +6,31 @@
  */
 
 import { SimpulBerkas, HasilPencarianBerkas } from './types';
-import { normalisasiJalur, gabungJalur } from '../build/jalur';
 import { parse as parseTOML } from 'smol-toml';
+
+function normalisasiJalur(jalur: string): string {
+  const bagian = jalur.replace(/\\/g, '/').split('/');
+  const tumpukan: string[] = [];
+  const absolut = jalur.startsWith('/') || jalur.startsWith('\\');
+  for (const seg of bagian) {
+    if (!seg || seg === '.') continue;
+    if (seg === '..') {
+      if (tumpukan.length > 0 && tumpukan[tumpukan.length - 1] !== '..') {
+        tumpukan.pop();
+      } else if (!absolut) {
+        tumpukan.push('..');
+      }
+    } else {
+      tumpukan.push(seg);
+    }
+  }
+  const hasil = (absolut ? '/' : '') + tumpukan.join('/');
+  return hasil || (absolut ? '/' : '.');
+}
+
+function gabungJalur(...bagian: string[]): string {
+  return normalisasiJalur(bagian.filter(Boolean).join('/'));
+}
 
 export interface KonfigurasiProyekNUSANTARA {
   nama: string;

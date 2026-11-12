@@ -7,7 +7,9 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
+import { WebSocket } from 'ws';
 import {
   AplikasiMobile,
   PengelolaLifecycleMobile,
@@ -56,9 +58,13 @@ import {
   NotifikasiLokalMobile,
   BerbagiMobile,
   JembatanMobileNative,
+  GeneratorJembatanMobileNative,
+  PerenderMobile,
+  HostPreviewMobile,
+  DetektorToolchainMobile,
   PengelolaAsetMobile,
-  AndroidBuildManager,
-  IOSBuildManager,
+  AndroidDistributionManager,
+  IOSDistributionManager,
   MobileCLI,
 } from '../../src/mobile';
 import { TemplateRegistry } from '../../src/generator/templateRegistry';
@@ -479,7 +485,7 @@ async function main(): Promise<void> {
   console.log('\n[8] Fondasi Sistem Build Android & iOS (Build Foundations)');
 
   await uji('8.1 Pemeriksaan Lingkungan & Generator Manifes Android', () => {
-    const env = AndroidBuildManager.periksaLingkungan();
+    const env = AndroidDistributionManager.periksaLingkungan();
     pastikan(env !== null, 'Hasil periksa Android tidak boleh null');
     pastikan(Array.isArray(env.catatan), 'Catatan lingkungan harus array');
 
@@ -492,18 +498,18 @@ async function main(): Promise<void> {
       daftarIzin: ['kamera', 'lokasi', 'notifikasi'] as any,
     };
 
-    const manifestXml = AndroidBuildManager.buatAndroidManifest(konfig);
+    const manifestXml = MobileCLI.buatAndroidManifest(konfig);
     pastikan(manifestXml.includes('package="id.nusantara.toko"'), 'Manifest harus memuat package name');
     pastikan(manifestXml.includes('android.permission.CAMERA'), 'Manifest harus memuat izin kamera');
     pastikan(manifestXml.includes('android.permission.ACCESS_FINE_LOCATION'), 'Manifest harus memuat izin lokasi');
 
-    const gradle = AndroidBuildManager.buatBuildGradleApp(konfig);
+    const gradle = MobileCLI.buatBuildGradleApp(konfig);
     pastikan(gradle.includes('applicationId "id.nusantara.toko"'), 'build.gradle harus memuat applicationId');
     pastikan(gradle.includes('compileSdk 34'), 'build.gradle harus menargetkan compileSdk 34');
   });
 
   await uji('8.2 Pemeriksaan Lingkungan & Generator Manifes iOS', () => {
-    const envIOS = IOSBuildManager.periksaLingkungan();
+    const envIOS = IOSDistributionManager.periksaLingkungan();
     pastikan(envIOS !== null, 'Hasil periksa iOS tidak boleh null');
 
     const konfig = {
@@ -515,12 +521,12 @@ async function main(): Promise<void> {
       daftarIzin: ['kamera', 'lokasi'] as any,
     };
 
-    const plistXml = IOSBuildManager.buatInfoPlist(konfig);
+    const plistXml = MobileCLI.buatInfoPlist(konfig);
     pastikan(plistXml.includes('CFBundleIdentifier'), 'Info.plist harus memuat CFBundleIdentifier');
     pastikan(plistXml.includes('id.nusantara.toko'), 'Info.plist harus memuat bundle ID');
     pastikan(plistXml.includes('NSCameraUsageDescription'), 'Info.plist harus menyertakan izin kamera');
 
-    const podfile = IOSBuildManager.buatPodfileTemplate(konfig);
+    const podfile = MobileCLI.buatPodfileTemplate(konfig);
     pastikan(podfile.includes("platform :ios, '15.0'"), 'Podfile harus menargetkan iOS 15.0');
   });
 
@@ -616,6 +622,181 @@ async function main(): Promise<void> {
 
     const log = penulis.ambilOutput();
     pastikan(log.includes('Demo Lengkap Nusantara Mobile sukses dijalankan.'), 'Program demo_mobile harus dieksekusi dengan sukses');
+  });
+
+  // 11. Native Bridge Codegen (Kotlin Android & Swift iOS) & Transport
+  console.log('\n[11] Jembatan Native Kotlin & Swift + Pluggable Transport');
+
+  await uji('11.1 Generator Kotlin & Swift Native Bridge + TransportJembatanNative kustom', async () => {
+    const bridge = JembatanMobileNative.dapatkanInstance();
+    const konfig = {
+      nama: 'NusantaraPay',
+      id: 'id.nusantara.pay',
+      versi: '1.0.0',
+      nomorBuild: 1,
+      platformTarget: { android: true, ios: true },
+      daftarIzin: ['internet', 'kamera'] as any,
+    };
+
+    const bundel = bridge.hasilkanBindingNative(konfig);
+    const ktBridge = bundel.android.find((b) => b.jalur.endsWith('NusantaraNativeBridge.kt'));
+    const ktMain = bundel.android.find((b) => b.jalur.endsWith('MainActivity.kt'));
+    const swiftBridge = bundel.ios.find((b) => b.jalur.endsWith('NusantaraNativeBridge.swift'));
+    const swiftVC = bundel.ios.find((b) => b.jalur.endsWith('NusantaraViewController.swift'));
+
+    pastikan(Boolean(ktBridge && ktBridge.isi.includes('@JavascriptInterface')), 'Android Kotlin Bridge harus memiliki @JavascriptInterface');
+    pastikan(Boolean(ktMain && ktMain.isi.includes('addJavascriptInterface')), 'MainActivity Kotlin harus memasang NusantaraAndroidBridge');
+    pastikan(Boolean(swiftBridge && swiftBridge.isi.includes('WKScriptMessageHandler')), 'iOS Swift Bridge harus mengimplementasikan WKScriptMessageHandler');
+    pastikan(Boolean(swiftVC && swiftVC.isi.includes('WKWebView')), 'iOS ViewController Swift harus memuat WKWebView');
+
+    // Uji transport eksternal pluggable
+    let dikirimKeTransport = false;
+    bridge.pasangTransport({
+      namaTransport: 'test-jni-pipe',
+      async kirimKeNative(req) {
+        dikirimKeTransport = true;
+        return {
+          id: req.id,
+          sukses: true,
+          data: `echo:${req.modul}.${req.metode}`,
+          stempelWaktu: Date.now(),
+        };
+      },
+    });
+    try {
+      pastikan(bridge.dapatkanNamaTransport() === 'test-jni-pipe', 'Nama transport aktif harus test-jni-pipe');
+      const res = await bridge.panggilNative('perangkat', 'ping');
+      pastikan(dikirimKeTransport && res === 'echo:perangkat.ping', 'Panggilan bridge harus dirutekan melalui transport eksternal');
+    } finally {
+      bridge.pasangTransport(null);
+    }
+  });
+
+  await uji('11.2 AplikasiMobile memancarkan peristiwa lifecycle nyata melalui JembatanMobileNative', async () => {
+    const bridge = JembatanMobileNative.dapatkanInstance();
+    const terekam: string[] = [];
+    const lepas = bridge.langgananPeristiwa('lifecycle', (ev) => {
+      terekam.push(String(ev.data?.status));
+    });
+    const app = new AplikasiMobile({ nama: 'UjiLifecycle', id: 'id.nusantara.lc', versi: '1.0.0', nomorBuild: 1 });
+    try {
+      await app.jalankan();
+      await app.jeda();
+      await app.lanjutkan();
+      await app.hentikan();
+      pastikan(
+        terekam.includes(StatusLifecycleMobile.AKTIF) &&
+          terekam.includes(StatusLifecycleMobile.JEDA) &&
+          terekam.includes(StatusLifecycleMobile.BERHENTI),
+        'JembatanMobileNative harus menerima peristiwa lifecycle AKTIF, JEDA, dan BERHENTI'
+      );
+    } finally {
+      lepas();
+      await app.hancurkan();
+    }
+  });
+
+  // 12. Mobile UI Viewport Renderer (HTML5 + SVG + Native JSON Tree)
+  console.log('\n[12] Perender Antarmuka Mobile (HTML5, SVG & Pohon UI Native)');
+
+  await uji('12.1 PerenderMobile merender UI mobile, Navigator & SafeArea menjadi HTML, SVG & UI Tree', async () => {
+    const app = new AplikasiMobile({ nama: 'WarungDigital', id: 'id.nusantara.warung', versi: '1.2.0', nomorBuild: 3 });
+    const safe = new AreaAmanMobile();
+    safe.tambahAnak(new TeksMobile({ teks: 'Selamat Datang', gaya: { beratFont: 'tebal' } }));
+    safe.tambahAnak(new TombolMobile({ teks: 'Bayar Sekarang' }));
+    app.tambahKomponenAkar(safe);
+
+    const perender = new PerenderMobile();
+    const html = perender.renderKeHTML(app, 'ws://127.0.0.1:9000/ipc');
+    const svg = perender.renderKeSVG(app);
+    const tree = perender.bangunPohonUINative(app);
+
+    pastikan(html.includes('NusantaraAndroidBridge') && html.includes('Bayar Sekarang'), 'HTML viewport harus memuat bridge Android/iOS & tombol');
+    pastikan(svg.includes('<svg') && svg.includes('Selamat Datang'), 'SVG preview harus valid dan memuat konten teks');
+    pastikan(tree.aplikasi === 'WarungDigital' && Array.isArray(tree.komponenAkar), 'Pohon UI Native harus valid');
+    await app.hancurkan();
+  });
+
+  // 13. Loopback HTTP + WebSocket Mobile Preview Host Runtime
+  console.log('\n[13] Loopback HTTP + WebSocket Mobile Preview Host Runtime');
+
+  await uji('13.1 HostPreviewMobile melayani HTTP HTML/JSON state & memproses peristiwa + bridge IPC via WebSocket', async () => {
+    const app = new AplikasiMobile({ nama: 'LiveMobileApp', id: 'id.nusantara.live', versi: '1.0.0', nomorBuild: 1 });
+    let diklik = false;
+    const btn = new TombolMobile('Proses', () => { diklik = true; });
+    const inp = new InputTeksMobile('Catatan', '');
+    const sw = new SakelarMobile(false, 'Notifikasi');
+    const kol = new TataLetakVertikalMobile({ jarakAntarItem: 8 });
+    kol.tambahAnak(btn).tambahAnak(inp).tambahAnak(sw);
+    app.tambahKomponenAkar(kol);
+    await app.jalankan();
+
+    const host = new HostPreviewMobile(app, 0);
+    try {
+      const url = await host.mulai();
+      const resHtml = await fetch(url);
+      const html = await resHtml.text();
+      pastikan(resHtml.status === 200 && html.includes('Proses'), 'GET / harus menyajikan HTML preview aplikasi mobile');
+
+      const resState = await fetch(`${url}/api/state`);
+      const stateJson = (await resState.json()) as any;
+      pastikan(stateJson.aplikasi === 'LiveMobileApp', 'GET /api/state harus mengembalikan metadata aplikasi mobile');
+
+      const wsUrl = url.replace('http://', 'ws://') + '/ipc';
+      let bridgePong = false;
+      await new Promise<void>((resolve, reject) => {
+        const ws = new WebSocket(wsUrl);
+        ws.on('open', () => {
+          ws.send(JSON.stringify({ tipe: 'bridge_call', id: 'b1', modul: 'perangkat', metode: 'ping' }));
+          ws.send(JSON.stringify({ tipe: 'peristiwa', jenis: 'teks_berubah', idKomponen: inp.id, nilaiTeks: 'Halo Socket' }));
+          ws.send(JSON.stringify({ tipe: 'peristiwa', jenis: 'nilai_berubah', idKomponen: sw.id, nilaiLogika: true }));
+          ws.send(JSON.stringify({ tipe: 'peristiwa', jenis: 'klik', idKomponen: btn.id }));
+        });
+        ws.on('message', (raw) => {
+          const msg = JSON.parse(String(raw));
+          if (msg.tipe === 'bridge_respon' && msg.data === 'pong') bridgePong = true;
+          if (msg.tipe === 'sinkronisasi' && diklik && inp.nilai === 'Halo Socket' && sw.aktifStatus && bridgePong) {
+            ws.close();
+            resolve();
+          }
+        });
+        ws.on('error', reject);
+        setTimeout(() => reject(new Error('Timeout menunggu sinkronisasi HostPreviewMobile WebSocket')), 3000);
+      });
+
+      pastikan(diklik && bridgePong && inp.nilai === 'Halo Socket' && sw.aktifStatus, 'Semua aksi WebSocket harus memperbarui state & komponen nyata');
+    } finally {
+      await host.hentikan();
+      await app.hancurkan();
+    }
+  });
+
+  // 14. Detektor Toolchain Mobile & Artefak Proyek CLI Nyata
+  console.log('\n[14] Detektor Toolchain Mobile & Artefak Build Kotlin/Swift CLI');
+
+  await uji('14.1 DetektorToolchainMobile & MobileCLI baru/build menghasilkan sumber Kotlin/Swift & SHA256SUMS', () => {
+    const tc = DetektorToolchainMobile.deteksi();
+    pastikan(tc.nodeRuntime && typeof tc.android.siapKompilasiNative === 'boolean', 'Detektor harus memeriksa kapabilitas Android & iOS secara faktual');
+
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nusantara-mobile-f37-'));
+    try {
+      const outAndroid = path.join(tmpRoot, 'out-android');
+      pastikan(MobileCLI.jalankan(['build', 'android', `--out=${outAndroid}`]) === 0, 'mobile build android --out harus exit 0');
+      pastikan(fs.existsSync(path.join(outAndroid, 'SHA256SUMS')), 'Keluaran build Android harus memuat SHA256SUMS');
+      pastikan(
+        fs.existsSync(path.join(outAndroid, 'android/app/src/main/java/id/nusantara/app/NusantaraNativeBridge.kt')),
+        'Keluaran build Android harus memuat NusantaraNativeBridge.kt'
+      );
+
+      const outIOS = path.join(tmpRoot, 'out-ios');
+      pastikan(MobileCLI.jalankan(['build', 'ios', `--out=${outIOS}`]) === 0, 'mobile build ios --out harus exit 0');
+      pastikan(
+        fs.existsSync(path.join(outIOS, 'ios/Sources/NusantaraNativeBridge.swift')),
+        'Keluaran build iOS harus memuat NusantaraNativeBridge.swift'
+      );
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
   });
 
   console.log('='.repeat(70));

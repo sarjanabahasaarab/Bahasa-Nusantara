@@ -8,7 +8,10 @@
  */
 
 import * as fs from 'fs';
+import * as http from 'http';
+import * as os from 'os';
 import * as path from 'path';
+import { WebSocketServer } from 'ws';
 import {
   LapisanKeamananMobile,
   PengawasJaringanMobile,
@@ -565,6 +568,166 @@ async function jalankanSemuaUji() {
 
     const out = buf.dapatkanSeluruhTeks().join('\n');
     pastikan(out.includes('Cloud File Manager berhasil mentransfer berkas secara aman.'), 'Harus sukses mengeksekusi');
+  });
+
+  // ---------------------------------------------------------------------------
+  // [17] Integrasi Loopback TCP HTTP + WebSocket + Persistensi Antrean Disk
+  // ---------------------------------------------------------------------------
+  console.log('\n[17] Integrasi Loopback HTTP & WebSocket Cloud Nyata + Persistensi Disk');
+  await ujiAsync('17.1 Loopback HTTP Server Nyata: Autentikasi JWT, REST CRUD & Sinkronisasi Konflik 409 LWW', async () => {
+    const dbCatatan: Record<string, any> = {};
+    const tokenResmi = 'jwt_loopback_valid_2026';
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusantara-p39-sync-'));
+    const queueFile = path.join(tmpDir, 'offline_queue.json');
+
+    const server = http.createServer((req, res) => {
+      const urlObj = new URL(req.url || '/', 'http://127.0.0.1');
+      let rawBody = '';
+      req.on('data', (chunk) => { rawBody += chunk; });
+      req.on('end', () => {
+        const parsed = rawBody ? JSON.parse(rawBody) : {};
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('X-Server-Bukti', 'nusantara-loopback-live');
+
+        if (req.method === 'POST' && urlObj.pathname === '/auth/masuk') {
+          res.statusCode = 200;
+          res.end(JSON.stringify({
+            accessToken: tokenResmi,
+            refreshToken: 'ref_loopback_01',
+            pengguna: { id: 'u1', email: parsed.identitas },
+          }));
+          return;
+        }
+
+        if (req.method === 'GET' && urlObj.pathname === '/catatan') {
+          if (req.headers['authorization'] !== `Bearer ${tokenResmi}`) {
+            res.statusCode = 401;
+            res.end(JSON.stringify({ pesan: 'Unauthorized' }));
+            return;
+          }
+          res.statusCode = 200;
+          res.end(JSON.stringify({ item: Object.values(dbCatatan) }));
+          return;
+        }
+
+        if (req.method === 'POST' && urlObj.pathname === '/catatan') {
+          if (parsed.paksaKonflik) {
+            res.statusCode = 409;
+            res.end(JSON.stringify({
+              dataServer: { judul: 'Versi Server Lama', isi: 'server' },
+              waktuServer: Date.now() - 60000,
+            }));
+            return;
+          }
+          const id = parsed.id || `doc_${Date.now()}`;
+          dbCatatan[id] = { id, ...parsed };
+          res.statusCode = 201;
+          res.end(JSON.stringify({ tersimpan: true, doc: dbCatatan[id] }));
+          return;
+        }
+
+        res.statusCode = 404;
+        res.end(JSON.stringify({ pesan: 'Not Found' }));
+      });
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const addr = server.address() as any;
+    const baseUrl = `http://127.0.0.1:${addr.port}`;
+
+    try {
+      const api = new KlienAPIMobile({ baseUrl });
+      const auth = new KlienAutentikasiMobile({ apiClient: api });
+      auth.keluar();
+
+      const resLogin = await auth.masuk('developer@nusantara.id', 'Sandi123!');
+      samaDengan(resLogin.sukses, true, 'Login loopback HTTP harus sukses');
+      samaDengan(auth.dapatkanTokenAkses(), tokenResmi, 'Harus menerima token asli dari server loopback');
+
+      const resGet = await api.dapatkan('/catatan');
+      samaDengan(resGet.status, 200, 'GET terautentikasi harus HTTP 200');
+      samaDengan(resGet.headers['x-server-bukti'], 'nusantara-loopback-live', 'Harus mengenai server HTTP nyata');
+
+      const monitor = PengawasJaringanMobile.dapatkanInstance();
+      const antrean = PengelolaOperasiOffline.dapatkanInstance();
+      antrean.reset();
+      antrean.aturJalurPersistensi(queueFile);
+
+      // Simulasi offline: enqueue ke disk
+      monitor.perbaruiStatusFisik(false, 'tidak_ada', false);
+      const q1 = await api.kirim('/catatan', { id: 'c1', judul: 'Catatan Offline' });
+      const q2 = await api.kirim('/catatan', { id: 'c2', judul: 'Catatan Konflik LWW', paksaKonflik: true });
+      samaDengan(q1.status, 202, 'Saat offline harus antre (202)');
+      samaDengan(q2.status, 202, 'Operasi konflik saat offline harus antre (202)');
+      pastikan(fs.existsSync(queueFile), 'Antrean offline harus tersimpan persisten ke berkas disk');
+
+      // Reload dari disk lalu sinkronkan ke server loopback nyata
+      antrean.muatUlangDariDisk();
+      samaDengan(antrean.hitung().tertunda, 2, 'Reload disk harus memulihkan 2 operasi tertunda');
+
+      const sync = MesinSinkronisasiMobile.dapatkanInstance();
+      sync.aturKlienAPI(api);
+      monitor.perbaruiStatusFisik(true, 'wifi', false);
+      // Tunggu sebentar jika auto-sync terpanggil listener
+      await new Promise((r) => setTimeout(r, 80));
+      if (antrean.hitung().tertunda > 0) {
+        await sync.sinkronkan();
+      }
+
+      pastikan(dbCatatan['c1']?.judul === 'Catatan Offline', 'Catatan c1 harus terkirim ke server loopback');
+      samaDengan(antrean.hitung().tertunda, 0, 'Antrean tertunda harus terkuras habis setelah sync');
+      const riwayatTerbaru = sync.dapatkanRiwayat()[0];
+      pastikan(riwayatTerbaru && riwayatTerbaru.konflik.length >= 1, 'Konflik HTTP 409 harus tercatat dan diselesaikan LWW');
+    } finally {
+      PengelolaOperasiOffline.dapatkanInstance().aturJalurPersistensi(undefined);
+      PengelolaOperasiOffline.dapatkanInstance().reset();
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  await ujiAsync('17.2 KlienWebSocketMobile terhubung penuh via TCP WebSocketServer nyata', async () => {
+    const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+    await new Promise<void>((resolve) => wss.once('listening', () => resolve()));
+    const addr = wss.address() as any;
+    const pesanDiterimaServer: any[] = [];
+
+    wss.on('connection', (ws) => {
+      ws.on('message', (data) => {
+        const msg = JSON.parse(String(data));
+        pesanDiterimaServer.push(msg);
+        ws.send(JSON.stringify({ tipe: 'ack', gema: msg.pesan }));
+      });
+    });
+
+    const klienWs = new KlienWebSocketMobile({
+      url: `ws://127.0.0.1:${addr.port}`,
+      autoReconnect: false,
+      intervalHeartbeatMs: 60000,
+    });
+
+    try {
+      const balasan = await new Promise<any>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Timeout WebSocket')), 4000);
+        klienWs.padaPesan((d) => {
+          clearTimeout(timeout);
+          resolve(d);
+        });
+        klienWs.padaStatus((st) => {
+          if (st === 'terbuka') {
+            klienWs.kirim({ tipe: 'chat', pesan: 'halo_ws_nyata' });
+          }
+        });
+        klienWs.buka();
+      });
+
+      samaDengan(balasan.tipe, 'ack');
+      samaDengan(balasan.gema, 'halo_ws_nyata');
+      pastikan(pesanDiterimaServer.length === 1, 'Server WebSocket harus menerima 1 pesan nyata');
+    } finally {
+      klienWs.tutup();
+      await new Promise<void>((resolve) => wss.close(() => resolve()));
+    }
   });
 
   console.log('\n======================================================================');

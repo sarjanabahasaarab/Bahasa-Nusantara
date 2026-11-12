@@ -13,7 +13,6 @@ import { PenelusurNUSANTARA } from '../debugger/penelusur';
 import { SesiDebug } from '../debugger/sesiDebug';
 import { ProfilerNUSANTARA } from '../debugger/profiler';
 import { LaporanProfil } from '../debugger/types';
-import { MesinBuild, HasilBuild } from '../build';
 import { PembacaBerkasMemori } from '../modul/pembacaBerkas';
 
 export interface HasilEksekusiIDE {
@@ -22,7 +21,7 @@ export interface HasilEksekusiIDE {
   durasiMs: number;
   keluaran: LogKeluaranIDE[];
   laporanProfil?: LaporanProfil;
-  hasilBuild?: HasilBuild;
+  hasilBuild?: Record<string, unknown>;
   galat?: string;
 }
 

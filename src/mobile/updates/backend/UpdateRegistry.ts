@@ -66,8 +66,8 @@ export class UpdateRegistry {
     // Tandatangani dengan kunci resmi
     const signed = SignatureVerifier.tandaTangani(
       rawManifest,
-      'a7c9f4d1e8b35a60c7f21d9e4a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b',
       'nusantara-ota-root-2026',
+      undefined,
       'Ed25519'
     );
 

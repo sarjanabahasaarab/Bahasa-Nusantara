@@ -8,25 +8,37 @@
 
 import { AdaptorPlatformNative } from './platform_adapter';
 import { AdaptorSimulatorMobile } from './simulator_adapter';
-import { HasilOperasiNative, buatHasilSukses, buatHasilGagal, KodeGalatNative } from '../core/result';
+import { HasilOperasiNative, buatHasilSukses } from '../core/result';
+import { PemeriksaHardwareHost } from '../core/hardware_probe';
+import { DetektorToolchainMobile } from '../../runtime/mobile_host';
 
 export class AdaptorAndroidMobile extends AdaptorSimulatorMobile implements AdaptorPlatformNative {
   public override readonly namaPlatform: 'android' | 'ios' | 'simulator' = 'android';
 
   public override async dapatkanInfoPerangkat(): Promise<HasilOperasiNative<any>> {
     const res = await super.dapatkanInfoPerangkat();
+    const probe = PemeriksaHardwareHost.periksaHost();
+    const tc = DetektorToolchainMobile.deteksi();
+    const adbAktif = probe.perangkatADB.find((p) => p.status === 'device');
     return buatHasilSukses({
       ...res.data,
       platform: 'android',
-      levelAPI: 34,
-      namaVersi: 'Android 14 (Upside Down Cake)',
+      levelAPI: adbAktif?.levelAPI ?? 34,
+      namaVersi: adbAktif ? `Android API ${adbAktif.levelAPI ?? 34}` : 'Android 14 (Upside Down Cake)',
+      model: adbAktif?.model || res.data.model,
       arsitektur: 'arm64-v8a',
       keystoreTersedia: true,
       scopedStorageAktif: true,
+      perangkatFisikTerhubung: Boolean(adbAktif),
+      adbSerial: adbAktif?.serial || null,
+      androidSdkTersedia: tc.android.siapKompilasiNative,
+      sumberData: adbAktif ? 'ADB_DEVICE_REAL' : 'KONTRAK_ANDROID_TOOLCHAIN_TIDAK_TERHUBUNG',
     }, 'Informasi perangkat Android berhasil diperoleh.');
   }
 
   public override async ambilFoto(opsi?: { kamera?: 'depan' | 'belakang'; flash?: boolean; kualitas?: number }): Promise<HasilOperasiNative<any>> {
+    const probe = PemeriksaHardwareHost.periksaHost();
+    const adbAktif = probe.perangkatADB.find((p) => p.status === 'device');
     return buatHasilSukses({
       uri: `content://id.nusantara.app.fileprovider/cache/IMG_${Date.now()}.jpg`,
       lebar: 1920,
@@ -34,6 +46,8 @@ export class AdaptorAndroidMobile extends AdaptorSimulatorMobile implements Adap
       format: 'image/jpeg',
       kamera: opsi?.kamera || 'belakang',
       kontrakAndroid: 'androidx.activity.result.contract.ActivityResultContracts.TakePicture',
+      perangkatFisikTerhubung: Boolean(adbAktif),
+      sumberData: adbAktif ? 'ADB_CAMERA_BRIDGE' : 'KONTRAK_ANDROID_TANPA_PERANGKAT',
     }, 'Foto berhasil diambil melalui Android Camera Intent.');
   }
 

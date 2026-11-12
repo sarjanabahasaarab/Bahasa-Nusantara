@@ -31,6 +31,7 @@ import {
   UpdateManager,
   ManifestPembaruan,
 } from '../../src/mobile/updates';
+import * as http from 'http';
 import { MobileCLI } from '../../src/mobile/cli/mobile_cli';
 import { Lexer } from '../../src/lexer/lexer';
 import { Parser } from '../../src/parser/parser';
@@ -324,6 +325,136 @@ selesai
     const logs = bufferOutput.dapatkanSeluruhTeks().join('\n');
     tegas(logs.includes('Ada Pembaruan?'), 'Harus mencetak status pembaruan');
     tegas(logs.includes('Hasil Rollback Sukses?'), 'Harus mencetak hasil rollback');
+  });
+
+  // --- 10. Real Asymmetric Ed25519 & Live Loopback HTTP OTA Integration ---
+  console.log('\n[KELOMPOK 10] Kriptografi Ed25519 Nyata & Unduhan OTA Server HTTP Loopback');
+  await uji('Ed25519 asimetris nyata (PKCS#8 & SPKI PEM) menandatangani, memverifikasi, dan menolak pemalsuan', () => {
+    const { kunciPublikPem, kunciPrivatPem, fingerprintHex } = SignatureVerifier.buatPasanganKunciEd25519();
+    const attackerKeys = SignatureVerifier.buatPasanganKunciEd25519();
+
+    const tm = TrustManager.dapatkanInstance();
+    const keyId = 'nusantara-ed25519-live-test-2026';
+    tm.daftarkanKunci({
+      keyId,
+      algoritma: 'Ed25519',
+      kunciPublikHex: fingerprintHex,
+      kunciPublikPem,
+      deskripsi: 'Ed25519 Ephemeral Test Public Key',
+      tanggalDibuat: new Date().toISOString(),
+      aktif: true,
+    });
+
+    const signed = SignatureVerifier.tandaTangani(validManifest, keyId, kunciPrivatPem, 'Ed25519');
+    const ok = SignatureVerifier.verifikasi(signed);
+    tegas(ok.valid === true, `Ed25519 PEM verification must succeed: ${ok.pesan}`);
+    tegas(ok.modeKripto === 'ASYMMETRIC_PEM_CRYPTO', `Expected ASYMMETRIC_PEM_CRYPTO, got ${ok.modeKripto}`);
+
+    const forged = SignatureVerifier.tandaTangani(validManifest, keyId, attackerKeys.kunciPrivatPem, 'Ed25519');
+    const bad = SignatureVerifier.verifikasi(forged);
+    tegas(bad.valid === false, 'Signature signed with attacker private key must be rejected');
+  });
+
+  await uji('Unduhan manifest & payload OTA penuh melalui server HTTP loopback nyata + aktivasi & rollback', async () => {
+    const { kunciPublikPem, kunciPrivatPem, fingerprintHex } = SignatureVerifier.buatPasanganKunciEd25519();
+    const keyId = 'nusantara-ota-http-ed25519-2026';
+    TrustManager.dapatkanInstance().daftarkanKunci({
+      keyId,
+      algoritma: 'Ed25519',
+      kunciPublikHex: fingerprintHex,
+      kunciPublikPem,
+      deskripsi: 'Loopback HTTP OTA Test Key',
+      tanggalDibuat: new Date().toISOString(),
+      aktif: true,
+    });
+
+    const payloadBytes = new TextEncoder().encode(JSON.stringify({
+      tema: 'Garuda v2 Loopback',
+      primer: '#dc2626',
+      aksen: '#facc15',
+    }));
+    const payloadSha = HashValidator.hitungSHA256(payloadBytes);
+    let serveCorrupted = false;
+    let baseUrl = '';
+
+    const server = http.createServer((req, res) => {
+      if (req.url === '/manifest.json') {
+        const raw: ManifestPembaruan = {
+          schemaVersion: 1,
+          applicationId: 'id.nusantara.ota.live',
+          platform: 'android',
+          channel: 'stable',
+          releaseVersion: '0.42.5',
+          minimumSupportedVersion: '0.40.0',
+          updateType: 'ota_resource',
+          policy: 'disarankan',
+          releaseDate: new Date().toISOString(),
+          revision: 5,
+          releaseNotes: { id: 'Rilis OTA HTTP loopback nyata' },
+          resources: [
+            {
+              id: 'tema-garuda-v2',
+              tipe: 'theme',
+              jalurRelatif: 'assets/themes/garuda_v2.json',
+              url: `${baseUrl}/assets/themes/garuda_v2.json`,
+              sha256: payloadSha,
+              ukuranByte: payloadBytes.byteLength,
+            },
+          ],
+        };
+        const signed = SignatureVerifier.tandaTangani(raw, keyId, kunciPrivatPem, 'Ed25519');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(signed));
+        return;
+      }
+
+      if (req.url === '/assets/themes/garuda_v2.json') {
+        res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
+        if (serveCorrupted) {
+          res.end('CORRUPTED_TAMPERED_PAYLOAD_BYTES');
+        } else {
+          res.end(Buffer.from(payloadBytes));
+        }
+        return;
+      }
+
+      res.writeHead(404);
+      res.end('Not found');
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const addr = server.address() as { port: number };
+    baseUrl = `http://127.0.0.1:${addr.port}`;
+
+    try {
+      const um = UpdateManager.dapatkanInstance();
+      um.konfigurasiAplikasi('id.nusantara.ota.live', '0.42.0', 'android');
+
+      const cek = await um.periksaPembaruanJarakJauh(`${baseUrl}/manifest.json`);
+      tegas(cek.sukses === true, `Remote HTTP manifest check failed: ${cek.pesan}`);
+      tegas(cek.signatureValid === true, 'Remote Ed25519 signature must validate');
+      tegas(Boolean(cek.manifest), 'Remote manifest must be returned');
+
+      // 1. Uji penolakan payload rusak (SHA-256 mismatch atas HTTP)
+      serveCorrupted = true;
+      const gagalRusak = await um.terapkanManifestOTA(cek.manifest!);
+      tegas(gagalRusak.sukses === false, 'Corrupted HTTP OTA payload must fail SHA-256 verification');
+
+      // 2. Uji unduhan & aktivasi HTTP nyata yang valid
+      serveCorrupted = false;
+      const suksesOta = await um.terapkanManifestOTA(cek.manifest!);
+      tegas(suksesOta.sukses === true, `Valid HTTP OTA activation failed: ${suksesOta.pesan}`);
+      tegas(um.dapatkanVersiTerpasang() === '0.42.5', 'Installed version must update to 0.42.5');
+
+      const aktif = ActivationManager.dapatkanInstance().bacaResource('assets/themes/garuda_v2.json');
+      tegas(aktif instanceof Uint8Array && aktif.byteLength === payloadBytes.byteLength, 'Activated payload bytes must match HTTP response');
+
+      // 3. Uji rollback ke versi sebelumnya
+      const rb = um.rollbackResource();
+      tegas(rb.sukses === true, `Rollback after live OTA failed: ${rb.pesan}`);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 
   console.log('\n======================================================================');

@@ -24,6 +24,9 @@ export interface KonfigurasiGooglePlay {
   autoCommitEdit: boolean;
   userFraction?: number; // Persentase peluncuran bertahap (0.01 - 1.0)
   inAppUpdatePriority?: number; // 0 - 5
+  endpointApi?: string; // Override base URL API Google Play (untuk server pengujian / proxy)
+  bearerTokenAkses?: string; // Token OAuth2 Bearer eksplisit untuk sesi aktif
+  kunciPrivatPem?: string; // Kunci privat RSA PEM untuk RS256 Service Account JWT assertion
 }
 
 export interface StatusKoneksiGooglePlay {
@@ -79,6 +82,8 @@ export interface KonfigurasiAppStoreConnect {
   appStoreConnectAppId?: string;
   bundleId: string;
   defaultChannel: 'testflight' | 'appstore';
+  endpointApi?: string; // Override base URL App Store Connect API (untuk server pengujian / proxy)
+  kunciPrivatPem?: string; // Kunci privat EC P-256 PEM (.p8) untuk penandatanganan ES256 JWT nyata
 }
 
 export interface StatusKoneksiASC {

@@ -159,7 +159,7 @@ jobs:
       matrix:
         target: [windows-x64, linux-x64, macos-x64, macos-arm64]
     steps:
-      - run: npx tsx -e "import { MesinBuild } from './src/build'; const m = new MesinBuild(); m.bangun({ mode: 'release', targetPlatforms: ['\${{ matrix.target }}'] });"
+      - run: npx tsx -e "import { MesinCI } from './src/cicd'; import { PembacaBerkasNode } from './src/modul/pembacaBerkas'; const m = new MesinCI({ pembaca: new PembacaBerkasNode(), targetPlatforms: ['\${{ matrix.target }}'], simulasikanRilis: true, persetujuanRilis: true }); if (m.jalankan().statusAkhir !== 'PASS') process.exit(1);"
 
   compile-release-bundle:
     needs: build-release-artifacts

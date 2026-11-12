@@ -12,6 +12,7 @@ import * as path from 'path';
 import { ArtefakHasilDistribusi, KonfigurasiDistribusiLengkap } from '../types';
 import { AndroidManifestManager } from './AndroidManifestManager';
 import { AndroidSigningManager } from './AndroidSigning';
+import { ZipBuilder } from '../core/ZipBuilder';
 
 export interface HasilBuildAAB {
   sukses: boolean;
@@ -99,15 +100,15 @@ export class AABBuilder {
       let sha256 = '';
 
       if (typeof Buffer !== 'undefined') {
-        const headerAAB = Buffer.from('PK\x03\x04\x14\x00\x08\x00\x08\x00AAB_BUNDLE_HEADER\n', 'binary');
-        const kontenConfig = Buffer.from(JSON.stringify(bundleConfig, null, 2), 'utf-8');
-        const sigBlock = Buffer.from(`AAB-SIGNATURE-BLOCK-${cekSigning.sidikJariSha256 || 'SELF_SIGNED'}`, 'utf-8');
-
-        const bufferGabungan = Buffer.concat([
-          headerAAB,
-          kontenConfig,
-          sigBlock,
+        const zipBytes = ZipBuilder.buatArsipZip([
+          { nama: 'BundleConfig.pb.json', konten: JSON.stringify(bundleConfig, null, 2) },
+          { nama: 'base/manifest/AndroidManifest.xml', konten: manifestXml },
+          {
+            nama: 'META-INF/AAB-SIGNATURE.SF',
+            konten: `AAB-SIGNATURE-BLOCK-${cekSigning.sidikJariSha256 || 'SELF_SIGNED'}\n`,
+          },
         ]);
+        const bufferGabungan = Buffer.from(zipBytes);
 
         if (typeof (fs as any)?.writeFileSync === 'function') {
           (fs as any).writeFileSync(jalurLokal, bufferGabungan);

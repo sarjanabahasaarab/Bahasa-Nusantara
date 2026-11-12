@@ -6,6 +6,11 @@
  * Suite Pengujian Komprehensif Mobile App Store Integration & Automated Release
  */
 
+import * as crypto from 'crypto';
+import * as fs from 'fs';
+import * as http from 'http';
+import * as os from 'os';
+import * as path from 'path';
 import {
   PublishingManager,
   GooglePlayClient,
@@ -570,6 +575,155 @@ async function jalankanSemuaPengujianFase41() {
     pastikan(output.includes('Status Toko: true') || output.includes('Status Toko: benar'), 'Program .nusantara harus memeriksa kesiapan toko');
     pastikan(output.includes('Versi Catatan: 1.0.0'), 'Program .nusantara harus menghasilkan catatan rilis');
     pastikan(output.includes('Laporan ID: id.nusantara.aplikasi'), 'Program .nusantara harus menghasilkan laporan publikasi');
+  }
+
+  // -------------------------------------------------------------------------
+  // [10] Integrasi Loopback HTTP REST + Tanda Tangan Kriptografis JWT Nyata
+  // -------------------------------------------------------------------------
+  console.log('\n[10] Loopback HTTP REST Store API & Tanda Tangan Kriptografis JWT (RS256/ES256)');
+  {
+    const rsaPair = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const rsaPubPem = rsaPair.publicKey.export({ type: 'spki', format: 'pem' }) as string;
+    const rsaPrivPem = rsaPair.privateKey.export({ type: 'pkcs8', format: 'pem' }) as string;
+
+    const ecPair = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    const ecPubPem = ecPair.publicKey.export({ type: 'spki', format: 'pem' }) as string;
+    const ecPrivPem = ecPair.privateKey.export({ type: 'pkcs8', format: 'pem' }) as string;
+
+    const permintaanTercatat: string[] = [];
+    const tmpAab = path.join(os.tmpdir(), `nusantara-p41-test-${Date.now()}.aab`);
+    fs.writeFileSync(tmpAab, Buffer.from('PK\x03\x04AAB_TEST_PAYLOAD'));
+
+    const server = http.createServer((req, res) => {
+      const urlPath = (req.url || '/').split('?')[0];
+      const chunks: Buffer[] = [];
+      req.on('data', (c) => chunks.push(c));
+      req.on('end', () => {
+        const bodyBuf = Buffer.concat(chunks);
+        permintaanTercatat.push(`${req.method} ${urlPath}`);
+        res.setHeader('Content-Type', 'application/json');
+
+        // Google Play loopback endpoints
+        if (req.method === 'POST' && urlPath === '/play/id.nusantara.test/edits') {
+          const authHdr = String(req.headers['authorization'] || '');
+          const token = authHdr.replace(/^Bearer\s+/, '');
+          const parts = token.split('.');
+          const okSig = parts.length === 3 && crypto.verify(
+            'RSA-SHA256',
+            Buffer.from(`${parts[0]}.${parts[1]}`),
+            rsaPubPem,
+            Buffer.from(parts[2], 'base64url')
+          );
+          if (!okSig) {
+            res.statusCode = 401;
+            res.end(JSON.stringify({ error: { message: 'Invalid RS256 JWT' } }));
+            return;
+          }
+          res.statusCode = 200;
+          res.end(JSON.stringify({ id: 'edit_live_9001' }));
+          return;
+        }
+
+        if (req.method === 'POST' && urlPath === '/play/id.nusantara.test/edits/edit_live_9001/bundles') {
+          res.statusCode = 200;
+          res.end(JSON.stringify({ versionCode: 42, size: bodyBuf.length }));
+          return;
+        }
+
+        if (req.method === 'PUT' && urlPath === '/play/id.nusantara.test/edits/edit_live_9001/tracks/internal') {
+          res.statusCode = 200;
+          res.end(JSON.stringify({ track: 'internal' }));
+          return;
+        }
+
+        if (req.method === 'GET' && urlPath === '/play/id.nusantara.test/edits/edit_live_9001/tracks/internal') {
+          res.statusCode = 200;
+          res.end(JSON.stringify({ track: 'internal', releases: [{ versionCodes: ['42'], status: 'inProgress' }] }));
+          return;
+        }
+
+        if (req.method === 'POST' && urlPath === '/play/id.nusantara.test/edits/edit_live_9001:commit') {
+          res.statusCode = 200;
+          res.end(JSON.stringify({ committed: true }));
+          return;
+        }
+
+        // App Store Connect loopback endpoints (verify ES256 ECDSA IEEE-P1363 JWT)
+        if (urlPath.startsWith('/asc/')) {
+          const authHdr = String(req.headers['authorization'] || '');
+          const token = authHdr.replace(/^Bearer\s+/, '');
+          const parts = token.split('.');
+          const okEs256 = parts.length === 3 && crypto.verify(
+            'sha256',
+            Buffer.from(`${parts[0]}.${parts[1]}`),
+            { key: ecPubPem, dsaEncoding: 'ieee-p1363' },
+            Buffer.from(parts[2], 'base64url')
+          );
+          if (!okEs256) {
+            res.statusCode = 401;
+            res.end(JSON.stringify({ errors: [{ status: '401', title: 'Invalid ES256 JWT' }] }));
+            return;
+          }
+          if (req.method === 'GET' && urlPath === '/asc/apps') {
+            res.statusCode = 200;
+            res.end(JSON.stringify({ data: [{ id: 'app_1', type: 'apps' }] }));
+            return;
+          }
+          if (req.method === 'POST' && urlPath === '/asc/builds') {
+            res.statusCode = 201;
+            res.end(JSON.stringify({ accepted: true }));
+            return;
+          }
+        }
+
+        res.statusCode = 404;
+        res.end(JSON.stringify({ error: 'Not Found' }));
+      });
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const addr = server.address() as any;
+
+    try {
+      const gp = new GooglePlayClient({
+        applicationId: 'id.nusantara.test',
+        packageName: 'id.nusantara.test',
+        defaultTrack: 'internal',
+        autoCommitEdit: false,
+        endpointApi: `http://127.0.0.1:${addr.port}/play`,
+        kunciPrivatPem: rsaPrivPem,
+      });
+
+      const edit = await gp.buatEdit(false);
+      pastikan(edit.sukses && edit.editId === 'edit_live_9001', 'GooglePlayClient buatEdit HTTP + RS256 JWT harus berhasil');
+
+      const expectedBytes = fs.statSync(tmpAab).size;
+      const upload = await gp.unggahAAB(tmpAab, 42, 'abcsha256', expectedBytes, 'internal', false);
+      pastikan(upload.sukses && !upload.modeSandbox && upload.ukuranBytes === expectedBytes, 'GooglePlayClient unggahAAB HTTP octet-stream harus berhasil');
+
+      const track = await gp.dapatkanStatusTrack('internal', false);
+      pastikan(track.versionCodes[0] === 42 && track.status === 'inProgress', 'GooglePlayClient GET track HTTP harus mencerminkan status server');
+
+      const committed = await gp.commitEdit(false);
+      pastikan(committed.sukses, 'GooglePlayClient commitEdit HTTP harus berhasil');
+
+      const asc = new AppStoreConnectClient({
+        bundleId: 'id.nusantara.test',
+        defaultChannel: 'testflight',
+        endpointApi: `http://127.0.0.1:${addr.port}/asc`,
+        kunciPrivatPem: ecPrivPem,
+      });
+
+      const verifAsc = await asc.verifikasiAksesAPIHttp();
+      pastikan(verifAsc.sukses && verifAsc.statusHTTP === 200, 'AppStoreConnectClient verifikasi ES256 JWT via HTTP GET /apps harus berhasil');
+
+      const buildRes = await asc.unggahBuild('/tmp/app.ipa', '1.0.0', 42, 2048, 'sha256hex', false);
+      pastikan(buildRes.sukses && !buildRes.modeSandbox, 'AppStoreConnectClient POST /builds via HTTP harus berhasil');
+      pastikan(permintaanTercatat.includes('POST /play/id.nusantara.test/edits/edit_live_9001/bundles'), 'Server loopback harus menerima unggahan AAB nyata');
+    } finally {
+      if (fs.existsSync(tmpAab)) fs.unlinkSync(tmpAab);
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   }
 
   console.log('\n======================================================================');

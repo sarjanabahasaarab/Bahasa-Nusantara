@@ -13,6 +13,8 @@ export * from './core/result';
 export * from './core/capabilities';
 export * from './core/events';
 export * from './core/registry';
+export * from './core/hardware_probe';
+export * from './codegen/native_device_codegen';
 export * from './adapters';
 
 // Inisialisasi otomatis semua API native saat modul dimuat

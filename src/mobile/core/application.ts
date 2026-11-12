@@ -9,6 +9,7 @@
 import { KonfigurasiAplikasiMobile, StatusLifecycleMobile } from '../types';
 import { KonteksAplikasiMobile } from './application_context';
 import { PengelolaKonfigurasiMobile } from './config';
+import { JembatanMobileNative } from '../bridge/bridge';
 
 export class AplikasiMobile {
   public readonly konfigurasi: KonfigurasiAplikasiMobile;
@@ -44,30 +45,47 @@ export class AplikasiMobile {
     return this.konteks.lifecycle.getStatus();
   }
 
+  private siarkanLifecycle(status: StatusLifecycleMobile): void {
+    JembatanMobileNative.dapatkanInstance().kirimPeristiwaDariNative({
+      saluran: 'lifecycle',
+      namaPeristiwa: 'status_berubah',
+      data: { idAplikasi: this.konfigurasi.id, status },
+      stempelWaktu: Date.now(),
+    });
+  }
+
   public async jalankan(): Promise<void> {
     await this.konteks.lifecycle.transisiKe(StatusLifecycleMobile.MEMULAI);
+    this.siarkanLifecycle(StatusLifecycleMobile.MEMULAI);
     await this.konteks.lifecycle.transisiKe(StatusLifecycleMobile.AKTIF);
+    this.siarkanLifecycle(StatusLifecycleMobile.AKTIF);
   }
 
   public async jeda(): Promise<void> {
     await this.konteks.lifecycle.transisiKe(StatusLifecycleMobile.JEDA);
+    this.siarkanLifecycle(StatusLifecycleMobile.JEDA);
   }
 
   public async lanjutkan(): Promise<void> {
     await this.konteks.lifecycle.transisiKe(StatusLifecycleMobile.RESUME);
+    this.siarkanLifecycle(StatusLifecycleMobile.RESUME);
     await this.konteks.lifecycle.transisiKe(StatusLifecycleMobile.AKTIF);
+    this.siarkanLifecycle(StatusLifecycleMobile.AKTIF);
   }
 
   public async keLatarBelakang(): Promise<void> {
     await this.konteks.lifecycle.transisiKe(StatusLifecycleMobile.LATAR_BELAKANG);
+    this.siarkanLifecycle(StatusLifecycleMobile.LATAR_BELAKANG);
   }
 
   public async hentikan(): Promise<void> {
     await this.konteks.lifecycle.transisiKe(StatusLifecycleMobile.BERHENTI);
+    this.siarkanLifecycle(StatusLifecycleMobile.BERHENTI);
   }
 
   public async hancurkan(): Promise<void> {
     await this.konteks.lifecycle.transisiKe(StatusLifecycleMobile.DIHANCURKAN);
+    this.siarkanLifecycle(StatusLifecycleMobile.DIHANCURKAN);
     this.konteks.bersihkan();
     this.navigatorUtama = null;
   }

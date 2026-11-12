@@ -9,6 +9,7 @@
 import { KonfigurasiDistribusiLengkap } from '../types';
 import { ArchiveManager, HasilPersiapanArchiveIOS } from './ArchiveManager';
 import { CodeSigningManager, HasilValidasiSigningIOS } from './CodeSigningManager';
+import { muatModulNode, apakahNodeRuntime } from '../../../gui/platform/node_bridge';
 
 export interface InfoLingkunganIOSDistribusi {
   apakahMacOS: boolean;
@@ -23,9 +24,23 @@ export class IOSDistributionManager {
   public static periksaLingkungan(): InfoLingkunganIOSDistribusi {
     const currentPlatform = typeof process !== 'undefined' ? process.platform : 'browser';
     const apakahMacOS = currentPlatform === 'darwin';
-    const adaXcode = apakahMacOS;
-    const adaXcodeBuild = apakahMacOS;
-    const versiXcode = apakahMacOS ? 'Xcode 15+' : undefined;
+    let adaXcodeBuild = false;
+    let versiXcode: string | undefined;
+
+    if (apakahMacOS && apakahNodeRuntime()) {
+      const cp = muatModulNode<any>('child_process');
+      if (cp && typeof cp.spawnSync === 'function') {
+        try {
+          const res = cp.spawnSync('xcodebuild', ['-version'], { timeout: 2500, stdio: 'pipe', encoding: 'utf-8' });
+          if (!res.error && res.status === 0) {
+            adaXcodeBuild = true;
+            versiXcode = String(res.stdout || '').trim().split('\n')[0] || 'Xcode';
+          }
+        } catch {}
+      }
+    }
+
+    const adaXcode = adaXcodeBuild;
     const siapBuildNativeIOS = apakahMacOS && adaXcodeBuild;
 
     const catatan: string[] = [];
@@ -34,8 +49,10 @@ export class IOSDistributionManager {
         `Host sistem saat ini adalah '${currentPlatform}' (Bukan macOS). ` +
         `Proses kompilasi native iOS IPA, Apple Code Signing, dan ekspor archive resmi mewajibkan lingkungan macOS dengan Xcode.`
       );
+    } else if (!adaXcodeBuild) {
+      catatan.push('Host macOS terdeteksi, namun Command Line Tools / xcodebuild belum terpasang.');
     } else {
-      catatan.push('Host macOS terdeteksi. Lingkungan toolchain Apple Xcode tersedia.');
+      catatan.push(`Host macOS & Xcode terdeteksi (${versiXcode}).`);
     }
 
     if (!siapBuildNativeIOS) {

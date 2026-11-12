@@ -67,16 +67,17 @@ export class SecureDownloadManager {
         throw new Error(`Pelanggaran batas ukuran pada '${res.id}': ${cekBatas.pesan}`);
       }
 
-      // 4. Simulasi / Eksekusi unduhan aman
+      // 4. Eksekusi unduhan HTTP nyata jika url tersedia, atau fallback representasi aman jika url kosong
       const konten = await this.unduhSatuResource(res, timeout, opsi.maksCobaUlang || SecureDownloadManager.RETRY_DEFAULT);
       hasil.set(res.jalurRelatif, konten);
 
-      bytesTerunduh += res.ukuranByte;
+      const byteAktual = typeof konten === 'string' ? new TextEncoder().encode(konten).byteLength : konten.byteLength;
+      bytesTerunduh += byteAktual > 0 ? byteAktual : res.ukuranByte;
 
       if (opsi.padaKemajuan) {
         opsi.padaKemajuan({
           bytesTerunduh,
-          totalBytes,
+          totalBytes: totalBytes > 0 ? totalBytes : bytesTerunduh,
           persentase: totalBytes > 0 ? Math.min(100, Math.round((bytesTerunduh / totalBytes) * 100)) : 100,
           resourceSaatIni: res.id,
           dibatalkan: false,
@@ -94,11 +95,11 @@ export class SecureDownloadManager {
   }
 
   /**
-   * Mengunduh satu resource dengan mekanisme coba-ulang (retry).
+   * Mengunduh satu resource melalui HTTP/HTTPS nyata dengan AbortController timeout & retry.
    */
   private async unduhSatuResource(
     resource: ItemResourceOTA,
-    _timeoutMs: number,
+    timeoutMs: number,
     maksCoba: number
   ): Promise<string | Uint8Array> {
     let percobaan = 0;
@@ -107,7 +108,20 @@ export class SecureDownloadManager {
     while (percobaan < maksCoba) {
       percobaan++;
       try {
-        // Konten representasi aman sesuai tipe resource
+        if (resource.url) {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), timeoutMs);
+          try {
+            const resp = await fetch(resource.url, { signal: controller.signal });
+            if (!resp.ok) {
+              throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
+            }
+            const buf = await resp.arrayBuffer();
+            return new Uint8Array(buf);
+          } finally {
+            clearTimeout(timer);
+          }
+        }
         return this.buatMockAtauAmbilKonten(resource);
       } catch (err) {
         galatTerakhir = err;

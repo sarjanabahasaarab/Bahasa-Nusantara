@@ -8,12 +8,17 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import { VERSI_NUSANTARA } from '../../konstanta/versi';
-import { AndroidBuildManager } from '../build/android';
-import { IOSBuildManager } from '../build/ios';
 import { KonfigurasiAplikasiMobile } from '../types';
+import { GeneratorJembatanMobileNative } from '../bridge/native_codegen';
+import { JembatanMobileNative } from '../bridge/bridge';
+import { DetektorToolchainMobile } from '../runtime/mobile_host';
+import { PengelolaKonfigurasiMobile } from '../core/config';
 import { RegistriNativeAPI } from '../native/core/registry';
 import { PengelolaKemampuanPerangkat } from '../native/core/capabilities';
+import { PemeriksaHardwareHost } from '../native/core/hardware_probe';
+import { GeneratorPluginPerangkatNative } from '../native/codegen/native_device_codegen';
 import { InfoPerangkatMobile } from '../device/info';
 import { PengawasJaringanMobile } from '../networking/connectivity/network_monitor';
 import { PengelolaKonfigurasiCloud } from '../networking/config/cloud_config';
@@ -183,14 +188,25 @@ export class MobileCLI {
       fs.writeFileSync(path.join(targetDir, 'nusantara.json'), JSON.stringify(konfig, null, 2), 'utf-8');
 
       // 2. Buat AndroidManifest.xml & build.gradle di direktori android
-      const androidManifest = AndroidBuildManager.buatAndroidManifest(konfig);
+      const androidManifest = MobileCLI.buatAndroidManifest(konfig);
       fs.writeFileSync(path.join(direktoriAndroid, 'AndroidManifest.xml'), androidManifest, 'utf-8');
-      const buildGradle = AndroidBuildManager.buatBuildGradleApp(konfig);
+      const buildGradle = MobileCLI.buatBuildGradleApp(konfig);
       fs.writeFileSync(path.join(direktoriAndroid, 'build.gradle'), buildGradle, 'utf-8');
 
       // 3. Buat Info.plist di direktori ios
-      const infoPlist = IOSBuildManager.buatInfoPlist(konfig);
+      const infoPlist = MobileCLI.buatInfoPlist(konfig);
       fs.writeFileSync(path.join(direktoriIOS, 'Info.plist'), infoPlist, 'utf-8');
+
+      // 3b. Hasilkan berkas sumber Kotlin (Android) & Swift (iOS) native bridge nyata
+      const bundelNative = GeneratorJembatanMobileNative.buatBundelLengkap(
+        konfig,
+        JembatanMobileNative.dapatkanInstance().daftarSemuaMetode()
+      );
+      for (const berkas of [...bundelNative.android, ...bundelNative.ios]) {
+        const dest = path.join(targetDir, berkas.jalur);
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.writeFileSync(dest, berkas.isi, 'utf-8');
+      }
 
       // 4. Buat kode awal aplikasi.nusantara
       const kodeAwal = `# Aplikasi Mobile Nusantara: ${namaProyek}
@@ -260,31 +276,105 @@ jalankanAplikasiMobile(aplikasi)
     return 0;
   }
 
+  public static buatAndroidManifest(konfig: KonfigurasiAplikasiMobile): string {
+    const izinMap: Record<string, string> = {
+      internet: 'android.permission.INTERNET',
+      kamera: 'android.permission.CAMERA',
+      lokasi: 'android.permission.ACCESS_FINE_LOCATION',
+      notifikasi: 'android.permission.POST_NOTIFICATIONS',
+      mikrofon: 'android.permission.RECORD_AUDIO',
+      bluetooth: 'android.permission.BLUETOOTH',
+    };
+    const izinXml = (konfig.daftarIzin || ['internet'])
+      .map((i) => `    <uses-permission android:name="${izinMap[i] || `android.permission.${String(i).toUpperCase()}`}" />`)
+      .join('\n');
+    return `<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="${konfig.id}">
+${izinXml}
+    <application android:label="${konfig.nama}">
+        <activity android:name=".MainActivity" android:exported="true" />
+    </application>
+</manifest>`;
+  }
+
+  public static buatBuildGradleApp(konfig: KonfigurasiAplikasiMobile): string {
+    const minSdk = konfig.versiMinPlatform?.androidMinSdk ?? 24;
+    const targetSdk = konfig.versiMinPlatform?.androidTargetSdk ?? 34;
+    return `android {
+    namespace "${konfig.id}"
+    compileSdk ${targetSdk}
+    defaultConfig {
+        applicationId "${konfig.id}"
+        minSdk ${minSdk}
+        targetSdk ${targetSdk}
+        versionCode ${konfig.nomorBuild || 1}
+        versionName "${konfig.versi}"
+    }
+}`;
+  }
+
+  public static buatInfoPlist(konfig: KonfigurasiAplikasiMobile): string {
+    const izinList = konfig.daftarIzin || [];
+    const extraKeys: string[] = [];
+    if (izinList.includes('kamera')) {
+      extraKeys.push('    <key>NSCameraUsageDescription</key>\n    <string>Aplikasi memerlukan akses kamera.</string>');
+    }
+    if (izinList.includes('lokasi')) {
+      extraKeys.push('    <key>NSLocationWhenInUseUsageDescription</key>\n    <string>Aplikasi memerlukan akses lokasi.</string>');
+    }
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>${konfig.id}</string>
+    <key>CFBundleName</key>
+    <string>${konfig.nama}</string>
+    <key>CFBundleShortVersionString</key>
+    <string>${konfig.versi}</string>
+${extraKeys.join('\n')}
+</dict>
+</plist>`;
+  }
+
+  public static buatPodfileTemplate(konfig: KonfigurasiAplikasiMobile): string {
+    const target = konfig.versiMinPlatform?.iosDeploymentTarget || '15.0';
+    return `platform :ios, '${target}'
+target '${konfig.nama}' do
+  use_frameworks!
+end`;
+  }
+
   public static perintahPeriksa(_args: string[]): number {
     console.log(`\n======================================================`);
     console.log(`  NUSANTARA MOBILE - Pemeriksaan Lingkungan Sistem`);
     console.log(`======================================================`);
 
-    const cekAndroid = AndroidBuildManager.periksaLingkungan();
+    const tc = DetektorToolchainMobile.deteksi();
+    const cekAndroid = AndroidDistributionManager.periksaLingkungan();
     console.log(`\n[ Android Environment ]`);
-    console.log(`  ANDROID_HOME : ${cekAndroid.androidHome || '(belum diatur)'}`);
-    console.log(`  JDK          : ${cekAndroid.adaJdk ? 'Terdeteksi' : '(belum diatur)'}`);
-    console.log(`  Status Build : ${cekAndroid.siapBuild ? 'SIAP NATIVE' : 'HANYA DESKTOP PREVIEW'}`);
+    console.log(`  ANDROID_HOME : ${tc.android.androidHome || cekAndroid.androidHome || '(belum diatur)'}`);
+    console.log(`  JDK / javac  : ${tc.android.javac ? 'Terdeteksi' : '(belum diatur)'}`);
+    console.log(`  Gradle / ADB : ${tc.android.gradle ? 'Ya' : 'Tidak'} / ${tc.android.adb ? 'Ya' : 'Tidak'}`);
+    console.log(`  Perangkat ADB: ${tc.android.perangkatTerhubung.length > 0 ? tc.android.perangkatTerhubung.join(', ') : '(tidak ada perangkat/emulator)'}`);
+    console.log(`  Status Build : ${tc.android.siapKompilasiNative ? 'SIAP NATIVE' : 'HANYA KODEGEN + PREVIEW'}`);
     for (const c of cekAndroid.catatan) {
       console.log(`  * ${c}`);
     }
 
-    const cekIOS = IOSBuildManager.periksaLingkungan();
+    const cekIOS = IOSDistributionManager.periksaLingkungan();
     console.log(`\n[ iOS Environment ]`);
     console.log(`  Platform OS  : ${process.platform} (${cekIOS.apakahMacOS ? 'macOS didukung' : 'Bukan macOS'})`);
-    console.log(`  Xcode Tools  : ${cekIOS.adaXcode ? 'Tersedia' : '(tidak tersedia)'}`);
-    console.log(`  Status Build : ${cekIOS.siapBuild ? 'SIAP XCODE' : 'HANYA DESKTOP PREVIEW'}`);
+    console.log(`  Xcode Tools  : ${tc.ios.xcodebuild ? 'Tersedia' : '(tidak tersedia)'}`);
+    console.log(`  simctl       : ${tc.ios.simctl ? 'Tersedia' : '(tidak tersedia)'}`);
+    console.log(`  Status Build : ${tc.ios.siapKompilasiNative ? 'SIAP XCODE' : 'HANYA KODEGEN + PREVIEW'}`);
     for (const c of cekIOS.catatan) {
       console.log(`  * ${c}`);
     }
 
     console.log(`\n[ Kesimpulan Lingkungan ]`);
-    console.log(`  Simulator / Desktop Mobile Preview: SIAP (100% Berfungsi di semua OS)`);
+    console.log(`  Native Codegen Kotlin/Swift & Loopback WebSocket Preview: SIAP`);
     console.log(`======================================================\n`);
     return 0;
   }
@@ -292,37 +382,56 @@ jalankanAplikasiMobile(aplikasi)
   public static perintahBuild(args: string[]): number {
     const target = (args[0] || 'android').toLowerCase();
     const tipe = args.find(a => a.startsWith('--tipe='))?.split('=')[1] || (target === 'ios' ? 'ipa' : 'apk');
+    const outArg = args.find(a => a.startsWith('--out='))?.slice(6);
 
     console.log(`\n=== NUSANTARA MOBILE - Proses Build ===`);
     console.log(`Target Platform : ${target}`);
     console.log(`Tipe Paket      : ${tipe}`);
 
-    if (target === 'android') {
-      const env = AndroidBuildManager.periksaLingkungan();
-      if (!env.siapBuild) {
-        console.log(`[PERINGATAN] Android SDK tidak ditemukan di lingkungan ini.`);
-        console.log(`Membuat artefak bundle manifest & script gradle siap kompilasi di direktori build/android...`);
-      } else {
-        console.log(`Mempersiapkan Gradle build untuk target Android...`);
-      }
-      console.log(`[SUKSES] Struktur proyek & konfigurasi build Android berhasil dipersiapkan.`);
-      return 0;
+    if (target !== 'android' && target !== 'ios') {
+      console.error(`Target '${target}' tidak dikenali. Pilihan: 'android' atau 'ios'.`);
+      return 1;
     }
 
-    if (target === 'ios') {
-      const env = IOSBuildManager.periksaLingkungan();
-      if (!env.apakahMacOS) {
-        console.log(`[PERINGATAN] Lingkungan bukan macOS.`);
-        console.log(`Membuat struktur Xcode Info.plist & Podfile siap kompilasi di direktori build/ios...`);
-      } else {
-        console.log(`Mempersiapkan xcodebuild untuk target iOS...`);
+    const tc = DetektorToolchainMobile.deteksi();
+    const konfig = PengelolaKonfigurasiMobile.buatKonfigurasiBawaan('AplikasiNusantara', 'id.nusantara.app');
+    const bundel = GeneratorJembatanMobileNative.buatBundelLengkap(
+      konfig,
+      JembatanMobileNative.dapatkanInstance().daftarSemuaMetode()
+    );
+    const pkgPath = konfig.id.replace(/\./g, '/');
+    const berkasPlugin = target === 'android'
+      ? {
+          jalur: `android/app/src/main/java/${pkgPath}/NusantaraDeviceApiPlugin.kt`,
+          isi: GeneratorPluginPerangkatNative.hasilkanPluginAndroid(konfig.id),
+        }
+      : {
+          jalur: `ios/NusantaraApp/NusantaraDeviceApiPlugin.swift`,
+          isi: GeneratorPluginPerangkatNative.hasilkanPluginIOS(konfig.id),
+        };
+    const daftarBerkas = [...(target === 'android' ? bundel.android : bundel.ios), berkasPlugin];
+
+    if (outArg) {
+      const outDir = path.resolve(outArg);
+      const sums: string[] = [];
+      for (const f of daftarBerkas) {
+        const dest = path.join(outDir, f.jalur);
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.writeFileSync(dest, f.isi, 'utf-8');
+        const sha = crypto.createHash('sha256').update(f.isi).digest('hex');
+        sums.push(`${sha}  ${f.jalur}`);
       }
-      console.log(`[SUKSES] Struktur proyek & konfigurasi build iOS berhasil dipersiapkan.`);
-      return 0;
+      fs.writeFileSync(path.join(outDir, 'SHA256SUMS'), sums.join('\n') + '\n', 'utf-8');
+      console.log(`[✓ ARTIFAK] ${daftarBerkas.length} berkas proyek native + SHA256SUMS ditulis ke ${outDir}`);
     }
 
-    console.error(`Target '${target}' tidak dikenali. Pilihan: 'android' atau 'ios'.`);
-    return 1;
+    const siapCompile = target === 'android' ? tc.android.siapKompilasiNative : tc.ios.siapKompilasiNative;
+    if (!siapCompile) {
+      console.log(`[INFO] Toolchain native ${target.toUpperCase()} tidak lengkap; artefak proyek Kotlin/Swift & manifest siap kompilasi telah disiapkan (${daftarBerkas.length} berkas).`);
+    } else {
+      console.log(`[SUKSES] Proyek native ${target} tervalidasi dan siap dikompilasi oleh toolchain host.`);
+    }
+    return 0;
   }
 
   public static perintahJalankan(args: string[]): number {
@@ -331,28 +440,26 @@ jalankanAplikasiMobile(aplikasi)
     console.log(`Target Perangkat: ${target}`);
 
     if (target === 'desktop' || target === 'preview') {
-      console.log(`Memulai Nusantara Mobile Desktop Simulator (Ukuran Layar: 390x844 potret)...`);
-      console.log(`Aplikasi berjalan pada mode simulator.`);
+      console.log(`Memulai Nusantara Mobile Desktop Preview (Viewport: 390x844 potret, Bridge IPC aktif)...`);
       return 0;
     }
 
+    const tc = DetektorToolchainMobile.deteksi();
     if (target === 'android') {
-      const env = AndroidBuildManager.periksaLingkungan();
-      if (!env.siapBuild) {
-        console.log(`[INFO] Android emulator/device tidak terdeteksi. Beralih ke Desktop Mobile Simulator...`);
-        return this.perintahJalankan(['desktop']);
+      if (!tc.android.adb || tc.android.perangkatTerhubung.length === 0) {
+        console.log(`[INFO] EMU_DEVICE_UNAVAILABLE: Tidak ada emulator/perangkat ADB terdeteksi. Gunakan HostPreviewMobile pada mode 'desktop'.`);
+        return 0;
       }
-      console.log(`Meluncurkan aplikasi ke perangkat Android yang terhubung via ADB...`);
+      console.log(`Perangkat ADB terdeteksi (${tc.android.perangkatTerhubung[0]}), siap meluncurkan paket Android.`);
       return 0;
     }
 
     if (target === 'ios') {
-      const env = IOSBuildManager.periksaLingkungan();
-      if (!env.apakahMacOS) {
-        console.log(`[INFO] iOS Simulator hanya didukung pada macOS. Beralih ke Desktop Mobile Simulator...`);
-        return this.perintahJalankan(['desktop']);
+      if (!tc.ios.apakahMacOS || !tc.ios.simctl) {
+        console.log(`[INFO] IOS_SIMULATOR_UNAVAILABLE: iOS Simulator memerlukan macOS & Xcode simctl. Gunakan mode 'desktop'.`);
+        return 0;
       }
-      console.log(`Meluncurkan aplikasi ke iOS Simulator...`);
+      console.log(`Xcode simctl tersedia, siap meluncurkan ke iOS Simulator.`);
       return 0;
     }
 
@@ -464,21 +571,25 @@ jalankanAplikasiMobile(aplikasi)
   public static perintahDevice(args: string[]): number {
     const info = InfoPerangkatMobile.dapatkanInfo();
     const kemampuan = PengelolaKemampuanPerangkat.dapatkanInstance().dapatkanKemampuan();
+    const probe = PemeriksaHardwareHost.periksaHost();
 
     console.log(`\n======================================================`);
     console.log(`  NUSANTARA MOBILE - Informasi Perangkat & Kemampuan`);
     console.log(`======================================================`);
-    console.log(`Platform Sistem   : ${info.platform}`);
+    console.log(`Platform Sistem   : ${info.platform} (Host: ${probe.hostOS})`);
     console.log(`Model Perangkat   : ${info.model}`);
     console.log(`Versi OS          : ${info.versiOS}`);
     console.log(`Resolusi Layar    : ${info.lebarLayar} x ${info.tinggiLayar} (${info.skalaPiksel}x)`);
-    console.log(`Arsitektur CPU    : ${kemampuan.sistem.arsitektur}`);
+    console.log(`Arsitektur CPU    : ${probe.arsitektur || kemampuan.sistem.arsitektur}`);
+    console.log(`Memori Host       : ${probe.memoriBebasMB} MB bebas / ${probe.memoriTotalMB} MB total`);
+    console.log(`Antarmuka Jaringan: ${probe.jaringan.antarmukaAktif.join(', ') || '(offline)'} (${probe.jaringan.tipeDominan})`);
+    console.log(`Perangkat ADB     : ${probe.perangkatADB.length > 0 ? probe.perangkatADB.map((p) => `${p.serial}(${p.status})`).join(', ') : '(tidak terhubung)'}`);
     console.log(`Mode Simulator    : ${info.apakahSimulator ? 'YA' : 'TIDAK (Perangkat Fisik)'}`);
     console.log(`\nKemampuan Perangkat Keras:`);
-    console.log(`  Kamera Depan/Belakang : ${kemampuan.kamera.tersedia ? 'Tersedia' : 'Tidak'}`);
-    console.log(`  Akselerometer/Giroskop: ${kemampuan.sensor.akselerometer ? 'Tersedia' : 'Tidak'}`);
-    console.log(`  Geolokasi (GPS)       : ${kemampuan.konektivitas.gps ? 'Tersedia' : 'Tidak'}`);
-    console.log(`  Bluetooth / BLE       : ${kemampuan.konektivitas.bluetooth ? 'Tersedia' : 'Tidak'}`);
+    console.log(`  Kamera Depan/Belakang : ${kemampuan.kamera.tersedia ? 'Tersedia (Kontrak)' : 'Tidak'} | Host V4L2: ${probe.kameraV4L2.length}`);
+    console.log(`  Akselerometer/Giroskop: ${kemampuan.sensor.akselerometer ? 'Tersedia (Kontrak)' : 'Tidak'}`);
+    console.log(`  Geolokasi (GPS)       : ${kemampuan.konektivitas.gps ? 'Tersedia (Kontrak)' : 'Tidak'}`);
+    console.log(`  Bluetooth / BLE       : ${kemampuan.konektivitas.bluetooth ? 'Tersedia (Kontrak)' : 'Tidak'} | Host HCI: ${probe.bluetoothHCI.length}`);
     console.log(`  Penyimpanan Aman (AES): ${kemampuan.keamanan.penyimpananAman ? 'Tersedia' : 'Tidak'}`);
     console.log(`  Umpan Balik Haptik    : ${kemampuan.haptik ? 'Tersedia' : 'Tidak'}`);
     console.log(`======================================================\n`);

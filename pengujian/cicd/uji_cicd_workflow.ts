@@ -16,9 +16,12 @@ import {
   dapatkanBannerCLI,
   dapatkanInfoHost,
 } from '../../src/konstanta/versi';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import * as crypto from 'crypto';
 import { PembacaBerkasMemori, PembacaBerkasNode } from '../../src/modul/pembacaBerkas';
 import { NusantaraCLI } from '../../src/paket/cli';
-import { MesinBuild } from '../../src/build';
 import { Interpreter } from '../../src/interpreter/interpreter';
 import { PenulisOutputBuffer } from '../../src/interpreter/outputWriter';
 
@@ -291,18 +294,41 @@ selesai
   samaDengan(out, `Hasil: 8 Versi: ${VERSI_NUSANTARA}`);
 });
 
-uji('8.2 Build system Phase 23 tetap menghasilkan artefak bersih dan SHA-256 sah', () => {
+uji('8.2 Matriks build lintas platform CI tetap menghasilkan artefak bersih dan SHA-256 sah', () => {
   const fsMem = new PembacaBerkasMemori();
-  const mesin = new MesinBuild(fsMem);
-  const hasil = mesin.bangun({
-    mode: 'release',
-    target: ['linux-x64'],
-    tanpaUji: true,
-  });
+  const ci = new MesinCI({ pembaca: fsMem, targetPlatforms: ['linux-x64'] });
+  const laporan = ci.jalankan();
 
-  samaDengan(hasil.sukses, true);
-  pastikan(hasil.artefak.length > 0, 'Harus menghasilkan artefak');
-  pastikan(Boolean(hasil.sha256sums && hasil.sha256sums.includes(`nusantara-${LABEL_VERSI_NUSANTARA}-linux-x64`)), 'SHA256SUMS memuat artefak Linux');
+  pastikan(laporan.artefak.length > 0, 'Harus menghasilkan artefak');
+  pastikan(Boolean(laporan.sha256sums && laporan.sha256sums.includes(`nusantara-${LABEL_VERSI_NUSANTARA}-linux-x64`)), 'SHA256SUMS memuat artefak Linux');
+});
+
+uji('8.3 CLI nusantara bangun (Phase 23) menghasilkan arsip .zip/.tar.gz nyata & SHA256SUMS sah', () => {
+  const tmpOut = fs.mkdtempSync(path.join(os.tmpdir(), 'nusantara-p23-'));
+  try {
+    const logList: string[] = [];
+    const cli = new NusantaraCLI({
+      pembaca: pembacaReal,
+      log: (m) => logList.push(m),
+    });
+    const code = cli.jalankan(['bangun', '--mode', 'release', '--target', 'linux-x64', '--out', tmpOut, '--json']);
+    samaDengan(code, 0, 'nusantara bangun harus keluar 0');
+    const parsed = JSON.parse(logList.join('\n'));
+    pastikan(parsed.sukses === true && parsed.artefak.length === 2, 'Harus menghasilkan zip dan tar.gz untuk linux-x64');
+
+    const zipPath = path.join(tmpOut, `nusantara-${LABEL_VERSI_NUSANTARA}-linux-x64.zip`);
+    const tgzPath = path.join(tmpOut, `nusantara-${LABEL_VERSI_NUSANTARA}-linux-x64.tar.gz`);
+    pastikan(fs.existsSync(zipPath) && fs.existsSync(tgzPath), 'Berkas arsip rilis harus tertulis ke disk');
+
+    const zipBuf = fs.readFileSync(zipPath);
+    pastikan(zipBuf[0] === 0x50 && zipBuf[1] === 0x4b && zipBuf[2] === 0x03 && zipBuf[3] === 0x04, 'Header ZIP harus PK\\x03\\x04');
+
+    const actualSha = crypto.createHash('sha256').update(zipBuf).digest('hex');
+    const zipArtifact = parsed.artefak.find((a: any) => a.format === 'zip');
+    samaDengan(zipArtifact.sha256, actualSha, 'SHA-256 pada manifest harus cocok dengan byte arsip ZIP');
+  } finally {
+    fs.rmSync(tmpOut, { recursive: true, force: true });
+  }
 });
 
 console.log('\n============================================================');

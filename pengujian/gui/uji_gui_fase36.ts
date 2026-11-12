@@ -43,10 +43,23 @@ import {
   PengelolaFormGUI,
   AdaptorHeadlessGUI,
   JembatanDesktopWebview,
+  MesinTataLetak,
+  KanvasFramebuffer,
+  PerenderDesktop,
+  PengelolaInputGUI,
+  DetektorPlatformDesktop,
+  AdaptorDesktopWebviewServer,
+  AdaptorDesktopLinux,
+  AdaptorDesktopWindows,
+  AdaptorDesktopMacOS,
+  PengemasAplikasiDesktop,
   sesuaikanShortcutOS,
   buatAtributAria,
   temukanWidgetDapatDifokuskan,
 } from '../../src/gui';
+import * as os from 'node:os';
+import { WebSocket } from 'ws';
+import { NusantaraCLI } from '../../src/paket/cli';
 import { TemplateRegistry } from '../../src/generator/templateRegistry';
 import { Interpreter } from '../../src/interpreter/interpreter';
 import { PenulisOutputBuffer } from '../../src/interpreter/outputWriter';
@@ -416,6 +429,247 @@ async function main() {
     pastikan(log.includes('Memulai Sistem Kasir Desktop NUSANTARA...'), 'Harus mencetak inisialisasi kasir');
     pastikan(log.includes('Aplikasi Kasir Nusantara POS siap melayani transaksi.'), 'Harus siap melayani transaksi');
     pastikan(log.includes('Item berhasil ditambahkan: Buku Catatan Nusantara A5 (Subtotal: Rp 30000)'), 'Transaksi kasir harus menghitung subtotal dengan tepat');
+  });
+
+  // --- 11. REAL LAYOUT ENGINE (PHASE 36 COMPLETION) ---
+  await uji('11.1 MesinTataLetak menghitung koordinat Baris, Kolom, Grid, Tab, dan BilahMenu', async () => {
+    const jendela = new JendelaGUI({ judul: 'Uji Layout', lebar: 800, tinggi: 600 });
+    const bm = new BilahMenu();
+    bm.tambahMenu(new Menu('Berkas'));
+    jendela.setBilahMenu(bm);
+
+    const kol = new KolomLayout(10);
+    const l1 = new LabelWidget('Judul Aplikasi');
+    const b1 = new TombolWidget('Simpan', { flex: 1 });
+    const b2 = new TombolWidget('Batal', { flex: 1 });
+    const baris = new BarisLayout(8);
+    baris.tambahAnak(b1).tambahAnak(b2);
+    const grid = new GridLayout(2, 6);
+    grid.tambahAnak(new LabelWidget('A')).tambahAnak(new LabelWidget('B')).tambahAnak(new LabelWidget('C'));
+    kol.tambahAnak(l1).tambahAnak(baris).tambahAnak(grid);
+    jendela.setKonten(kol);
+
+    const engine = new MesinTataLetak();
+    const layout = engine.hitungTataLetakJendela(jendela);
+
+    pastikan(layout.kotakBilahMenu !== null && layout.kotakBilahMenu.tinggi === 28, 'BilahMenu harus terukur tinggi 28px');
+    pastikan(layout.kotakKonten.y === 40, 'Area konten harus digeser ke bawah setelah BilahMenu + padding');
+    const nb1 = layout.petaKotak.get(b1.id)!;
+    const nb2 = layout.petaKotak.get(b2.id)!;
+    pastikan(nb1.kotak.x < nb2.kotak.x, 'BarisLayout harus meletakkan b2 di sebelah kanan b1');
+    pastikan(nb1.kotak.y === nb2.kotak.y, 'BarisLayout harus menyejajarkan b1 dan b2 secara horizontal');
+
+    const hit = engine.cariNodePadaTitik(layout.akarKonten, nb1.kotak.x + 5, nb1.kotak.y + 5);
+    pastikan(hit !== null && hit.widget.id === b1.id, 'Hit-testing koordinat harus menemukan b1 tepat sasaran');
+  });
+
+  // --- 12. SOFTWARE RGBA32 FRAMEBUFFER & RENDERING ENGINE ---
+  await uji('12.1 KanvasFramebuffer & PerenderDesktop menghasilkan BMP, PPM, dan SVG valid', async () => {
+    const jendela = new JendelaGUI({ judul: 'Render Uji', lebar: 400, tinggi: 300 });
+    const kol = new KolomLayout(12);
+    kol.tambahAnak(new LabelWidget('Halo Pixel'));
+    kol.tambahAnak(new TombolWidget('Eksekusi'));
+    kol.tambahAnak(new IndikatorProgresWidget(65, 100));
+    jendela.setKonten(kol);
+
+    const perender = new PerenderDesktop();
+    const fbTerang = perender.renderKeFramebuffer(jendela);
+    const bmp = fbTerang.eksporBMP();
+    const ppm = fbTerang.eksporPPM();
+
+    pastikan(bmp[0] === 0x42 && bmp[1] === 0x4d, 'Header BMP harus dimulai dengan signature BM');
+    const dv = new DataView(bmp.buffer, bmp.byteOffset, bmp.byteLength);
+    pastikan(dv.getInt32(18, true) === 400 && dv.getInt32(22, true) === 300, 'Dimensi BMP DIB harus 400x300');
+    pastikan(dv.getUint32(2, true) === bmp.length, 'Ukuran berkas di header BMP harus cocok dengan byte array');
+
+    const ppmHeader = Buffer.from(ppm.slice(0, 20)).toString('ascii');
+    pastikan(ppmHeader.startsWith('P6\n400 300\n255\n'), 'Header PPM P6 harus valid');
+
+    const gelapTema = new PengelolaTema('gelap').dapatkanSkema();
+    const fbGelap = perender.renderKeFramebuffer(jendela, { skemaWarna: gelapTema });
+    pastikan(fbTerang.hitungHashFNV1a() !== fbGelap.hitungHashFNV1a(), 'Tema gelap harus menghasilkan piksel berbeda dari tema terang');
+
+    const svg = perender.renderKeSVG(jendela);
+    pastikan(svg.includes('<svg') && svg.includes('Eksekusi'), 'Render SVG harus valid dan memuat label tombol');
+  });
+
+  // --- 13. INPUT ROUTER, FOCUS TRAVERSAL & MENU SHORTCUTS ---
+  await uji('13.1 PengelolaInputGUI menangani klik koordinat, ketikan keyboard, Tab, dan shortcut menu', async () => {
+    let shortcutDipicu = false;
+    let tombolDiklik = false;
+
+    const jendela = new JendelaGUI({ judul: 'Input Uji', lebar: 600, tinggi: 400 });
+    const bm = new BilahMenu();
+    const mBerkas = new Menu('Berkas');
+    mBerkas.tambahItem(new ItemMenu('Simpan', () => { shortcutDipicu = true; }, 'Ctrl+S'));
+    bm.tambahMenu(mBerkas);
+    jendela.setBilahMenu(bm);
+
+    const kol = new KolomLayout(10);
+    const input = new InputTeksWidget('Nama', '');
+    const cb = new KotakCentangWidget('Setuju', false);
+    const tombol = new TombolWidget('Kirim', () => { tombolDiklik = true; });
+    const slider = new SliderWidget(0, 100, 10);
+    kol.tambahAnak(input).tambahAnak(cb).tambahAnak(tombol).tambahAnak(slider);
+    jendela.setKonten(kol);
+
+    const engine = new MesinTataLetak();
+    const layout = engine.hitungTataLetakJendela(jendela);
+    const router = new PengelolaInputGUI(jendela);
+
+    // Fokus ke input melalui klik mouse
+    const kInput = layout.petaKotak.get(input.id)!.kotak;
+    await router.klikMouse(kInput.x + 10, kInput.y + 10);
+    pastikan(router.getIdWidgetFokus() === input.id, 'Klik pada InputTeksWidget harus memindahkan fokus ke input');
+
+    await router.tekanTombol('H');
+    await router.tekanTombol('i');
+    await router.tekanTombol('!');
+    await router.tekanTombol('Backspace');
+    pastikan(input.getNilai() === 'Hi', 'Ketikan keyboard dan Backspace harus mengubah nilai input');
+
+    // Tab ke checkbox lalu Space untuk toggle
+    await router.tekanTombol('Tab');
+    pastikan(router.getIdWidgetFokus() === cb.id, 'Tombol Tab harus memindahkan fokus ke checkbox berikutnya');
+    await router.tekanTombol(' ');
+    pastikan(cb.isCentang() === true, 'Spasi pada checkbox terfokus harus mengubah status centang');
+
+    // Klik mouse pada tombol
+    const kTombol = layout.petaKotak.get(tombol.id)!.kotak;
+    await router.klikMouse(kTombol.x + 10, kTombol.y + 10);
+    pastikan(tombolDiklik, 'Klik koordinat pada tombol harus mengeksekusi handler klik');
+
+    // Klik tengah slider
+    const kSlider = layout.petaKotak.get(slider.id)!.kotak;
+    await router.klikMouse(kSlider.x + Math.floor(kSlider.lebar / 2), kSlider.y + Math.floor(kSlider.tinggi / 2));
+    pastikan(slider.getNilai() >= 45 && slider.getNilai() <= 55, 'Klik di tengah slider harus mengatur nilai sekitar 50');
+
+    // Menu shortcut Ctrl+S
+    const ditangani = await router.tekanTombol('s', { ctrl: true });
+    pastikan(ditangani && shortcutDipicu, 'Shortcut Ctrl+S harus memicu ItemMenu Simpan');
+  });
+
+  // --- 14. LOOPBACK HTTP + WEBSOCKET DESKTOP HOST RUNTIME ---
+  await uji('14.1 AdaptorDesktopWebviewServer melayani HTTP HTML & IPC WebSocket nyata', async () => {
+    const srv = new AdaptorDesktopWebviewServer(0);
+    const jendela = new JendelaGUI({ judul: 'Live Host', lebar: 500, tinggi: 300 });
+    let diklik = false;
+    const btn = new TombolWidget('Tekan WebSocket', () => { diklik = true; });
+    const inp = new InputTeksWidget('Isi...', '');
+    const kol = new KolomLayout(8);
+    kol.tambahAnak(btn).tambahAnak(inp);
+    jendela.setKonten(kol);
+
+    await srv.inisialisasi({ idAplikasi: 'id.test.ws', namaAplikasi: 'WS App' });
+    await srv.bukaJendela(jendela);
+
+    try {
+      const url = srv.getUrlAktif();
+      pastikan(url.startsWith('http://127.0.0.1:'), 'Server desktop harus mendengarkan pada loopback port nyata');
+      const resHtml = await fetch(url);
+      const html = await resHtml.text();
+      pastikan(resHtml.status === 200 && html.includes('Tekan WebSocket'), 'GET / harus menyajikan HTML antarmuka jendela');
+
+      const wsUrl = url.replace('http://', 'ws://') + '/ipc';
+      await new Promise<void>((resolve, reject) => {
+        const client = new WebSocket(wsUrl);
+        client.on('open', () => {
+          client.send(JSON.stringify({ tipe: 'peristiwa', jenis: 'teks_berubah', idWidget: inp.id, nilaiTeks: 'Dari Klien' }));
+          client.send(JSON.stringify({ tipe: 'peristiwa', jenis: 'klik', idWidget: btn.id }));
+        });
+        client.on('message', (raw) => {
+          const msg = JSON.parse(String(raw));
+          if (msg.tipe === 'sinkronisasi' && diklik && inp.getNilai() === 'Dari Klien') {
+            client.close();
+            resolve();
+          }
+        });
+        client.on('error', reject);
+        setTimeout(() => reject(new Error('Timeout menunggu sinkronisasi WebSocket')), 3000);
+      });
+
+      pastikan(diklik && inp.getNilai() === 'Dari Klien', 'Peristiwa WebSocket harus memperbarui widget nyata');
+    } finally {
+      await srv.hancurkan();
+    }
+  });
+
+  // --- 15. NATIVE OS DETECTORS, PLATFORM ADAPTERS & DESKTOP PACKAGING ---
+  await uji('15.1 Detektor OS, Adaptor Native & PengemasAplikasiDesktop menghasilkan bundel sah', async () => {
+    const status = DetektorPlatformDesktop.deteksi();
+    pastikan(['linux', 'windows', 'macos', 'lainnya'].includes(status.os), 'Detektor harus mengenali OS host');
+
+    const jendela = new JendelaGUI({ judul: 'Aplikasi Kasir', lebar: 800, tinggi: 600 });
+    jendela.setKonten(new LabelWidget('Kasir Nusantara'));
+
+    const adLinux = new AdaptorDesktopLinux();
+    await adLinux.inisialisasi({ idAplikasi: 'id.nusantara.kasir', namaAplikasi: 'Kasir' });
+    const srcLinux = adLinux.hasilkanSumberHostNative(jendela);
+    pastikan(srcLinux.isi.includes('#include <gtk/gtk.h>'), 'Host C Linux harus menghasilkan kode GTK3 valid');
+
+    await adLinux.bukaJendela(jendela);
+    const lap = adLinux.dapatkanLaporanTerakhir()!;
+    if (!status.displayAktif) {
+      pastikan(lap.status === 'NATIVE_DISPLAY_UNAVAILABLE', 'Harus melaporkan NATIVE_DISPLAY_UNAVAILABLE secara jujur tanpa display');
+    }
+    await adLinux.hancurkan();
+
+    const adWin = new AdaptorDesktopWindows();
+    pastikan(adWin.hasilkanSumberHostNative(jendela).isi.includes('WinMain'), 'Host Win32 harus valid');
+    const adMac = new AdaptorDesktopMacOS();
+    pastikan(adMac.hasilkanSumberHostNative(jendela).isi.includes('NSApplication'), 'Host Cocoa harus valid');
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusantara-desktop-pkg-'));
+    try {
+      const pengemas = new PengemasAplikasiDesktop();
+      const resLinux = pengemas.kemas({
+        konfig: { idAplikasi: 'id.nusantara.kasir', namaAplikasi: 'Kasir Nusantara', versi: '0.36.0' },
+        jendelaUtama: jendela,
+        target: 'linux',
+        direktoriKeluaran: tmpDir,
+      });
+      pastikan(resLinux.sukses && fs.existsSync(path.join(resLinux.direktoriBundel, 'id.nusantara.kasir.desktop')), 'Bundel Linux harus berisi berkas .desktop');
+      pastikan(fs.existsSync(path.join(resLinux.direktoriBundel, 'SHA256SUMS')), 'Bundel harus berisi SHA256SUMS');
+
+      const resMac = pengemas.kemas({
+        konfig: { idAplikasi: 'id.nusantara.kasir', namaAplikasi: 'Kasir Nusantara', versi: '0.36.0' },
+        jendelaUtama: jendela,
+        target: 'macos',
+        direktoriKeluaran: tmpDir,
+      });
+      pastikan(fs.existsSync(path.join(resMac.direktoriBundel, 'Contents/Info.plist')), 'Bundel macOS harus berisi Info.plist');
+
+      const resWin = pengemas.kemas({
+        konfig: { idAplikasi: 'id.nusantara.kasir', namaAplikasi: 'Kasir Nusantara', versi: '0.36.0' },
+        jendelaUtama: jendela,
+        target: 'windows',
+        direktoriKeluaran: tmpDir,
+      });
+      pastikan(fs.existsSync(path.join(resWin.direktoriBundel, 'id.nusantara.kasir.exe.manifest')), 'Bundel Windows harus berisi Win32 manifest');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  // --- 16. CLI DESKTOP COMMAND INTEGRATION ---
+  await uji('16.1 CLI nusantara desktop check, render, package & run berfungsi menyeluruh', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusantara-desktop-cli-'));
+    try {
+      const logs: string[] = [];
+      const cli = new NusantaraCLI({ log: (m) => logs.push(m) });
+      pastikan(cli.jalankan(['desktop', 'check']) === 0, 'desktop check harus exit 0');
+      pastikan(logs.join('\n').includes('AUDIT KAPABILITAS DESKTOP GUI NUSANTARA'), 'Output check harus berisi laporan kapabilitas');
+
+      const outBmp = path.join(tmpDir, 'out.bmp');
+      pastikan(cli.jalankan(['desktop', 'render', `--out=${outBmp}`]) === 0, 'desktop render BMP harus exit 0');
+      const bmpBytes = fs.readFileSync(outBmp);
+      pastikan(bmpBytes[0] === 0x42 && bmpBytes[1] === 0x4d, 'Berkas output desktop render harus berupa BMP valid');
+
+      pastikan(cli.jalankan(['desktop', 'package', '--target=linux', `--out=${tmpDir}`]) === 0, 'desktop package harus exit 0');
+      pastikan(cli.jalankan(['desktop', 'run']) === 0, 'desktop run harus exit 0 dan melaporkan status display');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 
   console.log('='.repeat(70));

@@ -26,6 +26,7 @@ export class KlienWebSocketMobile {
   private readonly jedaReconnectMaksMs: number;
   private readonly intervalHeartbeatMs: number;
   private pengaturHeartbeat?: any;
+  private timerReconnect?: any;
   private pendengarPesan: Array<(data: any) => void> = [];
   private pendengarStatus: Array<(status: StatusKoneksiWS) => void> = [];
 
@@ -92,8 +93,14 @@ export class KlienWebSocketMobile {
   public tutup(): void {
     this.autoReconnect = false;
     this.hentikanHeartbeat();
+    if (this.timerReconnect) {
+      clearTimeout(this.timerReconnect);
+      this.timerReconnect = undefined;
+    }
     if (this.socket && typeof this.socket.close === 'function') {
-      this.socket.close();
+      try {
+        this.socket.close();
+      } catch {}
     }
     this.ubahStatus('ditutup');
   }
@@ -149,11 +156,19 @@ export class KlienWebSocketMobile {
   }
 
   private tanganiPesan(raw: any): void {
-    let diproses = raw;
-    try {
-      diproses = JSON.parse(raw);
-    } catch {
-      // Biarkan berupa teks murni
+    let teks = raw;
+    if (raw instanceof ArrayBuffer) {
+      teks = new TextDecoder().decode(new Uint8Array(raw));
+    } else if (ArrayBuffer.isView(raw)) {
+      teks = new TextDecoder().decode(new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength));
+    }
+    let diproses = teks;
+    if (typeof teks === 'string') {
+      try {
+        diproses = JSON.parse(teks);
+      } catch {
+        // Biarkan berupa teks murni
+      }
     }
 
     if (diproses && typeof diproses === 'object' && diproses.tipe === 'pong') {
@@ -196,7 +211,8 @@ export class KlienWebSocketMobile {
   }
 
   private jadwalkanReconnect(): void {
-    setTimeout(() => {
+    if (this.timerReconnect) clearTimeout(this.timerReconnect);
+    this.timerReconnect = setTimeout(() => {
       if (this.autoReconnect && this.status !== 'terbuka') {
         this.buka();
         this.jedaReconnectMs = Math.min(this.jedaReconnectMs * 1.5, this.jedaReconnectMaksMs);

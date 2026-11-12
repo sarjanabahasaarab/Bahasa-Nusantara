@@ -149,17 +149,17 @@ jobs:
       - name: Bangun Distribusi Bersih Resmi (${{ matrix.target }})
         run: |
           npx tsx -e "
-            import { MesinBuild } from './src/build';
-            const mesin = new MesinBuild();
-            const hasil = mesin.bangun({
-              mode: 'release',
+            import { MesinCI } from './src/cicd';
+            import { PembacaBerkasNode } from './src/modul/pembacaBerkas';
+            const mesin = new MesinCI({
+              pembaca: new PembacaBerkasNode(),
               targetPlatforms: ['${{ matrix.target }}'],
-              tanpaUji: false,
-              bersihkanSebelum: true,
-              reproducible: true
+              simulasikanRilis: true,
+              persetujuanRilis: true
             });
-            if (!hasil.sukses) {
-              console.error('Build rilis gagal:', hasil.pesan);
+            const hasil = mesin.jalankan();
+            if (hasil.statusAkhir !== 'PASS') {
+              console.error('Build rilis gagal:', hasil.ringkasanTeks);
               process.exit(1);
             }
             console.log('Build rilis sukses:', hasil.artefak.length, 'artefak dihasilkan.');

@@ -161,6 +161,115 @@ export class UpdateManager {
   }
 
   /**
+   * Mengambil manifest pembaruan langsung dari server HTTP/HTTPS OTA,
+   * memvalidasi URL, skema manifest, serta memverifikasi tanda tangan digitalnya.
+   */
+  public async periksaPembaruanJarakJauh(manifestUrl: string, timeoutMs = 15000): Promise<{
+    sukses: boolean;
+    hasil?: HasilPemeriksaanVersi;
+    evaluasi?: EvaluasiKebijakan;
+    manifest?: ManifestPembaruan;
+    signatureValid: boolean;
+    pesan: string;
+  }> {
+    const { UpdateSecurityPolicy } = await import('../security/UpdateSecurityPolicy');
+    const { ManifestValidator } = await import('../manifest/ManifestValidator');
+
+    const cekUrl = UpdateSecurityPolicy.validasiURL(manifestUrl);
+    if (!cekUrl.valid) {
+      return { sukses: false, signatureValid: false, pesan: cekUrl.pesan || 'URL tidak valid' };
+    }
+
+    this.stateManager.transisi('checking', `Mengambil manifest OTA dari ${manifestUrl}...`);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const resp = await fetch(manifestUrl, { signal: controller.signal });
+      if (!resp.ok) {
+        this.stateManager.transisi('failed', `Server OTA mengembalikan HTTP ${resp.status}`);
+        return { sukses: false, signatureValid: false, pesan: `HTTP ${resp.status} saat mengambil manifest.` };
+      }
+
+      const manifest = (await resp.json()) as ManifestPembaruan;
+      const validasiSkema = ManifestValidator.validasi(manifest);
+      if (!validasiSkema.valid) {
+        this.stateManager.transisi('failed', validasiSkema.pesanGalat.join('; '));
+        return {
+          sukses: false,
+          manifest,
+          signatureValid: false,
+          pesan: `Skema manifest tidak valid: ${validasiSkema.pesanGalat.join(', ')}`,
+        };
+      }
+
+      const verifSig = SignatureVerifier.verifikasi(manifest);
+      if (!verifSig.valid) {
+        this.stateManager.transisi('failed', verifSig.pesan);
+        return {
+          sukses: false,
+          manifest,
+          signatureValid: false,
+          pesan: verifSig.pesan,
+        };
+      }
+
+      UpdateRegistry.dapatkanInstance().daftarkanManifest(manifest);
+      const hasil = VersionChecker.periksaKetersediaan(
+        this.versiTerpasang,
+        this.applicationId,
+        this.platform,
+        manifest
+      );
+      const evaluasi = UpdatePolicyManager.evaluasi(hasil);
+      this.stateManager.transisi(
+        hasil.adaPembaruan ? (hasil.perluPembaruanWajib ? 'requires_store_update' : 'available') : 'idle',
+        hasil.pesan,
+        { versiTarget: manifest.releaseVersion, saluran: manifest.channel, manifestAktif: manifest }
+      );
+      return {
+        sukses: true,
+        hasil,
+        evaluasi,
+        manifest,
+        signatureValid: true,
+        pesan: hasil.pesan,
+      };
+    } catch (err: any) {
+      this.stateManager.transisi('failed', err?.message || 'Galat jaringan OTA');
+      return { sukses: false, signatureValid: false, pesan: err?.message || 'Galat jaringan OTA' };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Menerapkan paket OTA langsung dari sebuah objek manifest terverifikasi.
+   */
+  public async terapkanManifestOTA(manifest: ManifestPembaruan): Promise<{
+    sukses: boolean;
+    aktivasi?: HasilAktivasiResource;
+    pesan: string;
+  }> {
+    if (manifest.updateType === 'native_store') {
+      return {
+        sukses: false,
+        pesan: 'Pembaruan ini adalah Native Binary Update. Harus diperbarui melalui Google Play Store atau Apple App Store.',
+      };
+    }
+
+    const res = await this.otaManager.terapkanPembaruanOTA(manifest);
+    if (res.sukses && res.aktivasi) {
+      this.versiTerpasang = res.aktivasi.versiAktif;
+    }
+
+    return {
+      sukses: res.sukses,
+      aktivasi: res.aktivasi,
+      pesan: res.pesan,
+    };
+  }
+
+  /**
    * Menjalankan siklus unduh dan penerapan OTA resource secara aman.
    */
   public async terapkanPembaruanOTA(): Promise<{

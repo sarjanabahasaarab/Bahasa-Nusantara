@@ -77,8 +77,13 @@ export class OTAResourceManager {
       };
     }
 
-    // 4. Tahap Staging
-    this.stateManager.transisi('staged', 'Berkas divalidasi dan siap untuk diaktifkan.');
+    // 4. Tahap Staging (simpan ke cache disk/memori lokal)
+    const { UpdateCache } = await import('../storage/UpdateCache');
+    const cache = new UpdateCache();
+    for (const [jalurRelatif, konten] of hasilUnduhan.hasilUnduhan.entries()) {
+      cache.simpanBerkasStaging(jalurRelatif, konten);
+    }
+    this.stateManager.transisi('staged', 'Berkas divalidasi dan disiapkan di staging untuk aktivasi atomik.');
 
     // 5. Aktivasi Atomik
     this.stateManager.transisi('activating', 'Mengaktifkan resource baru secara atomik...');

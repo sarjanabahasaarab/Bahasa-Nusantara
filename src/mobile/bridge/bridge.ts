@@ -7,9 +7,20 @@
  */
 
 import { PesanJembatanPermintaan, PesanJembatanRespon, PesanJembatanPeristiwa } from './messages';
+import {
+  GeneratorJembatanMobileNative,
+  BundelKodeNativeMobile,
+  DaftarKontrakBridge,
+} from './native_codegen';
+import { KonfigurasiAplikasiMobile } from '../types';
 
 export type PenanganPanggilanNative = (argumen: any) => Promise<any> | any;
 export type PenanganPeristiwaNative = (peristiwa: PesanJembatanPeristiwa) => void;
+
+export interface TransportJembatanNative {
+  readonly namaTransport: string;
+  kirimKeNative(permintaan: PesanJembatanPermintaan): Promise<PesanJembatanRespon>;
+}
 
 let counterIdPesan = 0;
 
@@ -18,6 +29,7 @@ export class JembatanMobileNative {
   private modulTerdaftar: Map<string, Map<string, PenanganPanggilanNative>> = new Map();
   private pendengarPeristiwa: Map<string, Set<PenanganPeristiwaNative>> = new Map();
   private riwayatPesan: Array<PesanJembatanPermintaan | PesanJembatanRespon> = [];
+  private transportEksternal: TransportJembatanNative | null = null;
 
   private constructor() {
     this.inisialisasiModulBawaan();
@@ -28,6 +40,26 @@ export class JembatanMobileNative {
       JembatanMobileNative.instance = new JembatanMobileNative();
     }
     return JembatanMobileNative.instance;
+  }
+
+  public pasangTransport(transport: TransportJembatanNative | null): void {
+    this.transportEksternal = transport;
+  }
+
+  public dapatkanNamaTransport(): string {
+    return this.transportEksternal?.namaTransport || 'in-memory-bridge';
+  }
+
+  public daftarSemuaMetode(): DaftarKontrakBridge[] {
+    const out: DaftarKontrakBridge[] = [];
+    for (const [modul, metodeMap] of this.modulTerdaftar.entries()) {
+      out.push({ modul, metode: Array.from(metodeMap.keys()) });
+    }
+    return out;
+  }
+
+  public hasilkanBindingNative(konfig: KonfigurasiAplikasiMobile): BundelKodeNativeMobile {
+    return GeneratorJembatanMobileNative.buatBundelLengkap(konfig, this.daftarSemuaMetode());
   }
 
   public daftarkanMetode(modul: string, metode: string, penangan: PenanganPanggilanNative): void {
@@ -54,7 +86,16 @@ export class JembatanMobileNative {
     };
     this.riwayatPesan.push(permintaan);
 
-    // Periksa apakah handler terdaftar
+    if (this.transportEksternal) {
+      const res = await this.transportEksternal.kirimKeNative(permintaan);
+      this.riwayatPesan.push(res);
+      if (!res.sukses) {
+        throw new Error(res.pesanKesalahan || `Kesalahan transport native '${this.transportEksternal.namaTransport}'`);
+      }
+      return res.data as TRes;
+    }
+
+    // Periksa apakah handler lokal terdaftar
     const modulHandlers = this.modulTerdaftar.get(modul);
     const handler = modulHandlers?.get(metode);
 

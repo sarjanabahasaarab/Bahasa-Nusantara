@@ -10,6 +10,7 @@ export interface KunciPublikTepercaya {
   keyId: string;
   algoritma: 'Ed25519' | 'RSA-SHA256' | 'HMAC-SHA256';
   kunciPublikHex: string;
+  kunciPublikPem?: string;
   deskripsi: string;
   tanggalDibuat: string;
   kedaluwarsa?: string;

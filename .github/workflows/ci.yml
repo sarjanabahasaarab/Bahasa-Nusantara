@@ -138,7 +138,7 @@ jobs:
 
       - name: Validasi Pembuatan Distribusi Target (${{ matrix.target }})
         run: |
-          npx tsx -e "import { MesinBuild } from './src/build'; const m = new MesinBuild(); const r = m.bangun({ targetPlatforms: ['${{ matrix.target }}'], tanpaUji: true }); if (!r.sukses) process.exit(1);"
+          npx tsx -e "import { MesinCI } from './src/cicd'; import { PembacaBerkasNode } from './src/modul/pembacaBerkas'; const ci = new MesinCI({ pembaca: new PembacaBerkasNode(), targetPlatforms: ['${{ matrix.target }}'] }); const r = ci.jalankan(); if (r.statusAkhir !== 'PASS') process.exit(1);"
 
       - name: Unggah Artefak Sementara CI (Retention 7 Hari)
         uses: actions/upload-artifact@v4

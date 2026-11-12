@@ -19,6 +19,7 @@ export * from './core/application';
 export * from './events/event';
 export * from './events/event_handler';
 export * from './events/callback';
+export * from './events/input_router';
 
 // Styling
 export * from './styling/colors';
@@ -41,13 +42,18 @@ export * from './widgets/progress';
 export * from './widgets/slider';
 export * from './widgets/tab';
 
-// Layout
+// Layout & Layout Engine
 export * from './layout/container';
 export * from './layout/row';
 export * from './layout/column';
 export * from './layout/grid';
 export * from './layout/stack';
 export * from './layout/scroll';
+export * from './layout/layout_engine';
+
+// Render Engine
+export * from './render/framebuffer';
+export * from './render/renderer';
 
 // Dialogs & Menus
 export * from './dialogs/dialog';
@@ -56,8 +62,12 @@ export * from './menus/menu';
 // Forms & Validation
 export * from './forms/form_validator';
 
-// Platform & Accessibility
+// Platform, Native Windowing, Packaging & Accessibility
 export * from './platform/adapter';
 export * from './platform/headless';
 export * from './platform/bridge';
+export * from './platform/detector';
+export * from './platform/webview_server';
+export * from './platform/native_desktop';
+export * from './packaging/desktop_packager';
 export * from './accessibility/a11y';

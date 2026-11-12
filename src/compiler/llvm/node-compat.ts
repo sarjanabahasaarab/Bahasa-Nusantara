@@ -67,10 +67,14 @@ export const safeCP = {
 };
 
 export const safeFS = {
-  writeFileSync(filePath: string, data: string | Uint8Array, encoding: any = 'utf-8'): void {
+  writeFileSync(filePath: string, data: string | Uint8Array, encoding?: any): void {
     const fs = getRuntimeNodeModule('fs');
     if (fs && typeof fs.writeFileSync === 'function') {
-      fs.writeFileSync(filePath, data, encoding);
+      if (data instanceof Uint8Array && (encoding === undefined || encoding === null)) {
+        fs.writeFileSync(filePath, data);
+      } else {
+        fs.writeFileSync(filePath, data, encoding ?? 'utf-8');
+      }
     }
   },
 

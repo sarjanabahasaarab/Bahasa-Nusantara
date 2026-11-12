@@ -6,7 +6,26 @@
  * Target Milestone: v0.24.0
  */
 
-import { PlatformTarget, ModeBuild, ArtefakBuild, ManifestRilis } from '../build/types';
+export type PlatformTarget = 'windows-x64' | 'linux-x64' | 'macos-x64' | 'macos-arm64';
+export type ModeBuild = 'debug' | 'release';
+
+export interface ArtefakBuild {
+  platform: PlatformTarget;
+  format: 'zip' | 'tar.gz' | 'binary';
+  namaBerkas: string;
+  jalurKeluaran: string;
+  ukuranByte: number;
+  sha256: string;
+}
+
+export interface ManifestRilis {
+  nama: string;
+  versi: string;
+  mode: ModeBuild;
+  waktuBuild: string;
+  artefak: ArtefakBuild[];
+  sha256sums?: string;
+}
 
 export type StatusPemeriksaanCI = 'PASS' | 'FAIL' | 'NOT SUPPORTED' | 'NOT VERIFIED' | 'SKIPPED';
 

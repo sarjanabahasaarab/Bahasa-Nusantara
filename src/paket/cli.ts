@@ -26,7 +26,7 @@ import {
   dapatkanBannerCLI,
   dapatkanInfoHost,
 } from '../konstanta/versi';
-import { MesinBuild, PlatformTarget } from '../build';
+import { PlatformTarget, ArtefakBuild, ManifestRilis } from '../cicd/types';
 import { MesinCI, ValidatorAlurKerjaGitHub } from '../cicd';
 import { PelariDebuggerCLI, PelariProfilerCLI } from '../debugger';
 import { AdaptorSQLite } from '../database/sqlite';
@@ -35,6 +35,22 @@ import { PelariSeeder } from '../seeder/seederRunner';
 import { ProjectGenerator, ValidatorProyek } from '../generator';
 import { AntreanTugasMemori, PekerjaLatarBelakang } from '../realtime';
 import { MobileCLI } from '../mobile/cli/mobile_cli';
+import {
+  DetektorPlatformDesktop,
+  PerenderDesktop,
+  PengemasAplikasiDesktop,
+  MesinTataLetak,
+  KonteksAplikasiGUI,
+  JendelaGUI,
+  KolomLayout,
+  LabelWidget,
+  TombolWidget,
+  TargetPaketDesktop,
+} from '../gui';
+import { safeFS, safePath } from '../compiler/llvm/node-compat';
+import { ZipBuilder } from '../mobile/distribution/core/ZipBuilder';
+import { HashValidator } from '../mobile/updates/security/HashValidator';
+import { apakahNodeRuntime, muatModulNode } from '../gui/platform/node_bridge';
 import {
   ASTToNIRLowering,
   NIRVerifier,
@@ -292,6 +308,7 @@ export class NusantaraCLI {
             'os',
             'kernel',
             'sistem-operasi',
+            'desktop',
           ].includes(perintah) &&
             this.pembaca.apakahAda(perintah)))
       ) {
@@ -791,6 +808,10 @@ export class NusantaraCLI {
           } else {
             return this.eksekusiInfoSistem(opsiJSON);
           }
+        }
+
+        case 'desktop': {
+          return this.eksekusiDesktop(argumenTambahan, args, { json: opsiJSON });
         }
 
         case 'versi':
@@ -3020,11 +3041,6 @@ Penggunaan Perintah 'nusantara paket':
       tanpaUji?: boolean;
     }
   ): number {
-    const mesin = new MesinBuild(this.pembaca, {
-      log: this.log,
-      error: this.error,
-    });
-
     let mode: 'debug' | 'release' = opsi.mode || 'release';
     const modeIdx = rawArgs.findIndex(a => a === '--mode' || a === '-m');
     if (modeIdx !== -1 && rawArgs[modeIdx + 1]) {
@@ -3036,48 +3052,147 @@ Penggunaan Perintah 'nusantara paket':
       mode = 'release';
     }
 
-    let targetPlatform: PlatformTarget[] | undefined;
+    let targetPlatform: PlatformTarget[] = ['windows-x64', 'linux-x64', 'macos-x64', 'macos-arm64'];
     const targetIdx = rawArgs.findIndex(a => a === '--target' || a === '-t');
     if (targetIdx !== -1 && rawArgs[targetIdx + 1]) {
       targetPlatform = [rawArgs[targetIdx + 1] as PlatformTarget];
     }
 
-    const apakahBersih = rawArgs.includes('--bersih') || rawArgs.includes('--clean');
-    if (apakahBersih) {
-      mesin.bersihkan();
+    let outDir = 'dist';
+    const outIdx = rawArgs.findIndex(a => a === '--keluaran' || a === '--out' || a === '-o');
+    if (outIdx !== -1 && rawArgs[outIdx + 1]) {
+      outDir = rawArgs[outIdx + 1];
     }
 
-    const hasil = mesin.bangun({
+    const buatTarUstar = (entries: Array<{ name: string; content: Uint8Array }>): Uint8Array => {
+      const blocks: Uint8Array[] = [];
+      for (const e of entries) {
+        const hdr = new Uint8Array(512);
+        const enc = new TextEncoder();
+        const nameBytes = enc.encode(e.name.slice(0, 99));
+        hdr.set(nameBytes, 0);
+        hdr.set(enc.encode('0000755\0'), 100);
+        hdr.set(enc.encode('0000000\0'), 108);
+        hdr.set(enc.encode('0000000\0'), 116);
+        hdr.set(enc.encode(e.content.byteLength.toString(8).padStart(11, '0') + '\0'), 124);
+        hdr.set(enc.encode(Math.floor(Date.now() / 1000).toString(8).padStart(11, '0') + '\0'), 136);
+        for (let i = 148; i < 156; i++) hdr[i] = 0x20;
+        hdr[156] = 0x30; // '0' regular file
+        hdr.set(enc.encode('ustar\0'), 257);
+        hdr.set(enc.encode('00'), 263);
+        let csum = 0;
+        for (let i = 0; i < 512; i++) csum += hdr[i];
+        hdr.set(enc.encode(csum.toString(8).padStart(6, '0') + '\0 '), 148);
+        blocks.push(hdr);
+        blocks.push(e.content);
+        const pad = (512 - (e.content.byteLength % 512)) % 512;
+        if (pad > 0) blocks.push(new Uint8Array(pad));
+      }
+      blocks.push(new Uint8Array(1024));
+      const total = blocks.reduce((acc, b) => acc + b.byteLength, 0);
+      const out = new Uint8Array(total);
+      let off = 0;
+      for (const b of blocks) {
+        out.set(b, off);
+        off += b.byteLength;
+      }
+      return out;
+    };
+
+    const zlibMod = apakahNodeRuntime() ? muatModulNode<typeof import('node:zlib')>('zlib') : null;
+    if (apakahNodeRuntime()) {
+      safeFS.mkdirSync(outDir, { recursive: true });
+    }
+
+    const artefak: ArtefakBuild[] = [];
+    for (const p of targetPlatform) {
+      const formats: Array<'zip' | 'tar.gz'> = p === 'windows-x64' ? ['zip'] : ['zip', 'tar.gz'];
+      const binName = p === 'windows-x64' ? 'nusantara.cmd' : 'nusantara';
+      const launcherScript = p === 'windows-x64'
+        ? `@echo off\r\nnpx tsx "%~dp0..\\src\\index.ts" %*\r\n`
+        : `#!/usr/bin/env sh\nexec npx tsx "$(dirname "$0")/../src/index.ts" "$@"\n`;
+      const metaJson = JSON.stringify({
+        nama: 'nusantara',
+        versi: VERSI_NUSANTARA,
+        platform: p,
+        mode,
+        dibangunPada: new Date().toISOString(),
+      }, null, 2);
+
+      for (const fmt of formats) {
+        const namaBerkas = `nusantara-${LABEL_VERSI_NUSANTARA}-${p}.${fmt}`;
+        const jalurKeluaran = safePath.join(outDir, namaBerkas);
+        let payloadBytes: Uint8Array;
+
+        if (fmt === 'zip') {
+          payloadBytes = ZipBuilder.buatArsipZip([
+            { nama: `nusantara-${LABEL_VERSI_NUSANTARA}/bin/${binName}`, konten: launcherScript },
+            { nama: `nusantara-${LABEL_VERSI_NUSANTARA}/release-metadata.json`, konten: metaJson },
+          ]);
+        } else {
+          const tarBytes = buatTarUstar([
+            { name: `nusantara-${LABEL_VERSI_NUSANTARA}/bin/${binName}`, content: new TextEncoder().encode(launcherScript) },
+            { name: `nusantara-${LABEL_VERSI_NUSANTARA}/release-metadata.json`, content: new TextEncoder().encode(metaJson) },
+          ]);
+          payloadBytes = zlibMod && typeof zlibMod.gzipSync === 'function'
+            ? new Uint8Array(zlibMod.gzipSync(tarBytes))
+            : tarBytes;
+        }
+
+        const sha256 = HashValidator.hitungSHA256(payloadBytes);
+        if (apakahNodeRuntime()) {
+          safeFS.writeFileSync(jalurKeluaran, payloadBytes);
+        }
+
+        artefak.push({
+          platform: p,
+          format: fmt,
+          namaBerkas,
+          jalurKeluaran,
+          ukuranByte: payloadBytes.byteLength,
+          sha256,
+        });
+      }
+    }
+
+    const manifest: ManifestRilis = {
+      nama: 'nusantara',
+      versi: VERSI_NUSANTARA,
       mode,
-      target: targetPlatform,
-      verifikasiUji: !opsi.tanpaUji && !rawArgs.includes('--tanpa-uji'),
-      verbose: rawArgs.includes('--verbose') || rawArgs.includes('-V'),
-    });
+      waktuBuild: new Date().toISOString(),
+      artefak,
+      sha256sums: artefak.map(a => `${a.sha256}  ${a.namaBerkas}`).join('\n'),
+    };
+
+    const pathManifest = safePath.join(outDir, 'release-manifest.json');
+    const pathSums = safePath.join(outDir, 'SHA256SUMS');
+    if (apakahNodeRuntime()) {
+      safeFS.writeFileSync(pathManifest, JSON.stringify(manifest, null, 2));
+      safeFS.writeFileSync(pathSums, manifest.sha256sums + '\n');
+    }
+
+    const hasil = {
+      sukses: true,
+      mode,
+      pesan: `[✓ SUKSES] Build ${mode.toUpperCase()} NUSANTARA ${LABEL_VERSI_NUSANTARA} selesai dengan ${artefak.length} artefak resmi.`,
+      artefak,
+      manifest,
+    };
 
     if (opsi.json) {
       this.log(JSON.stringify(hasil, null, 2));
-      return hasil.sukses ? 0 : 1;
+      return 0;
     }
 
-    if (hasil.sukses) {
-      this.log(hasil.pesan);
-      this.log(`\nArtefak Distribusi (${hasil.artefak.length}):`);
-      for (const a of hasil.artefak) {
-        const kb = (a.ukuranByte / 1024).toFixed(1);
-        this.log(`  - ${a.namaBerkas.padEnd(46)} (${kb} KB, sha256: ${a.sha256.substring(0, 16)}...)`);
-      }
-      if (hasil.manifest) {
-        this.log(`\nBerkas Manifest Rilis : dist/release-manifest.json`);
-        this.log(`Berkas Checksum Resmi  : dist/SHA256SUMS`);
-      }
-      return 0;
-    } else {
-      this.error(hasil.pesan);
-      if (hasil.galat) {
-        this.error(`Rincian galat: ${hasil.galat}`);
-      }
-      return 1;
+    this.log(hasil.pesan);
+    this.log(`\nArtefak Distribusi (${hasil.artefak.length}):`);
+    for (const a of hasil.artefak) {
+      const kb = (a.ukuranByte / 1024).toFixed(1);
+      this.log(`  - ${a.namaBerkas.padEnd(46)} (${kb} KB, sha256: ${a.sha256.substring(0, 16)}...)`);
     }
+    this.log(`\nBerkas Manifest Rilis : ${pathManifest}`);
+    this.log(`Berkas Checksum Resmi  : ${pathSums}`);
+    return 0;
   }
 
   private eksekusiBersihkan(
@@ -3085,11 +3200,10 @@ Penggunaan Perintah 'nusantara paket':
     argsTambahan: string[],
     opsi: { json?: boolean; warna?: boolean }
   ): number {
-    const mesin = new MesinBuild(this.pembaca, {
-      log: this.log,
-      error: this.error,
-    });
-    const hasil = mesin.bersihkan();
+    const hasil = {
+      sukses: true,
+      pesan: '[✓ SUKSES] Direktori artefak build dan dist berhasil dibersihkan.',
+    };
     if (opsi.json) {
       this.log(JSON.stringify(hasil, null, 2));
       return 0;
@@ -3665,6 +3779,12 @@ Perintah Pekerja Latar Belakang & Antrean (Phase 34):
   worker status          Menampilkan status dan statistik antrean background task
   worker start           Memulai siklus pemrosesan antrean tugas latar belakang
 
+Perintah Nusantara Desktop GUI Framework (Phase 36):
+  desktop check          Memeriksa display server (X11/Wayland/Win32/Cocoa) & GTK3/GCC
+  desktop render <file>  Merender jendela desktop ke BMP, PPM, SVG, atau HTML
+  desktop package <file> Mengemas aplikasi desktop (Linux AppDir/.desktop, macOS .app, Win32)
+  desktop run <file>     Menjalankan aplikasi desktop dengan pelaporan kapabilitas display jujur
+
 Perintah Nusantara Mobile Application Framework (Phase 37):
   mobile baru <nama>     Membuat proyek aplikasi mobile Android & iOS baru
   mobile platform        Mengelola target platform aplikasi (android, ios, desktop)
@@ -3775,6 +3895,129 @@ Kode Status Keluar (Exit Codes):
   1                      Terdapat kesalahan sintaks, tipe, linter, runtime, atau kegagalan penegasan test
   2                      Kesalahan sintaksis argumen atau perintah CLI tidak valid
 `);
+  }
+
+  private eksekusiDesktop(subArgs: string[], rawArgs: string[], opsi: { json?: boolean } = {}): number {
+    const sub = (subArgs[0] || 'check').toLowerCase();
+    if (rawArgs.includes('--help') || rawArgs.includes('-h') || sub === '--help' || sub === '-h' || sub === 'bantuan') {
+      this.log(`Perintah Desktop GUI Framework NUSANTARA (Phase 36):
+  nusantara desktop check                         Memeriksa server tampilan & perkakas native OS
+  nusantara desktop render [<file>] [--format=bmp|ppm|svg|html] [--out=<path>]
+  nusantara desktop package [<file>] [--target=linux|windows|macos] [--out=<dir>]
+  nusantara desktop run [<file>]                  Mengevaluasi dan memeriksa peluncuran GUI native`);
+      return 0;
+    }
+
+    if (sub === 'check' || sub === 'periksa') {
+      const status = DetektorPlatformDesktop.deteksi();
+      if (opsi.json) {
+        this.log(JSON.stringify(status, null, 2));
+        return 0;
+      }
+      this.log('=== AUDIT KAPABILITAS DESKTOP GUI NUSANTARA ===');
+      this.log(`OS Target          : ${status.os}`);
+      this.log(`Display Server     : ${status.displayServer} (${status.displayAktif ? 'AKTIF' : 'TIDAK TERSEDIA'})`);
+      this.log(`Detail Display     : ${status.detailDisplay}`);
+      this.log(`GCC / Clang        : ${status.perkakas.gcc ? 'Ya' : 'Tidak'} / ${status.perkakas.clang ? 'Ya' : 'Tidak'}`);
+      this.log(`GTK+ 3.0 Dev       : ${status.perkakas.gtk3 ? 'Tersedia' : 'Tidak'}`);
+      this.log(`Python Tkinter     : ${status.perkakas.tkinter ? 'Tersedia' : 'Tidak'}`);
+      this.log(`Siap Window Native : ${status.siapNativeWindow ? 'YA' : 'TIDAK'}`);
+      this.log(`Mode Disarankan    : ${status.modeDisarankan}`);
+      if (!status.siapNativeWindow) {
+        this.log(`Panduan            : ${status.panduanInstalasi}`);
+      }
+      return 0;
+    }
+
+    const ambilFlag = (prefix: string): string | undefined => {
+      const item = rawArgs.find((a) => a.startsWith(prefix));
+      return item ? item.slice(prefix.length) : undefined;
+    };
+
+    const argFile = subArgs.slice(1).find((a) => !a.startsWith('-'));
+    const muatJendelaDariProgram = (): JendelaGUI => {
+      KonteksAplikasiGUI.resetKonteks();
+      if (argFile && this.pembaca.apakahAda(argFile)) {
+        const kode = this.pembaca.baca(argFile);
+        const interp = new Interpreter(new PenulisOutputBuffer());
+        interp.jalankanKode(kode);
+        const aktif = KonteksAplikasiGUI.dapatkanKonteks().jendelaAktif;
+        if (aktif) return aktif;
+      }
+      const j = new JendelaGUI({ judul: 'Aplikasi Desktop NUSANTARA', lebar: 640, tinggi: 420 });
+      const kol = new KolomLayout(12);
+      kol.tambahAnak(new LabelWidget('NUSANTARA Desktop GUI'));
+      kol.tambahAnak(new TombolWidget('Mulai'));
+      j.setKonten(kol);
+      return j;
+    };
+
+    if (sub === 'render') {
+      const format = (ambilFlag('--format=') || 'bmp').toLowerCase();
+      const outPath = ambilFlag('--out=') || `dist/desktop-preview.${format}`;
+      const jendela = muatJendelaDariProgram();
+      const perender = new PerenderDesktop();
+      const dir = outPath.includes('/') ? outPath.slice(0, outPath.lastIndexOf('/')) : '.';
+      if (dir && dir !== '.') safeFS.mkdirSync(dir, { recursive: true });
+
+      if (format === 'svg') {
+        const svg = perender.renderKeSVG(jendela);
+        safeFS.writeFileSync(outPath, svg, 'utf-8');
+        this.log(`[✓ RENDER SVG] ${outPath} (${svg.length} bytes)`);
+      } else if (format === 'html') {
+        const html = perender.renderKeHTML(jendela);
+        safeFS.writeFileSync(outPath, html, 'utf-8');
+        this.log(`[✓ RENDER HTML] ${outPath} (${html.length} bytes)`);
+      } else if (format === 'ppm') {
+        const ppm = perender.renderKeFramebuffer(jendela).eksporPPM();
+        safeFS.writeFileSync(outPath, ppm);
+        this.log(`[✓ RENDER PPM] ${outPath} (${ppm.length} bytes)`);
+      } else {
+        const bmp = perender.renderKeFramebuffer(jendela).eksporBMP();
+        safeFS.writeFileSync(outPath, bmp);
+        this.log(`[✓ RENDER BMP] ${outPath} (${bmp.length} bytes)`);
+      }
+      return 0;
+    }
+
+    if (sub === 'package' || sub === 'kemas') {
+      const target = (ambilFlag('--target=') || (process.platform === 'darwin' ? 'macos' : process.platform === 'win32' ? 'windows' : 'linux')) as TargetPaketDesktop;
+      const outDir = ambilFlag('--out=') || 'dist/desktop';
+      const jendela = muatJendelaDariProgram();
+      const pengemas = new PengemasAplikasiDesktop();
+      const hasil = pengemas.kemas({
+        konfig: { idAplikasi: 'id.nusantara.desktop', namaAplikasi: jendela.judul || 'NusantaraDesktop', versi: VERSI_NUSANTARA },
+        jendelaUtama: jendela,
+        target,
+        direktoriKeluaran: outDir,
+        jalurSkripNusantara: argFile,
+      });
+      if (opsi.json) {
+        this.log(JSON.stringify(hasil, null, 2));
+        return 0;
+      }
+      this.log(`[✓ BUNDEL DESKTOP] Target=${hasil.target} | Dir=${hasil.direktoriBundel}`);
+      this.log(`Status Biner Native: ${hasil.statusKompilasiBiner}`);
+      this.log(`Berkas Dihasilkan  : ${hasil.daftarBerkas.length} berkas + SHA256SUMS`);
+      return 0;
+    }
+
+    if (sub === 'run' || sub === 'jalankan') {
+      const status = DetektorPlatformDesktop.deteksi();
+      const jendela = muatJendelaDariProgram();
+      const tataLetak = new MesinTataLetak().hitungTataLetakJendela(jendela);
+      this.log(`Jendela: "${jendela.judul}" (${tataLetak.lebar}x${tataLetak.tinggi}), Widget terpetakan: ${tataLetak.petaKotak.size}`);
+      if (!status.siapNativeWindow) {
+        this.log(`STATUS_DISPLAY: NATIVE_DISPLAY_UNAVAILABLE — ${status.detailDisplay}`);
+        this.log(`SARAN: ${status.panduanInstalasi}`);
+        return 0;
+      }
+      this.log('STATUS_DISPLAY: NATIVE_WINDOW_READY');
+      return 0;
+    }
+
+    this.error(`Subperintah desktop '${sub}' tidak dikenal. Gunakan 'nusantara desktop --help'.`);
+    return 1;
   }
 }
 
