@@ -20,8 +20,9 @@ import {
   NilaiPeta,
 } from '../interpreter/nilai';
 import { GalatRuntime, JenisGalatRuntime } from '../interpreter/galat';
+import { Interpreter } from '../interpreter/interpreter';
 import { InfoSimbolModul } from '../modul/jenisModul';
-import { AdaptorSQLite } from '../database/sqlite';
+import { AdaptorSQLite, dapatkanInfoDriverSQLite } from '../database/sqlite';
 import { GalatBasisdata } from '../database/jenis';
 
 /**
@@ -496,11 +497,7 @@ export function buatEksporBasisdata(): Map<string, NilaiRuntime> {
         if (aksiArg.jenis === JenisNilaiRuntime.FUNGSI_BAWAAN) {
           hasil = aksiArg.eksekusi([koneksiArg]);
         } else if (aksiArg.jenis === JenisNilaiRuntime.FUNGSI) {
-          // Callback fungsi pengguna ditangani jika dipanggil langsung
-          throw new GalatRuntime(
-            JenisGalatRuntime.INTERNAL,
-            'Pemanggilan fungsi closure pengguna di dalam jalankanTransaksi memerlukan konteks evaluator interpreter.'
-          );
+          hasil = Interpreter.panggilFungsiAktif(aksiArg, [koneksiArg]);
         } else {
           throw new GalatRuntime(
             JenisGalatRuntime.KETIDAKCOCOKAN_TIPE,
@@ -525,8 +522,7 @@ export function buatEksporBasisdata(): Map<string, NilaiRuntime> {
     jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
     nama: 'versiDriver',
     eksekusi: () => {
-      const adaptor = new AdaptorSQLite();
-      return buatTeks(adaptor.versiDriver);
+      return buatTeks(dapatkanInfoDriverSQLite().versiDriver);
     },
   };
 
@@ -535,7 +531,7 @@ export function buatEksporBasisdata(): Map<string, NilaiRuntime> {
     jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
     nama: 'apakahTersedia',
     eksekusi: () => {
-      return buatLogika(true);
+      return buatLogika(dapatkanInfoDriverSQLite().tersedia);
     },
   };
 

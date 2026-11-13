@@ -32,7 +32,7 @@ jobs:
       - name: "Setup Node.js Environment"
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
 
       - name: "Install Project Dependencies"
@@ -57,7 +57,7 @@ jobs:
       - name: "Setup Node.js Environment"
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
 
       - name: "Install Project Dependencies"
@@ -65,6 +65,16 @@ jobs:
 
       - name: "Audit Fondasi Proyek (Phase 1–5)"
         run: node skrip/periksa_fondasi.js
+
+      - name: "Verifikasi Node.js 22 LTS & Native node:sqlite (DatabaseSync)"
+        run: |
+          node -v
+          node -e "const s = process.getBuiltinModule('node:sqlite'); if (!s || typeof s.DatabaseSync !== 'function') { console.error('[GALAT] node:sqlite DatabaseSync unavailable on ' + process.version); process.exit(1); } console.log('[OK] node:sqlite DatabaseSync verified:', process.version);"
+
+      - name: "Jalankan Pengujian Basis Data SQLite (Phase 29)"
+        run: |
+          npm run test:database-v29
+          npm run test:database-browser-v29
 
       - name: "Jalankan Suite Uji Leksikal, Sintaks, & Semantik"
         run: |
@@ -98,7 +108,7 @@ jobs:
       - name: "Setup Node.js Environment"
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
 
       - name: "Install Project Dependencies"
@@ -133,7 +143,7 @@ jobs:
       - name: "Setup Node.js Environment"
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
 
       - name: "Install Project Dependencies"
@@ -156,7 +166,7 @@ jobs:
       - name: "Setup Node.js Environment"
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
 
       - name: "Install Project Dependencies"
@@ -179,7 +189,7 @@ jobs:
       - name: "Setup Node.js Environment"
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
 
       - name: "Install Project Dependencies"
@@ -202,7 +212,7 @@ jobs:
       - name: "Setup Node.js Environment"
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
 
       - name: "Install System Toolchains (QEMU, Clang, LLD, Xorriso, GRUB)"
@@ -262,7 +272,7 @@ jobs:
       - name: "Setup Node.js Environment"
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
 
       - name: "Install QEMU x86_64 Emulator"

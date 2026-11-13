@@ -4,7 +4,8 @@
  *
  * NUSANTARA Programming Language - Database API & Data Access (Phase 29)
  * Adaptor Basis Data SQLite terpadu berbasis node:sqlite (C-Native SQLite 3)
- * dengan Fallback In-Memory untuk Kompatibilitas Peramban (Browser Vite).
+ * dengan penolakan eksplisit apabila SQLite native tidak tersedia di Node.js,
+ * serta fallback peramban (Browser Vite) yang terdokumentasi dan terpisah.
  */
 
 import * as path from 'node:path';
@@ -12,6 +13,7 @@ import * as fs from 'node:fs';
 import {
   AdaptorBasisdata,
   HasilEksekusiBasisdata,
+  InfoDriverBasisdata,
   OpsiKoneksiBasisdata,
   ParameterBindingSQL,
   GalatBasisdata,
@@ -21,52 +23,107 @@ import {
 // Tipe alias agar kompatibel dengan TypeScript tanpa named import node:sqlite
 type DatabaseSync = any;
 
-let _DatabaseSyncClass: any = undefined;
+export const VERSI_DRIVER_SQLITE_NATIVE = 'SQLite 3 (node:sqlite)';
+export const VERSI_DRIVER_BROWSER_FALLBACK = 'SQLite Fallback In-Memory (Browser)';
 
 /**
- * Memuat DatabaseSync secara aman tanpa impor statis yang memicu eksternalisasi Vite di peramban.
+ * Mendeteksi apakah kode berjalan di lingkungan peramban (browser/DOM).
  */
-function dapatkanKelasDatabaseSync(): any {
-  if (_DatabaseSyncClass !== undefined) {
-    return _DatabaseSyncClass;
-  }
+export function apakahLingkunganBrowser(): boolean {
+  return typeof window !== 'undefined' || typeof document !== 'undefined';
+}
 
-  // Jika berjalan di lingkungan browser client (Vite)
-  if (typeof window !== 'undefined' || typeof document !== 'undefined') {
-    _DatabaseSyncClass = null;
+/**
+ * Memuat kelas DatabaseSync dari modul bawaan Node.js `node:sqlite` tanpa static import
+ * agar bundler Vite di sisi klien tidak gagal pada resolusi `node:*`.
+ */
+export function muatKelasDatabaseSyncNative(): any | null {
+  if (apakahLingkunganBrowser()) {
     return null;
   }
 
   try {
-    // 1. Coba melalui process.getBuiltinModule (Node 22+)
+    // 1. Jalur utama resmi: process.getBuiltinModule('node:sqlite') (Node.js 22 LTS+)
     if (typeof (process as any)?.getBuiltinModule === 'function') {
       const mod = (process as any).getBuiltinModule('node:sqlite');
-      if (mod?.DatabaseSync) {
-        _DatabaseSyncClass = mod.DatabaseSync;
-        return _DatabaseSyncClass;
+      if (mod && typeof mod.DatabaseSync === 'function') {
+        return mod.DatabaseSync;
       }
     }
-    // 2. Coba melalui require jika tersedia
+    // 2. Jalur sekunder CommonJS jika getBuiltinModule tidak tersedia
     if (typeof require === 'function') {
       const mod = require('node:sqlite');
-      if (mod?.DatabaseSync) {
-        _DatabaseSyncClass = mod.DatabaseSync;
-        return _DatabaseSyncClass;
+      if (mod && typeof mod.DatabaseSync === 'function') {
+        return mod.DatabaseSync;
       }
     }
   } catch {
-    _DatabaseSyncClass = null;
+    return null;
   }
 
-  _DatabaseSyncClass = null;
   return null;
 }
 
 /**
- * Mesin SQL In-Memory mandiri sebagai fallback peramban (client browser).
- * Mendukung DDL, INSERT, SELECT, UPDATE, DELETE, dan Transaksi dasar.
+ * Memeriksa apakah driver native `node:sqlite` (DatabaseSync) benar-benar tersedia di Node.js.
  */
-class InMemoriDatabaseSync {
+export function apakahSqliteNativeTersedia(): boolean {
+  return muatKelasDatabaseSyncNative() !== null;
+}
+
+/**
+ * Mengembalikan informasi diagnostik driver SQLite aktual pada runtime saat ini.
+ */
+export function dapatkanInfoDriverSQLite(): InfoDriverBasisdata {
+  if (apakahLingkunganBrowser()) {
+    return {
+      namaDriver: 'sqlite',
+      versiDriver: VERSI_DRIVER_BROWSER_FALLBACK,
+      tersedia: true,
+      apakahNative: false,
+      sumber: 'browser-in-memory',
+      versiRuntime: 'browser',
+      alasan: 'Berjalan di peramban; menggunakan fallback in-memory tanpa persistensi berkas disk.',
+    };
+  }
+
+  const versiNode = typeof process !== 'undefined' && process.version ? process.version : 'unknown';
+  const dbSync = muatKelasDatabaseSyncNative();
+  if (dbSync) {
+    return {
+      namaDriver: 'sqlite',
+      versiDriver: VERSI_DRIVER_SQLITE_NATIVE,
+      tersedia: true,
+      apakahNative: true,
+      sumber: 'node:sqlite',
+      versiRuntime: versiNode,
+    };
+  }
+
+  return {
+    namaDriver: 'sqlite',
+    versiDriver: `${VERSI_DRIVER_SQLITE_NATIVE} [TIDAK TERSEDIA]`,
+    tersedia: false,
+    apakahNative: false,
+    sumber: 'tidak-tersedia',
+    versiRuntime: versiNode,
+    alasan: `Modul bawaan Node.js 'node:sqlite' (DatabaseSync) tidak tersedia pada Node.js ${versiNode}. Diperlukan Node.js 22 LTS (>= 22.13.0).`,
+  };
+}
+
+/**
+ * Mesin SQL In-Memory terbatas khusus untuk fallback lingkungan peramban (Browser Vite).
+ *
+ * Batas kemampuan yang terdokumentasi:
+ * - Hanya menyimpan data sementara di memori peramban (tidak menulis berkas fisik).
+ * - Mendukung subset SQL dasar: CREATE TABLE (PRIMARY KEY, UNIQUE, NOT NULL),
+ *   INSERT INTO ... VALUES (...), UPDATE ... SET col = ? WHERE col = ?,
+ *   DELETE FROM ... WHERE col = ?, SELECT cols FROM tbl [WHERE col = ?] [ORDER BY] [LIMIT],
+ *   serta transaksi BEGIN / COMMIT / ROLLBACK berbasis snapshot.
+ * - Tidak mendukung fungsi agregasi SQL (COUNT/MAX/SUM), JOIN multi-tabel, atau subquery.
+ * - Tidak pernah digunakan secara diam-diam di lingkungan Node.js.
+ */
+export class MesinMemoriBrowserSQLite {
   private tabel = new Map<string, Array<Record<string, any>>>();
   private autoincrement = new Map<string, number>();
   private skemaKolom = new Map<string, { unik: Set<string>; notNull: Set<string> }>();
@@ -137,7 +194,10 @@ class InMemoriDatabaseSync {
         }
         this.skemaKolom.set(namaTabel, { unik: setUnik, notNull: setNotNull });
       }
+      return;
     }
+
+    throw new Error(`near "${s.split(/\s+/)[0] || s}": syntax error`);
   }
 
   public prepare(sql: string): any {
@@ -162,47 +222,79 @@ class InMemoriDatabaseSync {
     };
   }
 
-  private ekstraksiParameter(params: any[]): any[] {
+  private ekstraksiParameter(params: any[]): { positional: any[]; named: Record<string, any> | null } {
     if (params.length === 1 && typeof params[0] === 'object' && params[0] !== null && !Array.isArray(params[0])) {
-      return Object.values(params[0]);
+      return { positional: Object.values(params[0]), named: params[0] };
     }
-    return params;
+    return { positional: params, named: null };
+  }
+
+  private ambilNilaiToken(token: string, idxRef: { idx: number }, positional: any[], named: Record<string, any> | null): any {
+    const t = token.trim();
+    if (t === '?') {
+      return positional[idxRef.idx++];
+    }
+    if (named && (t.startsWith(':') || t.startsWith('@') || t.startsWith('$'))) {
+      if (t in named) return named[t];
+      const tanpaPrefix = t.slice(1);
+      if (tanpaPrefix in named) return named[tanpaPrefix];
+    }
+    if (/^['"].*['"]$/.test(t)) {
+      return t.slice(1, -1);
+    }
+    if (/^-?\d+(\.\d+)?$/.test(t)) {
+      return Number(t);
+    }
+    if (/^NULL$/i.test(t)) return null;
+    return undefined;
   }
 
   private jalankanRun(sql: string, paramsRaw: any[]): { changes: number; lastInsertRowid?: number } {
-    const params = this.ekstraksiParameter(paramsRaw);
+    const { positional, named } = this.ekstraksiParameter(paramsRaw);
+
+    if (/^(CREATE\s+TABLE|CREATE\s+INDEX|PRAGMA|BEGIN|COMMIT|ROLLBACK)/i.test(sql)) {
+      this.eksekusiDDL(sql);
+      return { changes: 0 };
+    }
 
     // INSERT INTO ...
     const matchInsert = sql.match(/^INSERT\s+INTO\s+([`"']?([a-zA-Z0-9_]+)[`"']?)\s*(?:\(([^)]+)\))?\s*VALUES\s*\(([^)]+)\)/i);
     if (matchInsert) {
       const namaTabel = matchInsert[2].toLowerCase();
       if (!this.tabel.has(namaTabel)) {
-        this.tabel.set(namaTabel, []);
-        this.autoincrement.set(namaTabel, 0);
-        this.skemaKolom.set(namaTabel, { unik: new Set(['id']), notNull: new Set(['id']) });
+        throw new Error(`no such table: ${namaTabel}`);
       }
 
       const kolomList = matchInsert[3]
         ? matchInsert[3].split(',').map(c => c.trim().replace(/[`"']/g, '').toLowerCase())
         : [];
+      const nilaiTokens = matchInsert[4].split(',');
 
       const daftarBaris = this.tabel.get(namaTabel)!;
-      let nextId = (this.autoincrement.get(namaTabel) || 0) + 1;
+      const nextId = (this.autoincrement.get(namaTabel) || 0) + 1;
       this.autoincrement.set(namaTabel, nextId);
 
       const barisBaru: Record<string, any> = { id: nextId };
+      const idxRef = { idx: 0 };
 
       kolomList.forEach((kolom, i) => {
-        barisBaru[kolom] = params[i] !== undefined ? params[i] : null;
+        const tok = nilaiTokens[i] !== undefined ? nilaiTokens[i] : '?';
+        const v = this.ambilNilaiToken(tok, idxRef, positional, named);
+        barisBaru[kolom] = v !== undefined ? v : null;
       });
 
       if (barisBaru.id === undefined || barisBaru.id === null) {
         barisBaru.id = nextId;
       }
 
-      // Validasi UNIQUE constraint
+      // Validasi UNIQUE & NOT NULL constraint
       const skema = this.skemaKolom.get(namaTabel);
       if (skema) {
+        for (const kolNN of skema.notNull) {
+          if (barisBaru[kolNN] === null || barisBaru[kolNN] === undefined) {
+            throw new Error(`NOT NULL constraint failed: ${namaTabel}.${kolNN}`);
+          }
+        }
         for (const kolUnik of skema.unik) {
           const val = barisBaru[kolUnik];
           if (val !== undefined && val !== null) {
@@ -222,6 +314,9 @@ class InMemoriDatabaseSync {
     const matchUpdate = sql.match(/^UPDATE\s+([`"']?([a-zA-Z0-9_]+)[`"']?)\s+SET\s+(.+?)(?:\s+WHERE\s+(.+))?$/i);
     if (matchUpdate) {
       const namaTabel = matchUpdate[2].toLowerCase();
+      if (!this.tabel.has(namaTabel)) {
+        throw new Error(`no such table: ${namaTabel}`);
+      }
       const setKlausul = matchUpdate[3];
       const whereKlausul = matchUpdate[4];
 
@@ -229,15 +324,18 @@ class InMemoriDatabaseSync {
       let jumlahPerubahan = 0;
 
       const pasangSet = setKlausul.split(',').map(s => s.trim());
-      let paramIdx = 0;
 
       for (const baris of daftarBaris) {
-        if (this.evaluasiWhere(baris, whereKlausul, params, pasangSet.length)) {
+        if (this.evaluasiWhere(baris, whereKlausul, positional, named, pasangSet.length)) {
+          const idxRef = { idx: 0 };
           pasangSet.forEach(p => {
-            const m = p.match(/^([a-zA-Z0-9_]+)\s*=\s*\?/);
+            const m = p.match(/^([a-zA-Z0-9_]+)\s*=\s*(.+)$/);
             if (m) {
               const kol = m[1].toLowerCase();
-              baris[kol] = params[paramIdx++];
+              const val = this.ambilNilaiToken(m[2], idxRef, positional, named);
+              if (val !== undefined) {
+                baris[kol] = val;
+              }
             }
           });
           jumlahPerubahan++;
@@ -250,13 +348,16 @@ class InMemoriDatabaseSync {
     const matchDelete = sql.match(/^DELETE\s+FROM\s+([`"']?([a-zA-Z0-9_]+)[`"']?)(?:\s+WHERE\s+(.+))?$/i);
     if (matchDelete) {
       const namaTabel = matchDelete[2].toLowerCase();
+      if (!this.tabel.has(namaTabel)) {
+        throw new Error(`no such table: ${namaTabel}`);
+      }
       const whereKlausul = matchDelete[3];
       const daftarBaris = this.tabel.get(namaTabel) || [];
       const barisTersisa: Record<string, any>[] = [];
       let jumlahHapus = 0;
 
       for (const baris of daftarBaris) {
-        if (this.evaluasiWhere(baris, whereKlausul, params, 0)) {
+        if (this.evaluasiWhere(baris, whereKlausul, positional, named, 0)) {
           jumlahHapus++;
         } else {
           barisTersisa.push(baris);
@@ -266,15 +367,19 @@ class InMemoriDatabaseSync {
       return { changes: jumlahHapus };
     }
 
-    return { changes: 0 };
+    throw new Error(`near "${sql.split(/\s+/)[0] || sql}": syntax error`);
   }
 
   private jalankanAll(sql: string, paramsRaw: any[]): Record<string, any>[] {
-    const params = this.ekstraksiParameter(paramsRaw);
+    const { positional, named } = this.ekstraksiParameter(paramsRaw);
+
+    if (/^SELECT\s+1$/i.test(sql.trim())) {
+      return [{ '1': 1 }];
+    }
 
     const matchSelect = sql.match(/^SELECT\s+(.+?)\s+FROM\s+([`"']?([a-zA-Z0-9_]+)[`"']?)(?:\s+WHERE\s+(.+?))?(?:\s+ORDER\s+BY\s+(.+?))?(?:\s+LIMIT\s+(\d+))?$/i);
     if (!matchSelect) {
-      return [];
+      throw new Error(`near "${sql.split(/\s+/)[0] || sql}": syntax error`);
     }
 
     const kolomPilih = matchSelect[1].trim();
@@ -283,8 +388,12 @@ class InMemoriDatabaseSync {
     const orderByKlausul = matchSelect[5];
     const limitKlausul = matchSelect[6];
 
+    if (!this.tabel.has(namaTabel)) {
+      throw new Error(`no such table: ${namaTabel}`);
+    }
+
     const daftarBaris = this.tabel.get(namaTabel) || [];
-    let barisHasil = daftarBaris.filter(baris => this.evaluasiWhere(baris, whereKlausul, params, 0));
+    let barisHasil = daftarBaris.filter(baris => this.evaluasiWhere(baris, whereKlausul, positional, named, 0));
 
     if (orderByKlausul) {
       const bagianOrder = orderByKlausul.trim().split(/\s+/);
@@ -318,25 +427,35 @@ class InMemoriDatabaseSync {
     });
   }
 
-  private evaluasiWhere(baris: Record<string, any>, where?: string, params?: any[], offsetParam = 0): boolean {
+  private evaluasiWhere(
+    baris: Record<string, any>,
+    where?: string,
+    positional?: any[],
+    named?: Record<string, any> | null,
+    offsetParam = 0
+  ): boolean {
     if (!where) return true;
     const w = where.trim();
     if (!w) return true;
 
-    // Sederhana: cocokkan kondisi "kolom = ?"
-    const matchSimple = w.match(/^([a-zA-Z0-9_]+)\s*=\s*\?$/);
-    if (matchSimple && params) {
-      const kol = matchSimple[1].toLowerCase();
-      const val = params[offsetParam];
+    const matchEqParam = w.match(/^([a-zA-Z0-9_]+)\s*=\s*(\?|[:@$][a-zA-Z0-9_]+)$/);
+    if (matchEqParam) {
+      const kol = matchEqParam[1].toLowerCase();
+      const tok = matchEqParam[2];
+      const val = this.ambilNilaiToken(tok, { idx: offsetParam }, positional || [], named || null);
       return baris[kol] == val;
     }
 
-    // Kondisi "kolom = 'nilai'"
-    const matchEq = w.match(/^([a-zA-Z0-9_]+)\s*=\s*['"]?([^'"]+)['"]?$/);
-    if (matchEq) {
-      const kol = matchEq[1].toLowerCase();
-      const val = matchEq[2];
-      return baris[kol] == val;
+    const matchEqLiteral = w.match(/^([a-zA-Z0-9_]+)\s*=\s*['"]([^'"]*)['"]$/);
+    if (matchEqLiteral) {
+      const kol = matchEqLiteral[1].toLowerCase();
+      return baris[kol] == matchEqLiteral[2];
+    }
+
+    const matchEqNum = w.match(/^([a-zA-Z0-9_]+)\s*=\s*(-?\d+(?:\.\d+)?)$/);
+    if (matchEqNum) {
+      const kol = matchEqNum[1].toLowerCase();
+      return baris[kol] == Number(matchEqNum[2]);
     }
 
     return true;
@@ -351,11 +470,20 @@ class InMemoriDatabaseSync {
 
 export class AdaptorSQLite implements AdaptorBasisdata {
   public readonly namaDriver = 'sqlite';
-  public readonly versiDriver = 'SQLite 3 (node:sqlite)';
+  private _versiDriver = VERSI_DRIVER_SQLITE_NATIVE;
 
   private db: DatabaseSync | null = null;
   private jalurAktif: string = '';
   private _dalamTransaksiAktif: boolean = false;
+  private readonly muatDriverOverride?: () => any | null;
+
+  constructor(opsiInternal?: { muatDriverNative?: () => any | null }) {
+    this.muatDriverOverride = opsiInternal?.muatDriverNative;
+  }
+
+  public get versiDriver(): string {
+    return this._versiDriver;
+  }
 
   public apakahTerbuka(): boolean {
     return this.db !== null;
@@ -363,6 +491,10 @@ export class AdaptorSQLite implements AdaptorBasisdata {
 
   public dalamTransaksi(): boolean {
     return this._dalamTransaksiAktif;
+  }
+
+  public dapatkanJalurAktif(): string {
+    return this.jalurAktif;
   }
 
   public buka(opsi: OpsiKoneksiBasisdata): void {
@@ -374,29 +506,63 @@ export class AdaptorSQLite implements AdaptorBasisdata {
     }
 
     const jalur = opsi.jalur ? opsi.jalur.trim() : ':memory:';
-    const DatabaseSyncClass = dapatkanKelasDatabaseSync() || InMemoriDatabaseSync;
+    const diBrowser = apakahLingkunganBrowser();
+
+    if (diBrowser) {
+      if (opsi.izinkanFallbackBrowser === false) {
+        throw new GalatBasisdata(
+          JenisGalatBasisdata.DRIVER_TIDAK_TERSEDIA,
+          'Driver SQLite native (node:sqlite) tidak tersedia di peramban dan fallback in-memory dinonaktifkan.'
+        );
+      }
+      this.jalurAktif = jalur || ':memory:';
+      try {
+        this._versiDriver = VERSI_DRIVER_BROWSER_FALLBACK;
+        this.db = new MesinMemoriBrowserSQLite(this.jalurAktif);
+        this.inisialisasiPragma(opsi);
+        return;
+      } catch (err) {
+        this.db = null;
+        throw this.terjemahkanGalat(err, `BUKA_KONEKSI: ${this.jalurAktif}`);
+      }
+    }
+
+    // Lingkungan Node.js: WAJIB menggunakan node:sqlite (DatabaseSync) asli.
+    // Tidak pernah diam-diam beralih ke database in-memory.
+    const DatabaseSyncClass =
+      this.muatDriverOverride !== undefined ? this.muatDriverOverride() : muatKelasDatabaseSyncNative();
+
+    if (!DatabaseSyncClass || typeof DatabaseSyncClass !== 'function') {
+      const versiNode = typeof process !== 'undefined' && process.version ? process.version : 'unknown';
+      throw new GalatBasisdata(
+        JenisGalatBasisdata.DRIVER_TIDAK_TERSEDIA,
+        `Driver SQLite native ('node:sqlite' / DatabaseSync) tidak tersedia pada Node.js ${versiNode}. ` +
+          `Operasi untuk '${jalur || ':memory:'}' ditolak dan tidak dialihkan ke database in-memory. ` +
+          `Gunakan Node.js 22 LTS (>= 22.13.0) agar process.getBuiltinModule('node:sqlite') tersedia.`
+      );
+    }
+
+    this._versiDriver = VERSI_DRIVER_SQLITE_NATIVE;
+
+    const opsiDriver: Record<string, any> = {};
+    if (opsi.modeBuka === 'baca_saja') {
+      opsiDriver.readOnly = true;
+    }
+    if (typeof opsi.batasWaktuMilidetik === 'number' && opsi.batasWaktuMilidetik > 0) {
+      opsiDriver.timeout = Math.floor(opsi.batasWaktuMilidetik);
+    }
 
     if (jalur === '' || jalur === ':memory:') {
       this.jalurAktif = ':memory:';
       try {
-        this.db = new DatabaseSyncClass(':memory:');
-        this.inisialisasiPragma();
+        this.db = Object.keys(opsiDriver).length > 0
+          ? new DatabaseSyncClass(':memory:', opsiDriver)
+          : new DatabaseSyncClass(':memory:');
+        this.inisialisasiPragma(opsi);
         return;
       } catch (err) {
+        this.db = null;
         throw this.terjemahkanGalat(err, 'BUKA_KONEKSI');
-      }
-    }
-
-    // Jika berjalan di browser dan meminta berkas, gunakan in-memory virtual
-    const apakahBrowser = typeof window !== 'undefined' || typeof document !== 'undefined';
-    if (apakahBrowser) {
-      this.jalurAktif = jalur;
-      try {
-        this.db = new InMemoriDatabaseSync(jalur);
-        this.inisialisasiPragma();
-        return;
-      } catch (err) {
-        throw this.terjemahkanGalat(err, `BUKA_KONEKSI: ${jalur}`);
       }
     }
 
@@ -407,7 +573,10 @@ export class AdaptorSQLite implements AdaptorBasisdata {
       : path.resolve(direktoriAman, jalur);
 
     const relatif = path.relative(direktoriAman, jalurDiselesaikan);
-    const lolosKeamanan = !relatif.startsWith('..') && !path.isAbsolute(relatif);
+    const lolosKeamanan =
+      relatif !== '..' &&
+      !relatif.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relatif);
 
     if (!lolosKeamanan && path.resolve('/') !== direktoriAman) {
       throw new GalatBasisdata(
@@ -416,35 +585,50 @@ export class AdaptorSQLite implements AdaptorBasisdata {
       );
     }
 
-    // Pastikan folder induk ada
-    try {
-      const folderInduk = path.dirname(jalurDiselesaikan);
-      if (!fs.existsSync(folderInduk)) {
-        fs.mkdirSync(folderInduk, { recursive: true });
+    if (opsi.modeBuka === 'baca_saja') {
+      if (!fs.existsSync(jalurDiselesaikan)) {
+        throw new GalatBasisdata(
+          JenisGalatBasisdata.KONEKSI_GAGAL,
+          `Berkas basis data mode baca-saja tidak ditemukan: '${jalur}'`
+        );
       }
-    } catch (err) {
-      throw new GalatBasisdata(
-        JenisGalatBasisdata.KONEKSI_GAGAL,
-        `Gagal membuat direktori untuk berkas basis data: ${(err as Error).message}`
-      );
+    } else {
+      // Pastikan folder induk ada
+      try {
+        const folderInduk = path.dirname(jalurDiselesaikan);
+        if (!fs.existsSync(folderInduk)) {
+          fs.mkdirSync(folderInduk, { recursive: true });
+        }
+      } catch (err) {
+        throw new GalatBasisdata(
+          JenisGalatBasisdata.KONEKSI_GAGAL,
+          `Gagal membuat direktori untuk berkas basis data: ${(err as Error).message}`
+        );
+      }
     }
 
     this.jalurAktif = jalurDiselesaikan;
     try {
-      this.db = new DatabaseSyncClass(jalurDiselesaikan);
-      this.inisialisasiPragma();
+      this.db = Object.keys(opsiDriver).length > 0
+        ? new DatabaseSyncClass(jalurDiselesaikan, opsiDriver)
+        : new DatabaseSyncClass(jalurDiselesaikan);
+      this.inisialisasiPragma(opsi);
     } catch (err) {
       this.db = null;
       throw this.terjemahkanGalat(err, `BUKA_KONEKSI: ${jalur}`);
     }
   }
 
-  private inisialisasiPragma(): void {
+  private inisialisasiPragma(opsi?: OpsiKoneksiBasisdata): void {
     if (!this.db) return;
+    if (opsi?.modeBuka === 'baca_saja') return;
     try {
       this.db.exec('PRAGMA foreign_keys = ON;');
+      if (typeof opsi?.batasWaktuMilidetik === 'number' && opsi.batasWaktuMilidetik > 0) {
+        this.db.exec(`PRAGMA busy_timeout = ${Math.floor(opsi.batasWaktuMilidetik)};`);
+      }
     } catch {
-      // Abaikan jika pragma opsional
+      // Abaikan jika pragma opsional tidak didukung
     }
   }
 
@@ -455,7 +639,7 @@ export class AdaptorSQLite implements AdaptorBasisdata {
         try {
           this.rollback();
         } catch {
-          // Abaikan jika rollback gagal saat penutupan
+          this._dalamTransaksiAktif = false;
         }
       }
       this.db.close();
@@ -493,16 +677,17 @@ export class AdaptorSQLite implements AdaptorBasisdata {
         if (k.startsWith(':') || k.startsWith('@') || k.startsWith('$')) {
           objHasil[k] = nilaiNormal;
         } else {
+          const esc = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
           let adaPrefix = false;
-          if (sqlText.includes(`:${k}`)) {
+          if (new RegExp(`:${esc}(?![A-Za-z0-9_])`).test(sqlText)) {
             objHasil[`:${k}`] = nilaiNormal;
             adaPrefix = true;
           }
-          if (sqlText.includes(`@${k}`)) {
+          if (new RegExp(`@${esc}(?![A-Za-z0-9_])`).test(sqlText)) {
             objHasil[`@${k}`] = nilaiNormal;
             adaPrefix = true;
           }
-          if (sqlText.includes(`$${k}`)) {
+          if (new RegExp(`\\$${esc}(?![A-Za-z0-9_])`).test(sqlText)) {
             objHasil[`$${k}`] = nilaiNormal;
             adaPrefix = true;
           }
@@ -544,9 +729,19 @@ export class AdaptorSQLite implements AdaptorBasisdata {
       const params = this.normalisasiParameter(parameter, sqlBersih);
       const stmt = db.prepare(sqlBersih);
       const hasil = (stmt as any).run(...params);
+
+      if (/^BEGIN(?:\s+(?:DEFERRED|IMMEDIATE|EXCLUSIVE))?(?:\s+TRANSACTION)?\s*;?$/i.test(sqlBersih)) {
+        this._dalamTransaksiAktif = true;
+      } else if (
+        /^(?:COMMIT|END)(?:\s+TRANSACTION)?\s*;?$/i.test(sqlBersih) ||
+        /^ROLLBACK(?:\s+TRANSACTION)?\s*;?$/i.test(sqlBersih)
+      ) {
+        this._dalamTransaksiAktif = false;
+      }
+
       return {
-        barisTerpengaruh: Number(hasil.changes ?? 0),
-        idTerakhir: hasil.lastInsertRowid !== undefined ? Number(hasil.lastInsertRowid) : undefined,
+        barisTerpengaruh: Number(hasil?.changes ?? 0),
+        idTerakhir: hasil?.lastInsertRowid !== undefined ? Number(hasil.lastInsertRowid) : undefined,
         sukses: true,
       };
     } catch (err) {
@@ -615,7 +810,11 @@ export class AdaptorSQLite implements AdaptorBasisdata {
     if (kunci.length === 0) {
       return null;
     }
-    return (row[kunci[0]] as T) ?? null;
+    const nilai = row[kunci[0]];
+    if (nilai === undefined || nilai === null) {
+      return null;
+    }
+    return nilai as T;
   }
 
   public mulaiTransaksi(): void {
@@ -662,6 +861,7 @@ export class AdaptorSQLite implements AdaptorBasisdata {
       db.exec('ROLLBACK;');
       this._dalamTransaksiAktif = false;
     } catch (err) {
+      this._dalamTransaksiAktif = false;
       throw this.terjemahkanGalat(err, 'ROLLBACK');
     }
   }
@@ -676,7 +876,8 @@ export class AdaptorSQLite implements AdaptorBasisdata {
 
     if (
       teksBawah.includes('unique constraint') ||
-      teksBawah.includes('kekangan unik')
+      teksBawah.includes('kekangan unik') ||
+      teksBawah.includes('primary key must be unique')
     ) {
       return new GalatBasisdata(
         JenisGalatBasisdata.KEKANGAN_TERLANGGAR,
@@ -698,10 +899,37 @@ export class AdaptorSQLite implements AdaptorBasisdata {
       );
     }
 
-    if (teksBawah.includes('foreign key constraint')) {
+    if (teksBawah.includes('foreign key constraint') || teksBawah.includes('check constraint')) {
       return new GalatBasisdata(
         JenisGalatBasisdata.KEKANGAN_TERLANGGAR,
-        `Pelanggaran kekangan relasi kunci asing (FOREIGN KEY): ${pesan}`,
+        `Pelanggaran kekangan relasi/integritas basis data: ${pesan}`,
+        sql,
+        err
+      );
+    }
+
+    if (
+      teksBawah.includes('unknown named parameter') ||
+      teksBawah.includes('too many parameter') ||
+      teksBawah.includes('wrong number of arguments') ||
+      teksBawah.includes('bind')
+    ) {
+      return new GalatBasisdata(
+        JenisGalatBasisdata.PARAMETER_TIDAK_VALID,
+        `Parameter binding SQL tidak valid: ${pesan}`,
+        sql,
+        err
+      );
+    }
+
+    if (
+      teksBawah.includes('cannot start a transaction') ||
+      teksBawah.includes('cannot commit') ||
+      teksBawah.includes('cannot rollback')
+    ) {
+      return new GalatBasisdata(
+        JenisGalatBasisdata.TRANSAKSI_GAGAL,
+        `Operasi transaksi SQL gagal: ${pesan}`,
         sql,
         err
       );
@@ -710,7 +938,8 @@ export class AdaptorSQLite implements AdaptorBasisdata {
     if (
       teksBawah.includes('syntax error') ||
       teksBawah.includes('near ') ||
-      teksBawah.includes('unrecognized token')
+      teksBawah.includes('unrecognized token') ||
+      teksBawah.includes('incomplete input')
     ) {
       return new GalatBasisdata(
         JenisGalatBasisdata.SINTAKS_SQL,
@@ -722,7 +951,8 @@ export class AdaptorSQLite implements AdaptorBasisdata {
 
     if (
       teksBawah.includes('no such table') ||
-      teksBawah.includes('no such column')
+      teksBawah.includes('no such column') ||
+      teksBawah.includes('no such function')
     ) {
       return new GalatBasisdata(
         JenisGalatBasisdata.SINTAKS_SQL,

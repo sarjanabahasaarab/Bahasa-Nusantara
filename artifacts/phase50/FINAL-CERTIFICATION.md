@@ -10,17 +10,16 @@
 
 ---
 
-### 1. Informasi Lingkungan Runner & Toolchain Host Lokal
+### 1. Pemisahan Status Lingkungan, Regresi CI, ISO Build & Eksekusi QEMU
 
-| Komponen | Status Faktual Lokal | Keterangan |
-|---|:---:|---|
-| **OS Host Container** | Terdeteksi | Linux x86_64 (`Node.js v22.23.2`) |
-| **QEMU Emulator** | **MISSING** | `qemu-system-x86_64` tidak terpasang di container lokal |
-| **Clang Compiler** | **MISSING** | `clang` tidak terpasang di container lokal |
-| **LLD Linker** | **MISSING** | `ld.lld` / `lld` tidak terpasang di container lokal |
-| **GRUB Utility** | **MISSING** | `grub-mkrescue` / `grub-file` tidak terpasang di container lokal |
-| **Xorriso Utility** | **MISSING** | `xorriso` tidak terpasang di container lokal |
-| **QEMU Bare-Metal Exec** | **NOT EXECUTED** | Menunggu eksekusi pada runner `ubuntu-latest` GitHub Actions |
+| Subsistem / Target | Status Faktual Lokal (`linux x64`) | Status Target GitHub Actions CI | Keterangan |
+|---|---|---|---|
+| **Node.js Runtime & `node:sqlite`** | **TERVERIFIKASI (`v22.23.2`)** | **Node.js 22 LTS** | `process.getBuiltinModule('node:sqlite').DatabaseSync` terverifikasi; workflow `ci.yml`, `kernel-boot-qemu.yml`, `nusantara-os-ci.yml`, `release.yml` disamakan ke Node 22 LTS + `npm ci`. |
+| **SQLite Phase 29 (`test:database-v29`)** | **26/26 LULUS** (+3 browser fallback terpisah) | **Dijalankan di Linux, macOS, Windows** | Tidak ada fallback in-memory tersembunyi di Node.js; browser fallback diuji terpisah di `uji_browser_fallback_fase29.ts`. |
+| **Regresi Lintas Platform (`npm test`)** | **LULUS (Linux `x64`)** | **SIAP CI (`ubuntu`, `macos`, `windows`)** | Seluruh 45 skrip uji lulus lokal di Linux; eksekusi pada `macos-latest` dan `windows-latest` menunggu runner GitHub Actions. |
+| **Biner Kernel & User ELF64** | **VALID (`ELF64` + `Multiboot2`)** | **VALID + `grub-file`** | `kernel.elf`, `user-test.elf`, `user-fault-test.elf` tervalidasi struktural & checksum `SHA256SUMS`. |
+| **Image ISO GRUB2 (`grub-mkrescue`)** | **NOT_BUILT** (`grub-mkrescue`/`xorriso` **MISSING**) | **Dibangun & Divalidasi El Torito** | `grub-pc-bin` + `xorriso` dipasang oleh workflow di `ubuntu-latest`. |
+| **Eksekusi QEMU Bare-Metal (18 Sentinel)** | **NOT EXECUTED** (`qemu-system-x86_64` **MISSING**) | **Menunggu Eksekusi `ubuntu-latest`** | Sertifikasi final hanya boleh dinyatakan COMPLETE setelah QEMU keluar `1` dan log serial UART aktual memuat 18 sentinel berurutan. |
 
 ---
 

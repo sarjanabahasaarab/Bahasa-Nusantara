@@ -61,12 +61,11 @@ jobs:
       - name: Pasang Lingkungan Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Pasang Dependensi
-        run: |
-          npm ci || npm install --no-audit --prefer-offline
+        run: npm ci
 
       - name: Validasi Konsistensi Versi Proyek
         run: |
@@ -96,12 +95,11 @@ jobs:
       - name: Pasang Lingkungan Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Pasang Dependensi
-        run: |
-          npm ci || npm install --no-audit --prefer-offline
+        run: npm ci
 
       - name: Jalankan Static Check & Seluruh Rangkaian Uji
         run: |
@@ -139,12 +137,11 @@ jobs:
       - name: Pasang Lingkungan Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Pasang Dependensi
-        run: |
-          npm ci || npm install --no-audit --prefer-offline
+        run: npm ci
 
       - name: Bangun Distribusi Bersih Resmi (${{ matrix.target }})
         run: |
@@ -186,7 +183,7 @@ jobs:
       - name: Pasang Lingkungan Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Unduh Seluruh Artefak Terkompilasi

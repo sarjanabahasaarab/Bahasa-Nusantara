@@ -9,7 +9,11 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { AdaptorSQLite } from '../../src/database/sqlite';
+import {
+  AdaptorSQLite,
+  apakahSqliteNativeTersedia,
+  dapatkanInfoDriverSQLite,
+} from '../../src/database/sqlite';
 import { JenisGalatBasisdata, GalatBasisdata } from '../../src/database/jenis';
 import {
   KATALOG_MODUL_STANDAR,
@@ -85,6 +89,47 @@ uji('dapatkanSemuaModulStandar memuat modul Fase 29', () => {
 // ----------------------------------------------------------------------------
 console.log('\n2. Pengujian Adaptor SQLite (In-Memory & Persistensi Berkas):');
 
+uji('Runtime Node.js menyediakan process.getBuiltinModule("node:sqlite").DatabaseSync secara native', () => {
+  const getBuiltin = (process as any).getBuiltinModule;
+  pastikan(typeof getBuiltin === 'function', `process.getBuiltinModule wajib tersedia (Node ${process.version})`);
+  const modSqlite = getBuiltin.call(process, 'node:sqlite');
+  pastikan(
+    Boolean(modSqlite && typeof modSqlite.DatabaseSync === 'function'),
+    `node:sqlite DatabaseSync tidak tersedia pada Node ${process.version}. Gunakan Node.js 22 LTS.`
+  );
+  pastikan(apakahSqliteNativeTersedia(), 'apakahSqliteNativeTersedia() harus bernilai true');
+  const info = dapatkanInfoDriverSQLite();
+  pastikanSama(info.sumber, 'node:sqlite');
+  pastikanSama(info.apakahNative, true);
+  pastikanSama(info.tersedia, true);
+});
+
+uji('Penolakan eksplisit (DRIVER_TIDAK_TERSEDIA) bila SQLite native tidak ada di Node.js', () => {
+  const berkasPalsu = path.join(process.cwd(), 'temp_uji_tanpa_driver.db');
+  const dbTanpaDriver = new AdaptorSQLite({ muatDriverNative: () => null });
+  let kenaGalatFile = false;
+  try {
+    dbTanpaDriver.buka({ jalur: berkasPalsu });
+  } catch (err) {
+    kenaGalatFile = true;
+    pastikan(err instanceof GalatBasisdata, 'Harus melempar GalatBasisdata');
+    pastikanSama((err as GalatBasisdata).jenis, JenisGalatBasisdata.DRIVER_TIDAK_TERSEDIA);
+    pastikan((err as Error).message.includes('node:sqlite'), 'Pesan error harus menjelaskan kebutuhan node:sqlite');
+  }
+  pastikan(kenaGalatFile, 'Tidak boleh diam-diam beralih ke fallback in-memory untuk berkas persisten');
+  pastikan(!fs.existsSync(berkasPalsu), 'Berkas database tidak boleh terbuat jika driver native gagal dimuat');
+
+  let kenaGalatMemori = false;
+  try {
+    dbTanpaDriver.buka({ jalur: ':memory:' });
+  } catch (err) {
+    kenaGalatMemori = true;
+    pastikan(err instanceof GalatBasisdata);
+    pastikanSama((err as GalatBasisdata).jenis, JenisGalatBasisdata.DRIVER_TIDAK_TERSEDIA);
+  }
+  pastikan(kenaGalatMemori, 'Node.js tanpa node:sqlite harus menolak koneksi secara eksplisit');
+});
+
 uji('Buka dan tutup koneksi SQLite in-memory (:memory:)', () => {
   const db = new AdaptorSQLite();
   pastikan(!db.apakahTerbuka(), 'Sebelum dibuka, status harus belum terbuka');
@@ -106,23 +151,29 @@ uji('Persistensi data pada berkas SQLite lokal', () => {
     }
   }
 
+  let db1: AdaptorSQLite | null = null;
+  let db2: AdaptorSQLite | null = null;
   try {
     // Sesi 1: Tulis data
-    const db1 = new AdaptorSQLite();
+    db1 = new AdaptorSQLite();
     db1.buka({ jalur: berkasDb });
     db1.eksekusi('CREATE TABLE konfigurasi (kunci TEXT PRIMARY KEY, nilai TEXT)');
     db1.eksekusi('INSERT INTO konfigurasi (kunci, nilai) VALUES (?, ?)', ['versi_app', '1.0.0']);
     db1.tutup();
+    db1 = null;
 
     pastikan(fs.existsSync(berkasDb), 'Berkas database harus tercipta di disk');
 
     // Sesi 2: Baca kembali data yang tersimpan
-    const db2 = new AdaptorSQLite();
+    db2 = new AdaptorSQLite();
     db2.buka({ jalur: berkasDb });
     const nilai = db2.ambilNilai<string>('SELECT nilai FROM konfigurasi WHERE kunci = ?', ['versi_app']);
     pastikanSama(nilai, '1.0.0', 'Data harus persisten setelah database ditutup dan dibuka kembali');
     db2.tutup();
+    db2 = null;
   } finally {
+    if (db1?.apakahTerbuka()) db1.tutup();
+    if (db2?.apakahTerbuka()) db2.tutup();
     if (fs.existsSync(berkasDb)) {
       try {
         fs.unlinkSync(berkasDb);
@@ -186,8 +237,9 @@ uji('Named Parameter Binding (:nama, @divisi, $gaji)', () => {
   db.buka({ jalur: ':memory:' });
 
   db.eksekusi('CREATE TABLE produk (id INTEGER PRIMARY KEY AUTOINCREMENT, nama TEXT, stok INTEGER, harga REAL)');
+  db.eksekusi('CREATE TABLE pegawai (id INTEGER PRIMARY KEY AUTOINCREMENT, nama TEXT, nama_lengkap TEXT, divisi TEXT, gaji REAL)');
 
-  // Menggunakan objek parameter
+  // Menggunakan objek parameter tanpa prefiks untuk :nama, :stok, :harga
   const hasil = db.eksekusi('INSERT INTO produk (nama, stok, harga) VALUES (:nama, :stok, :harga)', {
     nama: 'Batik Tulis Nusantara',
     stok: 25,
@@ -199,6 +251,24 @@ uji('Named Parameter Binding (:nama, @divisi, $gaji)', () => {
   pastikan(row !== null, 'Baris data harus ditemukan');
   pastikanSama(row.stok, 25);
   pastikanSama(row.harga, 350000.0);
+
+  // Pengujian ketiga gaya prefiks (:nama, @divisi, $gaji) dan batas identifier (:nama vs :nama_lengkap)
+  db.eksekusi(
+    'INSERT INTO pegawai (nama, nama_lengkap, divisi, gaji) VALUES (:nama, :nama_lengkap, @divisi, $gaji)',
+    {
+      nama: 'Budi',
+      nama_lengkap: 'Budi Santoso',
+      divisi: 'Sistem Operasi',
+      gaji: 18500000,
+    }
+  );
+  const pg1 = db.ambilSatu<any>(
+    'SELECT * FROM pegawai WHERE nama = :nama AND divisi = @divisi AND gaji >= $gaji',
+    { ':nama': 'Budi', '@divisi': 'Sistem Operasi', '$gaji': 18000000 }
+  );
+  pastikan(pg1 !== null, 'Pegawai harus ditemukan dengan kombinasi :nama, @divisi, $gaji');
+  pastikanSama(pg1.nama_lengkap, 'Budi Santoso');
+  pastikanSama(pg1.gaji, 18500000);
 
   db.tutup();
 });
@@ -238,18 +308,22 @@ uji('ambilSatu mengembalikan satu baris atau null jika tidak ada', () => {
   db.tutup();
 });
 
-uji('ambilNilai mengembalikan nilai kolom pertama baris pertama atau null', () => {
+uji('ambilNilai mengembalikan nilai kolom pertama baris pertama (termasuk 0) atau null', () => {
   const db = new AdaptorSQLite();
   db.buka({ jalur: ':memory:' });
   db.eksekusi('CREATE TABLE skor (poin REAL)');
   db.eksekusi('INSERT INTO skor (poin) VALUES (?)', [98.5]);
   db.eksekusi('INSERT INTO skor (poin) VALUES (?)', [75.0]);
+  db.eksekusi('INSERT INTO skor (poin) VALUES (?)', [0]);
 
   const maks = db.ambilNilai<number>('SELECT MAX(poin) FROM skor');
   pastikanSama(maks, 98.5);
 
+  const min = db.ambilNilai<number>('SELECT MIN(poin) FROM skor');
+  pastikanSama(min, 0, 'Nilai skalar 0 harus dikembalikan sebagai 0, bukan null');
+
   const jumlah = db.ambilNilai<number>('SELECT COUNT(*) FROM skor');
-  pastikanSama(jumlah, 2);
+  pastikanSama(jumlah, 3);
 
   const kosong = db.ambilNilai('SELECT poin FROM skor WHERE poin > 100');
   pastikanSama(kosong, null);
@@ -386,6 +460,47 @@ uji('Galat sintaks SQL diterjemahkan ke Bahasa Indonesia', () => {
   db.tutup();
 });
 
+uji('Transaksi via perintah SQL BEGIN / COMMIT / ROLLBACK dan penutupan koneksi aman', () => {
+  const db = new AdaptorSQLite();
+  db.buka({ jalur: ':memory:' });
+  db.eksekusi('CREATE TABLE log_tx (pesan TEXT)');
+
+  db.eksekusi('BEGIN');
+  pastikan(db.dalamTransaksi(), 'eksekusi BEGIN harus menandai transaksi aktif');
+  db.eksekusi('INSERT INTO log_tx (pesan) VALUES (?)', ['batal']);
+  db.eksekusi('ROLLBACK');
+  pastikan(!db.dalamTransaksi(), 'eksekusi ROLLBACK harus mengakhiri transaksi aktif');
+  pastikanSama(db.ambilNilai<number>('SELECT COUNT(*) FROM log_tx'), 0);
+
+  db.eksekusi('BEGIN TRANSACTION');
+  db.eksekusi('INSERT INTO log_tx (pesan) VALUES (?)', ['simpan']);
+  db.eksekusi('COMMIT');
+  pastikan(!db.dalamTransaksi(), 'eksekusi COMMIT harus mengakhiri transaksi aktif');
+  pastikanSama(db.ambilNilai<number>('SELECT COUNT(*) FROM log_tx'), 1);
+
+  db.tutup();
+});
+
+uji('Galat parameter binding tidak dikenal diterjemahkan ke PARAMETER_TIDAK_VALID', () => {
+  const db = new AdaptorSQLite();
+  db.buka({ jalur: ':memory:' });
+  db.eksekusi('CREATE TABLE contoh (nama TEXT)');
+
+  let kenaGalat = false;
+  try {
+    db.eksekusi('SELECT * FROM contoh WHERE nama = :nama', {
+      nama: 'Adi',
+      parameterAsing: 'xyz',
+    });
+  } catch (err) {
+    kenaGalat = true;
+    pastikan(err instanceof GalatBasisdata);
+    pastikanSama((err as GalatBasisdata).jenis, JenisGalatBasisdata.PARAMETER_TIDAK_VALID);
+  }
+  pastikan(kenaGalat, 'Parameter tidak dikenal harus melempar PARAMETER_TIDAK_VALID');
+  db.tutup();
+});
+
 uji('Operasi pada koneksi yang sudah ditutup menghasilkan KONEKSI_TUTUP', () => {
   const db = new AdaptorSQLite();
   db.buka({ jalur: ':memory:' });
@@ -418,6 +533,11 @@ uji('Ekspor modul basisdata menyediakan bukaKoneksi, bukaMemori, dan versiDriver
   const hasilVersi = fnVersi.eksekusi([]);
   pastikanSama(hasilVersi.jenis, JenisNilaiRuntime.TEKS);
   pastikan((hasilVersi as any).nilai.includes('SQLite 3'));
+
+  const fnTersedia = ekspor.get('apakahTersedia') as NilaiFungsiBawaan;
+  const hasilTersedia = fnTersedia.eksekusi([]);
+  pastikanSama(hasilTersedia.jenis, JenisNilaiRuntime.LOGIKA);
+  pastikanSama((hasilTersedia as any).nilai, true);
 });
 
 uji('bukaMemori menghasilkan objek koneksi Nusantara lengkap dengan method-method bawaan', () => {
@@ -514,6 +634,52 @@ selesai
   const logs = jalankanProgram(kode);
   pastikan(logs.includes('Koin Rollback: 100'), 'Harus menampilkan Koin Rollback: 100');
   pastikan(logs.includes('Koin Commit: 250'), 'Harus menampilkan Koin Commit: 250');
+});
+
+uji('Program NUSANTARA: db.jalankanTransaksi dengan callback fungsi pengguna & persistensi berkas', () => {
+  const namaBerkas = 'temp_uji_interpreter_fase29.db';
+  const jalurLengkap = path.join(process.cwd(), namaBerkas);
+  if (fs.existsSync(jalurLengkap)) {
+    fs.unlinkSync(jalurLengkap);
+  }
+
+  try {
+    const kode = `program UjiTransaksiCallbackDanBerkas
+gunakan "basisdata" sebagai db
+
+fungsi tambahSaldo(kon : peta) : bilangan
+mulai
+    kon.eksekusi("INSERT INTO mutasi (keterangan, nominal) VALUES (:ket, @nom)", { ket: "Setoran Awal", nom: 500000 })
+    kembalikan kon.ambilNilai("SELECT SUM(nominal) FROM mutasi")
+selesai
+
+mulai
+    kon1 : peta = db.bukaKoneksi("${namaBerkas}")
+    kon1.eksekusi("CREATE TABLE mutasi (id INTEGER PRIMARY KEY AUTOINCREMENT, keterangan TEXT, nominal INTEGER)")
+    total : bilangan = db.jalankanTransaksi(kon1, tambahSaldo)
+    kon1.tutup()
+
+    kon2 : peta = db.bukaKoneksi("${namaBerkas}")
+    tersimpan : bilangan = kon2.ambilNilai("SELECT SUM(nominal) FROM mutasi")
+    kon2.tutup()
+
+    tampilkan("Total Callback:", total)
+    tampilkan("Tersimpan Disk:", tersimpan)
+selesai
+`;
+    const logs = jalankanProgram(kode);
+    pastikan(logs.includes('Total Callback: 500000'), 'Callback jalankanTransaksi harus mengembalikan 500000');
+    pastikan(logs.includes('Tersimpan Disk: 500000'), 'Data harus persisten di berkas disk');
+    pastikan(fs.existsSync(jalurLengkap), 'Berkas SQLite dari program NUSANTARA harus terbuat di disk');
+  } finally {
+    if (fs.existsSync(jalurLengkap)) {
+      try {
+        fs.unlinkSync(jalurLengkap);
+      } catch {
+        // Abaikan
+      }
+    }
+  }
 });
 
 // ----------------------------------------------------------------------------

@@ -47,8 +47,12 @@ NUSANTARA bukan sekadar terjemahan sintaksis atau praprosesor teks atas bahasa a
 - **Total Fase Diaudit:** 50 Fase (Phase 1 s/d Phase 50).
   - 🟢 **Selesai Penuh (40 Fase):** Phase 1–22, Phase 24–35, dan Phase 43–48 berstatus implementasi penuh dan lulus seluruh pengujian unit, integrasi, serta E2E (catatan: 3 skenario biner native LLVM/Linker/Actor pada Phase 44–46 ditandai *skipped* transparan di container tanpa `clang`/`llc`/`lld`).
   - 🟠 **Selesai Sebagian / PARTIAL (10 Fase):** Phase 23 & 36–42 (implementasi inti & protokol nyata aktif dan teruji via loopback HTTP/WebSocket, kripto Ed25519/RS256/ES256, & PKZIP CRC-32; perangkat keras fisik, display server, Android SDK, Xcode, serta toko produksi memerlukan toolchain/kredensial eksternal) dan Phase 49–50 (90 pengujian OS kernel/usermode lulus 100% dan ISO `artifacts/phase50/` tervalidasi; eksekusi boot bare-metal QEMU siap di GitHub Actions karena container lokal tidak memiliki `qemu-system-x86_64`).
-- **Rangkaian Pengujian:** 45 perintah uji otomatis lulus 100% (167 pemeriksaan dokumen fondasi + 1.271 skenario TypeScript di 44 suite: 1.268 lulus, 0 gagal, 3 *skipped* transparan = **1.438 pemeriksaan gabungan terverifikasi**).
-- **Audit Terakhir:** 12 November 2026.
+- **Rangkaian Pengujian (`npm test`):** 45 perintah uji otomatis lulus 100% di Linux x86_64 (`Node.js v22.23.2`): 167 pemeriksaan dokumen fondasi + 1.276 skenario TypeScript di 44 suite (1.273 lulus, 0 gagal, 3 *skipped* transparan = **1.443 pemeriksaan gabungan terverifikasi**), ditambah 3 uji terpisah untuk fallback peramban (`npm run test:database-browser-v29`).
+- **Pemisahan Status Verifikasi Lingkungan:**
+  - **SQLite Native (`node:sqlite`):** `26/26` lulus lokal pada Node.js 22 LTS Linux; tidak diam-diam fallback in-memory di Node.js.
+  - **Regresi Lintas Platform:** Linux lulus lokal; `ubuntu-latest`, `macos-latest`, dan `windows-latest` disiapkan pada `.github/workflows/ci.yml` dengan **Node.js 22 LTS** & `npm ci` (eksekusi macOS/Windows menunggu GitHub Actions).
+  - **Build ISO & Eksekusi QEMU:** Biner `kernel.elf`/`user-test.elf`/`user-fault-test.elf` tervalidasi ELF64/Multiboot2, namun ISO GRUB2 (`NOT_BUILT`) dan QEMU (`NOT EXECUTED`) menunggu runner Ubuntu di GitHub Actions.
+- **Audit Terakhir:** 13 November 2026.
 - **Dokumentasi Roadmap Lengkap:** Silakan baca [ROADMAP.md](ROADMAP.md) untuk tabel detail status, bukti implementasi, dan rencana pengembangan fase 1 hingga 50.
 
 ---
@@ -290,8 +294,8 @@ Pada Windows:
 
 ### 5.2 Membangun dari Sumber (Build From Source)
 Kebutuhan lingkungan:
-- Node.js versi 18 LTS ke atas (disarankan Node.js 22 LTS).
-- npm versi 9 ke atas.
+- Node.js versi 22 LTS (`>= 22.13.0`, wajib untuk dukungan native `node:sqlite` / `DatabaseSync`).
+- npm versi 10 ke atas.
 
 ```bash
 # 1. Klon repositori proyek

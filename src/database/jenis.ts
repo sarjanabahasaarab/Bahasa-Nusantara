@@ -23,6 +23,22 @@ export interface OpsiKoneksiBasisdata {
   modeBuka?: 'baca_tulis' | 'baca_saja' | 'buat_baru';
   batasWaktuMilidetik?: number;
   direktoriAman?: string; // Root sandbox untuk pencegahan path traversal
+  /**
+   * Hanya berlaku di lingkungan peramban (browser).
+   * Di Node.js, driver native `node:sqlite` wajib tersedia dan tidak pernah diam-diam
+   * beralih ke database in-memory.
+   */
+  izinkanFallbackBrowser?: boolean;
+}
+
+export interface InfoDriverBasisdata {
+  namaDriver: string;
+  versiDriver: string;
+  tersedia: boolean;
+  apakahNative: boolean;
+  sumber: 'node:sqlite' | 'browser-in-memory' | 'tidak-tersedia';
+  versiRuntime: string;
+  alasan?: string;
 }
 
 export enum JenisGalatBasisdata {
@@ -51,7 +67,7 @@ export class GalatBasisdata extends Error {
 
 /**
  * Antarmuka standar Adaptor Basis Data NUSANTARA.
- * Memungkinkan implementasi multi-driver (SQLite, PostgreSQL, MySQL, mock in-memory).
+ * Memungkinkan implementasi multi-driver (SQLite, PostgreSQL, MySQL).
  */
 export interface AdaptorBasisdata {
   readonly namaDriver: string;

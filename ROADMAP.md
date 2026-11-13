@@ -1,7 +1,7 @@
 # Peta Jalan Pengembangan (ROADMAP) Bahasa Pemrograman NUSANTARA
 
 > **Peta Jalan Strategis, Hasil Audit Implementasi Nyata, dan Rencana Kerja Menuju NusantaraOS**  
-> **Tanggal Audit Terakhir:** 12 November 2026
+> **Tanggal Audit Terakhir:** 13 November 2026
 > **Versi Rilis Saat Ini:** `v0.50.0` (Phase 50: Nusantara OS Process Isolation & User Mode)
 
 Dokumen ini memetakan seluruh pencapaian rekayasa piranti lunak (*engineering milestones*) bahasa pemrograman **NUSANTARA**, dari fondasi awal tata bahasa hingga terwujudnya sistem operasi **NusantaraOS**. Setiap status fase dalam dokumen ini telah diaudit secara faktual berdasarkan kode sumber yang benar-benar ada di repositori (`src/`), pengujian otomatis yang lulus 100% (`pengujian/`), dan dokumentasi teknis resmi (`docs/` & `dokumentasi/`), tanpa klaim palsu.
@@ -54,7 +54,7 @@ Sesuai standar audit transparan dan kejujuran teknis proyek NUSANTARA, status se
 | **26** | **Nusantara IDE Foundation & DevTools** | `v0.26.0` | 🟢 SELESAI | `src/ide/workspace.ts`, `src/ide/fileTree.ts`, `src/ide/editorManager.ts`, `src/ide/terminalEmulator.ts`, `src/komponen/StudioIDE.tsx` (workspace tree navigasi, multi-tab editor, emulator terminal). | `pengujian/ide/uji_ide_foundation.ts` (46 pengujian IDE & workspace manager lulus 100%). |
 | **27** | **Package Ecosystem & Dependency Graph** | `v0.27.0` | 🟢 SELESAI | `src/paket/cache.ts`, `src/paket/graph.ts`, `src/paket/pengelolaPaket.ts` (`ManajerCachePaket`, audit keamanan sirkular, pohon dependensi visual `nusantara pohon`, instalasi `--terkunci`). | `pengujian/paket/uji_ekosistem_dependensi.ts` (25 pengujian dependency graph & cache lulus 100%). |
 | **28** | **Standard Library Expansion** | `v0.28.0` | 🟢 SELESAI | `src/stdlib/ekspansi/kripto.ts`, `kompresi.ts`, `http_klien.ts`, `validasi.ts`, `berkas_ekspansi.ts`, `proses_ekspansi.ts` (SHA256, HMAC, Gzip, Regex, Fetch client bawaan). | `pengujian/stdlib/uji_stdlib_fase28.ts` (28 pengujian pustaka standar ekspansi lulus 100%). |
-| **29** | **Database API & SQLite Native** | `v0.29.0` | 🟢 SELESAI | `src/database/koneksi.ts`, `src/database/pernyataan.ts`, `src/database/transaksi.ts`, `src/stdlib/basisdata.ts` (modul `basisdata`, prepared statements, parameter binding, transaksi ACID). | `pengujian/database/uji_database_fase29.ts` (21 pengujian query & transaksi basis data lulus 100%). |
+| **29** | **Database API & SQLite Native** | `v0.29.0` | 🟢 SELESAI | `src/database/sqlite.ts`, `src/database/jenis.ts`, `src/database/queryBuilder.ts`, `src/stdlib/basisdata.ts` (modul `basisdata`, `node:sqlite` `DatabaseSync` wajib di Node.js 22 LTS, prepared statements `:nama`/`@divisi`/`$gaji`, transaksi ACID, serta `MesinMemoriBrowserSQLite` terpisah khusus peramban). | `pengujian/database/uji_database_fase29.ts` (`26/26` uji native SQLite lulus di Linux x86_64 Node `v22.23.2`) + `pengujian/database/uji_browser_fallback_fase29.ts` (`3/3` uji fallback peramban terpisah). |
 | **30** | **Web Application Framework** | `v0.30.0` | 🟢 SELESAI | `src/web/aplikasi.ts`, `src/web/router.ts`, `src/web/konteks.ts`, `src/web/template.ts`, `src/web/middleware.ts`, `src/stdlib/web.ts` (HTTP server, router parameterized `:id`, template Anti-XSS, JSON API). | `pengujian/web/uji_web_fase30.ts` (25 pengujian router & server HTTP web lulus 100%). |
 | **31** | **Authentication, Session & RBAC** | `v0.31.0` | 🟢 SELESAI | `src/autentikasi/password.ts`, `src/autentikasi/sesi.ts`, `src/autentikasi/rbac.ts`, `src/autentikasi/csrf.ts`, `src/autentikasi/layanan.ts`, `src/stdlib/autentikasi.ts` (Scrypt KDF, CSPRNG token, RBAC wildcard, CSRF). | `pengujian/autentikasi/uji_autentikasi_fase31.ts` (27 pengujian hashing, sesi & RBAC lulus 100%). |
 | **32** | **Object-Relational Mapping (ORM)** | `v0.32.0` | 🟢 SELESAI | `src/orm/model.ts`, `src/orm/skema.ts`, `src/orm/queryBuilder.ts`, `src/orm/relasi.ts`, `src/orm/migrasi.ts`, `src/stdlib/orm.ts` (definisi entitas, relasi 1:1, 1:N, N:M, anti-SQL injection, migrasi skema). | `pengujian/orm/uji_orm_fase32.ts` (17 pengujian model, relasi & migrasi ORM lulus 100%). |
@@ -136,12 +136,16 @@ Seluruh **45 skrip perintah pengujian** berikut (**1 skrip audit 167 berkas fond
 | Metrik Verifikasi | Nilai Faktual | Keterangan Operasional |
 |---|:---:|---|
 | **Audit Fondasi** | **1 Skrip** | Skrip eksekutor Node.js (`skrip/periksa_fondasi.js`) |
-| **Suite Pengujian TypeScript** | **44 Suite** | 44 berkas suite pengujian TypeScript aktif di direktori `pengujian/` |
+| **Suite Pengujian TypeScript** | **44 Suite** | 44 berkas suite pengujian TypeScript aktif dalam `npm test` (+1 suite terpisah fallback peramban `test:database-browser-v29`) |
 | **Pemeriksaan Dokumen Fondasi** | **167 Berkas** | Integritas dokumen EBNF, spesifikasi tata bahasa, lisensi, dan contoh (Phase 1–5) |
-| **Kasus Pengujian TypeScript** | **1.271 Kasus** | Total skenario uji yang dieksekusi oleh 44 suite TypeScript (**1.268 Lulus**, **0 Gagal**, **3 Skipped** transparan saat host tanpa `clang`/`llc`/`lld`) |
-| **Total Pemeriksaan Gabungan** | **1.438 Pemeriksaan** | **167 pemeriksaan dokumen fondasi + 1.271 kasus uji TypeScript = 1.438 pemeriksaan** |
+| **Kasus Pengujian TypeScript** | **1.276 Kasus** | Total skenario uji yang dieksekusi oleh 44 suite TypeScript (**1.273 Lulus**, **0 Gagal**, **3 Skipped** transparan saat host tanpa `clang`/`llc`/`lld`), ditambah **3/3 uji** fallback peramban terpisah |
+| **Total Pemeriksaan Gabungan** | **1.443 Pemeriksaan** | **167 pemeriksaan dokumen fondasi + 1.276 kasus uji TypeScript dalam `npm test` = 1.443 pemeriksaan** |
 
-> *Catatan:* Angka **1.438** adalah total pemeriksaan gabungan terverifikasi setelah seluruh pembaruan Phase 23 & 36–42 (167 pemeriksaan berkas fondasi ditambah 1.271 kasus pengujian TypeScript).
+> *Catatan Pemisahan Status Lingkungan:*
+> - **SQLite Native (`node:sqlite`):** Teruji `26/26` lulus pada Linux x86_64 (`Node.js v22.23.2`); Node.js menolak beralih diam-diam ke in-memory bila `DatabaseSync` tidak tersedia.
+> - **Regresi Lintas Platform (Linux/macOS/Windows):** Linux teruji penuh lokal; workflow `.github/workflows/ci.yml` telah disamakan ke **Node.js 22 LTS** & `npm ci` untuk `ubuntu-latest`, `macos-latest`, dan `windows-latest` (eksekusi macOS & Windows menunggu runner GitHub Actions).
+> - **Build ISO GRUB2:** Biner `kernel.elf`, `user-test.elf`, `user-fault-test.elf` lolos validasi ELF64/Multiboot2; ISO bootable **NOT_BUILT** lokal karena `grub-mkrescue`/`xorriso` tidak terpasang.
+> - **Eksekusi QEMU Bare-Metal:** Tetap **NOT EXECUTED** lokal (`PARTIAL (CI_READY)`) sampai `ubuntu-latest` menjalankan ISO dan menghasilkan 18 sentinel serial UART + exit code `1`.
 
 ```bash
 npm test

@@ -20,8 +20,13 @@ jobs:
       - name: "Setup Node.js Runtime"
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
+
+      - name: "Verify Node.js 22 LTS & Native node:sqlite (DatabaseSync)"
+        run: |
+          node -v
+          node -e "const s = process.getBuiltinModule('node:sqlite'); if (!s || typeof s.DatabaseSync !== 'function') { console.error('[GALAT] node:sqlite DatabaseSync unavailable on ' + process.version); process.exit(1); } console.log('[OK] node:sqlite DatabaseSync verified:', process.version);"
 
       - name: "Install System Dependencies (QEMU, Clang, LLD, Xorriso, GRUB, Make, GCC, NASM)"
         run: |

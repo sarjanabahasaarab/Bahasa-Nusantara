@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.50.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
@@ -32,6 +35,7 @@
     "test:paket-v27": "tsx pengujian/paket/uji_ekosistem_dependensi.ts",
     "test:stdlib-v28": "tsx pengujian/stdlib/uji_stdlib_fase28.ts",
     "test:database-v29": "tsx pengujian/database/uji_database_fase29.ts",
+    "test:database-browser-v29": "tsx pengujian/database/uji_browser_fallback_fase29.ts",
     "test:web-v30": "tsx pengujian/web/uji_web_fase30.ts",
     "test:auth-v31": "tsx pengujian/autentikasi/uji_autentikasi_fase31.ts",
     "test:orm-v32": "tsx pengujian/orm/uji_orm_fase32.ts",

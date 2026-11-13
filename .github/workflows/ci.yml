@@ -33,12 +33,11 @@ jobs:
       - name: Pasang Lingkungan Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Pasang Dependensi Proyek (Reproducible)
-        run: |
-          npm ci || npm install --no-audit --prefer-offline
+        run: npm ci
 
       - name: Validasi Konfigurasi & Tipe Data (Lint / Typecheck)
         run: |
@@ -62,16 +61,24 @@ jobs:
       - name: Pasang Lingkungan Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
-      - name: Pasang Dependensi
+      - name: Verifikasi Node.js 22 LTS & Native node:sqlite (DatabaseSync)
         run: |
-          npm ci || npm install --no-audit --prefer-offline
+          node -v
+          node -e "const s = process.getBuiltinModule('node:sqlite'); if (!s || typeof s.DatabaseSync !== 'function') { console.error('[GALAT] node:sqlite DatabaseSync tidak tersedia pada ' + process.version); process.exit(1); } console.log('[OK] node:sqlite DatabaseSync tersedia pada', process.platform, process.arch, process.version);"
 
-      - name: Jalankan Rangkaian Uji Lengkap (Phase 1–24)
+      - name: Pasang Dependensi
+        run: npm ci
+
+      - name: Uji Khusus Phase 29 SQLite Native & Browser Fallback Lintas Platform
         run: |
-          npm test
+          npm run test:database-v29
+          npm run test:database-browser-v29
+
+      - name: Jalankan Rangkaian Uji Lengkap (Phase 1–50)
+        run: npm test
 
   # ============================================================================
   # 3. QUALITY GATE NUSANTARA
@@ -87,12 +94,11 @@ jobs:
       - name: Pasang Lingkungan Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Pasang Dependensi
-        run: |
-          npm ci || npm install --no-audit --prefer-offline
+        run: npm ci
 
       - name: Verifikasi Standar Kualitas (Cakupan & Konsistensi)
         run: |
@@ -125,12 +131,11 @@ jobs:
       - name: Pasang Lingkungan Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Pasang Dependensi
-        run: |
-          npm ci || npm install --no-audit --prefer-offline
+        run: npm ci
 
       - name: Bangun Proyek Web & Kompilator
         run: |
