@@ -182,8 +182,6 @@ export class QEMURunner {
 
     if (isCDROM) {
       qemuArgs.push(
-        '-machine',
-        'q35',
         '-m',
         `${memoryMb}M`,
         '-cdrom',
@@ -242,10 +240,12 @@ export class QEMURunner {
         }
 
         const sentinelFound = serialContent.includes(QEMURunner.REQUIRED_SENTINEL);
+        const hasPanic = serialContent.includes('NUSANTARA_KERNEL_PANIC');
         const stagesCompleted = QEMURunner.STAGES.filter(s => serialContent.includes(s.trim()));
         // Jika memakai isa-debug-exit, exit code 1 adalah sukses deterministik ((0 << 1) | 1 = 1)
         const isPass =
           sentinelFound &&
+          !hasPanic &&
           (options.useISADebugExit === false ? exitCode === 0 : exitCode === 1 || exitCode === 0);
 
         resolve({

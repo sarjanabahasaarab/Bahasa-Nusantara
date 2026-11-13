@@ -88,13 +88,18 @@ export class KernelELFBuilder {
     const textSize = actualPayload.byteLength;
     const effectiveEntryPoint = this.entryPoint ?? textPhysAddr;
 
-    const rodataOffset = textOffset + Math.ceil(textSize / 16) * 16;
-    const rodataData = new TextEncoder().encode(`Nusantara OS Kernel v0.49.0 (${this.kernelName})\0`);
+    const rodataOffset = Math.ceil((textOffset + textSize) / 0x1000) * 0x1000;
+    const rodataData = new TextEncoder().encode(`Nusantara OS Kernel v0.50.0 (${this.kernelName})\0`);
     const rodataSize = rodataData.byteLength;
 
     const dataOffset = rodataOffset + Math.ceil(rodataSize / 16) * 16;
     const dataPayload = new Uint8Array([0x4E, 0x55, 0x53, 0x41]); // 'NUSA'
     const dataSize = dataPayload.byteLength;
+
+    const seg1PhysAddr = 0x0010_0000n + BigInt(rodataOffset - multibootOffset);
+    const seg1VirtAddr = 0xFFFF_FFFF_8000_0000n + seg1PhysAddr;
+    const dataVirtAddr = seg1VirtAddr + BigInt(dataOffset - rodataOffset);
+    const bssVirtAddr = seg1VirtAddr + BigInt(Math.ceil((dataOffset - rodataOffset + dataSize) / 0x1000) * 0x1000);
 
     const shstrtabOffset = dataOffset + Math.ceil(dataSize / 16) * 16;
     const shstrtabSize = shstrtabData.byteLength;
@@ -155,7 +160,7 @@ export class KernelELFBuilder {
     let phOffset = elfHeaderSize;
     view.setUint32(phOffset, 1, true);                // p_type = PT_LOAD
     view.setUint32(phOffset + 4, 5, true);            // p_flags = PF_R | PF_X (1 | 4 = 5)
-    view.setBigUint64(phOffset + 8, BigInt(multibootOffset), true); // p_offset
+    view.setBigUint64(phOffset + 8, BigInt(multibootOffset), true); // p_offset (0x1000)
     view.setBigUint64(phOffset + 16, 0x0010_0000n, true);          // p_vaddr
     view.setBigUint64(phOffset + 24, 0x0010_0000n, true);          // p_paddr
     const seg0Size = (textOffset - multibootOffset) + textSize;
@@ -163,16 +168,18 @@ export class KernelELFBuilder {
     view.setBigUint64(phOffset + 40, BigInt(seg0Size), true); // p_memsz
     view.setBigUint64(phOffset + 48, 0x1000n, true);               // p_align = 4KB
 
-    // Phdr 1: PT_LOAD untuk Higher-Half Kernel Data (RW-)
+    // Phdr 1: PT_LOAD untuk Higher-Half Kernel Data (RW-), selaras 4KB penuh
     phOffset += phdrEntrySize;
+    const seg1Filesz = (dataOffset - rodataOffset) + dataSize;
+    const seg1Memsz = Number(bssVirtAddr - seg1VirtAddr) + 0x1000;
     view.setUint32(phOffset, 1, true);                // p_type = PT_LOAD
     view.setUint32(phOffset + 4, 6, true);            // p_flags = PF_R | PF_W (4 | 2 = 6)
-    view.setBigUint64(phOffset + 8, BigInt(rodataOffset), true); // p_offset
-    view.setBigUint64(phOffset + 16, 0xFFFF_FFFF_8010_0000n, true); // p_vaddr
-    view.setBigUint64(phOffset + 24, 0x0010_2000n, true);          // p_paddr
-    view.setBigUint64(phOffset + 32, BigInt(rodataSize + dataSize), true); // p_filesz
-    view.setBigUint64(phOffset + 40, BigInt(rodataSize + dataSize + 0x1000), true); // p_memsz (includes bss)
-    view.setBigUint64(phOffset + 48, 0x1000n, true);               // p_align = 4KB
+    view.setBigUint64(phOffset + 8, BigInt(rodataOffset), true); // p_offset (4KB-aligned)
+    view.setBigUint64(phOffset + 16, seg1VirtAddr, true);        // p_vaddr
+    view.setBigUint64(phOffset + 24, seg1PhysAddr, true);        // p_paddr
+    view.setBigUint64(phOffset + 32, BigInt(seg1Filesz), true);  // p_filesz
+    view.setBigUint64(phOffset + 40, BigInt(seg1Memsz), true);   // p_memsz
+    view.setBigUint64(phOffset + 48, 0x1000n, true);             // p_align = 4KB
 
     // ==========================================
     // 6. Tulis Data Payload
@@ -205,7 +212,7 @@ export class KernelELFBuilder {
     buffer[symOff + 4] = (1 << 4) | 2;             // st_info -> STB_GLOBAL | STT_FUNC
     buffer[symOff + 5] = 0;
     view.setUint16(symOff + 6, 2, true);           // st_shndx -> .text
-    view.setBigUint64(symOff + 8, 0xFFFF_FFFF_8010_0000n, true);
+    view.setBigUint64(symOff + 8, effectiveEntryPoint, true);
     view.setBigUint64(symOff + 16, 16n, true);
     symOff += symEntrySize;
 
@@ -256,13 +263,13 @@ export class KernelELFBuilder {
     writeShdr(2, shstrtabOffsets[2], 1, 6n, textPhysAddr, textOffset, textSize, 0, 0, 16);
 
     // [3] .rodata (SHT_PROGBITS = 1, SHF_ALLOC = 2)
-    writeShdr(3, shstrtabOffsets[3], 1, 2n, 0xFFFF_FFFF_8010_0000n, rodataOffset, rodataSize, 0, 0, 16);
+    writeShdr(3, shstrtabOffsets[3], 1, 2n, seg1VirtAddr, rodataOffset, rodataSize, 0, 0, 16);
 
     // [4] .data (SHT_PROGBITS = 1, SHF_ALLOC | SHF_WRITE = 3)
-    writeShdr(4, shstrtabOffsets[4], 1, 3n, 0xFFFF_FFFF_8010_1000n, dataOffset, dataSize, 0, 0, 16);
+    writeShdr(4, shstrtabOffsets[4], 1, 3n, dataVirtAddr, dataOffset, dataSize, 0, 0, 16);
 
     // [5] .bss (SHT_NOBITS = 8, SHF_ALLOC | SHF_WRITE = 3)
-    writeShdr(5, shstrtabOffsets[5], 8, 3n, 0xFFFF_FFFF_8010_2000n, dataOffset + dataSize, 0x1000, 0, 0, 4096);
+    writeShdr(5, shstrtabOffsets[5], 8, 3n, bssVirtAddr, dataOffset + dataSize, 0x1000, 0, 0, 4096);
 
     // [6] .shstrtab (SHT_STRTAB = 3)
     writeShdr(6, shstrtabOffsets[6], 3, 0n, 0n, shstrtabOffset, shstrtabSize);

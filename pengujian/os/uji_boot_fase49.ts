@@ -329,7 +329,11 @@ uji('7.3 QEMURunner menjalankan kernel biner x86_64 nyata jika QEMU dan GRUB ter
     samaDengan(hasil.success, true, 'QEMU boot biner kernel harus berhasil');
     samaDengan(hasil.status, 'QEMU_BOOT_PASS', 'Status eksekusi harus QEMU_BOOT_PASS');
     pastikan(hasil.sentinelFound, 'Sentinel NUSANTARA_KERNEL_BOOT_OK harus ditemukan pada serial');
-    samaDengan(hasil.stagesCompleted?.length, 10, 'Semua 10 tahapan boot serial COM1 harus terpenuhi');
+    const phase49Stages = QEMURunner.STAGES.slice(0, 10);
+    for (const stage of phase49Stages) {
+      pastikan(hasil.serialLog.includes(stage), `Tahap boot Phase 49 '${stage}' harus ada di serial log`);
+    }
+    pastikan((hasil.stagesCompleted?.length ?? 0) >= 10, 'Minimal semua 10 tahapan boot Phase 49 harus terpenuhi');
   }
 });
 

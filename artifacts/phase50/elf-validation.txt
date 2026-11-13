@@ -3,6 +3,7 @@
 ======================================================================
 --- 1. BINER KERNEL (kernel.elf) ---
 Multiboot2 Header Valid : YA (LULUS)
+grub-file Check         : SKIPPED (grub-file tidak terpasang)
 Multiboot2 Offset       : 0x1000
 Multiboot2 Architecture : 0 (i386 32-bit protected mode entry)
 Multiboot2 Checksum     : 0x17adaf12 (Checksum valid: true)
@@ -10,11 +11,12 @@ ELF64 Format Valid      : YA (LULUS)
 ELF64 Class / Endian    : 64-bit / Little-Endian (AMD64)
 Entry Point Kernel      : 0x100020
 Program Headers (PT_LOAD): 2 segmen
+  [0] off=0x1000 vaddr=0x100000 paddr=0x100000 filesz=12062 memsz=12062 flags=RX
+  [1] off=0x4000 vaddr=0xffffffff80103000 paddr=0x103000 filesz=52 memsz=8192 flags=RW
 
 --- 2. BINER APLIKASI USER MODE (user-test.elf) ---
 ELF64 Format Valid      : YA (LULUS)
-Entry Point User Space  : 0x400000 (Valid User Canonical: YA)
-Jumlah Segmen PT_LOAD   : 1
+Entry Point User Space  : 0x400000
 Segmen Flags            : PF_R | PF_X (Readable & Executable, Non-Writable)
 
 --- 3. BINER APLIKASI USER FAULT TEST (user-fault-test.elf) ---

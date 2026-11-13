@@ -1,21 +1,13 @@
 ======================================================================
-       LAPORAN UJI ISOLASI MEMORI PERANGKAT KERAS (HARDWARE PAGING)   
+     VERIFIKASI STRUKTUR & MODEL HARDWARE PAGING (PRE-QEMU CHECK)     
 ======================================================================
-Test A — Kernel Memory Read (0xFFFFFFFF80000000): LULUS (Ditolak: SUPERVISOR_PRIVILEGE_VIOLATION)
-Test B — Kernel Memory Write (0xFFFF800000000000): LULUS (Ditolak: SUPERVISOR_PRIVILEGE_VIOLATION)
-Test C — Isolasi Proses A (CR3 0x301000) & B (CR3 0x302000): LULUS (Halaman privat tidak saling tumpang tindih)
-Test D — No-Execute (NX) Protection: LULUS (Ditolak: NO_EXECUTE_VIOLATION)
-Test E — Read-Only Protection: LULUS (Ditolak: WRITE_PROTECTION_VIOLATION)
-Test F — Invalid User Pointer (NULL, Zero-Page, Kernel, Non-Canon): LULUS (Semua pointer tidak sah mengembalikan EFAULT)
-Test G — Process Fault Handling & Kernel Survival: LULUS (Proses diterminasi, kernel tetap hidup)
+Test A — Kernel Memory Read (0xFFFFFFFF80000000): LULUS
+Test B — Kernel Memory Write (0xFFFF800000000000): LULUS
+Test C — Isolasi Proses A (CR3 0x301000) & B (CR3 0x302000): LULUS
+Test D — No-Execute (NX) Protection: LULUS
+Test E — Read-Only Protection: LULUS
+Test F — Invalid User Pointer (EFAULT): LULUS
+Test G — Fault Guard Model Check: LULUS
 ----------------------------------------------------------------------
-SERIAL SENTINELS VERIFIED:
-  [✓] NUSANTARA_USERMODE_ENTERED
-  [✓] HELLO FROM NUSANTARA USER MODE
-  [✓] NUSANTARA_SYSCALL_OK
-  [✓] NUSANTARA_PROCESS_EXIT_OK
-  [✓] NUSANTARA_PROCESS_ISOLATION_OK
-  [✓] NUSANTARA_USER_FAULT_ISOLATED
-  [✓] NUSANTARA_KERNEL_SURVIVED_USER_FAULT
-  [✓] NUSANTARA_USERMODE_TEST_PASS
+CATATAN: Verifikasi hardware CPU Ring 3 aktual membutuhkan eksekusi QEMU nyata.
 ======================================================================

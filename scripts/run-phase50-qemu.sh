@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 ARTIFACTS_DIR="artifacts/phase50"
 LOG_FILE="${ARTIFACTS_DIR}/serial.log"
+QEMU_LOG_FILE="${ARTIFACTS_DIR}/qemu.log"
+BOOT_LOG_FILE="${ARTIFACTS_DIR}/boot.log"
+DEBUG_LOG_FILE="${ARTIFACTS_DIR}/qemu-debug.log"
 ISO_FILE="${ARTIFACTS_DIR}/nusantara-phase50.iso"
 EXIT_CODE_FILE="${ARTIFACTS_DIR}/qemu-exit-code.txt"
-TIMEOUT_SEC=10
+TIMEOUT_SEC=15
+SKIP_BUILD="${1:-}"
 
 mkdir -p "$ARTIFACTS_DIR"
 
@@ -17,9 +21,13 @@ echo "======================================================================"
 echo "[1/7] Memeriksa status toolchain host..."
 ./scripts/check-toolchain.sh
 
-# 2. Bangun biner ELF dan artefak
-echo "[2/7] Membangun kernel ELF, user ELFs, dan ISO..."
-npm run build:artifacts-v50
+# 2. Bangun biner ELF dan ISO bootable (kecuali --skip-build)
+if [ "$SKIP_BUILD" != "--skip-build" ]; then
+    echo "[2/7] Membangun kernel ELF, user ELFs, dan GRUB2 ISO..."
+    npm run build:artifacts-v50
+else
+    echo "[2/7] Melewati tahap build (--skip-build), memakai artefak staging..."
+fi
 
 # 3. Validasi struktur biner ELF
 echo "[3/7] Memvalidasi struktur biner kernel dan aplikasi pengguna..."
@@ -27,8 +35,8 @@ if [ -f "$ARTIFACTS_DIR/elf-validation.txt" ]; then
     cat "$ARTIFACTS_DIR/elf-validation.txt"
 fi
 
-# 4. Periksa ketersediaan QEMU
-echo "[4/7] Memeriksa ketersediaan emulator QEMU x86_64..."
+# 4. Periksa ketersediaan QEMU & ISO
+echo "[4/7] Memeriksa ketersediaan emulator QEMU x86_64 dan ISO..."
 if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
     echo "======================================================================"
     echo "[PERINGATAN TRANSPARAN] qemu-system-x86_64 TIDAK TERPASANG di host ini."
@@ -38,9 +46,15 @@ if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
     exit 0
 fi
 
-# 5. Eksekusi QEMU Headless jika qemu terpasang
+if [ ! -s "$ISO_FILE" ]; then
+    echo "[GALAT FATAL] Image ISO bootable '$ISO_FILE' tidak ditemukan atau kosong!"
+    echo "              Pastikan grub-mkrescue dan xorriso terpasang saat build artefak."
+    exit 1
+fi
+
+# 5. Eksekusi QEMU Headless
 echo "[5/7] Menjalankan QEMU headless dengan monitor serial (Timeout: ${TIMEOUT_SEC}s)..."
-rm -f "$LOG_FILE"
+rm -f "$LOG_FILE" "$QEMU_LOG_FILE" "$BOOT_LOG_FILE" "$DEBUG_LOG_FILE"
 
 QEMU_EXIT=0
 timeout --kill-after=2s "${TIMEOUT_SEC}s" qemu-system-x86_64 \
@@ -51,16 +65,30 @@ timeout --kill-after=2s "${TIMEOUT_SEC}s" qemu-system-x86_64 \
     -display none \
     -no-reboot \
     -no-shutdown \
-    -device isa-debug-exit,iobase=0xf4,iosize=0x04 || QEMU_EXIT=$?
+    -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
+    -d cpu_reset \
+    -D "$DEBUG_LOG_FILE" || QEMU_EXIT=$?
 
 echo "Kode Keluar QEMU mentah: $QEMU_EXIT"
 
+# Salin log serial aktual jika ada SEBELUM mengevaluasi kegagalan agar debugging tetap lengkap
+if [ -f "$LOG_FILE" ]; then
+    cp -f "$LOG_FILE" "$QEMU_LOG_FILE"
+    cp -f "$LOG_FILE" "$BOOT_LOG_FILE"
+fi
+
+echo "======================================================================"
+echo "                        SERIAL UART LOG MENTAH QEMU                   "
+echo "======================================================================"
+if [ -s "$LOG_FILE" ]; then
+    cat "$LOG_FILE"
+else
+    echo "[PERINGATAN] Berkas serial log kosong atau tidak terbuat ($LOG_FILE)."
+fi
+echo "======================================================================"
+
 # 6. Analisis Exit Code Berdasarkan Kontrak Port 0xF4
-# Pada isa-debug-exit: exit_code = (val << 1) | 1
-# val = 0x00 (SUCCESS) -> exit_code = 1
-# val = 0x01 (PANIC)   -> exit_code = 3
-# timeout              -> exit_code = 124
-echo "[6/7] Menganalisis kode keluar dan serial output..."
+echo "[6/7] Menganalisis kode keluar dan diagnosa CPU..."
 STATUS_ANALYSIS="UNKNOWN"
 
 if [ "$QEMU_EXIT" -eq 1 ]; then
@@ -77,8 +105,27 @@ echo "Hasil Analisis: $STATUS_ANALYSIS"
 echo "QEMU_RAW_EXIT_CODE: $QEMU_EXIT" > "$EXIT_CODE_FILE"
 echo "ANALYSIS: $STATUS_ANALYSIS" >> "$EXIT_CODE_FILE"
 
-# 7. Verifikasi Keberadaan Seluruh 18 Sentinel Serial
-echo "[7/7] Memverifikasi seluruh 18 sentinel diagnostik di serial log..."
+if [ "$QEMU_EXIT" -ne 1 ]; then
+    if [ -s "$DEBUG_LOG_FILE" ]; then
+        echo "--- CUPLIKAN QEMU DEBUG LOG ($DEBUG_LOG_FILE) ---"
+        tail -n 60 "$DEBUG_LOG_FILE"
+    fi
+    echo "[GAGAL] QEMU berhenti dengan kode keluar $QEMU_EXIT ($STATUS_ANALYSIS)"
+    exit 1
+fi
+
+if [ ! -s "$LOG_FILE" ]; then
+    echo "[GAGAL] Serial log kosong meskipun QEMU keluar dengan kode 1!"
+    exit 1
+fi
+
+if grep -q "NUSANTARA_KERNEL_PANIC" "$LOG_FILE"; then
+    echo "[GAGAL] Kernel Panic terdeteksi di dalam log serial QEMU!"
+    exit 1
+fi
+
+# 7. Verifikasi Keberadaan Seluruh 18 Sentinel Serial Secara Berurutan
+echo "[7/7] Memverifikasi seluruh 18 sentinel diagnostik secara berurutan..."
 SENTINELS=(
     "NUSANTARA_BOOT_START"
     "NUSANTARA_MULTIBOOT2_OK"
@@ -102,36 +149,25 @@ SENTINELS=(
 
 TOTAL_SENTINELS=${#SENTINELS[@]}
 FOUND_COUNT=0
+LAST_LINE=0
+ORDER_OK=true
 
-if [ -f "$LOG_FILE" ]; then
-    echo "======================================================================"
-    echo "                        SERIAL UART LOG DITEMUKAN                     "
-    echo "======================================================================"
-    cat "$LOG_FILE"
-    echo "======================================================================"
-
-    LAST_LINE=0
-    ORDER_OK=true
-    for s in "${SENTINELS[@]}"; do
-        MATCH_LINE=$(awk -v last="$LAST_LINE" -v pattern="$s" 'NR > last && index($0, pattern) { print NR; exit }' "$LOG_FILE")
-        if [ -n "$MATCH_LINE" ]; then
-            ((FOUND_COUNT++))
-            LAST_LINE=$MATCH_LINE
-            echo "  [✓] Sentinel #$FOUND_COUNT (Baris $MATCH_LINE): $s"
-        else
-            echo "  [✗] Sentinel TIDAK DITEMUKAN SECARA BERURUTAN (setelah baris $LAST_LINE): $s"
-            ORDER_OK=false
-        fi
-    done
-else
-    echo "[PERINGATAN] Berkas serial log tidak ditemukan."
-    ORDER_OK=false
-fi
+for s in "${SENTINELS[@]}"; do
+    MATCH_LINE=$(awk -v last="$LAST_LINE" -v pattern="$s" 'NR > last && index($0, pattern) { print NR; exit }' "$LOG_FILE")
+    if [ -n "$MATCH_LINE" ]; then
+        ((FOUND_COUNT++)) || true
+        LAST_LINE=$MATCH_LINE
+        echo "  [✓] Sentinel #$FOUND_COUNT (Baris $MATCH_LINE): $s"
+    else
+        echo "  [✗] Sentinel TIDAK DITEMUKAN SECARA BERURUTAN (setelah baris $LAST_LINE): $s"
+        ORDER_OK=false
+    fi
+done
 
 echo "----------------------------------------------------------------------"
 echo "Sentinel Ditemukan Berurutan: $FOUND_COUNT / $TOTAL_SENTINELS"
 
-if [ "$FOUND_COUNT" -eq "$TOTAL_SENTINELS" ] && [ "$ORDER_OK" = true ] && [ "$QEMU_EXIT" -eq 1 ]; then
+if [ "$FOUND_COUNT" -eq "$TOTAL_SENTINELS" ] && [ "$ORDER_OK" = true ]; then
     echo "======================================================================"
     echo "     [QEMU_CERTIFICATION_PASS] SELURUH TAHAPAN KERNEL & USER MODE OK! "
     echo "======================================================================"

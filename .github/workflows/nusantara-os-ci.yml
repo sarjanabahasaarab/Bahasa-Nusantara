@@ -231,12 +231,15 @@ jobs:
       - name: "Bangun Biner ELF64 Kernel, User ELFs & Image ISO Bootable"
         run: npm run build:artifacts-v50
 
-      - name: "Validasi Struktur Header Multiboot2 & ELF64"
+      - name: "Validasi Struktur Header Multiboot2, ELF64, & El Torito GRUB2 ISO"
         run: |
           npx tsx src/index.ts os inspect-boot artifacts/phase50/kernel.elf
           npx tsx src/index.ts os inspect artifacts/phase50/kernel.elf
           npx tsx src/index.ts os inspect artifacts/phase50/user.elf
           npx tsx src/index.ts os inspect artifacts/phase50/user-fault-test.elf
+          grub-file --is-x86-multiboot2 artifacts/phase50/kernel.elf
+          test -s artifacts/phase50/nusantara-os.iso
+          xorriso -indev artifacts/phase50/nusantara-os.iso -report_el_torito plain
 
       - name: "Simpan Artefak Build untuk Tahap Validasi QEMU"
         uses: actions/upload-artifact@v4
@@ -275,109 +278,31 @@ jobs:
 
       - name: "Jalankan QEMU Headless dengan Port Debug 0xF4 & Monitor Serial"
         run: |
-          ISO_FILE="artifacts/phase50/nusantara-os.iso"
-          LOG_FILE="artifacts/phase50/qemu.log"
-          EXIT_FILE="artifacts/phase50/qemu-exit-code.txt"
-          TIMEOUT_SEC=15
-
-          echo "Memulai eksekusi QEMU x86_64 headless..."
-          rm -f "$LOG_FILE"
-          QEMU_EXIT=0
-          timeout --kill-after=2s "${TIMEOUT_SEC}s" qemu-system-x86_64 \
-            -cdrom "$ISO_FILE" \
-            -boot d \
-            -m 512M \
-            -serial file:"$LOG_FILE" \
-            -display none \
-            -no-reboot \
-            -no-shutdown \
-            -device isa-debug-exit,iobase=0xf4,iosize=0x04 || QEMU_EXIT=$?
-
-          echo "QEMU raw exit code: $QEMU_EXIT"
-          echo "QEMU_RAW_EXIT_CODE: $QEMU_EXIT" > "$EXIT_FILE"
-
-          # Evaluasi exit code berdasarkan port 0xF4: exit_code = (val << 1) | 1
-          # val = 0x00 (SUCCESS) -> exit_code = 1
-          # val = 0x01 (PANIC)   -> exit_code = 3
-          # timeout              -> exit_code = 124
-          if [ "$QEMU_EXIT" -eq 1 ]; then
-            echo "ANALYSIS: EXPECTED_SUCCESS (Port 0xF4 val=0x00)" >> "$EXIT_FILE"
-            echo "[✓] Exit Code Evaluasi: SUKSES (val=0x00 diterjemahkan menjadi 1)"
-          elif [ "$QEMU_EXIT" -eq 3 ]; then
-            echo "ANALYSIS: KERNEL_PANIC (Port 0xF4 val=0x01)" >> "$EXIT_FILE"
-            echo "[✗] Exit Code Evaluasi: KERNEL_PANIC (val=0x01)"
-            exit 1
-          elif [ "$QEMU_EXIT" -eq 124 ]; then
-            echo "ANALYSIS: TIMEOUT" >> "$EXIT_FILE"
-            echo "[✗] Exit Code Evaluasi: TIMEOUT (Kernel menggantung lebih dari ${TIMEOUT_SEC}s)"
-            exit 1
-          else
-            echo "ANALYSIS: UNEXPECTED_EXIT ($QEMU_EXIT)" >> "$EXIT_FILE"
-            echo "[✗] Exit Code Evaluasi: Tidak terduga ($QEMU_EXIT)"
-            exit 1
-          fi
-
-          # Tampilkan output serial UART aktual mentah
-          echo "======================================================================"
-          echo "                 SERIAL UART LOG MENTAH DARI QEMU                     "
-          echo "======================================================================"
-          cat "$LOG_FILE"
-          echo "======================================================================"
-
-          # Salin log serial ke alias boot.log dan serial.log
-          cp -f "$LOG_FILE" artifacts/phase50/boot.log
-          cp -f "$LOG_FILE" artifacts/phase50/serial.log
-
-          # Validasi ke-18 sentinel serial secara ketat dan berurutan
-          SENTINELS=(
-            "NUSANTARA_BOOT_START"
-            "NUSANTARA_MULTIBOOT2_OK"
-            "NUSANTARA_CPU_LONG_MODE_OK"
-            "NUSANTARA_PAGING_OK"
-            "NUSANTARA_GDT64_OK"
-            "NUSANTARA_LONG_MODE_ENTERED"
-            "NUSANTARA_IDT_OK"
-            "NUSANTARA_MEMORY_MANAGER_OK"
-            "NUSANTARA_KERNEL_MAIN_ENTERED"
-            "NUSANTARA_KERNEL_BOOT_OK"
-            "NUSANTARA_USERMODE_ENTERED"
-            "HELLO FROM NUSANTARA USER MODE"
-            "NUSANTARA_SYSCALL_OK"
-            "NUSANTARA_PROCESS_EXIT_OK"
-            "NUSANTARA_PROCESS_ISOLATION_OK"
-            "NUSANTARA_USER_FAULT_ISOLATED"
-            "NUSANTARA_KERNEL_SURVIVED_USER_FAULT"
-            "NUSANTARA_USERMODE_TEST_PASS"
-          )
-
-          LAST_LINE=0
-          ORDER_OK=true
-          FOUND_COUNT=0
-          TOTAL_SENTINELS=${#SENTINELS[@]}
-
-          for s in "${SENTINELS[@]}"; do
-            MATCH_LINE=$(awk -v last="$LAST_LINE" -v pattern="$s" 'NR > last && index($0, pattern) { print NR; exit }' "$LOG_FILE")
-            if [ -n "$MATCH_LINE" ]; then
-              ((FOUND_COUNT++))
-              LAST_LINE=$MATCH_LINE
-              echo "  [✓] Sentinel #$FOUND_COUNT (Baris $MATCH_LINE): $s"
-            else
-              echo "  [✗] Sentinel TIDAK DITEMUKAN SECARA BERURUTAN (setelah baris $LAST_LINE): $s"
-              ORDER_OK=false
-            fi
-          done
-
-          echo "----------------------------------------------------------------------"
-          echo "Sentinel Ditemukan Berurutan: $FOUND_COUNT / $TOTAL_SENTINELS"
-          if [ "$FOUND_COUNT" -ne "$TOTAL_SENTINELS" ] || [ "$ORDER_OK" != true ]; then
-            echo "[GAGAL] Validasi 18 sentinel secara berurutan gagal pada serial log QEMU!"
-            exit 1
-          fi
-          echo "[SUKSES] Seluruh 18 sentinel terverifikasi secara berurutan langsung dari QEMU!"
+          chmod +x scripts/*
+          ./scripts/run-phase50-qemu.sh --skip-build
 
       - name: "Hitung Ulang & Validasi SHA256SUMS Seluruh Artefak"
         run: |
           cd artifacts/phase50
+          for f in \
+            kernel.elf \
+            user.elf \
+            user-test.elf \
+            user-fault-test.elf \
+            nusantara-os.iso \
+            nusantara-phase50.iso \
+            boot.log \
+            qemu.log \
+            serial.log \
+            qemu-exit-code.txt \
+            elf-validation.txt \
+            isolation-test-report.txt \
+            toolchain-versions.txt \
+            test-report.txt \
+            test-results.txt \
+            FINAL-CERTIFICATION.md; do
+            test -f "$f" || { echo "[GALAT] Artefak wajib hilang: $f"; exit 1; }
+          done
           sha256sum kernel.elf user.elf user-test.elf user-fault-test.elf nusantara-os.iso nusantara-phase50.iso boot.log qemu.log serial.log qemu-exit-code.txt elf-validation.txt isolation-test-report.txt toolchain-versions.txt test-report.txt test-results.txt FINAL-CERTIFICATION.md > SHA256SUMS
           sha256sum -c SHA256SUMS
 
@@ -396,6 +321,7 @@ jobs:
             artifacts/phase50/boot.log
             artifacts/phase50/qemu.log
             artifacts/phase50/serial.log
+            artifacts/phase50/qemu-debug.log
             artifacts/phase50/qemu-exit-code.txt
             artifacts/phase50/elf-validation.txt
             artifacts/phase50/isolation-test-report.txt
