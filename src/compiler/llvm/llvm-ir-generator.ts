@@ -71,7 +71,13 @@ export class LLVMIRGenerator {
     lines.push(`declare void @free(${ptrType})`);
     lines.push('declare void @exit(i32)');
     lines.push('declare i64 @nusantara_cetak_bilangan(i64)');
+    lines.push('declare i64 @nusantara_cetak_bilangan_inline(i64)');
+    lines.push('declare void @nusantara_cetak_desimal(double)');
+    lines.push('declare void @nusantara_cetak_desimal_inline(double)');
+    lines.push('declare void @nusantara_cetak_logika(i1)');
     lines.push(`declare void @nusantara_cetak_teks(${ptrType})`);
+    lines.push(`declare void @nusantara_cetak_teks_inline(${ptrType})`);
+    lines.push('declare void @nusantara_cetak_baris()');
     lines.push('');
 
     // Emisi Fungsi

@@ -37,7 +37,7 @@ import { NIRConstants } from '../constant';
 import { NIRFunction } from '../function';
 import { NIRCastKind, NIRPredicate } from '../instruction';
 import { NIRModule } from '../module';
-import { NIRType, NIRTypes } from '../type';
+import { NIRType, NIRTypeKind, NIRTypes } from '../type';
 import { NIRGlobal, NIRValue } from '../value';
 
 interface LoopContext {
@@ -345,7 +345,14 @@ export class ASTToNIRLowering {
 
   private lowerReturn(retStmt: NodeInstruksiKembalikan): void {
     if (retStmt.nilai) {
-      const val = this.lowerExpression(retStmt.nilai);
+      let val = this.lowerExpression(retStmt.nilai);
+      if (
+        this.currentFunction &&
+        this.currentFunction.returnType.kind === NIRTypeKind.INT32 &&
+        val.type.kind === NIRTypeKind.INT64
+      ) {
+        val = this.builder.createCast(NIRCastKind.TRUNC, val, NIRTypes.i32(), 'ret.trunc');
+      }
       this.builder.createRet(val);
     } else {
       this.builder.createRetVoid();
@@ -429,6 +436,50 @@ export class ASTToNIRLowering {
       case JenisNodeAST.PEMANGGILAN_FUNGSI: {
         const call = expr as NodePemanggilanFungsi;
         const args = call.argumen.map((a: any) => this.lowerExpression(a));
+
+        if (call.namaFungsi === 'tampilkan' || call.namaFungsi === 'cetak') {
+          if (args.length === 0) {
+            return this.builder.createCall('nusantara_cetak_baris', [], NIRTypes.void(), 'cetak.baris');
+          }
+          for (let i = 0; i < args.length; i++) {
+            const arg = args[i];
+            const isLast = i === args.length - 1;
+            if (i > 0) {
+              this.builder.createCall(
+                'nusantara_cetak_teks_inline',
+                [NIRConstants.string(' ')],
+                NIRTypes.void(),
+                'cetak.spasi'
+              );
+            }
+            if (arg.type.kind === NIRTypeKind.STRING || arg.type.kind === NIRTypeKind.POINTER || arg.type.kind === NIRTypeKind.ANY) {
+              this.builder.createCall(
+                isLast ? 'nusantara_cetak_teks' : 'nusantara_cetak_teks_inline',
+                [arg],
+                NIRTypes.void(),
+                'cetak.teks'
+              );
+            } else if (arg.type.kind === NIRTypeKind.FLOAT64) {
+              this.builder.createCall(
+                isLast ? 'nusantara_cetak_desimal' : 'nusantara_cetak_desimal_inline',
+                [arg],
+                NIRTypes.void(),
+                'cetak.desimal'
+              );
+            } else if (arg.type.kind === NIRTypeKind.BOOLEAN) {
+              this.builder.createCall('nusantara_cetak_logika', [arg], NIRTypes.void(), 'cetak.logika');
+            } else {
+              this.builder.createCall(
+                isLast ? 'nusantara_cetak_bilangan' : 'nusantara_cetak_bilangan_inline',
+                [arg],
+                NIRTypes.i64(),
+                'cetak.bil'
+              );
+            }
+          }
+          return NIRConstants.null(NIRTypes.void());
+        }
+
         const fn = this.module.getFunction(call.namaFungsi);
         const retType = fn ? fn.returnType : NIRTypes.any();
         return this.builder.createCall(call.namaFungsi, args, retType, 'call');

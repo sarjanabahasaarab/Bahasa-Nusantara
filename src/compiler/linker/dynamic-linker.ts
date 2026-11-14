@@ -21,6 +21,8 @@ export interface DynamicLinkingOptions {
   rpaths?: string[];
   isSharedLibraryOutput?: boolean; // Jika menghasilkan .so / .dylib / .dll
   debug?: boolean;
+  strip?: boolean;
+  sysroot?: string;
 }
 
 export class DynamicLinker {
@@ -62,6 +64,14 @@ export class DynamicLinker {
         ...options.objectFiles,
       ];
 
+      if (options.sysroot) {
+        if (this.targetInfo.os === 'darwin') {
+          args.push('-isysroot', options.sysroot);
+        } else {
+          args.push(`--sysroot=${options.sysroot}`);
+        }
+      }
+
       // Jika bukan library bersama (.so), sertakan runtime C stub
       if (!options.isSharedLibraryOutput) {
         args.push(runtimeCPath);
@@ -74,6 +84,9 @@ export class DynamicLinker {
 
       if (options.debug) {
         args.push('-g');
+      }
+      if (options.strip && this.targetInfo.os !== 'darwin') {
+        args.push('-s');
       }
 
       // Search paths

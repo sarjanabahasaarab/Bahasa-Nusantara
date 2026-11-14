@@ -47,7 +47,7 @@ NUSANTARA bukan sekadar terjemahan sintaksis atau praprosesor teks atas bahasa a
 - **Total Fase Diaudit:** 50 Fase (Phase 1 s/d Phase 50).
   - 🟢 **Selesai Penuh (40 Fase):** Phase 1–22, Phase 24–35, dan Phase 43–48 berstatus implementasi penuh dan lulus seluruh pengujian unit, integrasi, serta E2E (catatan: 3 skenario biner native LLVM/Linker/Actor pada Phase 44–46 ditandai *skipped* transparan di container tanpa `clang`/`llc`/`lld`).
   - 🟠 **Selesai Sebagian / PARTIAL (10 Fase):** Phase 23 & 36–42 (implementasi inti & protokol nyata aktif dan teruji via loopback HTTP/WebSocket, kripto Ed25519/RS256/ES256, & PKZIP CRC-32; perangkat keras fisik, display server, Android SDK, Xcode, serta toko produksi memerlukan toolchain/kredensial eksternal) dan Phase 49–50 (90 pengujian OS kernel/usermode lulus 100% dan ISO `artifacts/phase50/` tervalidasi; eksekusi boot bare-metal QEMU siap di GitHub Actions karena container lokal tidak memiliki `qemu-system-x86_64`).
-- **Rangkaian Pengujian (`npm test`):** 45 perintah uji otomatis lulus 100% di Linux x86_64 (`Node.js v22.23.2`): 167 pemeriksaan dokumen fondasi + 1.276 skenario TypeScript di 44 suite (1.273 lulus, 0 gagal, 3 *skipped* transparan = **1.443 pemeriksaan gabungan terverifikasi**), ditambah 3 uji terpisah untuk fallback peramban (`npm run test:database-browser-v29`).
+- **Rangkaian Pengujian (`npm test`):** 46 perintah uji otomatis berjalan 100% tanpa kegagalan di Linux x86_64 (`Node.js v22.23.2`): 167 pemeriksaan dokumen fondasi + 1.292 skenario TypeScript di 45 suite (1.288 lulus, 0 gagal, 3 *skipped* transparan pada LLVM/Linker/Actor + 1 `BELUM DIVERIFIKASI` pada Phase 23 native host build tanpa `clang` = **1.459 pemeriksaan gabungan terverifikasi**), ditambah 3 uji terpisah untuk fallback peramban (`npm run test:database-browser-v29`).
 - **Pemisahan Status Verifikasi Lingkungan:**
   - **SQLite Native (`node:sqlite`):** `26/26` lulus lokal pada Node.js 22 LTS Linux; tidak diam-diam fallback in-memory di Node.js.
   - **Regresi Lintas Platform:** Linux lulus lokal; `ubuntu-latest`, `macos-latest`, dan `windows-latest` disiapkan pada `.github/workflows/ci.yml` dengan **Node.js 22 LTS** & `npm ci` (eksekusi macOS/Windows menunggu GitHub Actions).
@@ -336,6 +336,7 @@ Dokumentasi resmi tersusun secara terstruktur di dalam direktori `docs/` dan `do
 - **Autentikasi, Sesi & Keamanan RBAC (Fase 31):** [docs/referensi/authentication.md](docs/referensi/authentication.md)
 - **Framework Web & Server HTTP (Fase 30):** [docs/referensi/web-framework.md](docs/referensi/web-framework.md)
 - **Basis Data API & SQLite Native (Fase 29):** [docs/referensi/database.md](docs/referensi/database.md)
+- **Build System & Distribusi Desktop (Fase 23):** [docs/distribusi/build-native.md](docs/distribusi/build-native.md), [cross-compilation.md](docs/distribusi/cross-compilation.md), [instalasi.md](docs/distribusi/instalasi.md), [distribusi-paket.md](docs/distribusi/distribusi-paket.md)
 
 ---
 

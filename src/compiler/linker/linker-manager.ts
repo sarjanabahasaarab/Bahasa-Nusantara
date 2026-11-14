@@ -27,6 +27,7 @@ export interface LinkerOptions {
   noDefaultLibraries?: boolean;
   debug?: boolean;
   strip?: boolean;
+  sysroot?: string;
   targetTriple?: string;
   customToolchainPath?: string;
 }
@@ -67,6 +68,7 @@ export class LinkerManager {
         noDefaultLibraries: options.noDefaultLibraries,
         debug: options.debug,
         strip: options.strip,
+        sysroot: options.sysroot,
       });
     } else {
       return this.dynamicLinker.linkDynamic({
@@ -75,6 +77,8 @@ export class LinkerManager {
         sharedLibraries: options.sharedLibraries,
         libraryPaths: options.libraryPaths,
         debug: options.debug,
+        strip: options.strip,
+        sysroot: options.sysroot,
       });
     }
   }

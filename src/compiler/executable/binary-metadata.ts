@@ -29,4 +29,7 @@ export interface BinaryMetadata {
   dynamicLibraries: string[];
   hasDebugInfo: boolean;
   isStripped: boolean;
+  binaryType?: 'EXECUTABLE' | 'SHARED_LIB' | 'OBJECT' | 'SCRIPT' | 'UNKNOWN';
+  isValidExecutable?: boolean;
+  validationErrors?: string[];
 }

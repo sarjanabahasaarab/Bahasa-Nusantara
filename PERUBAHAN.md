@@ -4,6 +4,31 @@ Seluruh perubahan penting pada proyek bahasa pemrograman NUSANTARA dicatat dalam
 
 Format penomoran versi mengacu pada **Semantic Versioning** (`vMAJOR.MINOR.PATCH`). Pada masa pengembangan awal, versi minor mencerminkan tahapan fase roadmap (misal `v0.1.0` untuk Phase 1, `v0.2.0` untuk Phase 2, `v0.3.0` untuk Phase 3, `v0.4.0` untuk Phase 4, `v0.5.0` untuk Phase 5, `v0.6.0` untuk Phase 6, `v0.7.0` untuk Phase 7, `v0.8.0` untuk Phase 8, `v0.9.0` untuk Phase 9, `v0.10.0` untuk Phase 10).
 
+## [v0.23.0 — Finalisasi Build System & Distribusi Desktop] — 2026-11-13
+### Phase 23: Finalisasi Build System & Distribusi Desktop NUSANTARA (SELESAI SEBAGIAN — Native Cross-Target Menunggu CI/Target Hardware)
+
+*(Catatan versi: Basis kode tetap berada pada cabang `main` milestone `v0.50.0`; pembaruan ini menuntaskan arsitektur Phase 23 `v0.23.0` di atas infrastruktur compiler NIR/LLVM/Linker yang telah terintegrasi.)*
+
+#### Ditambahkan & Disempurnakan:
+- **Submodul Build & Distribusi Desktop (`src/build/`):**
+  - `TargetMatrixManager` (`src/build/target-matrix.ts`): Dukungan 6 target desktop resmi (`windows-x86_64`, `windows-arm64`, `linux-x86_64`, `linux-arm64`, `macos-x86_64`, `macos-arm64`) beserta aliasnya, deteksi host, dan validasi *cross-SDK* / *sysroot* jujur (`CROSS_SDK_TIDAK_TERSEDIA`).
+  - `NativeBuildPipeline` (`src/build/native-pipeline.ts`): Kompilasi nyata berkas `.nusantara` -> NIR -> LLVM IR -> berkas objek -> biner native via LLVM/Clang + `StaticLinker` / `DynamicLinker` + runtime C portabel (`<inttypes.h>` `PRId64`), dengan penolakan tegas (`TOOLCHAIN_TIDAK_TERSEDIA`) tanpa biner palsu bila toolchain belum terpasang.
+  - `ArchiveBuilder` (`src/build/archive-builder.ts`): Pembuat & pengekstrak arsip `.zip` (PKZIP + CRC-32) dan `.tar.gz` (POSIX USTAR + dukungan prefix jalur >100 byte + mode reproducible) beserta pemformat/verifikator `SHA256SUMS` dan proteksi anti-*path-traversal* / anti-*symlink-escape*.
+  - `DesktopInstallerGenerator` (`src/build/installers.ts`): Skrip `install.sh`/`uninstall.sh` (Linux & macOS) serta `install.ps1`/`uninstall.ps1`/`install.bat`/`uninstall.bat` (Windows) dengan verifikasi `SHA256SUMS`, pencadangan & rollback atomik saat upgrade, manajemen `PATH` aman, dan pencopotan bersih berbasis `.install-manifest`.
+  - `DesktopDistributionPackager` (`src/build/distribution-packager.ts`): Pemaket distribusi lengkap (`bin/`, `lib/`, `config/`, `resources/`, `manifest.json`, `SHA256SUMS`, `LISENSI.txt`, `BACA-SAYA.txt`) dan `release-manifest.json` untuk multi-target.
+- **Penguatan Inspeksi Biner, Runtime & Linker (`src/compiler/`):**
+  - `safeFS.readFileBufferSync` pada `node-compat.ts` agar pembacaan biner tidak rusak oleh dekoding UTF-8.
+  - `BinaryInspector.inspectStrict` (`binary-inspector.ts`): Validasi ketat biner `ELF64`, `PE32+`, dan `Mach-O 64` (serta penolakan tegas skrip `#!`/`@echo` maupun header korup).
+  - Dukungan `--sysroot=`/`-isysroot` pada `StaticLinker`/`DynamicLinker`/`LinkerManager`, runtime cetak `<inttypes.h>` pada `native-runtime.ts`, lowering `tampilkan`/`cetak` di `ast-to-nir.ts`, serta output `.tar.gz` & `SHA256SUMS` nyata pada `StandalonePackager`.
+- **Integrasi CLI, Web Studio, CI & Dokumentasi:**
+  - `src/paket/cli.ts`: Opsi `--source`, `--native`, `--static`/`--dynamic`, `--verifikasi`, `--target` (6 target), `--all-targets`, `--no-reproducible` pada `nusantara bangun`, serta pembaruan `nusantara info` dan `nusantara bersihkan`.
+  - `src/komponen/StudioDistribusiBuild.tsx`: Pemilih 6 target desktop, pratinjau installer/uninstaller + `SHA256SUMS`, dan penggunaan `ArchiveBuilder`/`DESKTOP_CANONICAL_TARGETS` dari `src/build`.
+  - `.github/workflows/ci.yml`: Pemasangan Clang/LLVM dan langkah kompilasi + verifikasi + eksekusi `.nusantara` native pada matriks runner `ubuntu-latest`, `macos-latest`, dan `windows-latest`.
+  - `docs/distribusi/`: 4 panduan baru (`build-native.md`, `cross-compilation.md`, `instalasi.md`, `distribusi-paket.md`).
+  - `pengujian/build/uji_build_distribusi_fase23.ts` (`npm run test:build-v23`): 15 lulus, 0 gagal, 1 `BELUM DIVERIFIKASI` (kompilasi native host saat `clang`/LLVM tidak terpasang di container lokal).
+
+---
+
 ## [v0.50.0] — 2026-11-11
 ### Phase 50: Nusantara OS: Process Isolation & User Mode (PARTIAL - CI_READY)
 

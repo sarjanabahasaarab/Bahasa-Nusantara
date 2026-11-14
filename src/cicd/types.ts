@@ -6,7 +6,16 @@
  * Target Milestone: v0.24.0
  */
 
-export type PlatformTarget = 'windows-x64' | 'linux-x64' | 'macos-x64' | 'macos-arm64';
+export type PlatformTarget =
+  | 'windows-x64'
+  | 'windows-x86_64'
+  | 'windows-arm64'
+  | 'linux-x64'
+  | 'linux-x86_64'
+  | 'linux-arm64'
+  | 'macos-x64'
+  | 'macos-x86_64'
+  | 'macos-arm64';
 export type ModeBuild = 'debug' | 'release';
 
 export interface ArtefakBuild {

@@ -86,6 +86,38 @@ export const safeFS = {
     return '';
   },
 
+  readFileBufferSync(filePath: string): Uint8Array {
+    const fs = getRuntimeNodeModule('fs');
+    if (fs && typeof fs.readFileSync === 'function') {
+      const buf = fs.readFileSync(filePath);
+      return new Uint8Array(buf);
+    }
+    return new Uint8Array(0);
+  },
+
+  chmodSync(filePath: string, mode: number): void {
+    const fs = getRuntimeNodeModule('fs');
+    if (fs && typeof fs.chmodSync === 'function') {
+      fs.chmodSync(filePath, mode);
+    }
+  },
+
+  statSync(filePath: string): { size: number; isDirectory: () => boolean; mode: number } | null {
+    const fs = getRuntimeNodeModule('fs');
+    if (fs && typeof fs.statSync === 'function') {
+      return fs.statSync(filePath);
+    }
+    return null;
+  },
+
+  readdirSync(dirPath: string): string[] {
+    const fs = getRuntimeNodeModule('fs');
+    if (fs && typeof fs.readdirSync === 'function') {
+      return fs.readdirSync(dirPath);
+    }
+    return [];
+  },
+
   existsSync(filePath: string): boolean {
     const fs = getRuntimeNodeModule('fs');
     if (fs && typeof fs.existsSync === 'function') {

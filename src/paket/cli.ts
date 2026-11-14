@@ -60,9 +60,16 @@ import {
   NIRFormatter,
 } from '../compiler/nir';
 import { AOTCompiler } from '../compiler/aot';
-import { LLVMToolchainManager } from '../compiler/llvm';
+import { LLVMToolchainManager, TargetTripleManager } from '../compiler/llvm';
 import { LinkerManager, DependencyInspector } from '../compiler/linker';
 import { BinaryInspector, ExecutableBuilder, StandalonePackager } from '../compiler/executable';
+import {
+  ArchiveBuilder,
+  DesktopDistributionPackager,
+  LinkingMode,
+  NativeBuildPipeline,
+  TargetMatrixManager,
+} from '../build';
 import { ActorSystem, ActorRegistry, ActorStatus } from '../runtime/actor';
 import { ResourceManager, ConcurrencyDiagnostics } from '../runtime/concurrency';
 import { TaskGroup } from '../runtime/async';
@@ -789,8 +796,25 @@ export class NusantaraCLI {
           if (this.pembaca.apakahAda(jalurToml)) {
             const info = this.pengelola.info();
             const hostInfo = dapatkanInfoHost();
+            const toolchainStatus = new LLVMToolchainManager().detect();
+            const targetsDesktop = TargetMatrixManager.getAllCanonicalTargets();
             if (opsiJSON) {
-              this.log(JSON.stringify({ ...info, host: hostInfo }, null, 2));
+              this.log(
+                JSON.stringify(
+                  {
+                    ...info,
+                    host: hostInfo,
+                    toolchainLLVM: {
+                      tersedia: toolchainStatus.available,
+                      versi: toolchainStatus.version || null,
+                    },
+                    targetDidukung: targetsDesktop,
+                    targetAlias: ['windows-x64', 'linux-x64', 'macos-x64', 'macos-arm64'],
+                  },
+                  null,
+                  2
+                )
+              );
               return 0;
             }
             this.log('Informasi Paket NUSANTARA:\n');
@@ -803,6 +827,8 @@ export class NusantaraCLI {
             this.log(`  Lokasi Proyek    : ${info.lokasiProyek}`);
             this.log(`  Platform Host    : ${hostInfo.namaPlatform}`);
             this.log(`  Arsitektur       : ${hostInfo.arsitektur}`);
+            this.log(`  Toolchain LLVM   : ${toolchainStatus.available ? toolchainStatus.version || 'tersedia' : 'tidak terpasang (mode script-launcher)'}`);
+            this.log(`  Target Resmi     : ${targetsDesktop.join(', ')}`);
             this.log(`  Mode Build       : release`);
             return 0;
           } else {
@@ -3042,7 +3068,7 @@ Penggunaan Perintah 'nusantara paket':
     }
   ): number {
     let mode: 'debug' | 'release' = opsi.mode || 'release';
-    const modeIdx = rawArgs.findIndex(a => a === '--mode' || a === '-m');
+    const modeIdx = rawArgs.findIndex((a) => a === '--mode' || a === '-m');
     if (modeIdx !== -1 && rawArgs[modeIdx + 1]) {
       const m = rawArgs[modeIdx + 1].toLowerCase();
       if (m === 'debug' || m === 'release') mode = m;
@@ -3052,128 +3078,228 @@ Penggunaan Perintah 'nusantara paket':
       mode = 'release';
     }
 
-    let targetPlatform: PlatformTarget[] = ['windows-x64', 'linux-x64', 'macos-x64', 'macos-arm64'];
-    const targetIdx = rawArgs.findIndex(a => a === '--target' || a === '-t');
+    let targets: string[] = ['windows-x64', 'linux-x64', 'macos-x64', 'macos-arm64'];
+    const targetIdx = rawArgs.findIndex((a) => a === '--target' || a === '-t');
     if (targetIdx !== -1 && rawArgs[targetIdx + 1]) {
-      targetPlatform = [rawArgs[targetIdx + 1] as PlatformTarget];
+      targets = rawArgs[targetIdx + 1]
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    } else if (rawArgs.includes('--all-targets') || rawArgs.includes('--semua-target')) {
+      targets = TargetMatrixManager.getAllCanonicalTargets();
+    }
+
+    // Validasi ketat seluruh target sebelum memulai build
+    for (const t of targets) {
+      const check = TargetTripleManager.resolveStrict(t);
+      if (!check.supported || !check.info.targetId) {
+        const pesan = check.error || `Target build '${t}' tidak didukung.`;
+        if (opsi.json) {
+          this.log(JSON.stringify({ sukses: false, statusCode: 'TARGET_TIDAK_DIDUKUNG', pesan }, null, 2));
+        } else {
+          this.error(`[✗ GALAT] ${pesan}`);
+        }
+        return 1;
+      }
     }
 
     let outDir = 'dist';
-    const outIdx = rawArgs.findIndex(a => a === '--keluaran' || a === '--out' || a === '-o');
+    const outIdx = rawArgs.findIndex((a) => a === '--keluaran' || a === '--out' || a === '-o');
     if (outIdx !== -1 && rawArgs[outIdx + 1]) {
       outDir = rawArgs[outIdx + 1];
     }
 
-    const buatTarUstar = (entries: Array<{ name: string; content: Uint8Array }>): Uint8Array => {
-      const blocks: Uint8Array[] = [];
-      for (const e of entries) {
-        const hdr = new Uint8Array(512);
-        const enc = new TextEncoder();
-        const nameBytes = enc.encode(e.name.slice(0, 99));
-        hdr.set(nameBytes, 0);
-        hdr.set(enc.encode('0000755\0'), 100);
-        hdr.set(enc.encode('0000000\0'), 108);
-        hdr.set(enc.encode('0000000\0'), 116);
-        hdr.set(enc.encode(e.content.byteLength.toString(8).padStart(11, '0') + '\0'), 124);
-        hdr.set(enc.encode(Math.floor(Date.now() / 1000).toString(8).padStart(11, '0') + '\0'), 136);
-        for (let i = 148; i < 156; i++) hdr[i] = 0x20;
-        hdr[156] = 0x30; // '0' regular file
-        hdr.set(enc.encode('ustar\0'), 257);
-        hdr.set(enc.encode('00'), 263);
-        let csum = 0;
-        for (let i = 0; i < 512; i++) csum += hdr[i];
-        hdr.set(enc.encode(csum.toString(8).padStart(6, '0') + '\0 '), 148);
-        blocks.push(hdr);
-        blocks.push(e.content);
-        const pad = (512 - (e.content.byteLength % 512)) % 512;
-        if (pad > 0) blocks.push(new Uint8Array(pad));
-      }
-      blocks.push(new Uint8Array(1024));
-      const total = blocks.reduce((acc, b) => acc + b.byteLength, 0);
-      const out = new Uint8Array(total);
-      let off = 0;
-      for (const b of blocks) {
-        out.set(b, off);
-        off += b.byteLength;
-      }
-      return out;
-    };
+    let sourceFile: string | undefined;
+    const srcIdx = rawArgs.findIndex((a) => a === '--source' || a === '-s' || a === '--sumber');
+    if (srcIdx !== -1 && rawArgs[srcIdx + 1]) {
+      sourceFile = rawArgs[srcIdx + 1];
+    } else if (argsTambahan.length > 0 && argsTambahan[0].endsWith('.nusantara')) {
+      sourceFile = argsTambahan[0];
+    }
 
-    const zlibMod = apakahNodeRuntime() ? muatModulNode<typeof import('node:zlib')>('zlib') : null;
+    const nativeMode =
+      Boolean(sourceFile) || rawArgs.includes('--native') || rawArgs.includes('--biner');
+    const linkingMode: LinkingMode = rawArgs.includes('--static')
+      ? 'static'
+      : rawArgs.includes('--dynamic')
+      ? 'dynamic'
+      : 'auto';
+    const reproducible = !rawArgs.includes('--no-reproducible');
+    const verifyExecution = rawArgs.includes('--verifikasi') || rawArgs.includes('--verify');
+
+    if (nativeMode) {
+      if (!sourceFile) {
+        const candidates = ['src/utama.nusantara', 'utama.nusantara', 'main.nusantara'];
+        sourceFile = candidates.find((c) => safeFS.existsSync(c));
+      }
+      if (!sourceFile || !safeFS.existsSync(sourceFile)) {
+        const pesan =
+          'Mode build native memerlukan berkas sumber .nusantara (--source <berkas.nusantara>).';
+        if (opsi.json) {
+          this.log(JSON.stringify({ sukses: false, statusCode: 'GALAT_KOMPILASI', pesan }, null, 2));
+        } else {
+          this.error(`[✗ GALAT] ${pesan}`);
+        }
+        return 1;
+      }
+
+      const appName = safePath.basename(sourceFile, safePath.extname(sourceFile)) || 'nusantara-app';
+      const targetList =
+        targetIdx !== -1 || rawArgs.includes('--all-targets')
+          ? targets
+          : [TargetMatrixManager.getHostTargetId() || 'linux-x86_64'];
+
+      if (apakahNodeRuntime()) {
+        safeFS.mkdirSync(outDir, { recursive: true });
+      }
+
+      const artefak: ArtefakBuild[] = [];
+      const allDiagnostics: string[] = [];
+
+      for (const rawT of targetList) {
+        const stageWork = safePath.join(outDir, '.work', rawT);
+        const buildRes = NativeBuildPipeline.build({
+          sourceFilePath: sourceFile,
+          appName,
+          target: rawT,
+          outputDirectory: stageWork,
+          optLevel: mode === 'debug' ? 'O0' : 'O2',
+          linkingMode,
+          debug: mode === 'debug',
+          strip: mode === 'release',
+          verifyExecution,
+        });
+        allDiagnostics.push(...buildRes.diagnostics);
+
+        if (!buildRes.success || !buildRes.executablePath) {
+          if (opsi.json) {
+            this.log(
+              JSON.stringify(
+                {
+                  sukses: false,
+                  statusCode: buildRes.statusCode,
+                  target: rawT,
+                  pesan: buildRes.diagnostics[buildRes.diagnostics.length - 1] || 'Build native gagal.',
+                  diagnostics: allDiagnostics,
+                },
+                null,
+                2
+              )
+            );
+          } else {
+            this.error(`[✗ GAGAL] Build native untuk target '${rawT}' gagal (${buildRes.statusCode}):`);
+            for (const d of buildRes.diagnostics) {
+              this.error(`  - ${d}`);
+            }
+          }
+          return 1;
+        }
+
+        const pkgRes = DesktopDistributionPackager.packageTarget({
+          appName,
+          appVersion: `v${VERSI_NUSANTARA}`,
+          target: rawT,
+          mode,
+          packageKind: 'native',
+          outputDirectory: outDir,
+          nativeBuildResult: buildRes,
+          linkingMode,
+          reproducible,
+          includeInstallers: true,
+        });
+        allDiagnostics.push(...pkgRes.diagnostics);
+
+        for (const a of pkgRes.artifacts) {
+          artefak.push({
+            platform: a.legacyTargetName as PlatformTarget,
+            format: a.format,
+            namaBerkas: a.filename,
+            jalurKeluaran: a.filePath,
+            ukuranByte: a.sizeBytes,
+            sha256: a.sha256,
+          });
+        }
+      }
+
+      const sha256sums = ArchiveBuilder.formatSha256Sums(
+        artefak.map((a) => ({ sha256: a.sha256, filename: a.namaBerkas }))
+      ).trimEnd();
+      const manifest: ManifestRilis = {
+        nama: appName,
+        versi: VERSI_NUSANTARA,
+        mode,
+        waktuBuild: reproducible ? '1970-01-01T00:00:00.000Z' : new Date().toISOString(),
+        artefak,
+        sha256sums,
+      };
+      const pathManifest = safePath.join(outDir, 'release-manifest.json');
+      const pathSums = safePath.join(outDir, 'SHA256SUMS');
+      if (apakahNodeRuntime()) {
+        safeFS.writeFileSync(pathManifest, JSON.stringify({ ...manifest, packageKind: 'native' }, null, 2));
+        safeFS.writeFileSync(pathSums, sha256sums + '\n');
+      }
+
+      const hasil = {
+        sukses: true,
+        mode,
+        packageKind: 'native',
+        pesan: `[✓ SUKSES] Build NATIVE ${mode.toUpperCase()} ${appName} selesai dengan ${artefak.length} artefak distribusi.`,
+        artefak,
+        manifest,
+        diagnostics: allDiagnostics,
+      };
+
+      if (opsi.json) {
+        this.log(JSON.stringify(hasil, null, 2));
+        return 0;
+      }
+      this.log(hasil.pesan);
+      this.log(`\nArtefak Distribusi (${artefak.length}):`);
+      for (const a of artefak) {
+        const kb = (a.ukuranByte / 1024).toFixed(1);
+        this.log(`  - ${a.namaBerkas.padEnd(46)} (${kb} KB, sha256: ${a.sha256.substring(0, 16)}...)`);
+      }
+      this.log(`\nBerkas Manifest Rilis : ${pathManifest}`);
+      this.log(`Berkas Checksum Resmi  : ${pathSums}`);
+      return 0;
+    }
+
+    // Mode paket distribusi CLI/Launcher (kompatibel Phase 24 CI matrix & environment tanpa Clang)
     if (apakahNodeRuntime()) {
       safeFS.mkdirSync(outDir, { recursive: true });
     }
 
-    const artefak: ArtefakBuild[] = [];
-    for (const p of targetPlatform) {
-      const formats: Array<'zip' | 'tar.gz'> = p === 'windows-x64' ? ['zip'] : ['zip', 'tar.gz'];
-      const binName = p === 'windows-x64' ? 'nusantara.cmd' : 'nusantara';
-      const launcherScript = p === 'windows-x64'
-        ? `@echo off\r\nnpx tsx "%~dp0..\\src\\index.ts" %*\r\n`
-        : `#!/usr/bin/env sh\nexec npx tsx "$(dirname "$0")/../src/index.ts" "$@"\n`;
-      const metaJson = JSON.stringify({
-        nama: 'nusantara',
-        versi: VERSI_NUSANTARA,
-        platform: p,
-        mode,
-        dibangunPada: new Date().toISOString(),
-      }, null, 2);
+    const matrixRes = DesktopDistributionPackager.buildLauncherDistributionMatrix({
+      outputDirectory: outDir,
+      targets,
+      mode,
+      reproducible,
+      appVersion: LABEL_VERSI_NUSANTARA,
+      appName: 'nusantara',
+    });
 
-      for (const fmt of formats) {
-        const namaBerkas = `nusantara-${LABEL_VERSI_NUSANTARA}-${p}.${fmt}`;
-        const jalurKeluaran = safePath.join(outDir, namaBerkas);
-        let payloadBytes: Uint8Array;
-
-        if (fmt === 'zip') {
-          payloadBytes = ZipBuilder.buatArsipZip([
-            { nama: `nusantara-${LABEL_VERSI_NUSANTARA}/bin/${binName}`, konten: launcherScript },
-            { nama: `nusantara-${LABEL_VERSI_NUSANTARA}/release-metadata.json`, konten: metaJson },
-          ]);
-        } else {
-          const tarBytes = buatTarUstar([
-            { name: `nusantara-${LABEL_VERSI_NUSANTARA}/bin/${binName}`, content: new TextEncoder().encode(launcherScript) },
-            { name: `nusantara-${LABEL_VERSI_NUSANTARA}/release-metadata.json`, content: new TextEncoder().encode(metaJson) },
-          ]);
-          payloadBytes = zlibMod && typeof zlibMod.gzipSync === 'function'
-            ? new Uint8Array(zlibMod.gzipSync(tarBytes))
-            : tarBytes;
-        }
-
-        const sha256 = HashValidator.hitungSHA256(payloadBytes);
-        if (apakahNodeRuntime()) {
-          safeFS.writeFileSync(jalurKeluaran, payloadBytes);
-        }
-
-        artefak.push({
-          platform: p,
-          format: fmt,
-          namaBerkas,
-          jalurKeluaran,
-          ukuranByte: payloadBytes.byteLength,
-          sha256,
-        });
-      }
-    }
+    const artefak: ArtefakBuild[] = matrixRes.artifacts.map((a) => ({
+      platform: a.legacyTargetName as PlatformTarget,
+      format: a.format,
+      namaBerkas: a.filename,
+      jalurKeluaran: a.filePath,
+      ukuranByte: a.sizeBytes,
+      sha256: a.sha256,
+    }));
 
     const manifest: ManifestRilis = {
       nama: 'nusantara',
       versi: VERSI_NUSANTARA,
       mode,
-      waktuBuild: new Date().toISOString(),
+      waktuBuild: reproducible ? '1970-01-01T00:00:00.000Z' : new Date().toISOString(),
       artefak,
-      sha256sums: artefak.map(a => `${a.sha256}  ${a.namaBerkas}`).join('\n'),
+      sha256sums: matrixRes.sha256sums,
     };
-
-    const pathManifest = safePath.join(outDir, 'release-manifest.json');
-    const pathSums = safePath.join(outDir, 'SHA256SUMS');
-    if (apakahNodeRuntime()) {
-      safeFS.writeFileSync(pathManifest, JSON.stringify(manifest, null, 2));
-      safeFS.writeFileSync(pathSums, manifest.sha256sums + '\n');
-    }
 
     const hasil = {
       sukses: true,
       mode,
+      packageKind: 'script-launcher',
       pesan: `[✓ SUKSES] Build ${mode.toUpperCase()} NUSANTARA ${LABEL_VERSI_NUSANTARA} selesai dengan ${artefak.length} artefak resmi.`,
       artefak,
       manifest,
@@ -3190,8 +3316,8 @@ Penggunaan Perintah 'nusantara paket':
       const kb = (a.ukuranByte / 1024).toFixed(1);
       this.log(`  - ${a.namaBerkas.padEnd(46)} (${kb} KB, sha256: ${a.sha256.substring(0, 16)}...)`);
     }
-    this.log(`\nBerkas Manifest Rilis : ${pathManifest}`);
-    this.log(`Berkas Checksum Resmi  : ${pathSums}`);
+    this.log(`\nBerkas Manifest Rilis : ${matrixRes.manifestPath}`);
+    this.log(`Berkas Checksum Resmi  : ${matrixRes.sha256sumsPath}`);
     return 0;
   }
 
@@ -3200,8 +3326,18 @@ Penggunaan Perintah 'nusantara paket':
     argsTambahan: string[],
     opsi: { json?: boolean; warna?: boolean }
   ): number {
+    const cleanedDirs: string[] = [];
+    if (apakahNodeRuntime()) {
+      for (const dir of ['dist', 'target']) {
+        if (safeFS.existsSync(dir)) {
+          safeFS.rmSync(dir, { recursive: true, force: true });
+          cleanedDirs.push(dir);
+        }
+      }
+    }
     const hasil = {
       sukses: true,
+      direktoriDibersihkan: cleanedDirs,
       pesan: '[✓ SUKSES] Direktori artefak build dan dist berhasil dibersihkan.',
     };
     if (opsi.json) {
@@ -3214,6 +3350,8 @@ Penggunaan Perintah 'nusantara paket':
 
   private eksekusiInfoSistem(opsiJSON?: boolean): number {
     const hostInfo = dapatkanInfoHost();
+    const toolchainStatus = new LLVMToolchainManager().detect();
+    const targetsDesktop = TargetMatrixManager.getAllCanonicalTargets();
     const info = {
       nama: 'NUSANTARA',
       versi: VERSI_NUSANTARA,
@@ -3222,7 +3360,12 @@ Penggunaan Perintah 'nusantara paket':
       namaFase: NAMA_FASE_TERAKHIR,
       host: hostInfo,
       modeDefault: 'release',
-      targetDidukung: ['windows-x64', 'linux-x64', 'macos-x64', 'macos-arm64'],
+      toolchainLLVM: {
+        tersedia: toolchainStatus.available,
+        versi: toolchainStatus.version || null,
+      },
+      targetDidukung: targetsDesktop,
+      targetAlias: ['windows-x64', 'linux-x64', 'macos-x64', 'macos-arm64'],
       direktori: {
         akarProyek: this.pengelola.dapatkanDirektoriProyek(),
         dist: 'dist',
@@ -3241,6 +3384,7 @@ Penggunaan Perintah 'nusantara paket':
     this.log(`  Platform Host    : ${hostInfo.namaPlatform}`);
     this.log(`  Arsitektur       : ${hostInfo.arsitektur}`);
     this.log(`  Mode Default     : ${info.modeDefault}`);
+    this.log(`  Toolchain LLVM   : ${toolchainStatus.available ? toolchainStatus.version || 'tersedia' : 'tidak terpasang (mode script-launcher aktif)'}`);
     this.log(`  Target Resmi     : ${info.targetDidukung.join(', ')}`);
     this.log(`  Direktori Output : ${info.direktori.dist}`);
     this.log(`  Direktori Build  : ${info.direktori.target}`);

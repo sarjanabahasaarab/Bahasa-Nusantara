@@ -20,6 +20,7 @@ export interface StaticLinkingOptions {
   noDefaultLibraries?: boolean;
   debug?: boolean;
   strip?: boolean;
+  sysroot?: string;
 }
 
 export interface LinkingExecutionResult {
@@ -70,11 +71,17 @@ export class StaticLinker {
         '-target',
         this.targetInfo.triple,
         '-static', // Flag static linking
-        ...options.objectFiles,
-        runtimeCPath,
-        '-o',
-        options.outputExecutable,
       ];
+
+      if (options.sysroot) {
+        if (this.targetInfo.os === 'darwin') {
+          args.push('-isysroot', options.sysroot);
+        } else {
+          args.push(`--sysroot=${options.sysroot}`);
+        }
+      }
+
+      args.push(...options.objectFiles, runtimeCPath, '-o', options.outputExecutable);
 
       if (options.debug) {
         args.push('-g');

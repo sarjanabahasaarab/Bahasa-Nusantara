@@ -61,14 +61,32 @@ int main(int argc, char** argv) {
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <inttypes.h>
 
 // Deklarasi fungsi utama Nusantara (dihasilkan oleh NIR & LLVM Backend)
 extern int32_t utama(void);
 
 // Helper pencetakan bilangan 64-bit
 int64_t nusantara_cetak_bilangan(int64_t val) {
-    printf("%ld\\n", (long)val);
+    printf("%" PRId64 "\\n", val);
     return val;
+}
+
+int64_t nusantara_cetak_bilangan_inline(int64_t val) {
+    printf("%" PRId64, val);
+    return val;
+}
+
+void nusantara_cetak_desimal(double val) {
+    printf("%g\\n", val);
+}
+
+void nusantara_cetak_desimal_inline(double val) {
+    printf("%g", val);
+}
+
+void nusantara_cetak_logika(uint8_t val) {
+    printf("%s\\n", val ? "benar" : "salah");
 }
 
 // Helper pencetakan teks dengan penanganan null-safety
@@ -78,6 +96,18 @@ void nusantara_cetak_teks(const char* str) {
     } else {
         printf("(kosong)\\n");
     }
+}
+
+void nusantara_cetak_teks_inline(const char* str) {
+    if (str != NULL) {
+        printf("%s", str);
+    } else {
+        printf("(kosong)");
+    }
+}
+
+void nusantara_cetak_baris(void) {
+    printf("\\n");
 }
 
 // Alokasi memori terkelola
