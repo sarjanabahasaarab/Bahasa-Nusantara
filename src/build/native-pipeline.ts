@@ -134,6 +134,11 @@ export class NativeBuildPipeline {
 
     diag.push(...aotRes.diagnostics);
 
+    const llContent = aotRes.optimizedIR || aotRes.llvmIR;
+    if (llContent) {
+      safeFS.writeFileSync(llPath, llContent, 'utf-8');
+    }
+
     if (!aotRes.success || !aotRes.objectPath) {
       return {
         success: false,
@@ -169,6 +174,8 @@ export class NativeBuildPipeline {
       sysroot: capability.sysrootPath,
       targetTriple: capability.triple,
       customToolchainPath: options.customToolchainPath,
+      crossCompilerCommand: capability.crossCompilerCommand,
+      explicitSysrootOverride: Boolean(options.sysrootOverride),
     });
 
     diag.push(...linkRes.diagnostics);
@@ -253,19 +260,56 @@ export class NativeBuildPipeline {
     const exeBytes = safeFS.readFileBufferSync(exePath);
     const executableSha256 = ArchiveBuilder.computeSha256(exeBytes);
 
-    // 7. Opsional: Verifikasi eksekusi biner secara nyata bila berjalan di host yang sesuai
+    // 7. Opsional: Verifikasi eksekusi biner secara nyata bila berjalan di host atau QEMU user-mode
     let executionVerification: ExecutionVerificationResult | undefined;
     if (options.verifyExecution) {
       if (capability.isCross) {
-        executionVerification = {
-          executed: false,
-          success: false,
-          exitCode: null,
-          stdout: '',
-          stderr: '',
-          timedOut: false,
-          reason: `Biner target '${capability.canonicalTarget}' merupakan hasil cross-compile; eksekusi langsung memerlukan runner/perangkat target asli (${capability.recommendedRunner}).`,
-        };
+        const qemuExec =
+          capability.canonicalTarget === 'linux-arm64' &&
+          typeof process !== 'undefined' &&
+          process.platform === 'linux'
+            ? this.executeWithQemuUser(
+                exePath,
+                options.executionArgs || [],
+                options.executionTimeoutMs || 10000,
+                capability.sysrootPath
+              )
+            : undefined;
+
+        if (qemuExec) {
+          executionVerification = qemuExec;
+          if (!executionVerification.success) {
+            diag.push(
+              `Eksekusi QEMU user-mode linux-arm64 gagal (exit=${executionVerification.exitCode}): ${executionVerification.stderr}`
+            );
+            return {
+              success: false,
+              statusCode: 'BINER_TIDAK_SAH',
+              target: capability,
+              executablePath: exePath,
+              objectPath: aotRes.objectPath,
+              llvmIRPath: safeFS.existsSync(llPath) ? llPath : undefined,
+              linkingMode,
+              binaryMetadata,
+              dependencyReport,
+              executionVerification,
+              executableSha256,
+              durationMs: Date.now() - start,
+              diagnostics: diag,
+            };
+          }
+        } else {
+          executionVerification = {
+            executed: false,
+            success: false,
+            exitCode: null,
+            stdout: '',
+            stderr: '',
+            timedOut: false,
+            executionMode: 'not-executed',
+            reason: `Biner target '${capability.canonicalTarget}' merupakan hasil cross-compile; eksekusi langsung memerlukan runner/perangkat target asli (${capability.recommendedRunner}).`,
+          };
+        }
       } else {
         executionVerification = this.executeBinary(
           exePath,
@@ -312,6 +356,53 @@ export class NativeBuildPipeline {
     };
   }
 
+  public static executeWithQemuUser(
+    executablePath: string,
+    args: string[] = [],
+    timeoutMs: number = 10000,
+    sysrootPath?: string
+  ): ExecutionVerificationResult | undefined {
+    const absPath = safePath.resolve(executablePath);
+    const qemuCandidates = ['qemu-aarch64-static', 'qemu-aarch64'];
+    let qemuCmd: string | undefined;
+    for (const candidate of qemuCandidates) {
+      try {
+        const check = safeCP.spawnSync(candidate, ['--version'], { encoding: 'utf-8', timeout: 3000 });
+        if (check.status === 0) {
+          qemuCmd = candidate;
+          break;
+        }
+      } catch {
+        // lanjut kandidat berikutnya
+      }
+    }
+    if (!qemuCmd) return undefined;
+
+    const qemuArgs: string[] = [];
+    const sysroot = sysrootPath || (safeFS.existsSync('/usr/aarch64-linux-gnu') ? '/usr/aarch64-linux-gnu' : undefined);
+    if (sysroot) {
+      qemuArgs.push('-L', sysroot);
+    }
+    qemuArgs.push(absPath, ...args);
+
+    const res = safeCP.spawnSync(qemuCmd, qemuArgs, {
+      encoding: 'utf-8',
+      timeout: timeoutMs,
+      shell: false,
+    });
+    const timedOut = Boolean(res.error && (res.error as any).code === 'ETIMEDOUT');
+    return {
+      executed: !res.error || timedOut,
+      success: res.status === 0 && !timedOut && !res.error,
+      exitCode: res.status,
+      stdout: res.stdout || '',
+      stderr: res.stderr || (res.error ? res.error.message : ''),
+      timedOut,
+      executionMode: 'qemu-user',
+      reason: res.error ? res.error.message : `Dieksekusi via ${qemuCmd}`,
+    };
+  }
+
   public static executeBinary(
     executablePath: string,
     args: string[] = [],
@@ -326,6 +417,7 @@ export class NativeBuildPipeline {
         stdout: '',
         stderr: '',
         timedOut: false,
+        executionMode: 'not-executed',
         reason: `Biner tidak ditemukan: ${absPath}`,
       };
     }
@@ -344,6 +436,7 @@ export class NativeBuildPipeline {
       stdout: res.stdout || '',
       stderr: res.stderr || (res.error ? res.error.message : ''),
       timedOut,
+      executionMode: !res.error || timedOut ? 'native' : 'not-executed',
       reason: res.error ? res.error.message : undefined,
     };
   }

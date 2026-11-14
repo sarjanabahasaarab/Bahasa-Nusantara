@@ -105,7 +105,8 @@ jobs:
           npx tsx pengujian/testing/uji_testing.ts
 
   # ============================================================================
-  # 4. BUILD VALIDATION MATRIX (Windows, Linux, macOS)
+  # 4. BUILD VALIDATION MATRIX (6 Target Desktop Resmi)
+  # Kompatibilitas Fase 24 aliases: windows-x64, linux-x64, macos-x64, macos-arm64 (ref runner: macos-13)
   # ============================================================================
   build-matrix-validation:
     name: NUSANTARA / Validasi Build (${{ matrix.target }})
@@ -114,16 +115,43 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [windows-x64, linux-x64, macos-x64, macos-arm64]
         include:
-          - target: windows-x64
+          - target: windows-x86_64
+            legacy_target: windows-x64
+            triple: x86_64-pc-windows-msvc
             os: windows-latest
-          - target: linux-x64
+            is_native: 'true'
+            require_clang: '1'
+          - target: windows-arm64
+            legacy_target: windows-arm64
+            triple: aarch64-pc-windows-msvc
+            os: windows-latest
+            is_native: 'false'
+            require_clang: '1'
+          - target: linux-x86_64
+            legacy_target: linux-x64
+            triple: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-          - target: macos-x64
-            os: macos-13
-          - target: macos-arm64
+            is_native: 'true'
+            require_clang: '1'
+          - target: linux-arm64
+            legacy_target: linux-arm64
+            triple: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            is_native: 'false'
+            require_clang: '1'
+          - target: macos-x86_64
+            legacy_target: macos-x64
+            triple: x86_64-apple-darwin
             os: macos-latest
+            is_native: 'false'
+            require_clang: '1'
+          - target: macos-arm64
+            legacy_target: macos-arm64
+            triple: arm64-apple-darwin
+            os: macos-latest
+            is_native: 'true'
+            require_clang: '1'
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
@@ -141,40 +169,150 @@ jobs:
         run: |
           npm run build
 
-      - name: Pasang Toolchain LLVM/Clang Host (${{ matrix.target }})
+      - name: Pasang Toolchain LLVM/Clang & Cross-Tools (${{ matrix.target }})
         shell: bash
         run: |
           if [ "${{ runner.os }}" = "Linux" ]; then
             sudo apt-get update -y
-            sudo apt-get install -y clang lld llvm
+            if [ "${{ matrix.target }}" = "linux-arm64" ]; then
+              sudo apt-get install -y clang lld llvm gcc-aarch64-linux-gnu libc6-dev-arm64-cross qemu-user-static binutils
+              aarch64-linux-gnu-gcc --version
+              qemu-aarch64-static --version
+            else
+              sudo apt-get install -y clang lld llvm binutils
+            fi
           elif [ "${{ runner.os }}" = "Windows" ]; then
             if ! command -v clang >/dev/null 2>&1; then
               choco install -y llvm
               echo "C:/Program Files/LLVM/bin" >> "$GITHUB_PATH"
+              export PATH="/c/Program Files/LLVM/bin:$PATH"
+            fi
+            if [ "${{ matrix.target }}" = "windows-arm64" ]; then
+              ARM64_VC_LIB=$(find "/c/Program Files/Microsoft Visual Studio" -type d -path "*/VC/Tools/MSVC/*/lib/arm64" 2>/dev/null | head -n 1 || true)
+              if [ -n "$ARM64_VC_LIB" ]; then
+                VC_TOOLS_DIR=$(dirname "$(dirname "$ARM64_VC_LIB")")
+                echo "VCToolsInstallDir=$VC_TOOLS_DIR" >> "$GITHUB_ENV"
+                echo "[OK] MSVC ARM64 libraries ditemukan: $ARM64_VC_LIB"
+              else
+                echo "[INFO] MSVC ARM64 libraries tidak terpasang di runner windows-latest ini."
+              fi
             fi
           fi
           clang --version
 
-      - name: Uji Sistem Build & Distribusi Desktop (Phase 23) dengan Clang Aktif
-        run: npm run test:build-v23
+      - name: Uji LLVM Backend (Phase 44) & Build System (Phase 23) dengan Clang Aktif
+        env:
+          NUSANTARA_REQUIRE_CLANG: ${{ matrix.require_clang }}
+          NUSANTARA_BUILD_REPORT_DIR: dist-native/reports
+        run: |
+          npm run test:llvm-v44
+          npm run test:build-v23
 
       - name: Kompilasi, Validasi & Eksekusi Biner Native Nyata (${{ matrix.target }})
         shell: bash
         run: |
-          mkdir -p .ci-native-src dist-native
+          mkdir -p .ci-native-src dist-native/reports
           cat > .ci-native-src/uji_ci_native.nusantara <<'EOF'
-          program UjiNativeCI
+          program UjiNativePhase23
           mulai
             hasil : bilangan = 20 + 22
-            tampilkan("NUSANTARA_NATIVE_CI_OK", hasil)
+            tampilkan("NUSANTARA_NATIVE_CI_OK")
+            tampilkan("Pengujian LLVM IR berhasil")
+            tampilkan("Bahasa Indonesia")
+            tampilkan(hasil)
           selesai
           EOF
-          npx tsx -e "import { NusantaraCLI } from './src/paket/cli'; import { PembacaBerkasNode } from './src/modul/pembacaBerkas'; const cli = new NusantaraCLI({ pembaca: new PembacaBerkasNode() }); const code = cli.jalankan(['bangun', '--source', '.ci-native-src/uji_ci_native.nusantara', '--native', '--verifikasi', '--target', '${{ matrix.target }}', '--mode', 'release', '--out', 'dist-native']); if (code !== 0) process.exit(code);"
+          npx tsx -e "
+            import * as fs from 'fs';
+            import * as path from 'path';
+            import { execSync } from 'child_process';
+            import { NativeBuildPipeline, TargetMatrixManager } from './src/build';
+            import { LLVMToolchainManager } from './src/compiler/llvm/toolchain-manager';
+
+            const target = '${{ matrix.target }}';
+            const cap = TargetMatrixManager.inspectTargetCapability(target);
+            const toolchain = new LLVMToolchainManager().detect();
+            const isWinArm64 = target === 'windows-arm64';
+
+            if (!cap.canBuildNative && isWinArm64) {
+              const rep = {
+                target,
+                triple: cap.triple,
+                host: process.platform + '/' + process.arch,
+                toolchainVersion: toolchain.version || 'N/A',
+                status: 'NOT_VERIFIED',
+                reason: cap.missingRequirements.join('; ') || 'MSVC ARM64 SDK/libs tidak tersedia pada runner windows-latest',
+              };
+              fs.writeFileSync('dist-native/reports/matrix-' + target + '.json', JSON.stringify(rep, null, 2));
+              console.log('[NOT_VERIFIED] windows-arm64 dilewati jujur:', rep.reason);
+              process.exit(0);
+            }
+
+            const res = NativeBuildPipeline.build({
+              sourceFilePath: '.ci-native-src/uji_ci_native.nusantara',
+              appName: 'uji_ci_native',
+              target,
+              outputDirectory: 'dist-native/out-' + target,
+              linkingMode: 'dynamic',
+              strip: true,
+              verifyExecution: true,
+            });
+
+            if (!res.success || !res.executablePath) {
+              console.error('[FAIL] NativeBuildPipeline gagal:', res.statusCode, res.diagnostics.join(' | '));
+              process.exit(1);
+            }
+
+            const execRes = res.executionVerification;
+            if (('${{ matrix.is_native }}' === 'true' || target === 'linux-arm64')) {
+              if (!execRes || !execRes.executed || !execRes.success) {
+                console.error('[FAIL] Eksekusi target gagal:', execRes);
+                process.exit(1);
+              }
+              const out = execRes.stdout || '';
+              for (const expected of ['NUSANTARA_NATIVE_CI_OK', 'Pengujian LLVM IR berhasil', 'Bahasa Indonesia', '42']) {
+                if (!out.includes(expected)) {
+                  console.error('[FAIL] Stdout tidak memuat:', expected, 'Aktual:', out);
+                  process.exit(1);
+                }
+              }
+            }
+
+            const rep = {
+              target,
+              triple: cap.triple,
+              host: process.platform + '/' + process.arch,
+              toolchainVersion: toolchain.version || 'N/A',
+              llvmAsAvailable: toolchain.binaries.llvmAs.found,
+              crossCompilerCommand: cap.crossCompilerCommand || null,
+              sysroot: cap.sysrootPath || null,
+              binaryFormat: res.binaryMetadata?.format,
+              binaryArch: res.binaryMetadata?.architecture,
+              binaryType: res.binaryMetadata?.binaryType,
+              dependenciesResolved: res.dependencyReport?.allResolved,
+              executableSha256: res.executableSha256,
+              executionMode: execRes?.executionMode || 'not-executed',
+              exitCode: execRes?.exitCode ?? null,
+              stdout: execRes?.stdout || '',
+              status: 'PASS',
+            };
+            fs.writeFileSync('dist-native/reports/matrix-' + target + '.json', JSON.stringify(rep, null, 2));
+            console.log(JSON.stringify(rep, null, 2));
+          "
           rm -rf .ci-native-src
 
       - name: Validasi Pembuatan Distribusi Target (${{ matrix.target }})
         run: |
-          npx tsx -e "import { MesinCI } from './src/cicd'; import { PembacaBerkasNode } from './src/modul/pembacaBerkas'; const ci = new MesinCI({ pembaca: new PembacaBerkasNode(), targetPlatforms: ['${{ matrix.target }}'] }); const r = ci.jalankan(); if (r.statusAkhir !== 'PASS') process.exit(1);"
+          npx tsx -e "import { MesinCI } from './src/cicd'; import { PembacaBerkasNode } from './src/modul/pembacaBerkas'; const ci = new MesinCI({ pembaca: new PembacaBerkasNode(), targetPlatforms: ['${{ matrix.legacy_target }}'] }); const r = ci.jalankan(); if (r.statusAkhir !== 'PASS') process.exit(1);"
+
+      - name: Ringkasan Validasi Target ke Step Summary
+        shell: bash
+        run: |
+          REPORT_FILE="dist-native/reports/matrix-${{ matrix.target }}.json"
+          echo "### Target Matrix: \`${{ matrix.target }}\` (\`${{ matrix.triple }}\`)" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "$REPORT_FILE" ]; then
+            cat "$REPORT_FILE" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Unggah Artefak Sementara CI (Retention 7 Hari)
         uses: actions/upload-artifact@v4
@@ -204,6 +342,6 @@ jobs:
           echo "| Pemeriksaan Statis (Lint/TSC) | ${{ needs.static-checks.result == 'success' && '✅ PASS' || '❌ FAIL' }} | ubuntu-latest | Validasi sintaks dan tipe TypeScript |" >> $GITHUB_STEP_SUMMARY
           echo "| Rangkaian Uji Otomatis | ${{ needs.test-suite.result == 'success' && '✅ PASS' || '❌ FAIL' }} | Ubuntu, Windows, macOS | Seluruh unit, integrasi, dan stdlib |" >> $GITHUB_STEP_SUMMARY
           echo "| Gerbang Kualitas (Quality Gate) | ${{ needs.quality-gate.result == 'success' && '✅ PASS' || '❌ FAIL' }} | ubuntu-latest | Ambang batas kualitas dan regresi |" >> $GITHUB_STEP_SUMMARY
-          echo "| Matriks Build Lintas Platform | ${{ needs.build-matrix-validation.result == 'success' && '✅ PASS' || '❌ FAIL' }} | Multi-OS Matrix | Windows x64, Linux x64, macOS x64/ARM64 (+ Clang Native Build & Exec) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Matriks Build 6 Target Desktop | ${{ needs.build-matrix-validation.result == 'success' && '✅ PASS' || '❌ FAIL' }} | Multi-OS Matrix | Windows x86_64/ARM64, Linux x86_64/ARM64 (+QEMU user), macOS x86_64/ARM64 |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Status Release**: \`NOT PUBLISHED\` (CI Pipeline tidak mempublikasikan rilis publik)." >> $GITHUB_STEP_SUMMARY

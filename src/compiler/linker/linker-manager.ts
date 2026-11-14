@@ -30,6 +30,8 @@ export interface LinkerOptions {
   sysroot?: string;
   targetTriple?: string;
   customToolchainPath?: string;
+  crossCompilerCommand?: string;
+  explicitSysrootOverride?: boolean;
 }
 
 export class LinkerManager {
@@ -69,6 +71,8 @@ export class LinkerManager {
         debug: options.debug,
         strip: options.strip,
         sysroot: options.sysroot,
+        crossCompilerCommand: options.crossCompilerCommand,
+        explicitSysrootOverride: options.explicitSysrootOverride,
       });
     } else {
       return this.dynamicLinker.linkDynamic({
@@ -79,6 +83,8 @@ export class LinkerManager {
         debug: options.debug,
         strip: options.strip,
         sysroot: options.sysroot,
+        crossCompilerCommand: options.crossCompilerCommand,
+        explicitSysrootOverride: options.explicitSysrootOverride,
       });
     }
   }

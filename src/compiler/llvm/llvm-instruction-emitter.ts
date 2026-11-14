@@ -3,14 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * NUSANTARA LLVM BACKEND - Emitter Instruksi NIR ke Format LLVM IR
- * Target Milestone: Phase 44 (v0.44.0)
+ * Target Milestone: Phase 44 (v0.44.0) & Phase 23.1 String Interning / SSA Deduplication
  */
 
 import {
   NIRAllocaInst,
   NIRBinaryInst,
   NIRCastInst,
-  NIRCastKind,
   NIRFCmpInst,
   NIRGetElementPtrInst,
   NIRICmpInst,
@@ -18,25 +17,108 @@ import {
   NIRLoadInst,
   NIROpcode,
   NIRPhiInst,
-  NIRPredicate,
   NIRStoreInst,
 } from '../nir/instruction';
 import {
   NIRBranchInst,
   NIRCondBranchInst,
   NIRReturnInst,
-  NIRUnreachableInst,
 } from '../nir/terminator';
-import { NIRConstant, NIRConstantArray, NIRConstantBool, NIRConstantFloat, NIRConstantInt, NIRConstantNull, NIRConstantString } from '../nir/constant';
-import { NIRValue, NIRValueKind } from '../nir/value';
+import {
+  NIRConstantBool,
+  NIRConstantFloat,
+  NIRConstantInt,
+  NIRConstantNull,
+  NIRConstantString,
+} from '../nir/constant';
+import { NIRFunction } from '../nir/function';
+import { NIRValue } from '../nir/value';
 import { LLVMDiagnosticsManager } from './diagnostics';
 import { LLVMTypeMapper } from './llvm-type-mapper';
 
+export type StringLiteralSymbolResolver = (lit: NIRConstantString) => string;
+
 export class LLVMInstructionEmitter {
+  private readonly ssaNameMap: Map<NIRValue, string> = new Map();
+  private readonly bbLabelMap: Map<any, string> = new Map();
+  private readonly standaloneStringMap: Map<string, string> = new Map();
+  private standaloneStrIdx = 0;
+
   constructor(
     private readonly typeMapper: LLVMTypeMapper = new LLVMTypeMapper(),
-    private readonly diag?: LLVMDiagnosticsManager
+    private readonly diag?: LLVMDiagnosticsManager,
+    private readonly stringSymbolResolver?: StringLiteralSymbolResolver
   ) {}
+
+  /**
+   * Mendaftarkan nama SSA & label blok unik per fungsi sebelum instruksi di-emit,
+   * sehingga duplikasi nama dari lowering (mis. %add, %cetak.bil, %call) tidak pernah
+   * memicu 'multiple definition of local value' di LLVM.
+   */
+  public beginFunction(fn: NIRFunction): void {
+    this.ssaNameMap.clear();
+    this.bbLabelMap.clear();
+
+    const usedValueNames = new Set<string>();
+    for (const p of fn.parameters) {
+      const base = `%${p.name}`;
+      let unique = base;
+      let suffix = 1;
+      while (usedValueNames.has(unique)) {
+        unique = `${base}.${suffix++}`;
+      }
+      usedValueNames.add(unique);
+      this.ssaNameMap.set(p, unique);
+    }
+
+    const usedLabels = new Set<string>();
+    for (const bb of fn.basicBlocks) {
+      let label = bb.label;
+      let lSuffix = 1;
+      while (usedLabels.has(label)) {
+        label = `${bb.label}.${lSuffix++}`;
+      }
+      usedLabels.add(label);
+      this.bbLabelMap.set(bb, label);
+
+      const assignInstName = (inst: NIRInstruction): void => {
+        // Instruksi tanpa nilai hasil (void / terminator / store / actor.stop) tidak mendefinisikan register SSA
+        if (
+          inst.isTerminator() ||
+          inst.opcode === NIROpcode.STORE ||
+          inst.opcode === NIROpcode.ACTOR_STOP ||
+          (inst.opcode === NIROpcode.CALL && inst.type.isVoid())
+        ) {
+          return;
+        }
+        const rawBase = inst.id.startsWith('%') ? inst.id : `%${inst.id}`;
+        let unique = rawBase;
+        let suffix = 1;
+        while (usedValueNames.has(unique)) {
+          unique = `${rawBase}.${suffix++}`;
+        }
+        usedValueNames.add(unique);
+        this.ssaNameMap.set(inst, unique);
+      };
+
+      for (const phi of bb.phiNodes) assignInstName(phi);
+      for (const inst of bb.instructions) assignInstName(inst);
+    }
+  }
+
+  public endFunction(): void {
+    this.ssaNameMap.clear();
+    this.bbLabelMap.clear();
+  }
+
+  public getBlockLabel(bb: any, fallback: string = 'bb'): string {
+    if (!bb) return fallback;
+    return this.bbLabelMap.get(bb) || bb.label || fallback;
+  }
+
+  private getResultId(inst: NIRInstruction): string {
+    return this.ssaNameMap.get(inst) || (inst.id.startsWith('%') ? inst.id : `%${inst.id}`);
+  }
 
   public formatValue(val: NIRValue): string {
     if (val instanceof NIRConstantInt) {
@@ -54,7 +136,21 @@ export class LLVMInstructionEmitter {
       return 'null';
     }
     if (val instanceof NIRConstantString) {
-      return `@.str.${val.id.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+      if (this.stringSymbolResolver) {
+        const sym = this.stringSymbolResolver(val);
+        return sym.startsWith('@') ? sym : `@${sym}`;
+      }
+      let existing = this.standaloneStringMap.get(val.value);
+      if (!existing) {
+        existing = `.str.${this.standaloneStrIdx++}`;
+        this.standaloneStringMap.set(val.value, existing);
+      }
+      return `@${existing}`;
+    }
+
+    const mapped = this.ssaNameMap.get(val);
+    if (mapped) {
+      return mapped;
     }
 
     // Register SSA lokal (%name) atau simbol global (@name)
@@ -65,11 +161,13 @@ export class LLVMInstructionEmitter {
   }
 
   public emitInstruction(inst: NIRInstruction): string {
+    const resId = this.getResultId(inst);
+
     switch (inst.opcode) {
       case NIROpcode.ALLOCA: {
         const alloca = inst as NIRAllocaInst;
         const allocTypeStr = this.typeMapper.map(alloca.allocatedType);
-        return `${inst.id} = alloca ${allocTypeStr}, align 8`;
+        return `${resId} = alloca ${allocTypeStr}, align 8`;
       }
 
       case NIROpcode.LOAD: {
@@ -77,7 +175,7 @@ export class LLVMInstructionEmitter {
         const resTypeStr = this.typeMapper.map(load.type);
         const ptrVal = this.formatValue(load.pointer);
         const ptrTypeStr = this.typeMapper.getPointerType(load.type);
-        return `${inst.id} = load ${resTypeStr}, ${ptrTypeStr} ${ptrVal}, align 8`;
+        return `${resId} = load ${resTypeStr}, ${ptrTypeStr} ${ptrVal}, align 8`;
       }
 
       case NIROpcode.STORE: {
@@ -97,7 +195,7 @@ export class LLVMInstructionEmitter {
           .map((i) => `${this.typeMapper.map(i.type)} ${this.formatValue(i)}`)
           .join(', ');
         const ptrTypeStr = this.typeMapper.getPointerType(gep.basePtr.type.elementType || gep.basePtr.type);
-        return `${inst.id} = getelementptr inbounds ${elemTypeStr}, ${ptrTypeStr} ${basePtr}, ${indices}`;
+        return `${resId} = getelementptr inbounds ${elemTypeStr}, ${ptrTypeStr} ${basePtr}, ${indices}`;
       }
 
       case NIROpcode.ADD:
@@ -126,7 +224,7 @@ export class LLVMInstructionEmitter {
           else if (bin.opcode === NIROpcode.SREM) llvmOp = 'frem';
         }
 
-        return `${inst.id} = ${llvmOp} ${typeStr} ${lhs}, ${rhs}`;
+        return `${resId} = ${llvmOp} ${typeStr} ${lhs}, ${rhs}`;
       }
 
       case NIROpcode.ICMP: {
@@ -134,23 +232,23 @@ export class LLVMInstructionEmitter {
         const opTypeStr = this.typeMapper.map(icmp.lhs.type);
         const lhs = this.formatValue(icmp.lhs);
         const rhs = this.formatValue(icmp.rhs);
-        return `${inst.id} = icmp ${icmp.predicate} ${opTypeStr} ${lhs}, ${rhs}`;
+        return `${resId} = icmp ${icmp.predicate} ${opTypeStr} ${lhs}, ${rhs}`;
       }
 
       case NIROpcode.FCMP: {
         const fcmp = inst as NIRFCmpInst;
         const lhs = this.formatValue(fcmp.lhs);
         const rhs = this.formatValue(fcmp.rhs);
-        return `${inst.id} = fcmp ${fcmp.predicate} double ${lhs}, ${rhs}`;
+        return `${resId} = fcmp ${fcmp.predicate} double ${lhs}, ${rhs}`;
       }
 
       case NIROpcode.PHI: {
         const phi = inst as NIRPhiInst;
         const typeStr = this.typeMapper.map(phi.type);
         const incomingStrs = phi.incoming
-          .map((inc) => `[ ${this.formatValue(inc.value)}, %${inc.block ? inc.block.label : 'bb'} ]`)
+          .map((inc) => `[ ${this.formatValue(inc.value)}, %${this.getBlockLabel(inc.block, 'bb')} ]`)
           .join(', ');
-        return `${inst.id} = phi ${typeStr} ${incomingStrs}`;
+        return `${resId} = phi ${typeStr} ${incomingStrs}`;
       }
 
       case NIROpcode.CALL: {
@@ -163,7 +261,7 @@ export class LLVMInstructionEmitter {
         if (call.type.isVoid()) {
           return `call void @${call.calleeName}(${argsStr})`;
         }
-        return `${inst.id} = call ${retTypeStr} @${call.calleeName}(${argsStr})`;
+        return `${resId} = call ${retTypeStr} @${call.calleeName}(${argsStr})`;
       }
 
       case NIROpcode.CAST: {
@@ -171,7 +269,7 @@ export class LLVMInstructionEmitter {
         const srcTypeStr = this.typeMapper.map(cast.sourceValue.type);
         const targetTypeStr = this.typeMapper.map(cast.type);
         const srcVal = this.formatValue(cast.sourceValue);
-        return `${inst.id} = ${cast.castKind} ${srcTypeStr} ${srcVal} to ${targetTypeStr}`;
+        return `${resId} = ${cast.castKind} ${srcTypeStr} ${srcVal} to ${targetTypeStr}`;
       }
 
       case NIROpcode.RET: {
@@ -185,14 +283,14 @@ export class LLVMInstructionEmitter {
 
       case NIROpcode.BR: {
         const br = inst as NIRBranchInst;
-        return `br label %${br.targetBlock ? br.targetBlock.label : 'bb'}`;
+        return `br label %${this.getBlockLabel(br.targetBlock, 'bb')}`;
       }
 
       case NIROpcode.BR_COND: {
         const condBr = inst as NIRCondBranchInst;
         const condVal = this.formatValue(condBr.condition);
-        const thenLabel = condBr.thenBlock ? condBr.thenBlock.label : 'then';
-        const elseLabel = condBr.elseBlock ? condBr.elseBlock.label : 'else';
+        const thenLabel = this.getBlockLabel(condBr.thenBlock, 'then');
+        const elseLabel = this.getBlockLabel(condBr.elseBlock, 'else');
         return `br i1 ${condVal}, label %${thenLabel}, label %${elseLabel}`;
       }
 
@@ -203,7 +301,7 @@ export class LLVMInstructionEmitter {
       // Concurrency & Actor LLVM Lowering (Phase 46)
       case NIROpcode.ACTOR_CREATE: {
         const pt = this.typeMapper.getPointerType();
-        return `${inst.id} = call ${pt} @nusantara_actor_create(${pt} null)`;
+        return `${resId} = call ${pt} @nusantara_actor_create(${pt} null)`;
       }
 
       case NIROpcode.ACTOR_SEND: {
@@ -225,14 +323,14 @@ export class LLVMInstructionEmitter {
         const pt = this.typeMapper.getPointerType();
         const ops = (inst as any).operands || [];
         const callee = ops[0] ? this.formatValue(ops[0]) : 'null';
-        return `${inst.id} = call ${pt} @nusantara_task_spawn(${pt} ${callee}, ${pt} null)`;
+        return `${resId} = call ${pt} @nusantara_task_spawn(${pt} ${callee}, ${pt} null)`;
       }
 
       case NIROpcode.AWAIT: {
         const pt = this.typeMapper.getPointerType();
         const ops = (inst as any).operands || [];
         const task = ops[0] ? this.formatValue(ops[0]) : 'null';
-        return `${inst.id} = call ${pt} @nusantara_task_wait(${pt} ${task})`;
+        return `${resId} = call ${pt} @nusantara_task_wait(${pt} ${task})`;
       }
 
       default:

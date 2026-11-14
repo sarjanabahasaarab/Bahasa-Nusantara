@@ -28,3 +28,7 @@ nusantara bangun --source app.nusantara --native --static --target linux-x86_64 
 - **Windows (`x86_64` / `arm64`)**: LLVM for Windows (`winget install LLVM.LLVM` / `choco install llvm`) + Windows SDK
 
 Jika compiler atau linker tidak tersedia di host, CLI dan `NativeBuildPipeline` akan berhenti dengan exit code non-nol (`TOOLCHAIN_TIDAK_TERSEDIA`) tanpa menghasilkan biner palsu.
+
+## 4. Validasi Ketat CI (`NUSANTARA_REQUIRE_CLANG=1`)
+
+Pada lingkungan CI (`.github/workflows/ci.yml`), pengujian Phase 23 dijalankan dengan `NUSANTARA_REQUIRE_CLANG=1` sehingga ketiadaan Clang/LLVM selalu gagal keras dan tidak pernah dianggap `SKIPPED`. Lihat pula [Laporan Perbaikan LLVM IR Phase 23.1](PHASE-23-1-LLVM-IR-REPAIR-REPORT.md).

@@ -82,6 +82,7 @@ export interface ExecutionVerificationResult {
   stdout: string;
   stderr: string;
   timedOut: boolean;
+  executionMode?: 'native' | 'qemu-user' | 'not-executed';
   reason?: string;
 }
 

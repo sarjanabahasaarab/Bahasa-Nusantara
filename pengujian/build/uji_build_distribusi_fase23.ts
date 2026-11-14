@@ -23,9 +23,11 @@ import {
   NativeBuildPipeline,
   TargetMatrixManager,
 } from '../../src/build';
+import { AOTCompiler } from '../../src/compiler/aot/aot-compiler';
 import { BinaryInspector } from '../../src/compiler/executable/binary-inspector';
 import { StandalonePackager } from '../../src/compiler/executable/standalone-packager';
 import { DependencyInspector } from '../../src/compiler/linker/dependency-inspector';
+import { LLVMValidator } from '../../src/compiler/llvm/llvm-validator';
 import { TargetTripleManager } from '../../src/compiler/llvm/target-triple';
 import { LLVMToolchainManager } from '../../src/compiler/llvm/toolchain-manager';
 import { Interpreter } from '../../src/interpreter/interpreter';
@@ -124,6 +126,94 @@ uji('1.3 Penanganan jujur jika LLVM/Clang tidak terpasang di lingkungan saat ini
     pastikan(!res.executablePath, 'Tidak boleh menghasilkan biner palsu');
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// GRUP 1B: AUDIT LLVM IR LITERAL STRING & KELENGKAPAN SIMBOL GLOBAL (11 SKENARIO)
+// -----------------------------------------------------------------------------
+console.log('\n=== [GRUP 1B: Audit LLVM IR Literal String & Konsistensi Simbol] ===');
+
+uji('1B.1 Seluruh 11 skenario literal string menghasilkan LLVM IR sah tanpa simbol tak terdefinisi', () => {
+  const compiler = new AOTCompiler();
+  const toolchain = new LLVMToolchainManager().detect();
+  const validator = new LLVMValidator(toolchain);
+
+  const scenarios: Array<{ nama: string; kode: string; minStrings: number }> = [
+    {
+      nama: '01_single_string',
+      kode: `program S1\nmulai\n  tampilkan("Halo Nusantara")\nselesai\n`,
+      minStrings: 1,
+    },
+    {
+      nama: '02_multi_string_satu_fungsi',
+      kode: `program S2\nmulai\n  tampilkan("Satu", "Dua", "Tiga")\nselesai\n`,
+      minStrings: 4, // "Satu", " ", "Dua", "Tiga"
+    },
+    {
+      nama: '03_duplicate_string_interning',
+      kode: `program S3\nmulai\n  tampilkan("Sama")\n  tampilkan("Sama")\nselesai\n`,
+      minStrings: 1,
+    },
+    {
+      nama: '04_string_sebagai_argumen_fungsi',
+      kode: `program S4\nfungsi cetakPesan(p : teks) : kosong\nmulai\n  tampilkan(p)\nselesai\nmulai\n  cetakPesan("Dikirim ke fungsi")\nselesai\n`,
+      minStrings: 1,
+    },
+    {
+      nama: '05_string_dalam_percabangan_jika',
+      kode: `program S5\nmulai\n  x : bilangan = 5\n  jika x > 2 maka\n    tampilkan("Lebih besar")\n  selain\n    tampilkan("Lebih kecil")\n  akhir\nselesai\n`,
+      minStrings: 2,
+    },
+    {
+      nama: '06_string_dalam_perulangan',
+      kode: `program S6\nmulai\n  i : bilangan = 0\n  selama i < 2 lakukan\n    tampilkan("Iterasi")\n    i = i + 1\n  akhir\n  untuk j dari 1 sampai 2 lakukan\n    tampilkan("Untuk", j)\n  akhir\nselesai\n`,
+      minStrings: 2,
+    },
+    {
+      nama: '07_string_kosong',
+      kode: `program S7\nmulai\n  tampilkan("")\nselesai\n`,
+      minStrings: 1,
+    },
+    {
+      nama: '08_string_quote_dan_escape',
+      kode: `program S8\nmulai\n  tampilkan("Kutipan \\"Nusantara\\"\\nBaris Baru\\tTab")\nselesai\n`,
+      minStrings: 1,
+    },
+    {
+      nama: '09_string_unicode_bahasa_indonesia',
+      kode: `program S9\nmulai\n  tampilkan("Bahasa Indonesia — Café Rp10.000 🚀")\nselesai\n`,
+      minStrings: 1,
+    },
+    {
+      nama: '10_multi_tampilkan_dan_ekspresi',
+      kode: `program S10\nmulai\n  hasil : bilangan = 20 + 22\n  tampilkan("NUSANTARA_NATIVE_CI_OK")\n  tampilkan("Pengujian LLVM IR berhasil")\n  tampilkan("Bahasa Indonesia")\n  tampilkan(hasil)\nselesai\n`,
+      minStrings: 3,
+    },
+    {
+      nama: '11_rantai_panggilan_fungsi_bersarang',
+      kode: `program S11\nfungsi dalam(label : teks, n : bilangan) : bilangan\nmulai\n  tampilkan("Dalam:", label)\n  kembalikan n + 2\nselesai\nfungsi luar(k : bilangan) : bilangan\nmulai\n  tampilkan("Luar")\n  kembalikan dalam("DariLuar", k * 2)\nselesai\nmulai\n  tampilkan("Awal")\n  res : bilangan = luar(20)\n  tampilkan("Akhir", res)\nselesai\n`,
+      minStrings: 5,
+    },
+  ];
+
+  for (const sc of scenarios) {
+    const res = compiler.compileSource(sc.kode, { emitLLVM: false, optLevel: 'O2' });
+    pastikan(res.success && Boolean(res.llvmIR), `Kompilasi '${sc.nama}' gagal: ${res.diagnostics.join(' | ')}`);
+    const ir = res.llvmIR!;
+
+    pastikan(!/@\.str\._v\d+/.test(ir), `${sc.nama}: terdeteksi simbol rusak @.str._v*`);
+    const strDeclCount = (ir.match(/^@\.str\.\d+\s*=/gm) || []).length;
+    pastikan(
+      strDeclCount >= sc.minStrings,
+      `${sc.nama}: jumlah deklarasi @.str.N=${strDeclCount} kurang dari minimum ${sc.minStrings}`
+    );
+
+    const valRes = validator.validateIR(ir);
+    pastikan(
+      valRes.valid,
+      `${sc.nama}: LLVMValidator gagal (${valRes.toolUsed || 'static'}): ${valRes.diagnostics.join(' | ')}`
+    );
   }
 });
 
@@ -295,38 +385,76 @@ uji('3.1 DependencyInspector memeriksa biner nyata di disk (/bin/sh di Linux)', 
   }
 });
 
-uji('3.2 Kompilasi & eksekusi biner native NUSANTARA (bila LLVM/Clang tersedia)', () => {
+uji('3.2 Kompilasi, validasi LLVM IR, & eksekusi biner native UjiNativePhase23 (wajib aktif bila NUSANTARA_REQUIRE_CLANG=1)', () => {
   const status = new LLVMToolchainManager().detect();
+  const requireClang = process.env.NUSANTARA_REQUIRE_CLANG === '1';
   if (!status.available) {
+    if (requireClang) {
+      throw new Error(
+        'NUSANTARA_REQUIRE_CLANG=1 aktif, tetapi toolchain Clang/LLVM tidak ditemukan di CI!'
+      );
+    }
     console.log('     [CATATAN JUJUR] Clang/LLVM tidak terpasang di container ini; kompilasi native dilewati (BELUM DIVERIFIKASI).');
     return 'UNVERIFIED';
   }
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-native-e2e-'));
   try {
-    const srcPath = path.join(tmpDir, 'halo_build.nusantara');
+    const srcPath = path.join(tmpDir, 'uji_native_phase23.nusantara');
     fs.writeFileSync(
       srcPath,
-      `program UjiNativeFase23\nmulai\n  a : bilangan = 20\n  b : bilangan = 22\n  tampilkan("Halo Native Phase 23:", a + b)\nselesai\n`,
+      `program UjiNativePhase23\nmulai\n  hasil : bilangan = 20 + 22\n  tampilkan("NUSANTARA_NATIVE_CI_OK")\n  tampilkan("Pengujian LLVM IR berhasil")\n  tampilkan("Bahasa Indonesia")\n  tampilkan(hasil)\nselesai\n`,
       'utf-8'
     );
 
     const res = NativeBuildPipeline.build({
       sourceFilePath: srcPath,
-      appName: 'halo_build',
+      appName: 'uji_native_phase23',
       outputDirectory: tmpDir,
       linkingMode: 'dynamic',
       verifyExecution: true,
     });
 
-    pastikan(res.success, `Build native gagal: ${res.diagnostics.join(' | ')}`);
-    pastikan(Boolean(res.executablePath && fs.existsSync(res.executablePath)), 'Executable harus ada di disk');
+    pastikan(res.success, `Build native gagal [${res.statusCode}]: ${res.diagnostics.join(' | ')}`);
+    pastikan(Boolean(res.llvmIRPath && fs.existsSync(res.llvmIRPath)), 'Berkas LLVM IR (.ll) harus dihasilkan di disk');
+    const irText = fs.readFileSync(res.llvmIRPath!, 'utf-8');
+    pastikan(!/@\.str\._v\d+/.test(irText), 'LLVM IR mengandung simbol string rusak @.str._v');
+    pastikan(Boolean(res.executablePath && fs.existsSync(res.executablePath)), 'Executable native harus ada di disk');
     pastikan(Boolean(res.binaryMetadata?.isValidExecutable), 'Header executable harus sah');
+    pastikan(Boolean(res.dependencyReport?.allResolved), 'Dependensi runtime executable harus terpenuhi');
     pastikan(Boolean(res.executionVerification?.executed && res.executionVerification?.success), 'Eksekusi biner harus berhasil');
-    pastikan(
-      (res.executionVerification?.stdout || '').includes('Halo Native Phase 23: 42'),
-      `Output tidak sesuai: '${res.executionVerification?.stdout}'`
-    );
+
+    const stdout = res.executionVerification?.stdout || '';
+    pastikan(stdout.includes('NUSANTARA_NATIVE_CI_OK'), `Output tidak memuat sentinel: '${stdout}'`);
+    pastikan(stdout.includes('Pengujian LLVM IR berhasil'), `Output tidak memuat teks uji: '${stdout}'`);
+    pastikan(stdout.includes('Bahasa Indonesia'), `Output tidak memuat Bahasa Indonesia: '${stdout}'`);
+    pastikan(stdout.includes('42'), `Output tidak memuat hasil 42: '${stdout}'`);
+
+    const reportDir = process.env.NUSANTARA_BUILD_REPORT_DIR;
+    if (reportDir) {
+      fs.mkdirSync(reportDir, { recursive: true });
+      fs.writeFileSync(path.join(reportDir, 'uji_native_phase23.ll'), irText, 'utf-8');
+      fs.writeFileSync(
+        path.join(reportDir, 'uji_native_phase23_report.json'),
+        JSON.stringify(
+          {
+            target: res.target.canonicalTarget,
+            triple: res.target.triple,
+            toolchainVersion: status.version,
+            binaryFormat: res.binaryMetadata?.format,
+            binaryArch: res.binaryMetadata?.architecture,
+            binaryType: res.binaryMetadata?.binaryType,
+            executableSha256: res.executableSha256,
+            executionMode: res.executionVerification?.executionMode,
+            exitCode: res.executionVerification?.exitCode,
+            stdout,
+          },
+          null,
+          2
+        ),
+        'utf-8'
+      );
+    }
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }

@@ -40,6 +40,7 @@ export class ObjectGenerator {
         const args = [
           `-mtriple=${this.targetInfo.triple}`,
           '-filetype=obj',
+          ...(this.targetInfo.os !== 'windows' ? ['-relocation-model=pic'] : []),
           `-o=${outputFilePath}`,
           irPath,
         ];
@@ -82,6 +83,7 @@ export class ObjectGenerator {
         const args = [
           `-target`,
           this.targetInfo.triple,
+          ...(this.targetInfo.os !== 'windows' ? ['-fPIC'] : []),
           '-c',
           irPath,
           '-o',

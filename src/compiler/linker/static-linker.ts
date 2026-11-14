@@ -21,6 +21,8 @@ export interface StaticLinkingOptions {
   debug?: boolean;
   strip?: boolean;
   sysroot?: string;
+  crossCompilerCommand?: string;
+  explicitSysrootOverride?: boolean;
 }
 
 export interface LinkingExecutionResult {
@@ -41,8 +43,16 @@ export class StaticLinker {
   public linkStatic(options: StaticLinkingOptions): LinkingExecutionResult {
     const diagReport: string[] = [];
 
-    // Periksa ketersediaan tool linker (clang / lld)
-    const linkerBinary = this.toolchain.binaries.clang.found
+    const useCrossGcc = Boolean(
+      options.crossCompilerCommand &&
+        options.crossCompilerCommand !== 'clang' &&
+        (this.targetInfo.isCross || !this.toolchain.binaries.clang.found)
+    );
+
+    // Periksa ketersediaan tool linker (cross-gcc / clang / lld)
+    const linkerBinary = useCrossGcc
+      ? options.crossCompilerCommand
+      : this.toolchain.binaries.clang.found
       ? this.toolchain.binaries.clang.command
       : this.toolchain.binaries.lld.found
       ? this.toolchain.binaries.lld.command
@@ -67,13 +77,16 @@ export class StaticLinker {
       safeFS.writeFileSync(runtimeCPath, NativeRuntimeManager.generateRuntimeCSource(), 'utf-8');
 
       // 2. Susun argumen linker secara aman
-      const args: string[] = [
-        '-target',
-        this.targetInfo.triple,
-        '-static', // Flag static linking
-      ];
+      const args: string[] = [];
+      if (!useCrossGcc) {
+        args.push('-target', this.targetInfo.triple);
+        if (this.targetInfo.isCross && this.targetInfo.os === 'linux' && this.toolchain.binaries.lld.found) {
+          args.push('-fuse-ld=lld');
+        }
+      }
+      args.push('-static'); // Flag static linking
 
-      if (options.sysroot) {
+      if (options.sysroot && (!useCrossGcc || options.explicitSysrootOverride)) {
         if (this.targetInfo.os === 'darwin') {
           args.push('-isysroot', options.sysroot);
         } else {
@@ -87,7 +100,7 @@ export class StaticLinker {
         args.push('-g');
       }
 
-      if (options.strip) {
+      if (options.strip && this.targetInfo.os === 'linux') {
         args.push('-s');
       }
 

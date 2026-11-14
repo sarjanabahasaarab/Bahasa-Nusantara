@@ -91,6 +91,34 @@ export class DependencyInspector {
             inspectedFromDisk: true,
             diagnostics: ['Biner ditautkan secara statis penuh (statically linked).'],
           };
+        } else {
+          // Cross-arch ELF (misal aarch64 pada host x86_64): ldd tidak dapat mengeksekusi, gunakan readelf -d
+          const readelfRes = safeCP.spawnSync('readelf', ['-d', '--wide', executablePath], {
+            encoding: 'utf-8',
+            timeout: 5000,
+          });
+          if (readelfRes.status === 0 && readelfRes.stdout) {
+            const neededMatches = readelfRes.stdout.matchAll(/\(NEEDED\)\s+Shared library:\s+\[([^\]]+)\]/g);
+            for (const m of neededMatches) {
+              const libName = m[1].trim();
+              const isSys = this.isKnownSystemLib(libName, 'linux');
+              const armCandidate = `/usr/aarch64-linux-gnu/lib/${libName}`;
+              const x64Candidate = `/usr/x86_64-linux-gnu/lib/${libName}`;
+              const resolved = safeFS.existsSync(armCandidate)
+                ? armCandidate
+                : safeFS.existsSync(x64Candidate)
+                ? x64Candidate
+                : undefined;
+              const found = isSys || Boolean(resolved);
+              if (!found) missingLibraries.push(libName);
+              dependencies.push({
+                name: libName,
+                found,
+                resolvedPath: resolved,
+                isSystemLib: isSys,
+              });
+            }
+          }
         }
       } else if (platform === 'darwin') {
         if (process.platform === 'darwin') {

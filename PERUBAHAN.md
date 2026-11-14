@@ -4,6 +4,31 @@ Seluruh perubahan penting pada proyek bahasa pemrograman NUSANTARA dicatat dalam
 
 Format penomoran versi mengacu pada **Semantic Versioning** (`vMAJOR.MINOR.PATCH`). Pada masa pengembangan awal, versi minor mencerminkan tahapan fase roadmap (misal `v0.1.0` untuk Phase 1, `v0.2.0` untuk Phase 2, `v0.3.0` untuk Phase 3, `v0.4.0` untuk Phase 4, `v0.5.0` untuk Phase 5, `v0.6.0` untuk Phase 6, `v0.7.0` untuk Phase 7, `v0.8.0` untuk Phase 8, `v0.9.0` untuk Phase 9, `v0.10.0` untuk Phase 10).
 
+## [v0.23.1 — Perbaikan Simbol String LLVM IR & Validasi Build 6 Target] — 2026-11-13
+### Phase 23.1: LLVM IR String Symbol Repair & Six-Target Native Build Validation (`SELESAI SEBAGIAN` — Menunggu Runner CI Clang/Cross-SDK)
+
+Memperbaiki kegagalan kompilasi native GitHub Actions pada commit `782bdd9c2acbb0d3fe78391293c52741a85a5fc2` (`error: use of undefined value '@.str._v5'`) secara menyeluruh dari NIR hingga Linker & CI:
+
+#### Diperbaiki & Ditambahkan:
+- **Resolusi Terpadu Simbol String & UTF-8 LLVM IR (`src/compiler/llvm/llvm-ir-generator.ts`, `llvm-instruction-emitter.ts`):**
+  - Mengganti format `@.str._v*` dengan `stringSymbolResolver` tersentralisasi serta *string interning* sehingga setiap referensi `@.str.N` selalu cocok 100% dengan deklarasi globalnya dan literal identik dipakai ulang.
+  - Mengubah *escaping* string dari indeks UTF-16 `charCodeAt` menjadi byte UTF-8 via `TextEncoder`, sehingga `[N x i8] c"...\00"` presisi untuk Unicode/emoji/karakter Bahasa Indonesia.
+  - Menambahkan deduplikasi nama register SSA dan label basic block per fungsi pada `LLVMInstructionEmitter`, pemindaian string pada `phi`/`terminator`/`globals`/`NIRConstantArray`, serta penghapusan `#0` tak terdefinisi pada signature `define`.
+- **Penguatan Validator, Lowering, Object Generator & Linker (`llvm-validator.ts`, `ast-to-nir.ts`, `object-generator.ts`, `src/compiler/linker/`, `src/build/native-pipeline.ts`):**
+  - `LLVMValidator.validateInternalSyntax`: Menolak `@.str._v<N>`, memastikan seluruh referensi `@.str.*` terdeklarasi, dan memvalidasi kecocokan panjang byte `[N x i8]`.
+  - `ASTToNIRLowering`: Mengembalikan nilai default bertipe (`0`, `0.0`, `false`) alih-alih `null` pada fungsi primitif non-void tanpa `kembalikan`.
+  - `ObjectGenerator`: Menambahkan mode relokasi PIC (`-relocation-model=pic` / `-fPIC`) untuk kompatibilitas PIE di Linux & macOS.
+  - `StaticLinker` & `DynamicLinker`: Membatasi flag `-s` hanya ke Linux ELF, serta meneruskan `crossCompilerCommand` (`aarch64-linux-gnu-gcc`) untuk cross-linking `linux-arm64`.
+  - `DependencyInspector`: Menambahkan fallback `readelf -d` untuk inspeksi `.dynamic` `NEEDED` biner ELF cross-arch.
+  - `NativeBuildPipeline`: Menyimpan `<appName>.ll` konsisten serta mendukung eksekusi user-mode `qemu-aarch64-static` (`executionMode: 'qemu-user'`).
+- **Pengujian & Workflow 6 Target (`.github/workflows/ci.yml`, `uji_build_distribusi_fase23.ts`, `uji_llvm_fase44.ts`):**
+  - Menambahkan 11 skenario audit string literal LLVM IR di Grup 1B `test:build-v23` (`16 lulus, 0 gagal, 1 belum diverifikasi` saat lokal tanpa `clang`) dan Kelompok 9 di `test:llvm-v44` (`17 lulus, 0 gagal, 1 skipped`).
+  - Memperketat Test `3.2` dengan program `UjiNativePhase23` dan penegakan `NUSANTARA_REQUIRE_CLANG=1` di CI.
+  - Memperluas matriks `build-matrix-validation` pada `.github/workflows/ci.yml` ke seluruh 6 target (`windows-x86_64`, `windows-arm64`, `linux-x86_64`, `linux-arm64` + QEMU user, `macos-x86_64`, `macos-arm64`) tanpa menyembunyikan target tak terverifikasi.
+  - Mendokumentasikan laporan lengkap di `docs/distribusi/PHASE-23-1-LLVM-IR-REPAIR-REPORT.md`.
+
+---
+
 ## [v0.23.0 — Finalisasi Build System & Distribusi Desktop] — 2026-11-13
 ### Phase 23: Finalisasi Build System & Distribusi Desktop NUSANTARA (SELESAI SEBAGIAN — Native Cross-Target Menunggu CI/Target Hardware)
 

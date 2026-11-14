@@ -123,6 +123,12 @@ export class ASTToNIRLowering {
     if (currentBB && !currentBB.hasTerminator()) {
       if (fn.returnType.isVoid()) {
         this.builder.createRetVoid();
+      } else if (fn.returnType.kind === NIRTypeKind.INT64 || fn.returnType.kind === NIRTypeKind.INT32) {
+        this.builder.createRet(NIRConstants.int(0, fn.returnType));
+      } else if (fn.returnType.kind === NIRTypeKind.FLOAT64) {
+        this.builder.createRet(NIRConstants.float(0.0));
+      } else if (fn.returnType.kind === NIRTypeKind.BOOLEAN) {
+        this.builder.createRet(NIRConstants.bool(false));
       } else {
         this.builder.createRet(NIRConstants.null(fn.returnType));
       }

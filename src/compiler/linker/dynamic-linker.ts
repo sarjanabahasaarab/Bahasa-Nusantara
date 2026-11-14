@@ -23,6 +23,8 @@ export interface DynamicLinkingOptions {
   debug?: boolean;
   strip?: boolean;
   sysroot?: string;
+  crossCompilerCommand?: string;
+  explicitSysrootOverride?: boolean;
 }
 
 export class DynamicLinker {
@@ -35,7 +37,15 @@ export class DynamicLinker {
   public linkDynamic(options: DynamicLinkingOptions): LinkingExecutionResult {
     const diagReport: string[] = [];
 
-    const linkerBinary = this.toolchain.binaries.clang.found
+    const useCrossGcc = Boolean(
+      options.crossCompilerCommand &&
+        options.crossCompilerCommand !== 'clang' &&
+        (this.targetInfo.isCross || !this.toolchain.binaries.clang.found)
+    );
+
+    const linkerBinary = useCrossGcc
+      ? options.crossCompilerCommand
+      : this.toolchain.binaries.clang.found
       ? this.toolchain.binaries.clang.command
       : this.toolchain.binaries.lld.found
       ? this.toolchain.binaries.lld.command
@@ -58,13 +68,16 @@ export class DynamicLinker {
     try {
       safeFS.writeFileSync(runtimeCPath, NativeRuntimeManager.generateRuntimeCSource(), 'utf-8');
 
-      const args: string[] = [
-        '-target',
-        this.targetInfo.triple,
-        ...options.objectFiles,
-      ];
+      const args: string[] = [];
+      if (!useCrossGcc) {
+        args.push('-target', this.targetInfo.triple);
+        if (this.targetInfo.isCross && this.targetInfo.os === 'linux' && this.toolchain.binaries.lld.found) {
+          args.push('-fuse-ld=lld');
+        }
+      }
+      args.push(...options.objectFiles);
 
-      if (options.sysroot) {
+      if (options.sysroot && (!useCrossGcc || options.explicitSysrootOverride)) {
         if (this.targetInfo.os === 'darwin') {
           args.push('-isysroot', options.sysroot);
         } else {
@@ -85,7 +98,7 @@ export class DynamicLinker {
       if (options.debug) {
         args.push('-g');
       }
-      if (options.strip && this.targetInfo.os !== 'darwin') {
+      if (options.strip && this.targetInfo.os === 'linux') {
         args.push('-s');
       }
 

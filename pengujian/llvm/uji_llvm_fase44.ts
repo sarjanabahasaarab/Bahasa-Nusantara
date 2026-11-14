@@ -332,6 +332,96 @@ if (globalToolchain.available && globalToolchain.binaries.clang.found) {
 }
 
 // -----------------------------------------------------------------------------
+// KELOMPOK 9: KONSISTENSI SIMBOL STRING GLOBAL LLVM IR (PHASE 23.1)
+// -----------------------------------------------------------------------------
+console.log('\n[KELOMPOK 9] Konsistensi Simbol String Global & UTF-8 Byte Length');
+
+uji('9.1 Semua referensi @.str.* pada LLVM IR terdeklarasi, bebas @.str._v, dan unik antar SSA', () => {
+  const source = `
+program UjiStringLLVM
+fungsi sapa(nama : teks) : kosong
+mulai
+  tampilkan("Halo", nama)
+selesai
+
+mulai
+  hasil : bilangan = 20 + 22
+  tampilkan("NUSANTARA_NATIVE_CI_OK")
+  tampilkan("Pengujian LLVM IR berhasil")
+  tampilkan("Bahasa Indonesia")
+  tampilkan("Ulang", "Ulang")
+  tampilkan(hasil)
+  sapa("Dunia")
+selesai
+`;
+  const compiler = new AOTCompiler();
+  const res = compiler.compileSource(source, { emitLLVM: false, optLevel: 'O2' });
+  pastikan(res.success && Boolean(res.llvmIR), `Kompilasi AOT harus sukses: ${res.diagnostics.join(' | ')}`);
+  const ir = res.llvmIR!;
+
+  pastikan(!/@\.str\._v\d+/.test(ir), 'Dilarang menghasilkan simbol rusak @.str._v<N>');
+
+  const validator = new LLVMValidator(new LLVMToolchainManager().detect());
+  const valRes = validator.validateIR(ir);
+  pastikan(valRes.valid, `LLVMValidator harus lulus: ${valRes.diagnostics.join(' | ')}`);
+
+  // Verifikasi interning string literal duplikat ("Ulang") hanya menghasilkan 1 deklarasi global
+  const ulangMatches = ir.match(/c"Ulang\\00"/g) || [];
+  samaDengan(ulangMatches.length, 1, 'String duplikat harus di-interning menjadi satu deklarasi global');
+});
+
+uji('9.2 Validator menolak simbol @.str._v5 tak terdefinisi dan panjang [N x i8] tidak cocok', () => {
+  const validator = new LLVMValidator(new LLVMToolchainManager().detect());
+
+  const brokenRefIR = `
+define i32 @utama() {
+entry:
+  call void @nusantara_cetak_teks_inline(ptr @.str._v5)
+  ret i32 0
+}
+`;
+  const resRef = validator.validateIR(brokenRefIR);
+  pastikan(!resRef.valid, 'Validator wajib menolak referensi @.str._v5 yang tidak terdefinisi');
+
+  const badLenIR = `
+@.str.0 = private unnamed_addr constant [5 x i8] c"AB\\00", align 1
+define i32 @utama() {
+entry:
+  call void @nusantara_cetak_teks(ptr @.str.0)
+  ret i32 0
+}
+`;
+  const resLen = validator.validateIR(badLenIR);
+  pastikan(!resLen.valid, 'Validator wajib menolak deklarasi panjang string yang tidak cocok');
+});
+
+uji('9.3 String literal pada NIR phi node & terminator ret terdeklarasi dengan benar', () => {
+  const targetInfo = TargetTripleManager.resolve('x86_64-unknown-linux-gnu');
+  const gen = new LLVMIRGenerator(targetInfo, true);
+  const mod = new NIRModule('UjiPhiString');
+  const fn = mod.createFunction('pilih_teks', NIRTypes.string(), [{ name: 'cond', type: NIRTypes.bool() }]);
+  const entryBB = fn.createBasicBlock('entry');
+  const thenBB = fn.createBasicBlock('then');
+  const elseBB = fn.createBasicBlock('else');
+  const mergeBB = fn.createBasicBlock('merge');
+
+  new NIRBuilder(entryBB).createCondBr(fn.parameters[0], thenBB, elseBB);
+  new NIRBuilder(thenBB).createBr(mergeBB);
+  new NIRBuilder(elseBB).createBr(mergeBB);
+  const bMerge = new NIRBuilder(mergeBB);
+  const phi = bMerge.createPhi(NIRTypes.string(), 'msg');
+  phi.addIncoming(NIRConstants.string('Ya ✅'), thenBB);
+  phi.addIncoming(NIRConstants.string('Tidak'), elseBB);
+  bMerge.createRet(phi);
+
+  const ir = gen.generate(mod);
+  const validator = new LLVMValidator(new LLVMToolchainManager().detect());
+  const valRes = validator.validateIR(ir);
+  pastikan(valRes.valid, `IR dengan Phi string UTF-8 harus valid: ${valRes.diagnostics.join(' | ')}`);
+  pastikan(!/@\.str\._v\d+/.test(ir), 'Phi string tidak boleh memakai @.str._v');
+});
+
+// -----------------------------------------------------------------------------
 // REKAPITULASI HASIL
 // -----------------------------------------------------------------------------
 console.log('\n======================================================================');

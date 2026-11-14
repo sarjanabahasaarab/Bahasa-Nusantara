@@ -87,29 +87,92 @@ export class LLVMValidator {
     const lines = ir.split('\n');
 
     let openBraces = 0;
-    let inFunction = false;
-    let currentFn = '';
+    const declaredGlobals = new Set<string>();
+    const declaredAttributes = new Set<string>();
+    const declaredStringByteLengths = new Map<string, number>();
 
+    // Pass 1: Kumpulkan seluruh global dan attribute group yang dideklarasikan
+    for (let i = 0; i < lines.length; i++) {
+      const rawLine = lines[i];
+      const line = rawLine.trim();
+      const lineNum = i + 1;
+
+      if (!line || line.startsWith(';')) continue;
+
+      const globalMatch = line.match(/^(@[\w.$]+)\s*=\s*(.+)$/);
+      if (globalMatch) {
+        const symName = globalMatch[1];
+        const rhs = globalMatch[2];
+        declaredGlobals.add(symName);
+
+        // Validasi konsistensi ukuran array pada deklarasi string: [N x i8] c"...\00"
+        const strDeclMatch = rhs.match(/\[(\d+)\s*x\s*i8\]\s*c"((?:[^"\\]|\\.)*)"/);
+        if (strDeclMatch) {
+          const declaredLen = parseInt(strDeclMatch[1], 10);
+          const escapedBody = strDeclMatch[2];
+          const computedLen = this.countLLVMStringLiteralBytes(escapedBody);
+          declaredStringByteLengths.set(symName, declaredLen);
+          if (declaredLen !== computedLen) {
+            errors.push(
+              `Baris ${lineNum}: Panjang literal string ${symName} tidak cocok ([${declaredLen} x i8] vs aktual ${computedLen} byte).`
+            );
+          }
+        }
+      }
+
+      const attrMatch = line.match(/^attributes\s+(#\d+)\s*=/);
+      if (attrMatch) {
+        declaredAttributes.add(attrMatch[1]);
+      }
+    }
+
+    // Pass 2: Periksa struktur blok, terminator, dan seluruh referensi simbol @.str / #attr
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
       const lineNum = i + 1;
 
-      if (line.startsWith('define ')) {
-        inFunction = true;
-        currentFn = line;
-      }
+      if (!line || line.startsWith(';')) continue;
 
       for (const ch of line) {
         if (ch === '{') openBraces++;
-        if (ch === '}') {
-          openBraces--;
-          if (openBraces === 0) inFunction = false;
+        if (ch === '}') openBraces--;
+      }
+
+      if (line.includes('unreachable') && line.includes('ret ')) {
+        errors.push(`Baris ${lineNum}: Terminator ganda pada satu baris.`);
+      }
+
+      // Guard regresi spesifik bug @.str._v<N>
+      const badLegacyRef = line.match(/@\.str\._v\d+/);
+      if (badLegacyRef) {
+        errors.push(
+          `Baris ${lineNum}: Terdeteksi simbol string tak valid '${badLegacyRef[0]}' (sisa ID NIR %v tidak selaras dengan deklarasi global).`
+        );
+      }
+
+      // Validasi seluruh referensi global string @.str... di luar baris deklarasi global itu sendiri
+      const isGlobalDef = /^@[\w.$]+\s*=/.test(line);
+      if (!isGlobalDef) {
+        const strRefs = line.match(/@\.str[\w.$]*/g);
+        if (strRefs) {
+          for (const ref of strRefs) {
+            if (!declaredGlobals.has(ref)) {
+              errors.push(`Baris ${lineNum}: Referensi simbol string global tidak terdefinisi '${ref}'.`);
+            }
+          }
         }
       }
 
-      // Periksa baris ganjil atau instruksi cacat
-      if (line.includes('unreachable') && line.includes('ret ')) {
-        errors.push(`Baris ${lineNum}: Terminator ganda pada satu baris.`);
+      // Validasi referensi attribute group #N pada deklarasi/definisi fungsi
+      if (line.startsWith('define ') || line.startsWith('declare ')) {
+        const attrRefs = line.match(/#\d+/g);
+        if (attrRefs) {
+          for (const attrRef of attrRefs) {
+            if (!declaredAttributes.has(attrRef)) {
+              errors.push(`Baris ${lineNum}: Referensi attribute group tidak terdefinisi '${attrRef}'.`);
+            }
+          }
+        }
       }
     }
 
@@ -118,5 +181,24 @@ export class LLVMValidator {
     }
 
     return errors;
+  }
+
+  private countLLVMStringLiteralBytes(escapedBody: string): number {
+    let count = 0;
+    for (let i = 0; i < escapedBody.length; i++) {
+      if (escapedBody[i] === '\\') {
+        const hexPair = escapedBody.slice(i + 1, i + 3);
+        if (/^[0-9a-fA-F]{2}$/.test(hexPair)) {
+          count += 1;
+          i += 2;
+        } else {
+          count += 1;
+          i += 1;
+        }
+      } else {
+        count += 1;
+      }
+    }
+    return count;
   }
 }
