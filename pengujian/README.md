@@ -1,7 +1,7 @@
 # Kerangka Kerja & Sistem Pengujian Otomatis NUSANTARA
 
 > **Dokumentasi Resmi Rangkaian Pengujian Mutu (Quality Gate) Bahasa Pemrograman NUSANTARA**  
-> **Versi Rilis:** `v0.50.0` | **Status:** 45 Perintah Uji (`npm test`) Lulus 100%
+> **Versi Rilis:** `v0.50.0` | **Status:** 46 Perintah Uji (`npm test`) Terintegrasi (0 Gagal)
 
 Direktori `pengujian/` menampung seluruh kerangka pengujian mutu komprehensif bahasa pemrograman NUSANTARA, mulai dari verifikasi dokumen fondasi, analisis leksikal, parsing AST, evaluasi semantik & tipe, interpreter runtime, toolchain, framework web & desktop, ekosistem mobile, intermediate representation (NIR), LLVM backend, linker lanjutan, sistem konkurensi (Actor Model), Game SDK, hingga kernel dan user mode NusantaraOS (Phase 1 s/d Phase 50).
 
@@ -13,11 +13,11 @@ Sesuai audit teknis resmi dan transparan, berikut rincian metrik pengujian repos
 
 | Metrik | Jumlah Aktual | Penjelasan Operasional |
 |---|:---:|---|
-| **Skrip Perintah Pengujian** | **45 Skrip (`npm test`)** | Terdiri dari 1 skrip audit fondasi (`skrip/periksa_fondasi.js`) dan 44 skrip suite TypeScript dalam `npm test`, ditambah 1 skrip terpisah untuk fallback peramban (`test:database-browser-v29`). |
-| **Suite Pengujian TypeScript** | **44 Suite (+1 Terpisah)** | 44 suite aktif dalam `npm test`; fallback peramban SQLite diuji terpisah di `pengujian/database/uji_browser_fallback_fase29.ts`. |
+| **Skrip Perintah Pengujian** | **46 Skrip (`npm test`)** | Terdiri dari 1 skrip audit fondasi (`skrip/periksa_fondasi.js`) dan 45 skrip suite TypeScript dalam `npm test`, ditambah 1 skrip terpisah untuk fallback peramban (`test:database-browser-v29`). |
+| **Suite Pengujian TypeScript** | **45 Suite (+1 Terpisah)** | 45 suite aktif dalam `npm test`; fallback peramban SQLite diuji terpisah di `pengujian/database/uji_browser_fallback_fase29.ts`. |
 | **Pemeriksaan Dokumen Fondasi** | **167 Berkas** | Pemeriksaan keberadaan, kelengkapan isi, format lisensi, dan tata kelola pada Phase 1–5 oleh `skrip/periksa_fondasi.js`. |
-| **Kasus Pengujian TypeScript (Test Cases)** | **1.276 Kasus** | Total skenario pada 44 suite `npm test` (**1.273 LULUS**, **0 GAGAL**, **3 SKIPPED** transparan karena host tanpa `clang`/`llc`/`lld`), ditambah **3/3 kasus** fallback peramban terpisah. |
-| **Total Pemeriksaan Gabungan** | **1.443 Pemeriksaan** | **167 pemeriksaan dokumen fondasi + 1.276 kasus uji TypeScript dalam `npm test` = 1.443 pemeriksaan.** |
+| **Kasus Pengujian TypeScript (Test Cases)** | **1.308 Kasus** | Total skenario pada 45 suite `npm test` (**1.302 LULUS**, **0 GAGAL**, **3 SKIPPED** & **3 BELUM DIVERIFIKASI** secara transparan karena host Linux tanpa `clang`/`llc`/`lld`/`pwsh`), ditambah **3/3 kasus** fallback peramban terpisah. |
+| **Total Pemeriksaan Gabungan** | **1.475 Pemeriksaan** | **167 pemeriksaan dokumen fondasi + 1.308 kasus uji TypeScript dalam `npm test` = 1.475 pemeriksaan.** |
 
 ---
 
@@ -35,7 +35,7 @@ Setiap fitur dan subsistem diklasifikasikan secara jujur dan transparan berdasar
 
 ---
 
-## 3. Matriks Hasil Pengujian Komprehensif (45 Perintah Uji)
+## 3. Matriks Hasil Pengujian Komprehensif (46 Perintah Uji)
 
 | No | Target Fase | Modul & Nama Pengujian | Perintah Eksekusi | Kasus Uji | Status | Klasifikasi Validasi |
 |:---:|:---:|---|---|:---:|:---:|---|
@@ -57,40 +57,41 @@ Setiap fitur dan subsistem diklasifikasikan secara jujur dan transparan berdasar
 | 16 | Phase 20 | Language Server Protocol (LSP JSON-RPC 2.0) | `npx tsx pengujian/lsp/uji_lsp.ts` | 32 uji | LULUS | INTEGRATION TEST PASSED |
 | 17 | Phase 21 | Testing Framework (`pastikan`) & Quality Gate | `npx tsx pengujian/testing/uji_testing.ts` | 29 uji | LULUS | UNIT TEST PASSED |
 | 18 | Phase 22 | Registri Paket Lokal & Penerbitan `.npk` | `npx tsx pengujian/paket/uji_ekosistem_registri.ts` | 24 uji | LULUS | INTEGRATION TEST PASSED |
-| 19 | Phase 23 & 24 | Build Rilis ZIP/`tar.gz`, CI/CD GitHub Actions & Security Gate | `npx tsx pengujian/cicd/uji_cicd_workflow.ts` | 21 uji | LULUS | INTEGRATION TEST PASSED |
-| 20 | Phase 25 | Debugger Interaktif & Profiler Memori | `npx tsx pengujian/debugger/uji_debugger_profiler.ts` | 40 uji | LULUS | INTEGRATION TEST PASSED |
-| 21 | Phase 26 | IDE Foundation, File Tree & Terminal | `npx tsx pengujian/ide/uji_ide_foundation.ts` | 46 uji | LULUS | INTEGRATION TEST PASSED |
-| 22 | Phase 27 | Dependency Graph & Isolated Package Cache | `npx tsx pengujian/paket/uji_ekosistem_dependensi.ts` | 25 uji | LULUS | INTEGRATION TEST PASSED |
-| 23 | Phase 28 | Stdlib Ekspansi (Kripto, Kompresi, Fetch) | `npx tsx pengujian/stdlib/uji_stdlib_fase28.ts` | 28 uji | LULUS | INTEGRATION TEST PASSED |
-| 24 | Phase 29 | Database API & SQLite Native Driver (`node:sqlite` Node 22+) | `npm run test:database-v29` (`+ test:database-browser-v29`) | 26 (+3 browser) | LULUS | INTEGRATION TEST PASSED |
-| 25 | Phase 30 | Web Framework, Parameter Router & Anti-XSS | `npx tsx pengujian/web/uji_web_fase30.ts` | 25 uji | LULUS | INTEGRATION TEST PASSED |
-| 26 | Phase 31 | Autentikasi Scrypt, Sesi CSPRNG & RBAC | `npx tsx pengujian/autentikasi/uji_autentikasi_fase31.ts` | 27 uji | LULUS | INTEGRATION TEST PASSED |
-| 27 | Phase 32 | ORM, Model Relasional & Migrasi Skema | `npx tsx pengujian/orm/uji_orm_fase32.ts` | 17 uji | LULUS | INTEGRATION TEST PASSED |
-| 28 | Phase 33 | Scaffolder Generator Proyek (`nusantara baru`)| `npx tsx pengujian/generator/uji_generator_fase33.ts` | 28 uji | LULUS | INTEGRATION TEST PASSED |
-| 29 | Phase 34 | WebSocket Server & Background Worker Queue | `npx tsx pengujian/realtime/uji_realtime_fase34.ts` | 19 uji | LULUS | INTEGRATION TEST PASSED |
-| 30 | Phase 35 | Klien HTTP REST Mandiri & Interceptor | `npx tsx pengujian/http/uji_http_fase35.ts` | 19 uji | LULUS | INTEGRATION TEST PASSED |
-| 31 | Phase 36 | Desktop GUI, Rasterizer BMP/PPM/SVG, WebSocket IPC & Packager | `npx tsx pengujian/gui/uji_gui_fase36.ts` | 19 uji | LULUS | INTEGRATION TEST PASSED |
-| 32 | Phase 37 | Mobile Framework Core, Codegen Kotlin/Swift & Preview Host | `npx tsx pengujian/mobile/uji_mobile_fase37.ts` | 34 uji | LULUS | INTEGRATION TEST PASSED |
-| 33 | Phase 38 | Mobile Native Device API, Probe OS/ADB & Plugin Codegen | `npx tsx pengujian/mobile/uji_native_api_fase38.ts` | 19 uji | LULUS | INTEGRATION TEST PASSED |
-| 34 | Phase 39 | Mobile Networking, Disk Queue, 409 LWW & Loopback WS | `npx tsx pengujian/mobile/uji_mobile_networking_fase39.ts` | 34 uji | LULUS | INTEGRATION TEST PASSED |
-| 35 | Phase 40 | Mobile App Packaging PKZIP CRC-32 & Toolchain Probe | `npx tsx pengujian/mobile/uji_distribusi_fase40.ts` | 84 uji | LULUS | INTEGRATION TEST PASSED |
-| 36 | Phase 41 | Mobile Store Integration (JWT RS256/ES256 & Loopback REST) | `npx tsx pengujian/mobile/uji_publikasi_fase41.ts` | 97 uji | LULUS | INTEGRATION TEST PASSED |
-| 37 | Phase 42 | Mobile OTA Update Engine, Ed25519 PEM, HTTP Fetch & Rollback | `npx tsx pengujian/mobile/uji_pembaruan_fase42.ts` | 23 uji | LULUS | INTEGRATION TEST PASSED |
-| 38 | Phase 43 | Nusantara Intermediate Representation (NIR) | `npx tsx pengujian/nir/uji_nir_fase43.ts` | 29 uji | LULUS | INTEGRATION TEST PASSED |
-| 39 | Phase 44 | LLVM Backend & AOT Native Compilation | `npx tsx pengujian/llvm/uji_llvm_fase44.ts` | 15 uji | LULUS | INTEGRATION TEST PASSED |
-| 40 | Phase 45 | Linker, Symbol Table, Relocation & Standalone Executable | `npx tsx pengujian/linker/uji_linker_fase45.ts` | 21 uji | LULUS | INTEGRATION TEST PASSED |
-| 41 | Phase 46 | High-Performance Concurrency (Actor Model) | `npx tsx pengujian/actor/uji_actor_fase46.ts` | 32 uji | LULUS | INTEGRATION TEST PASSED |
-| 42 | Phase 47 | Nusantara Game Development Kit (Game SDK) | `npx tsx pengujian/game/uji_game_sdk_fase47.ts` | 33 uji | LULUS | INTEGRATION TEST PASSED |
-| 43 | Phase 48 | Nusantara OS: Minimal Kernel Interface | `npx tsx pengujian/os/uji_kernel_fase48.ts` | 42 uji | LULUS | INTEGRATION TEST PASSED |
-| 44 | Phase 49 | Nusantara OS: Bootable Kernel & Hardware Validation | `npx tsx pengujian/os/uji_boot_fase49.ts` | 23 uji | LULUS | INTEGRATION TEST PASSED |
-| 45 | Phase 50 | Nusantara OS: Process Isolation & User Mode | `npx tsx pengujian/os/uji_usermode_fase50.ts` | 25 uji | LULUS | INTEGRATION TEST PASSED |
+| 19 | Phase 23 | Build System, BOM-free Receipt, Installer & Certification Gate | `npx tsx pengujian/build/uji_build_distribusi_fase23.ts` | 25 lulus (+3 belum diverifikasi lokal) | PARTIAL_HOST_SAFE | INTEGRATION TEST PASSED |
+| 20 | Phase 23 & 24 | Build Rilis ZIP/`tar.gz`, CI/CD GitHub Actions & Security Gate | `npx tsx pengujian/cicd/uji_cicd_workflow.ts` | 21 uji | LULUS | INTEGRATION TEST PASSED |
+| 21 | Phase 25 | Debugger Interaktif & Profiler Memori | `npx tsx pengujian/debugger/uji_debugger_profiler.ts` | 40 uji | LULUS | INTEGRATION TEST PASSED |
+| 22 | Phase 26 | IDE Foundation, File Tree & Terminal | `npx tsx pengujian/ide/uji_ide_foundation.ts` | 46 uji | LULUS | INTEGRATION TEST PASSED |
+| 23 | Phase 27 | Dependency Graph & Isolated Package Cache | `npx tsx pengujian/paket/uji_ekosistem_dependensi.ts` | 25 uji | LULUS | INTEGRATION TEST PASSED |
+| 24 | Phase 28 | Stdlib Ekspansi (Kripto, Kompresi, Fetch) | `npx tsx pengujian/stdlib/uji_stdlib_fase28.ts` | 28 uji | LULUS | INTEGRATION TEST PASSED |
+| 25 | Phase 29 | Database API & SQLite Native Driver (`node:sqlite` Node 22+) | `npm run test:database-v29` (`+ test:database-browser-v29`) | 26 (+3 browser) | LULUS | INTEGRATION TEST PASSED |
+| 26 | Phase 30 | Web Framework, Parameter Router & Anti-XSS | `npx tsx pengujian/web/uji_web_fase30.ts` | 25 uji | LULUS | INTEGRATION TEST PASSED |
+| 27 | Phase 31 | Autentikasi Scrypt, Sesi CSPRNG & RBAC | `npx tsx pengujian/autentikasi/uji_autentikasi_fase31.ts` | 27 uji | LULUS | INTEGRATION TEST PASSED |
+| 28 | Phase 32 | ORM, Model Relasional & Migrasi Skema | `npx tsx pengujian/orm/uji_orm_fase32.ts` | 17 uji | LULUS | INTEGRATION TEST PASSED |
+| 29 | Phase 33 | Scaffolder Generator Proyek (`nusantara baru`)| `npx tsx pengujian/generator/uji_generator_fase33.ts` | 28 uji | LULUS | INTEGRATION TEST PASSED |
+| 30 | Phase 34 | WebSocket Server & Background Worker Queue | `npx tsx pengujian/realtime/uji_realtime_fase34.ts` | 19 uji | LULUS | INTEGRATION TEST PASSED |
+| 31 | Phase 35 | Klien HTTP REST Mandiri & Interceptor | `npx tsx pengujian/http/uji_http_fase35.ts` | 19 uji | LULUS | INTEGRATION TEST PASSED |
+| 32 | Phase 36 | Desktop GUI, Rasterizer BMP/PPM/SVG, WebSocket IPC & Packager | `npx tsx pengujian/gui/uji_gui_fase36.ts` | 19 uji | LULUS | INTEGRATION TEST PASSED |
+| 33 | Phase 37 | Mobile Framework Core, Codegen Kotlin/Swift & Preview Host | `npx tsx pengujian/mobile/uji_mobile_fase37.ts` | 34 uji | LULUS | INTEGRATION TEST PASSED |
+| 34 | Phase 38 | Mobile Native Device API, Probe OS/ADB & Plugin Codegen | `npx tsx pengujian/mobile/uji_native_api_fase38.ts` | 19 uji | LULUS | INTEGRATION TEST PASSED |
+| 35 | Phase 39 | Mobile Networking, Disk Queue, 409 LWW & Loopback WS | `npx tsx pengujian/mobile/uji_mobile_networking_fase39.ts` | 34 uji | LULUS | INTEGRATION TEST PASSED |
+| 36 | Phase 40 | Mobile App Packaging PKZIP CRC-32 & Toolchain Probe | `npx tsx pengujian/mobile/uji_distribusi_fase40.ts` | 84 uji | LULUS | INTEGRATION TEST PASSED |
+| 37 | Phase 41 | Mobile Store Integration (JWT RS256/ES256 & Loopback REST) | `npx tsx pengujian/mobile/uji_publikasi_fase41.ts` | 97 uji | LULUS | INTEGRATION TEST PASSED |
+| 38 | Phase 42 | Mobile OTA Update Engine, Ed25519 PEM, HTTP Fetch & Rollback | `npx tsx pengujian/mobile/uji_pembaruan_fase42.ts` | 23 uji | LULUS | INTEGRATION TEST PASSED |
+| 39 | Phase 43 | Nusantara Intermediate Representation (NIR) | `npx tsx pengujian/nir/uji_nir_fase43.ts` | 29 uji | LULUS | INTEGRATION TEST PASSED |
+| 40 | Phase 44 | LLVM Backend & AOT Native Compilation | `npx tsx pengujian/llvm/uji_llvm_fase44.ts` | 17 lulus (+1 skipped) | LULUS | INTEGRATION TEST PASSED |
+| 41 | Phase 45 | Linker, Symbol Table, Relocation & Standalone Executable | `npx tsx pengujian/linker/uji_linker_fase45.ts` | 21 lulus (+1 skipped) | LULUS | INTEGRATION TEST PASSED |
+| 42 | Phase 46 | High-Performance Concurrency (Actor Model) | `npx tsx pengujian/actor/uji_actor_fase46.ts` | 31 lulus (+1 skipped) | LULUS | INTEGRATION TEST PASSED |
+| 43 | Phase 47 | Nusantara Game Development Kit (Game SDK) | `npx tsx pengujian/game/uji_game_sdk_fase47.ts` | 33 uji | LULUS | INTEGRATION TEST PASSED |
+| 44 | Phase 48 | Nusantara OS: Minimal Kernel Interface | `npx tsx pengujian/os/uji_kernel_fase48.ts` | 42 uji | LULUS | INTEGRATION TEST PASSED |
+| 45 | Phase 49 | Nusantara OS: Bootable Kernel & Hardware Validation | `npx tsx pengujian/os/uji_boot_fase49.ts` | 23 uji | LULUS | INTEGRATION TEST PASSED |
+| 46 | Phase 50 | Nusantara OS: Process Isolation & User Mode | `npx tsx pengujian/os/uji_usermode_fase50.ts` | 25 uji | LULUS | INTEGRATION TEST PASSED |
 
 ---
 
 ## 4. Cara Menjalankan Pengujian
 
 ### 4.1 Menjalankan Seluruh Rangkaian Pengujian
-Jalankan perintah standar npm untuk mengeksekusi ke-45 suite secara berurutan:
+Jalankan perintah standar npm untuk mengeksekusi ke-46 skrip uji secara berurutan:
 
 ```bash
 npm test

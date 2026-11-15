@@ -4,6 +4,26 @@ Seluruh perubahan penting pada proyek bahasa pemrograman NUSANTARA dicatat dalam
 
 Format penomoran versi mengacu pada **Semantic Versioning** (`vMAJOR.MINOR.PATCH`). Pada masa pengembangan awal, versi minor mencerminkan tahapan fase roadmap (misal `v0.1.0` untuk Phase 1, `v0.2.0` untuk Phase 2, `v0.3.0` untuk Phase 3, `v0.4.0` untuk Phase 4, `v0.5.0` untuk Phase 5, `v0.6.0` untuk Phase 6, `v0.7.0` untuk Phase 7, `v0.8.0` untuk Phase 8, `v0.9.0` untuk Phase 9, `v0.10.0` untuk Phase 10).
 
+## [v0.23.5 — Perbaikan Manifest UTF-8 Windows, Pengujian Linker Native & Reaktivasi Matriks CI] — 2026-11-15
+### Phase 23.5: Windows UTF-8 Manifest Repair, Native Linker Test Fix & CI Matrix Reactivation (`SELESAI SEBAGIAN` — Menunggu Runner GitHub Actions & Sertifikasi 6/6 Target `CERTIFIED`)
+
+Menyelesaikan dua regresi pasca Phase 23.4, memulihkan modul `src/build/` beserta `uji_build_distribusi_fase23.ts`, dan mengaktifkan penuh matriks pengujian toolchain native pada `.github/workflows/ci.yml`:
+
+#### Diperbaiki & Ditambahkan:
+- **Penghapusan UTF-8 BOM pada Receipt & Manifest PowerShell Windows (`src/build/installers.ts`, `pengujian/build/uji_build_distribusi_fase23.ts`):**
+  - Mengganti penulisan file receipt JSON pada `install.ps1` dengan helper `Write-NusantaraUtf8NoBomAtomic` menggunakan `.NET` `New-Object System.Text.UTF8Encoding($false)` dan `[System.IO.File]::WriteAllText` ke berkas sementara diikuti `Move-Item -Force` atomik sehingga Node.js `JSON.parse()` tidak gagal akibat UTF-8 BOM (`0xEF 0xBB 0xBF`).
+  - Memperbaiki portabilitas ekspresi `sed` parsing `SHA256SUMS` di `install.sh` (`sed -e 's/^[0-9a-fA-F]*[[:space:]]*//' -e 's/^\*//'`) agar kompatibel dengan GNU `sed` Linux maupun BSD `sed` macOS.
+  - Menambahkan helper defensif `bacaJsonAman()` + **Test `5.1b`** (pengujian JSON polos, JSON ber-BOM, & penolakan JSON rusak) serta verifikasi byte-level anti-BOM di **Test `5.3`** (`.cmd`) & **Test `5.4`** (`PE32+` `.exe`).
+- **Perbaikan Pengujian Linker Native Phase 45 (`pengujian/linker/uji_linker_fase45.ts`, `src/compiler/linker/{static,dynamic}-linker.ts`, `src/compiler/llvm/toolchain-manager.ts`):**
+  - Memperbaiki **Test `10.1`** agar mengompilasi sumber C nyata yang memanggil `nusantara_cetak_teks("NUSANTARA_PHASE45_LINKER_OK")` menjadi berkas objek nyata (`.o`/`.obj`), memvalidasi magic header objek, menautkannya secara dinamis (`isStatic: false`) via `LinkerManager`, memverifikasi biner via `BinaryInspector.inspectStrict`, serta mengeksekusi biner untuk memastikan `exitCode === 0` dan keluaran sentinel aktual.
+  - Menambahkan **Test `10.2`** untuk menguji penolakan kontrak `OBJ_INPUT_KOSONG` dan penolakan `-static` pada Darwin (`STATIC_TIDAK_DIDUKUNG_DARWIN`).
+  - Memisahkan driver Clang/cross-GCC dari binary LLD mentah, menambahkan fallback `ld64.lld`, memvalidasi berkas objek di disk, serta melaporkan `exitCode`, `stdout`, `stderr`, `targetTriple`, dan `commandExecuted`.
+- **Reaktivasi Matriks CI 6 Target & Laporan (`/.github/workflows/ci.yml`, `docs/distribusi/PHASE-23-5-CI-REPAIR-REPORT.md`):**
+  - Menjalankan `test:llvm-v44`, `test:linker-v45`, dan `test:build-v23` berurutan dengan `NUSANTARA_REQUIRE_CLANG=1` di `build-matrix-validation` untuk ke-6 target resmi, diikuti gerbang sertifikasi `phase23-certification-gate`.
+  - Hasil aktual di container Linux x86_64 (`Node.js v22.23.2` tanpa `clang`/`pwsh`): `test:build-v23` **25 lulus, 0 gagal, 3 `BELUM DIVERIFIKASI`** (`28` skenario); `test:linker-v45` **21 lulus, 0 gagal, 1 `SKIPPED`** (`22` skenario); `npm test` **1.475 pemeriksaan gabungan** (`167` fondasi + `1.308` TS) lulus tanpa kegagalan + `3/3` fallback browser (`test:database-browser-v29`) + `npm run build` lulus.
+
+---
+
 ## [v0.23.4 — Perbaikan Siklus Hidup Installer PowerShell & Unblock Matriks CI] — 2026-11-15
 ### Phase 23.4: PowerShell Installer Lifecycle Repair & CI Matrix Unblock (`SELESAI SEBAGIAN` — Menunggu Runner GitHub Actions Windows/macOS/Linux & Sertifikasi 6/6 Target `CERTIFIED`)
 

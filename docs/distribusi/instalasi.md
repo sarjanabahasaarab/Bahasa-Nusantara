@@ -41,4 +41,4 @@ Pencopotan bersih:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\uninstall.ps1
 ```
-Pemasang memverifikasi setiap entri `SHA256SUMS` memakai `Get-FileHash -Algorithm SHA256`, memperbarui `Path` level User secara terpisah per segmen `;`, dan mencadangkan executable sebelum menimpa pada saat upgrade.
+Pemasang memverifikasi setiap entri `SHA256SUMS` memakai .NET `[System.Security.Cryptography.SHA256]::Create()` (kompatibel lintas PowerShell 5.1 & 7 tanpa `Get-FileHash`), menulis receipt JSON UTF-8 tanpa BOM (`System.Text.UTF8Encoding($false)`), memperbarui `Path` level User secara terpisah per segmen `;`, dan mencadangkan executable sebelum menimpa pada saat upgrade.

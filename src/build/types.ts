@@ -2,60 +2,79 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * NUSANTARA BUILD SYSTEM & DESKTOP DISTRIBUTION (Phase 23)
- * Definisi Tipe Data Target, Pipeline Native, Arsip, dan Pemasang Desktop.
+ * NUSANTARA BUILD SYSTEM - Definisi Tipe Terpadu (Phase 23)
+ * Target Milestone: v0.23.0 / v0.23.5
  */
 
 import { BinaryMetadata } from '../compiler/executable/binary-metadata';
 import { DependencyInspectionReport } from '../compiler/linker/dependency-inspector';
-import { DesktopTargetId, TargetPlatformInfo } from '../compiler/llvm/target-triple';
 import { LLVMOptLevel } from '../compiler/llvm/llvm-optimizer';
 
-export type CanonicalDesktopTarget = DesktopTargetId;
+export type CanonicalDesktopTarget =
+  | 'windows-x86_64'
+  | 'windows-arm64'
+  | 'linux-x86_64'
+  | 'linux-arm64'
+  | 'macos-x86_64'
+  | 'macos-arm64';
 
-export type DesktopTargetAlias = 'windows-x64' | 'linux-x64' | 'macos-x64';
-
-export type AnyDesktopTarget = CanonicalDesktopTarget | DesktopTargetAlias;
-
-export type LinkingMode = 'auto' | 'static' | 'dynamic';
-
-export type ArchiveFormat = 'zip' | 'tar.gz';
-
-export type BuildMode = 'debug' | 'release';
-
-export type PackageKind = 'native' | 'script-launcher';
+export type LinkingMode = 'static' | 'dynamic' | 'auto';
 
 export type BuildStatusCode =
-  | 'SUKSES'
+  | 'BERHASIL'
   | 'TOOLCHAIN_TIDAK_TERSEDIA'
   | 'CROSS_SDK_TIDAK_TERSEDIA'
   | 'TARGET_TIDAK_DIDUKUNG'
   | 'GALAT_KOMPILASI'
   | 'GALAT_LINKER'
-  | 'BINER_TIDAK_SAH'
-  | 'GALAT_VALIDASI';
+  | 'BINER_TIDAK_VALID'
+  | 'EKSEKUSI_GAGAL';
+
+export type ExecutionMode =
+  | 'native'
+  | 'qemu-user'
+  | 'rosetta2'
+  | 'cross-compiled-not-executed'
+  | 'not-executed';
 
 export interface TargetCapability {
-  rawInput: string;
+  input: string;
   canonicalTarget?: CanonicalDesktopTarget;
   legacyAlias?: string;
+  triple: string;
   os: 'windows' | 'linux' | 'darwin' | 'unknown';
   arch: 'x86_64' | 'aarch64' | 'unknown';
-  triple: string;
-  targetInfo?: TargetPlatformInfo;
+  objectFormat: 'ELF' | 'Mach-O' | 'COFF';
   supported: boolean;
   isCross: boolean;
-  toolchainAvailable: boolean;
-  crossSdkAvailable: boolean;
   canBuildNative: boolean;
-  sysrootPath?: string;
-  sdkName?: string;
-  linkerProbeVerified?: boolean;
+  canExecuteOnHost: boolean;
+  executionMode: ExecutionMode;
+  emulatorCommand?: string;
+  toolchainAvailable: boolean;
+  clangAvailable: boolean;
+  llcAvailable: boolean;
+  lldAvailable: boolean;
   crossCompilerCommand?: string;
-  extraLibraryPaths?: string[];
-  recommendedRunner: string;
+  sysroot?: string;
+  sdkName?: string;
+  sdkAvailable?: boolean;
+  linkerProbeVerified?: boolean;
   missingRequirements: string[];
-  diagnostics: string[];
+  recommendedRunner: string;
+  diagnosticMessage: string;
+}
+
+export interface ArchiveEntryInput {
+  name: string;
+  content: string | Uint8Array;
+  mode?: number;
+  mtime?: Date;
+}
+
+export interface Sha256SumEntry {
+  sha256: string;
+  filename: string;
 }
 
 export interface NativeBuildOptions {
@@ -68,172 +87,207 @@ export interface NativeBuildOptions {
   linkingMode?: LinkingMode;
   debug?: boolean;
   strip?: boolean;
-  staticLibraries?: string[];
-  sharedLibraries?: string[];
-  libraryPaths?: string[];
-  customToolchainPath?: string;
-  sysrootOverride?: string;
   verifyExecution?: boolean;
-  executionArgs?: string[];
-  executionTimeoutMs?: number;
-}
-
-export interface ExecutionVerificationResult {
-  executed: boolean;
-  success: boolean;
-  exitCode: number | null;
-  stdout: string;
-  stderr: string;
-  timedOut: boolean;
-  executionMode?:
-    | 'native'
-    | 'qemu-user'
-    | 'rosetta2'
-    | 'cross-compiled-not-executed'
-    | 'not-executed';
-  reason?: string;
+  sysroot?: string;
+  customToolchainPath?: string;
 }
 
 export interface NativeBuildResult {
   success: boolean;
   statusCode: BuildStatusCode;
-  target: TargetCapability;
-  executablePath?: string;
-  objectPath?: string;
+  target: string;
+  canonicalTarget?: CanonicalDesktopTarget;
+  triple: string;
+  isCross: boolean;
+  linkingMode: LinkingMode;
+  actualStaticLink: boolean;
+  compilerToolUsed?: string;
+  linkerToolUsed?: string;
+  linkerCommand?: string;
+  sdkUsed?: string;
   llvmIRPath?: string;
   llvmIRSha256?: string;
-  objectSha256?: string;
   llvmValidationTool?: string;
-  compilerInfo?: { name: string; version?: string; command?: string };
-  linkerInfo?: { name: string; version?: string; commandExecuted?: string };
-  linkingMode: LinkingMode;
+  objectPath?: string;
+  objectSha256?: string;
+  executablePath?: string;
+  executableSha256?: string;
+  executableSizeBytes?: number;
   binaryMetadata?: BinaryMetadata;
   dependencyReport?: DependencyInspectionReport;
-  executionVerification?: ExecutionVerificationResult;
-  executableSha256?: string;
-  durationMs: number;
+  executedOnHost: boolean;
+  executionMode: ExecutionMode;
+  executionExitCode?: number | null;
+  executionStdout?: string;
+  executionStderr?: string;
   diagnostics: string[];
 }
 
-export interface ArchiveEntryInput {
-  name: string;
-  content: string | Uint8Array;
-  mode?: number;
-}
-
-export interface ExtractedEntryInfo {
-  name: string;
-  size: number;
-  mode: number;
-}
-
-export interface Sha256SumEntry {
-  sha256: string;
+export interface DesktopDistributionArtifact {
+  canonicalTarget: CanonicalDesktopTarget;
+  legacyTargetName: string;
+  format: 'zip' | 'tar.gz';
   filename: string;
+  filePath: string;
+  sizeBytes: number;
+  sha256: string;
 }
 
-export interface Sha256VerificationResult {
-  valid: boolean;
-  checkedCount: number;
-  mismatches: Array<{ filename: string; expected: string; actual: string | 'MISSING' }>;
-  diagnostics: string[];
-}
-
-export interface InstallerScriptBundle {
+export interface DesktopPackageManifest {
+  appName: string;
+  appVersion: string;
   target: CanonicalDesktopTarget;
-  os: 'windows' | 'linux' | 'darwin';
-  files: ArchiveEntryInput[];
+  legacyTarget: string;
+  triple: string;
+  operatingSystem: 'windows' | 'linux' | 'darwin';
+  architecture: 'x86_64' | 'aarch64';
+  mode: 'debug' | 'release';
+  packageKind: 'native' | 'script-launcher';
+  binaryFormat: string;
+  linkingMode: LinkingMode;
+  actualStaticLink: boolean;
+  executable: string;
+  executableSha256: string;
+  installers: string[];
+  dependencies: string[];
+  builtAt: string;
 }
 
 export interface DesktopDistributionOptions {
   appName: string;
   appVersion: string;
   target: string;
-  mode?: BuildMode;
-  packageKind?: PackageKind;
+  mode: 'debug' | 'release';
+  packageKind?: 'native' | 'script-launcher';
   outputDirectory: string;
   nativeBuildResult?: NativeBuildResult;
-  executablePath?: string;
-  formats?: ArchiveFormat[];
   linkingMode?: LinkingMode;
   reproducible?: boolean;
   includeInstallers?: boolean;
-  extraConfigFiles?: Array<{ name: string; content: string | Uint8Array }>;
-  extraResourceFiles?: Array<{ name: string; content: string | Uint8Array }>;
-  extraLibraryFiles?: Array<{ name: string; content: string | Uint8Array }>;
-  licenseText?: string;
-  readmeText?: string;
-}
-
-export interface DesktopDistributionArtifact {
-  target: CanonicalDesktopTarget;
-  legacyTargetName: string;
-  format: ArchiveFormat;
-  filename: string;
-  filePath: string;
-  sizeBytes: number;
-  sha256: string;
-  packageKind: PackageKind;
-}
-
-export interface DesktopPackageManifest {
-  nama: string;
-  versi: string;
-  mode: BuildMode;
-  packageKind: PackageKind;
-  target: CanonicalDesktopTarget;
-  targetTriple: string;
-  architecture: string;
-  operatingSystem: string;
-  linkingMode: LinkingMode;
-  executable: string;
-  executableFormat: string;
-  executableSha256?: string;
-  dependencies: Array<{ name: string; found: boolean; isSystemLib: boolean }>;
-  installerFiles: string[];
-  internalChecksumsFile: string;
-  reproducible: boolean;
-  packagedAt: string;
+  extraFiles?: Array<{ relativePath: string; content: string | Uint8Array; mode?: number }>;
 }
 
 export interface DesktopDistributionResult {
   success: boolean;
-  statusCode: BuildStatusCode;
-  target: TargetCapability;
-  packageKind: PackageKind;
-  stagingDirectory: string;
+  target: CanonicalDesktopTarget;
+  packageDirectory: string;
   manifestPath: string;
-  manifest: DesktopPackageManifest;
-  artifacts: DesktopDistributionArtifact[];
   sha256sumsPath: string;
+  artifacts: DesktopDistributionArtifact[];
+  installers: string[];
   diagnostics: string[];
 }
 
-export interface DesktopReleaseManifest {
-  nama: string;
-  versi: string;
-  mode: BuildMode;
-  packageKind: PackageKind;
-  waktuBuild: string;
-  reproducible: boolean;
-  artefak: Array<{
-    platform: string;
-    targetCanonical: CanonicalDesktopTarget;
-    format: ArchiveFormat;
-    namaBerkas: string;
-    jalurKeluaran: string;
-    ukuranByte: number;
-    sha256: string;
-    packageKind: PackageKind;
-  }>;
-  sha256sums: string;
+export interface InstallerScriptBundle {
+  target: CanonicalDesktopTarget;
+  os: 'windows' | 'linux' | 'darwin';
+  files: Array<{ name: string; content: string; mode: number }>;
 }
 
 export interface InstallerSandboxResult {
   success: boolean;
+  skipped?: boolean;
   exitCode: number | null;
   stdout: string;
   stderr: string;
-  prefixDir: string;
-  installedBinaryPath?: string;
+  installedExecutablePath?: string;
+  manifestPath?: string;
+  shellUsed?: string;
+  shellVersion?: string;
+  reason?: string;
+}
+
+export type TargetCertificationStatus = 'PASS' | 'NOT_VERIFIED' | 'FAIL';
+
+export interface Phase23TargetEvidence {
+  schemaVersion: string;
+  generatedAt: string;
+  target: CanonicalDesktopTarget;
+  triple: string;
+  hostOs: string;
+  hostArch: string;
+  recommendedRunner: string;
+  isCross: boolean;
+  compiler: {
+    name: string;
+    available: boolean;
+    version?: string;
+    command?: string;
+  };
+  linker: {
+    name: string;
+    lldAvailable: boolean;
+    version?: string;
+    command?: string;
+  };
+  sdk: {
+    name?: string;
+    sysroot?: string;
+    available: boolean;
+    linkerProbeVerified: boolean;
+    missingRequirements: string[];
+  };
+  llvmIR: {
+    path?: string;
+    sha256?: string;
+    validationTool?: string;
+  };
+  objectFile: {
+    path?: string;
+    sha256?: string;
+  };
+  executable: {
+    path?: string;
+    sha256?: string;
+    sizeBytes?: number;
+  };
+  binaryMetadata?: {
+    format: string;
+    architecture: string;
+    binaryType: string;
+    isValidExecutable: boolean;
+    entryPointAddress?: string;
+  };
+  dependencyValidation?: {
+    allResolved: boolean;
+    isStatic?: boolean;
+    missingLibraries: string[];
+    dependencies: string[];
+  };
+  execution: {
+    required: boolean;
+    executed: boolean;
+    mode: ExecutionMode;
+    exitCode?: number | null;
+    stdout?: string;
+    sentinelExpected: string;
+    sentinelMatched: boolean;
+  };
+  status: TargetCertificationStatus;
+  statusCode: BuildStatusCode;
+  reason?: string;
+  diagnostics: string[];
+}
+
+export interface Phase23CertificationFinding {
+  severity: 'error' | 'warning' | 'info';
+  code: string;
+  target: string;
+  message: string;
+}
+
+export interface Phase23AggregationResult {
+  overallStatus: 'CERTIFIED' | 'PARTIAL' | 'FAILED';
+  exitCode: 0 | 1;
+  counts: {
+    totalRequired: number;
+    pass: number;
+    notVerified: number;
+    fail: number;
+    missing: number;
+    corrupt: number;
+  };
+  targets: Record<CanonicalDesktopTarget, Phase23TargetEvidence | null>;
+  findings: Phase23CertificationFinding[];
+  markdownReport: string;
 }

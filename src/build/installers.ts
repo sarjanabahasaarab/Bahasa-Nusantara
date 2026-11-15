@@ -2,30 +2,32 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * NUSANTARA BUILD SYSTEM - Generator Pemasang & Pencopot Desktop (Windows, Linux, macOS)
- * Fitur wajib: verifikasi SHA-256 sebelum salin, upgrade dengan backup/rollback atomik,
- * perubahan PATH yang aman dan dapat dipulihkan, serta pencopotan bersih.
+ * NUSANTARA BUILD SYSTEM - Generator Pemasang & Pencopot Lintas Platform (.sh / .ps1 / .bat)
+ * Target Milestone: Phase 23.4 & 23.5 (UTF-8 No-BOM Atomic PowerShell Manifest & .NET SHA-256)
  */
 
+import * as os from 'os';
 import { safeCP, safeFS, safePath } from '../compiler/llvm/node-compat';
 import { CanonicalDesktopTarget, InstallerSandboxResult, InstallerScriptBundle } from './types';
 
-function sanitizeIdent(val: string): string {
-  return val.replace(/[^a-zA-Z0-9._-]/g, '-');
+export interface InstallerGenerationOptions {
+  appName: string;
+  appVersion: string;
+  target: CanonicalDesktopTarget;
+  os: 'windows' | 'linux' | 'darwin';
+  binRelativePath: string; // misal: bin/program atau bin/program.exe
+}
+
+export interface PowerShellDetectionResult {
+  found: boolean;
+  command?: string;
+  kind?: 'powershell.exe' | 'pwsh';
+  version?: string;
+  platform: NodeJS.Platform;
 }
 
 export class DesktopInstallerGenerator {
-  public static generate(options: {
-    appName: string;
-    appVersion: string;
-    target: CanonicalDesktopTarget;
-    os: 'windows' | 'linux' | 'darwin';
-    binRelativePath: string;
-    hasLibDir?: boolean;
-  }): InstallerScriptBundle {
-    const appSafe = sanitizeIdent(options.appName);
-    const binBase = safePath.basename(options.binRelativePath);
-
+  public static generate(options: InstallerGenerationOptions): InstallerScriptBundle {
     if (options.os === 'windows') {
       return {
         target: options.target,
@@ -33,643 +35,669 @@ export class DesktopInstallerGenerator {
         files: [
           {
             name: 'install.ps1',
-            content: this.generateWindowsInstallPs1(appSafe, options.appVersion, binBase),
-            mode: 0o644,
+            content: this.generateWindowsPowerShellInstall(options),
+            mode: 0o755,
           },
           {
             name: 'uninstall.ps1',
-            content: this.generateWindowsUninstallPs1(appSafe, binBase),
-            mode: 0o644,
+            content: this.generateWindowsPowerShellUninstall(options),
+            mode: 0o755,
           },
           {
             name: 'install.bat',
-            content: `@echo off\r\npowershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0install.ps1" %*\r\n`,
-            mode: 0o644,
+            content: this.generateWindowsBatchInstall(options),
+            mode: 0o755,
           },
           {
             name: 'uninstall.bat',
-            content: `@echo off\r\npowershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0uninstall.ps1" %*\r\n`,
-            mode: 0o644,
+            content: this.generateWindowsBatchUninstall(options),
+            mode: 0o755,
           },
         ],
       };
     }
 
-    const posixInstall = this.generatePosixInstallSh(appSafe, options.appVersion, binBase, options.os);
-    const posixUninstall = this.generatePosixUninstallSh(appSafe, binBase);
-
     return {
       target: options.target,
       os: options.os,
       files: [
-        { name: 'install.sh', content: posixInstall, mode: 0o755 },
-        { name: 'uninstall.sh', content: posixUninstall, mode: 0o755 },
+        {
+          name: 'install.sh',
+          content: this.generatePosixInstallSh(options),
+          mode: 0o755,
+        },
+        {
+          name: 'uninstall.sh',
+          content: this.generatePosixUninstallSh(options),
+          mode: 0o755,
+        },
       ],
     };
   }
 
-  private static generatePosixInstallSh(
-    appName: string,
-    appVersion: string,
-    binBase: string,
-    osType: 'linux' | 'darwin'
-  ): string {
-    const markerBegin = `# >>> NUSANTARA ${appName.toUpperCase()} PATH >>>`;
-    const markerEnd = `# <<< NUSANTARA ${appName.toUpperCase()} PATH <<<`;
+  private static generatePosixInstallSh(options: InstallerGenerationOptions): string {
+    const binName = safePath.basename(options.binRelativePath);
+    const appSafe = options.appName.replace(/[^A-Za-z0-9._-]/g, '_');
 
-    return `#!/usr/bin/env bash
-set -euo pipefail
+    return `#!/bin/sh
+# Pemasang Resmi Aplikasi NUSANTARA (${options.appName} ${options.appVersion} - ${options.target})
+set -eu
 
-# Pemasang Resmi ${appName} ${appVersion} (${osType})
-# Mendukung instalasi baru, verifikasi SHA-256, upgrade atomik dengan rollback, dan pendaftaran PATH yang aman.
-
-SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
-PREFIX="\${NUSANTARA_PREFIX:-$HOME/.nusantara}"
-DRY_RUN=0
-SKIP_PATH=0
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+APP_NAME="${appSafe}"
+APP_VERSION="${options.appVersion}"
+BIN_REL="${options.binRelativePath}"
+BIN_NAME="${binName}"
+PREFIX="\${HOME}/.nusantara"
+ADD_PATH=1
+QUIET=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --prefix)
-      PREFIX="$2"
-      shift 2
+      shift
+      [ "$#" -gt 0 ] || { echo "[GALAT] --prefix memerlukan nilai direktori" >&2; exit 2; }
+      PREFIX="$1"
       ;;
     --prefix=*)
       PREFIX="\${1#*=}"
-      shift
-      ;;
-    --dry-run)
-      DRY_RUN=1
-      shift
       ;;
     --no-path)
-      SKIP_PATH=1
-      shift
+      ADD_PATH=0
+      ;;
+    -y|--yes|--quiet)
+      QUIET=1
+      ;;
+    -h|--help)
+      echo "Pemakaian: sh install.sh [--prefix <dir>] [--no-path] [-y]"
+      exit 0
       ;;
     *)
       echo "[GALAT] Opsi tidak dikenal: $1" >&2
       exit 2
       ;;
   esac
+  shift
 done
 
-verify_sha256() {
-  local sumfile="$1"
-  if [ ! -f "$sumfile" ]; then
-    echo "[GALAT] Berkas checksum SHA256SUMS tidak ditemukan di paket." >&2
+[ -n "$PREFIX" ] || { echo "[GALAT] Prefix tidak boleh kosong" >&2; exit 2; }
+[ -f "$SCRIPT_DIR/$BIN_REL" ] || { echo "[GALAT] Biner tidak ditemukan: $SCRIPT_DIR/$BIN_REL" >&2; exit 1; }
+[ -f "$SCRIPT_DIR/SHA256SUMS" ] || { echo "[GALAT] Berkas integritas SHA256SUMS tidak ditemukan" >&2; exit 1; }
+
+compute_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print tolower($1)}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print tolower($1)}'
+  elif command -v openssl >/dev/null 2>&1; then
+    openssl dgst -sha256 "$1" | awk '{print tolower($NF)}'
+  else
+    echo "[GALAT] Tidak ada utilitas sha256sum/shasum/openssl di sistem." >&2
     return 1
   fi
-  (
-    cd "$SCRIPT_DIR"
-    if command -v sha256sum >/dev/null 2>&1; then
-      sha256sum -c "$sumfile" >/dev/null
-    elif command -v shasum >/dev/null 2>&1; then
-      shasum -a 256 -c "$sumfile" >/dev/null
-    else
-      echo "[PERINGATAN] Utilitas sha256sum/shasum tidak tersedia; melewati verifikasi hash." >&2
-    fi
-  )
 }
 
-echo "[INFO] Memverifikasi integritas SHA-256 paket ${appName}..."
-verify_sha256 "$SCRIPT_DIR/SHA256SUMS"
+# Verifikasi SHA256SUMS sebelum memodifikasi target prefix
+VERIFIED_COUNT=0
+while IFS= read -r line || [ -n "$line" ]; do
+  [ -n "$line" ] || continue
+  EXPECTED_HASH="$(printf '%s' "$line" | awk '{print tolower($1)}')"
+  REL_FILE="$(printf '%s' "$line" | sed -e 's/^[0-9a-fA-F]*[[:space:]]*//' -e 's/^\\*//')"
+  [ -n "$EXPECTED_HASH" ] && [ -n "$REL_FILE" ] || continue
+  TARGET_PATH="$SCRIPT_DIR/$REL_FILE"
+  if [ ! -f "$TARGET_PATH" ]; then
+    echo "[GALAT] Berkas paket hilang saat verifikasi checksum: $REL_FILE" >&2
+    exit 1
+  fi
+  ACTUAL_HASH="$(compute_sha256 "$TARGET_PATH")"
+  if [ "$ACTUAL_HASH" != "$EXPECTED_HASH" ]; then
+    echo "[GALAT] Checksum SHA-256 tidak cocok untuk $REL_FILE (diharapkan=$EXPECTED_HASH, aktual=$ACTUAL_HASH)" >&2
+    exit 1
+  fi
+  VERIFIED_COUNT=$((VERIFIED_COUNT + 1))
+done < "$SCRIPT_DIR/SHA256SUMS"
 
-if [ ! -f "$SCRIPT_DIR/bin/${binBase}" ]; then
-  echo "[GALAT] Biner '$SCRIPT_DIR/bin/${binBase}' tidak ditemukan dalam paket." >&2
+if [ "$VERIFIED_COUNT" -le 0 ]; then
+  echo "[GALAT] SHA256SUMS kosong atau tidak memverifikasi berkas apa pun." >&2
   exit 1
 fi
 
-if [ "$DRY_RUN" -eq 1 ]; then
-  echo "[DRY-RUN] Akan memasang ${appName} ${appVersion} ke $PREFIX/bin/${binBase}"
-  exit 0
+BACKUP_DIR="$(mktemp -d "\${TMPDIR:-/tmp}/nusa-install-backup-XXXXXX")"
+INSTALLED_BIN="$PREFIX/bin/$BIN_NAME"
+INSTALLED_MANIFEST="$PREFIX/share/$APP_NAME/manifest.json"
+RECEIPT_FILE="$PREFIX/.nusantara-install-$APP_NAME.manifest"
+
+cleanup_on_fail() {
+  rc="$?"
+  if [ "$rc" -ne 0 ]; then
+    echo "[PERINGATAN] Instalasi gagal, melakukan rollback atomik..." >&2
+    if [ -f "$BACKUP_DIR/prev_bin" ]; then
+      cp -f "$BACKUP_DIR/prev_bin" "$INSTALLED_BIN" 2>/dev/null || true
+    else
+      rm -f "$INSTALLED_BIN" 2>/dev/null || true
+    fi
+    if [ -f "$BACKUP_DIR/prev_manifest" ]; then
+      cp -f "$BACKUP_DIR/prev_manifest" "$INSTALLED_MANIFEST" 2>/dev/null || true
+    fi
+  fi
+  rm -rf "$BACKUP_DIR"
+  exit "$rc"
+}
+trap cleanup_on_fail EXIT HUP INT TERM
+
+mkdir -p "$PREFIX/bin" "$PREFIX/lib" "$PREFIX/share/$APP_NAME"
+if [ -f "$INSTALLED_BIN" ]; then
+  cp -f "$INSTALLED_BIN" "$BACKUP_DIR/prev_bin"
+fi
+if [ -f "$INSTALLED_MANIFEST" ]; then
+  cp -f "$INSTALLED_MANIFEST" "$BACKUP_DIR/prev_manifest"
 fi
 
-BIN_DIR="$PREFIX/bin"
-LIB_DIR="$PREFIX/lib"
-BACKUP_DIR=""
-MANIFEST_FILE="$PREFIX/.${appName}-install-manifest"
-
-cleanup_backup() {
-  if [ -n "$BACKUP_DIR" ] && [ -d "$BACKUP_DIR" ]; then
-    rm -rf "$BACKUP_DIR"
-  fi
-}
-
-rollback() {
-  echo "[PERINGATAN] Terjadi kegagalan saat instalasi/upgrade; memulihkan versi sebelumnya..." >&2
-  if [ -n "$BACKUP_DIR" ] && [ -f "$BACKUP_DIR/${binBase}" ]; then
-    mkdir -p "$BIN_DIR"
-    cp "$BACKUP_DIR/${binBase}" "$BIN_DIR/${binBase}"
-    chmod 0755 "$BIN_DIR/${binBase}"
-  fi
-  cleanup_backup
-}
-trap rollback ERR
-
-mkdir -p "$BIN_DIR" "$LIB_DIR"
-
-# Upgrade aman: cadangkan biner lama jika sudah terpasang
-if [ -f "$BIN_DIR/${binBase}" ]; then
-  BACKUP_DIR="$(mktemp -d)"
-  cp "$BIN_DIR/${binBase}" "$BACKUP_DIR/${binBase}"
-  echo "[INFO] Cadangan versi sebelumnya dibuat di $BACKUP_DIR"
-fi
-
-# Salin biner dan library secara atomik melalui temporary file
-TMP_BIN="$BIN_DIR/.${binBase}.new.$$"
-cp "$SCRIPT_DIR/bin/${binBase}" "$TMP_BIN"
-chmod 0755 "$TMP_BIN"
-mv -f "$TMP_BIN" "$BIN_DIR/${binBase}"
+TMP_BIN="$PREFIX/bin/.$BIN_NAME.tmp.$$"
+cp -f "$SCRIPT_DIR/$BIN_REL" "$TMP_BIN"
+chmod 755 "$TMP_BIN"
+mv -f "$TMP_BIN" "$INSTALLED_BIN"
 
 if [ -d "$SCRIPT_DIR/lib" ]; then
-  for item in "$SCRIPT_DIR/lib"/*; do
-    [ -e "$item" ] || continue
-    cp -R "$item" "$LIB_DIR/"
+  for f in "$SCRIPT_DIR/lib/"*; do
+    [ -e "$f" ] || continue
+    cp -f "$f" "$PREFIX/lib/"
   done
 fi
 
 if [ -f "$SCRIPT_DIR/manifest.json" ]; then
-  cp "$SCRIPT_DIR/manifest.json" "$PREFIX/.${appName}-package-manifest.json"
+  cp -f "$SCRIPT_DIR/manifest.json" "$INSTALLED_MANIFEST"
 fi
 
-# Catatan khusus macOS: bersihkan atribut karantina jika ada dan periksa dependensi dylib
-if [ "$(uname -s)" = "Darwin" ]; then
-  if command -v xattr >/dev/null 2>&1; then
-    xattr -d com.apple.quarantine "$BIN_DIR/${binBase}" >/dev/null 2>&1 || true
-  fi
-  if command -v otool >/dev/null 2>&1; then
-    otool -L "$BIN_DIR/${binBase}" >/dev/null 2>&1 || true
-  fi
+if [ -f "$SCRIPT_DIR/uninstall.sh" ]; then
+  cp -f "$SCRIPT_DIR/uninstall.sh" "$PREFIX/share/$APP_NAME/uninstall.sh"
+  chmod 755 "$PREFIX/share/$APP_NAME/uninstall.sh"
 fi
 
-# Catat jejak instalasi untuk uninstaller yang aman
-MODIFIED_RC=""
-if [ "$SKIP_PATH" -eq 0 ]; then
-  RC_FILE="$HOME/.profile"
-  if [ -n "\${ZSH_VERSION:-}" ] || [ "\${SHELL##*/}" = "zsh" ]; then
-    RC_FILE="$HOME/.zshrc"
-  elif [ -f "$HOME/.bashrc" ] || [ "\${SHELL##*/}" = "bash" ]; then
-    RC_FILE="$HOME/.bashrc"
-  fi
-  touch "$RC_FILE"
-  if ! grep -Fq "${markerBegin}" "$RC_FILE"; then
-    {
-      echo ""
-      echo "${markerBegin}"
-      echo "export PATH=\\"$BIN_DIR:\\$PATH\\""
-      echo "${markerEnd}"
-    } >> "$RC_FILE"
-  fi
-  MODIFIED_RC="$RC_FILE"
+RC_UPDATED=""
+if [ "$ADD_PATH" -eq 1 ]; then
+  PATH_LINE="export PATH=\\"$PREFIX/bin:\\$PATH\\""
+  for rc_cand in "\${HOME}/.profile" "\${HOME}/.bashrc" "\${HOME}/.zshrc"; do
+    if [ -f "$rc_cand" ] || [ "$rc_cand" = "\${HOME}/.profile" ]; then
+      MARKER_BEGIN="# >>> NUSANTARA $APP_NAME PATH >>>"
+      MARKER_END="# <<< NUSANTARA $APP_NAME PATH <<<"
+      if ! grep -Fq "$MARKER_BEGIN" "$rc_cand" 2>/dev/null; then
+        printf '\\n%s\\n%s\\n%s\\n' "$MARKER_BEGIN" "$PATH_LINE" "$MARKER_END" >> "$rc_cand"
+        RC_UPDATED="$RC_UPDATED $rc_cand"
+      fi
+    fi
+  done
 fi
 
-cat > "$MANIFEST_FILE" <<EOF
-APP_NAME=${appName}
-APP_VERSION=${appVersion}
-PREFIX=$PREFIX
-BIN_FILE=$BIN_DIR/${binBase}
-RC_FILE=$MODIFIED_RC
+cat > "$RECEIPT_FILE" <<EOF
+{
+  "appName": "$APP_NAME",
+  "appVersion": "$APP_VERSION",
+  "target": "${options.target}",
+  "prefix": "$PREFIX",
+  "installedBin": "$INSTALLED_BIN",
+  "installedManifest": "$INSTALLED_MANIFEST",
+  "rcFiles": "$RC_UPDATED"
+}
 EOF
 
-trap - ERR
-cleanup_backup
+trap - EXIT HUP INT TERM
+rm -rf "$BACKUP_DIR"
 
-echo "[SUKSES] ${appName} ${appVersion} terpasang di $BIN_DIR/${binBase}"
-if [ -n "$MODIFIED_RC" ]; then
-  echo "[INFO] PATH ditambahkan pada $MODIFIED_RC (jalankan: source \\"$MODIFIED_RC\\")"
+if [ "$QUIET" -eq 0 ]; then
+  echo "[SUKSES] $APP_NAME ($APP_VERSION) berhasil dipasang di: $INSTALLED_BIN"
 fi
+exit 0
 `;
   }
 
-  private static generatePosixUninstallSh(appName: string, binBase: string): string {
-    const markerBegin = `# >>> NUSANTARA ${appName.toUpperCase()} PATH >>>`;
-    const markerEnd = `# <<< NUSANTARA ${appName.toUpperCase()} PATH <<<`;
+  private static generatePosixUninstallSh(options: InstallerGenerationOptions): string {
+    const binName = safePath.basename(options.binRelativePath);
+    const appSafe = options.appName.replace(/[^A-Za-z0-9._-]/g, '_');
 
-    return `#!/usr/bin/env bash
-set -euo pipefail
+    return `#!/bin/sh
+# Pencopot Resmi Aplikasi NUSANTARA (${options.appName} - ${options.target})
+set -eu
 
-# Pencopot Resmi ${appName}
-# Hanya menghapus berkas milik ${appName} yang tercatat dan blok PATH bertanda khusus.
+APP_NAME="${appSafe}"
+BIN_NAME="${binName}"
+PREFIX="\${HOME}/.nusantara"
 
-PREFIX="\${NUSANTARA_PREFIX:-$HOME/.nusantara}"
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --prefix)
-      PREFIX="$2"
-      shift 2
+      shift
+      [ "$#" -gt 0 ] || { echo "[GALAT] --prefix memerlukan nilai direktori" >&2; exit 2; }
+      PREFIX="$1"
       ;;
     --prefix=*)
       PREFIX="\${1#*=}"
-      shift
+      ;;
+    -y|--yes|--quiet)
       ;;
     *)
-      shift
+      echo "[GALAT] Opsi tidak dikenal: $1" >&2
+      exit 2
       ;;
   esac
+  shift
 done
 
-MANIFEST_FILE="$PREFIX/.${appName}-install-manifest"
-BIN_FILE="$PREFIX/bin/${binBase}"
-RC_CANDIDATES=("$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile")
+rm -f "$PREFIX/bin/$BIN_NAME"
+rm -rf "$PREFIX/share/$APP_NAME"
+rm -f "$PREFIX/.nusantara-install-$APP_NAME.manifest"
 
-if [ -f "$MANIFEST_FILE" ]; then
-  # Baca jejak instalasi secara aman tanpa eval sembarang
-  RECORDED_BIN="$(grep '^BIN_FILE=' "$MANIFEST_FILE" | head -n1 | cut -d'=' -f2- || true)"
-  RECORDED_RC="$(grep '^RC_FILE=' "$MANIFEST_FILE" | head -n1 | cut -d'=' -f2- || true)"
-  if [ -n "$RECORDED_BIN" ]; then
-    BIN_FILE="$RECORDED_BIN"
-  fi
-  if [ -n "$RECORDED_RC" ]; then
-    RC_CANDIDATES=("$RECORDED_RC")
-  fi
-fi
+MARKER_BEGIN="# >>> NUSANTARA $APP_NAME PATH >>>"
+MARKER_END="# <<< NUSANTARA $APP_NAME PATH <<<"
 
-if [ -f "$BIN_FILE" ]; then
-  rm -f "$BIN_FILE"
-  echo "[INFO] Menghapus biner: $BIN_FILE"
-fi
-
-rm -f "$PREFIX/.${appName}-package-manifest.json" "$MANIFEST_FILE"
-
-# Hapus direktori bin / prefix hanya jika sudah kosong
-rmdir "$PREFIX/bin" 2>/dev/null || true
-rmdir "$PREFIX/lib" 2>/dev/null || true
-rmdir "$PREFIX" 2>/dev/null || true
-
-# Bersihkan hanya blok bertanda NUSANTARA dari berkas profil shell
-for rc in "\${RC_CANDIDATES[@]}"; do
-  [ -f "$rc" ] || continue
-  if grep -Fq "${markerBegin}" "$rc"; then
-    TMP_RC="$(mktemp)"
-    awk -v b="${markerBegin}" -v e="${markerEnd}" '
-      $0 == b { skip = 1; next }
-      $0 == e { skip = 0; next }
+for rc_cand in "\${HOME}/.profile" "\${HOME}/.bashrc" "\${HOME}/.zshrc"; do
+  if [ -f "$rc_cand" ] && grep -Fq "$MARKER_BEGIN" "$rc_cand" 2>/dev/null; then
+    TMP_RC="$(mktemp "\${TMPDIR:-/tmp}/nusa-rc-XXXXXX")"
+    awk -v b="$MARKER_BEGIN" -v e="$MARKER_END" '
+      $0 == b { skip=1; next }
+      $0 == e { skip=0; next }
       !skip { print }
-    ' "$rc" > "$TMP_RC"
-    mv "$TMP_RC" "$rc"
-    echo "[INFO] Blok PATH ${appName} dibersihkan dari $rc"
+    ' "$rc_cand" > "$TMP_RC"
+    mv -f "$TMP_RC" "$rc_cand"
   fi
 done
 
-echo "[SUKSES] ${appName} berhasil dicopot dengan bersih."
+echo "[SUKSES] $APP_NAME berhasil dicopot dari $PREFIX"
+exit 0
 `;
   }
 
-  private static generateWindowsInstallPs1(
-    appName: string,
-    appVersion: string,
-    binBase: string
-  ): string {
-    return `#Requires -Version 5.1
+  private static generateWindowsPowerShellInstall(options: InstallerGenerationOptions): string {
+    const binName = safePath.basename(options.binRelativePath);
+    const binWinRel = options.binRelativePath.replace(/\//g, '\\');
+    const appSafe = options.appName.replace(/[^A-Za-z0-9._-]/g, '_');
+
+    return `# Pemasang Resmi Aplikasi NUSANTARA (${options.appName} ${options.appVersion} - ${options.target})
 param(
-  [string]$Prefix = $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA "Nusantara" } else { Join-Path $HOME ".nusantara" }),
-  [switch]$DryRun,
-  [switch]$NoPath
+  [string]$Prefix = "$env:LOCALAPPDATA\\Nusantara",
+  [switch]$NoPath,
+  [switch]$Quiet
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = 'Stop'
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$SumsPath = Join-Path $ScriptDir "SHA256SUMS"
+$AppName = '${appSafe}'
+$AppVersion = '${options.appVersion}'
+$TargetId = '${options.target}'
+$BinRel = '${binWinRel}'
+$BinName = '${binName}'
 
-if (-not (Test-Path -LiteralPath $SumsPath -PathType Leaf)) {
-  throw "Berkas checksum SHA256SUMS tidak ditemukan di paket."
+if ([string]::IsNullOrWhiteSpace($Prefix)) {
+  Write-Error "[GALAT] Parameter -Prefix tidak boleh kosong."
+  exit 2
 }
 
-function Get-NusantaraFileSha256 {
-  param(
-    [Parameter(Mandatory = $true)]
-    [string]$FilePath
-  )
-  $sha256 = [System.Security.Cryptography.SHA256]::Create()
-  $stream = [System.IO.File]::OpenRead($FilePath)
+$SourceBin = Join-Path $ScriptDir $BinRel
+$SumsPath = Join-Path $ScriptDir 'SHA256SUMS'
+$PkgManifestSource = Join-Path $ScriptDir 'manifest.json'
+
+if (-not (Test-Path -LiteralPath $SourceBin)) {
+  Write-Error "[GALAT] Berkas executable paket tidak ditemukan: $SourceBin"
+  exit 1
+}
+if (-not (Test-Path -LiteralPath $SumsPath)) {
+  Write-Error "[GALAT] Berkas checksum SHA256SUMS tidak ditemukan: $SumsPath"
+  exit 1
+}
+
+function Get-NusantaraFileSha256Hex {
+  param([Parameter(Mandatory = $true)][string]$FilePath)
+  $Sha256 = [System.Security.Cryptography.SHA256]::Create()
+  $Stream = $null
   try {
-    $hashBytes = $sha256.ComputeHash($stream)
-    return ([System.BitConverter]::ToString($hashBytes) -replace '-', '').ToLowerInvariant()
+    $Stream = [System.IO.File]::OpenRead($FilePath)
+    $HashBytes = $Sha256.ComputeHash($Stream)
+    return ([System.BitConverter]::ToString($HashBytes) -replace '-', '').ToLowerInvariant()
   } finally {
-    $stream.Dispose()
-    $sha256.Dispose()
+    if ($null -ne $Stream) {
+      $Stream.Dispose()
+    }
+    $Sha256.Dispose()
   }
 }
 
-Write-Host "[INFO] Memverifikasi SHA-256 paket ${appName} ${appVersion}..."
+function Write-NusantaraUtf8NoBomAtomic {
+  param(
+    [Parameter(Mandatory = $true)][string]$DestinationPath,
+    [Parameter(Mandatory = $true)][string]$Content
+  )
+  $ParentDir = Split-Path -Parent $DestinationPath
+  if (-not [string]::IsNullOrWhiteSpace($ParentDir)) {
+    New-Item -ItemType Directory -Force -Path $ParentDir | Out-Null
+  }
+  $TempPath = "$DestinationPath.tmp.$PID"
+  $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText($TempPath, $Content, $Utf8NoBom)
+  Move-Item -LiteralPath $TempPath -Destination $DestinationPath -Force
+}
+
+# Verifikasi SHA256SUMS menggunakan .NET SHA256 sebelum menyentuh $Prefix
 $VerifiedCount = 0
-foreach ($rawLine in (Get-Content -LiteralPath $SumsPath -Encoding UTF8)) {
-  $line = $rawLine.Trim()
-  if ($line -eq "") { continue }
-  if ($line -notmatch '^([0-9a-fA-F]{64})\\s+\\*?(.+)$') {
-    throw "Format baris SHA256SUMS tidak valid: $line"
+$SumLines = Get-Content -LiteralPath $SumsPath -Encoding UTF8
+foreach ($Line in $SumLines) {
+  $Trimmed = $Line.Trim()
+  if ([string]::IsNullOrWhiteSpace($Trimmed) -or $Trimmed.StartsWith('#')) {
+    continue
   }
-  $expected = $Matches[1].ToLowerInvariant()
-  $rel = $Matches[2].Trim()
-  $relNorm = $rel -replace '/', [System.IO.Path]::DirectorySeparatorChar
-  $targetFile = Join-Path $ScriptDir $relNorm
-  if (-not (Test-Path -LiteralPath $targetFile -PathType Leaf)) {
-    throw "Berkas hilang saat verifikasi checksum: $rel"
+  if ($Trimmed -notmatch '^([0-9a-fA-F]{64})\\s+\\*?(.+)$') {
+    Write-Error "[GALAT] Format baris SHA256SUMS tidak valid: $Trimmed"
+    exit 1
   }
-  $actual = Get-NusantaraFileSha256 -FilePath $targetFile
-  if ($actual -ne $expected) {
-    throw "Ketidakcocokan SHA-256 pada $rel (diharapkan=$expected, aktual=$actual)"
+  $ExpectedHash = $Matches[1].ToLowerInvariant()
+  $RelFile = ($Matches[2].Trim() -replace '/', '\\')
+  $TargetFile = Join-Path $ScriptDir $RelFile
+  if (-not (Test-Path -LiteralPath $TargetFile)) {
+    Write-Error "[GALAT] Berkas paket hilang saat verifikasi integritas: $RelFile"
+    exit 1
+  }
+  $ActualHash = Get-NusantaraFileSha256Hex -FilePath $TargetFile
+  if ($ActualHash -ne $ExpectedHash) {
+    Write-Error "[GALAT] Checksum SHA-256 tidak cocok untuk $RelFile (diharapkan=$ExpectedHash, aktual=$ActualHash)"
+    exit 1
   }
   $VerifiedCount++
 }
 
-if ($VerifiedCount -eq 0) {
-  throw "Berkas checksum SHA256SUMS kosong atau tidak memuat entri valid."
+if ($VerifiedCount -le 0) {
+  Write-Error "[GALAT] Berkas SHA256SUMS kosong atau tidak memiliki entri valid."
+  exit 1
 }
 
-$SourceBin = Join-Path (Join-Path $ScriptDir "bin") "${binBase}"
-if (-not (Test-Path -LiteralPath $SourceBin -PathType Leaf)) {
-  throw "Executable sumber tidak ditemukan: $SourceBin"
-}
+$BinDir = Join-Path $Prefix 'bin'
+$LibDir = Join-Path $Prefix 'lib'
+$ShareDir = Join-Path (Join-Path $Prefix 'share') $AppName
+$DestBin = Join-Path $BinDir $BinName
+$DestPkgManifest = Join-Path $ShareDir 'manifest.json'
+$ReceiptPath = Join-Path $Prefix ".$AppName-install-manifest.json"
 
-if ($DryRun) {
-  Write-Host "[DRY-RUN] Akan memasang ${appName} ${appVersion} ke $Prefix\\bin\\${binBase}"
-  exit 0
-}
-
-$BinDir = Join-Path $Prefix "bin"
-$LibDir = Join-Path $Prefix "lib"
-$DestBin = Join-Path $BinDir "${binBase}"
-$DestPkgManifest = Join-Path $Prefix ".${appName}-package-manifest.json"
-$BackupBin = $null
-$BackupPkgManifest = $null
-
-New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
-New-Item -ItemType Directory -Force -Path $LibDir | Out-Null
+$BackupBin = "$DestBin.bak.$PID"
+$BackupManifest = "$DestPkgManifest.bak.$PID"
+$HadPrevBin = Test-Path -LiteralPath $DestBin
+$HadPrevManifest = Test-Path -LiteralPath $DestPkgManifest
 
 try {
-  if (Test-Path -LiteralPath $DestBin -PathType Leaf) {
-    $BackupBin = "$DestBin.bak.$PID"
+  New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
+  New-Item -ItemType Directory -Force -Path $LibDir | Out-Null
+  New-Item -ItemType Directory -Force -Path $ShareDir | Out-Null
+
+  if ($HadPrevBin) {
     Copy-Item -LiteralPath $DestBin -Destination $BackupBin -Force
   }
-  if (Test-Path -LiteralPath $DestPkgManifest -PathType Leaf) {
-    $BackupPkgManifest = "$DestPkgManifest.bak.$PID"
-    Copy-Item -LiteralPath $DestPkgManifest -Destination $BackupPkgManifest -Force
+  if ($HadPrevManifest) {
+    Copy-Item -LiteralPath $DestPkgManifest -Destination $BackupManifest -Force
   }
 
-  $TempBin = "$DestBin.new.$PID"
+  $TempBin = "$DestBin.tmp.$PID"
   Copy-Item -LiteralPath $SourceBin -Destination $TempBin -Force
   Move-Item -LiteralPath $TempBin -Destination $DestBin -Force
 
-  $SourceLib = Join-Path $ScriptDir "lib"
-  if ((Test-Path -LiteralPath $SourceLib -PathType Container) -and ((Get-ChildItem -LiteralPath $SourceLib -Force | Measure-Object).Count -gt 0)) {
-    Copy-Item -Path (Join-Path $SourceLib "*") -Destination $LibDir -Recurse -Force
+  $SourceLibDir = Join-Path $ScriptDir 'lib'
+  if (Test-Path -LiteralPath $SourceLibDir) {
+    $LibItems = Get-ChildItem -LiteralPath $SourceLibDir -File -ErrorAction SilentlyContinue
+    if ($null -ne $LibItems) {
+      foreach ($Item in $LibItems) {
+        Copy-Item -LiteralPath $Item.FullName -Destination (Join-Path $LibDir $Item.Name) -Force
+      }
+    }
   }
 
-  $SourceManifest = Join-Path $ScriptDir "manifest.json"
-  if (Test-Path -LiteralPath $SourceManifest -PathType Leaf) {
-    Copy-Item -LiteralPath $SourceManifest -Destination $DestPkgManifest -Force
+  if (Test-Path -LiteralPath $PkgManifestSource) {
+    Copy-Item -LiteralPath $PkgManifestSource -Destination $DestPkgManifest -Force
+  }
+
+  $UninstallSrc = Join-Path $ScriptDir 'uninstall.ps1'
+  if (Test-Path -LiteralPath $UninstallSrc) {
+    Copy-Item -LiteralPath $UninstallSrc -Destination (Join-Path $ShareDir 'uninstall.ps1') -Force
   }
 
   $PathUpdated = $false
   if (-not $NoPath) {
-    $CurrentUserPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    $Segments = @()
-    if ($CurrentUserPath) {
-      $Segments = $CurrentUserPath -split ';' | Where-Object { $_.Trim() -ne "" }
+    $UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    if ($null -eq $UserPath) { $UserPath = '' }
+    $Segments = @($UserPath -split ';' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $HasBin = $false
+    foreach ($Seg in $Segments) {
+      if ($Seg.TrimEnd('\\').Equals($BinDir.TrimEnd('\\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+        $HasBin = $true
+        break
+      }
     }
-    if (-not ($Segments -contains $BinDir)) {
-      $NewPath = ($Segments + $BinDir) -join ';'
-      [Environment]::SetEnvironmentVariable("Path", $NewPath, "User")
+    if (-not $HasBin) {
+      $NewPath = ($Segments + @($BinDir)) -join ';'
+      [Environment]::SetEnvironmentVariable('Path', $NewPath, 'User')
       $PathUpdated = $true
     }
   }
 
-  $Receipt = @{
-    appName = "${appName}"
-    appVersion = "${appVersion}"
+  $ReceiptObj = [ordered]@{
+    appName = $AppName
+    appVersion = $AppVersion
+    target = $TargetId
     prefix = $Prefix
-    binFile = $DestBin
-    binDir = $BinDir
-    pathAdded = $PathUpdated
-  } | ConvertTo-Json
-  Set-Content -LiteralPath (Join-Path $Prefix ".${appName}-install-manifest.json") -Value $Receipt -Encoding UTF8
+    binPath = $DestBin
+    packageManifestPath = $DestPkgManifest
+    pathUpdated = $PathUpdated
+    verifiedFilesCount = $VerifiedCount
+    installedAt = [DateTime]::UtcNow.ToString('o')
+  }
+  $ReceiptJson = $ReceiptObj | ConvertTo-Json -Depth 4
+  Write-NusantaraUtf8NoBomAtomic -DestinationPath $ReceiptPath -Content ($ReceiptJson + "\`n")
 
-  if ($BackupBin -and (Test-Path -LiteralPath $BackupBin)) {
-    Remove-Item -LiteralPath $BackupBin -Force
-  }
-  if ($BackupPkgManifest -and (Test-Path -LiteralPath $BackupPkgManifest)) {
-    Remove-Item -LiteralPath $BackupPkgManifest -Force
-  }
-  Write-Host "[SUKSES] ${appName} ${appVersion} terpasang di $DestBin"
+  if (Test-Path -LiteralPath $BackupBin) { Remove-Item -LiteralPath $BackupBin -Force -ErrorAction SilentlyContinue }
+  if (Test-Path -LiteralPath $BackupManifest) { Remove-Item -LiteralPath $BackupManifest -Force -ErrorAction SilentlyContinue }
 } catch {
-  if ($BackupBin -and (Test-Path -LiteralPath $BackupBin)) {
-    Move-Item -LiteralPath $BackupBin -Destination $DestBin -Force
-    Write-Warning "Instalasi gagal; versi biner sebelumnya telah dipulihkan."
+  if ($HadPrevBin -and (Test-Path -LiteralPath $BackupBin)) {
+    Move-Item -LiteralPath $BackupBin -Destination $DestBin -Force -ErrorAction SilentlyContinue
+  } elseif (-not $HadPrevBin -and (Test-Path -LiteralPath $DestBin)) {
+    Remove-Item -LiteralPath $DestBin -Force -ErrorAction SilentlyContinue
   }
-  if ($BackupPkgManifest -and (Test-Path -LiteralPath $BackupPkgManifest)) {
-    Move-Item -LiteralPath $BackupPkgManifest -Destination $DestPkgManifest -Force
+  if ($HadPrevManifest -and (Test-Path -LiteralPath $BackupManifest)) {
+    Move-Item -LiteralPath $BackupManifest -Destination $DestPkgManifest -Force -ErrorAction SilentlyContinue
   }
-  throw
+  Write-Error "[GALAT] Instalasi gagal dan rollback selesai: $($_.Exception.Message)"
+  exit 1
 }
+
+if (-not $Quiet) {
+  Write-Output "[SUKSES] $AppName ($AppVersion) berhasil dipasang di: $DestBin"
+}
+exit 0
 `;
   }
 
-  private static generateWindowsUninstallPs1(appName: string, binBase: string): string {
-    return `#Requires -Version 5.1
+  private static generateWindowsPowerShellUninstall(options: InstallerGenerationOptions): string {
+    const binName = safePath.basename(options.binRelativePath);
+    const appSafe = options.appName.replace(/[^A-Za-z0-9._-]/g, '_');
+
+    return `# Pencopot Resmi Aplikasi NUSANTARA (${options.appName} - ${options.target})
 param(
-  [string]$Prefix = $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA "Nusantara" } else { Join-Path $HOME ".nusantara" })
+  [string]$Prefix = "$env:LOCALAPPDATA\\Nusantara",
+  [switch]$NoPath,
+  [switch]$Quiet
 )
 
-$ErrorActionPreference = "Stop"
-$ReceiptPath = Join-Path $Prefix ".${appName}-install-manifest.json"
-$PkgManifestPath = Join-Path $Prefix ".${appName}-package-manifest.json"
-$BinDir = Join-Path $Prefix "bin"
-$DestBin = Join-Path $BinDir "${binBase}"
-$ShouldCleanPath = $true
+$ErrorActionPreference = 'Stop'
+$AppName = '${appSafe}'
+$BinName = '${binName}'
 
-if (Test-Path -LiteralPath $ReceiptPath -PathType Leaf) {
-  $Receipt = Get-Content -LiteralPath $ReceiptPath -Raw -Encoding UTF8 | ConvertFrom-Json
-  if ($Receipt.binFile) { $DestBin = $Receipt.binFile }
-  if ($Receipt.binDir) { $BinDir = $Receipt.binDir }
-  if ($null -ne $Receipt.PSObject.Properties['pathAdded'] -and (-not $Receipt.pathAdded)) {
-    $ShouldCleanPath = $false
-  }
+if ([string]::IsNullOrWhiteSpace($Prefix)) {
+  Write-Error "[GALAT] Parameter -Prefix tidak boleh kosong."
+  exit 2
 }
 
-if (Test-Path -LiteralPath $DestBin -PathType Leaf) {
+$BinDir = Join-Path $Prefix 'bin'
+$DestBin = Join-Path $BinDir $BinName
+$ShareDir = Join-Path (Join-Path $Prefix 'share') $AppName
+$ReceiptPath = Join-Path $Prefix ".$AppName-install-manifest.json"
+
+if (Test-Path -LiteralPath $DestBin) {
   Remove-Item -LiteralPath $DestBin -Force
-  Write-Host "[INFO] Menghapus executable: $DestBin"
 }
-
-if (Test-Path -LiteralPath $PkgManifestPath -PathType Leaf) {
-  Remove-Item -LiteralPath $PkgManifestPath -Force
+if (Test-Path -LiteralPath $ShareDir) {
+  Remove-Item -LiteralPath $ShareDir -Recurse -Force
 }
-
-if (Test-Path -LiteralPath $ReceiptPath -PathType Leaf) {
+if (Test-Path -LiteralPath $ReceiptPath) {
   Remove-Item -LiteralPath $ReceiptPath -Force
 }
 
-if ($ShouldCleanPath) {
-  $CurrentUserPath = [Environment]::GetEnvironmentVariable("Path", "User")
-  if ($CurrentUserPath) {
-    $Segments = ($CurrentUserPath -split ';') | Where-Object { $_.Trim() -ne "" }
-    if ($Segments -contains $BinDir) {
-      $Filtered = $Segments | Where-Object { $_.Trim() -ne $BinDir }
-      [Environment]::SetEnvironmentVariable("Path", ($Filtered -join ';'), "User")
-    }
+if (-not $NoPath) {
+  $UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+  if (-not [string]::IsNullOrWhiteSpace($UserPath)) {
+    $Filtered = @($UserPath -split ';' | Where-Object {
+      (-not [string]::IsNullOrWhiteSpace($_)) -and
+      (-not $_.TrimEnd('\\').Equals($BinDir.TrimEnd('\\'), [System.StringComparison]::OrdinalIgnoreCase))
+    })
+    [Environment]::SetEnvironmentVariable('Path', ($Filtered -join ';'), 'User')
   }
 }
 
-foreach ($Dir in @($BinDir, (Join-Path $Prefix "lib"), $Prefix)) {
-  if ((Test-Path -LiteralPath $Dir -PathType Container) -and ((Get-ChildItem -LiteralPath $Dir -Force | Measure-Object).Count -eq 0)) {
-    Remove-Item -LiteralPath $Dir -Force
-  }
+if (-not $Quiet) {
+  Write-Output "[SUKSES] $AppName berhasil dicopot dari: $Prefix"
 }
-
-Write-Host "[SUKSES] ${appName} berhasil dicopot dengan bersih."
+exit 0
 `;
   }
 
-  public static detectWindowsPowerShell(): {
-    available: boolean;
-    command: string | null;
-    version: string | null;
-  } {
-    const candidates: string[] = [];
-    if (typeof process !== 'undefined' && process.platform === 'win32') {
-      const sysRoot = process.env.SystemRoot || process.env.WINDIR;
-      if (sysRoot) {
-        const canonicalPs5 = safePath.join(
-          sysRoot,
-          'System32',
-          'WindowsPowerShell',
-          'v1.0',
-          'powershell.exe'
-        );
-        if (safeFS.existsSync(canonicalPs5)) {
-          candidates.push(canonicalPs5);
-        }
-      }
-      candidates.push('powershell.exe', 'pwsh.exe', 'pwsh');
-    } else {
-      candidates.push('pwsh');
-    }
-
-    const seen = new Set<string>();
-    for (const cmd of candidates) {
-      if (seen.has(cmd)) continue;
-      seen.add(cmd);
-      const probe = safeCP.spawnSync(
-        cmd,
-        ['-NoProfile', '-NonInteractive', '-Command', '$PSVersionTable.PSVersion.ToString()'],
-        {
-          encoding: 'utf-8',
-          timeout: 8000,
-          shell: false,
-        }
-      );
-      if (!probe.error && probe.status === 0) {
-        return {
-          available: true,
-          command: cmd,
-          version: (probe.stdout || '').trim().split(/\r?\n/)[0] || null,
-        };
-      }
-    }
-    return { available: false, command: null, version: null };
+  private static generateWindowsBatchInstall(options: InstallerGenerationOptions): string {
+    return `@echo off\r\nsetlocal\r\nwhere pwsh >nul 2>&1\r\nif %errorlevel%==0 (\r\n  pwsh -NoProfile -ExecutionPolicy Bypass -File "%~dp0install.ps1" %*\r\n  exit /b %errorlevel%\r\n)\r\npowershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0install.ps1" %*\r\nexit /b %errorlevel%\r\n`;
   }
 
-  /**
-   * Mengeksekusi install.sh / uninstall.sh secara nyata di direktori sandbox terisolasi (tanpa menyentuh HOME pengguna).
-   */
-  public static runPosixScriptInSandbox(options: {
-    packageDir: string;
-    scriptName: 'install.sh' | 'uninstall.sh';
-    prefixDir: string;
-    homeDir: string;
-    extraArgs?: string[];
-  }): InstallerSandboxResult {
-    const scriptPath = safePath.join(options.packageDir, options.scriptName);
+  private static generateWindowsBatchUninstall(options: InstallerGenerationOptions): string {
+    return `@echo off\r\nsetlocal\r\nwhere pwsh >nul 2>&1\r\nif %errorlevel%==0 (\r\n  pwsh -NoProfile -ExecutionPolicy Bypass -File "%~dp0uninstall.ps1" %*\r\n  exit /b %errorlevel%\r\n)\r\npowershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0uninstall.ps1" %*\r\nexit /b %errorlevel%\r\n`;
+  }
+
+  public static detectWindowsPowerShell(): PowerShellDetectionResult {
+    const candidates: Array<{ cmd: string; kind: 'powershell.exe' | 'pwsh' }> = [];
+
+    if (process.platform === 'win32') {
+      const sysRoot = process.env.SystemRoot || 'C:\\Windows';
+      const winPsFull = safePath.join(sysRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+      if (safeFS.existsSync(winPsFull)) {
+        candidates.push({ cmd: winPsFull, kind: 'powershell.exe' });
+      }
+      candidates.push({ cmd: 'powershell.exe', kind: 'powershell.exe' });
+      candidates.push({ cmd: 'pwsh.exe', kind: 'pwsh' });
+    } else {
+      candidates.push({ cmd: 'pwsh', kind: 'pwsh' });
+    }
+
+    for (const cand of candidates) {
+      try {
+        const res = safeCP.spawnSync(
+          cand.cmd,
+          ['-NoProfile', '-NonInteractive', '-Command', '$PSVersionTable.PSVersion.ToString()'],
+          { encoding: 'utf-8', timeout: 8000, shell: false }
+        );
+        if (res.status === 0 && res.stdout && res.stdout.trim()) {
+          return {
+            found: true,
+            command: cand.cmd,
+            kind: cand.kind,
+            version: res.stdout.trim().split(/\r?\n/)[0].trim(),
+            platform: process.platform,
+          };
+        }
+      } catch {
+        // lanjut kandidat berikutnya
+      }
+    }
+
+    return {
+      found: false,
+      platform: process.platform,
+    };
+  }
+
+  public static runPosixScriptInSandbox(
+    packageDir: string,
+    scriptName: 'install.sh' | 'uninstall.sh',
+    prefixDir: string,
+    fakeHomeDir: string
+  ): InstallerSandboxResult {
+    const scriptPath = safePath.join(packageDir, scriptName);
     if (!safeFS.existsSync(scriptPath)) {
       return {
         success: false,
         exitCode: 1,
         stdout: '',
-        stderr: `Skrip pemasang tidak ditemukan: ${scriptPath}`,
-        prefixDir: options.prefixDir,
+        stderr: `Skrip tidak ditemukan: ${scriptPath}`,
       };
     }
 
-    const args = [scriptPath, '--prefix', options.prefixDir, ...(options.extraArgs || [])];
-    const env = {
-      ...(typeof process !== 'undefined' ? process.env : {}),
-      HOME: options.homeDir,
-      SHELL: '/bin/bash',
-    };
-
-    const res = safeCP.spawnSync('bash', args, {
-      encoding: 'utf-8',
-      timeout: 15000,
-      env,
-      shell: false,
-    });
+    const res = safeCP.spawnSync(
+      'sh',
+      [scriptPath, '--prefix', prefixDir, '-y'],
+      {
+        encoding: 'utf-8',
+        timeout: 20000,
+        shell: false,
+        env: {
+          ...process.env,
+          HOME: fakeHomeDir,
+          TMPDIR: os.tmpdir(),
+        },
+      }
+    );
 
     return {
       success: res.status === 0,
       exitCode: res.status,
       stdout: res.stdout || '',
       stderr: res.stderr || '',
-      prefixDir: options.prefixDir,
+      shellUsed: 'sh',
     };
   }
 
-  /**
-   * Mengeksekusi install.ps1 / uninstall.ps1 secara nyata di direktori prefix sandbox terisolasi
-   * (menggunakan -NoPath secara default agar PATH registry pengguna tidak tersentuh).
-   */
-  public static runWindowsScriptInSandbox(options: {
-    packageDir: string;
-    scriptName: 'install.ps1' | 'uninstall.ps1';
-    prefixDir: string;
-    noPath?: boolean;
-    dryRun?: boolean;
-    extraArgs?: string[];
-  }): InstallerSandboxResult & { shellNotAvailable?: boolean; shellCommand?: string } {
-    const scriptPath = safePath.join(options.packageDir, options.scriptName);
-    if (!safeFS.existsSync(scriptPath)) {
+  public static runWindowsScriptInSandbox(
+    packageDir: string,
+    scriptName: 'install.ps1' | 'uninstall.ps1',
+    prefixDir: string,
+    options: { noPath?: boolean; quiet?: boolean } = {}
+  ): InstallerSandboxResult {
+    const ps = this.detectWindowsPowerShell();
+    if (!ps.found || !ps.command) {
       return {
         success: false,
-        exitCode: 1,
-        stdout: '',
-        stderr: `Skrip pemasang Windows tidak ditemukan: ${scriptPath}`,
-        prefixDir: options.prefixDir,
-      };
-    }
-
-    const shellInfo = this.detectWindowsPowerShell();
-    if (!shellInfo.available || !shellInfo.command) {
-      return {
-        success: false,
+        skipped: true,
         exitCode: null,
         stdout: '',
-        stderr: 'PowerShell (powershell.exe / pwsh) tidak tersedia di lingkungan host saat ini.',
-        prefixDir: options.prefixDir,
-        shellNotAvailable: true,
+        stderr: '',
+        reason: 'PowerShell (powershell.exe / pwsh) tidak tersedia pada host saat ini.',
       };
     }
 
-    const args = ['-NoProfile', '-NonInteractive'];
-    if (typeof process !== 'undefined' && process.platform === 'win32') {
-      args.push('-ExecutionPolicy', 'Bypass');
-    }
-    args.push('-File', scriptPath, '-Prefix', options.prefixDir);
-
-    if (options.scriptName === 'install.ps1') {
-      if (options.noPath !== false) {
-        args.push('-NoPath');
-      }
-      if (options.dryRun) {
-        args.push('-DryRun');
-      }
-    }
-    if (options.extraArgs?.length) {
-      args.push(...options.extraArgs);
+    const scriptPath = safePath.join(packageDir, scriptName);
+    if (!safeFS.existsSync(scriptPath)) {
+      return {
+        success: false,
+        exitCode: 1,
+        stdout: '',
+        stderr: `Skrip PowerShell tidak ditemukan: ${scriptPath}`,
+        shellUsed: ps.command,
+        shellVersion: ps.version,
+      };
     }
 
-    const res = safeCP.spawnSync(shellInfo.command, args, {
+    const psArgs: string[] = ['-NoProfile', '-NonInteractive'];
+    if (process.platform === 'win32') {
+      psArgs.push('-ExecutionPolicy', 'Bypass');
+    }
+    psArgs.push('-File', scriptPath, '-Prefix', prefixDir);
+    if (options.noPath !== false) {
+      psArgs.push('-NoPath');
+    }
+    if (options.quiet) {
+      psArgs.push('-Quiet');
+    }
+
+    const res = safeCP.spawnSync(ps.command, psArgs, {
       encoding: 'utf-8',
-      timeout: 20000,
+      timeout: 30000,
       shell: false,
     });
 
@@ -678,8 +706,8 @@ Write-Host "[SUKSES] ${appName} berhasil dicopot dengan bersih."
       exitCode: res.status,
       stdout: res.stdout || '',
       stderr: res.stderr || '',
-      prefixDir: options.prefixDir,
-      shellCommand: shellInfo.command,
+      shellUsed: ps.command,
+      shellVersion: ps.version,
     };
   }
 }

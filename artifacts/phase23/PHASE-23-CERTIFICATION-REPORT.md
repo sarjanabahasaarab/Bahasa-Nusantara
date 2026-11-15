@@ -1,29 +1,21 @@
-# Laporan Sertifikasi Desktop 6 Target — Phase 23 (NUSANTARA)
+# Laporan Sertifikasi 6 Target Desktop NUSANTARA (Phase 23)
 
-- **Status Keseluruhan:** `PARTIAL` — PARTIAL (BELUM LENGKAP)
-- **Total Target Wajib:** 6
-- **Ringkasan Hitungan:** PASS=0, NOT_VERIFIED=6, FAIL=0, MISSING=0, CORRUPT=0
-- **Waktu Agregasi:** 2026-11-15T02:58:23.216Z
+- **Status Keseluruhan:** `PARTIAL` (exitCode=1)
+- **Ringkasan:** PASS=0/6 | NOT_VERIFIED=6 | FAIL=0 | MISSING=0 | CORRUPT=0
 
-## Matriks Sertifikasi Enam Target
+| Target | Triple | Status | Compiler / Linker | Format / Arch | Mode Eksekusi | Keterangan |
+| :--- | :--- | :---: | :--- | :--- | :--- | :--- |
+| `windows-x86_64` | `x86_64-pc-windows-msvc` | **NOT_VERIFIED** | none / none | - | not-executed | Target 'windows-x86_64' belum dapat diverifikasi pada host ini: MSVC CRT (libcmt.lib/msvcrt.lib) & Windows SDK (kernel32.lib/ucrt.lib) tidak tersedia di host non-Windows. |
+| `windows-arm64` | `aarch64-pc-windows-msvc` | **NOT_VERIFIED** | none / none | - | not-executed | Target 'windows-arm64' belum dapat diverifikasi pada host ini: MSVC CRT (libcmt.lib/msvcrt.lib) & Windows SDK (kernel32.lib/ucrt.lib) tidak tersedia di host non-Windows. |
+| `linux-x86_64` | `x86_64-unknown-linux-gnu` | **NOT_VERIFIED** | none / none | - | not-executed | Target 'linux-x86_64' belum dapat diverifikasi pada host ini: clang (driver compiler + linker C runtime) tidak ditemukan di PATH. |
+| `linux-arm64` | `aarch64-unknown-linux-gnu` | **NOT_VERIFIED** | none / aarch64-linux-gnu-gcc | - | not-executed | Target 'linux-arm64' belum dapat diverifikasi pada host ini: llvm / clang (objek generator) tidak tersedia.; libc6-dev-arm64-cross (/usr/aarch64-linux-gnu) tidak ditemukan. |
+| `macos-x86_64` | `x86_64-apple-darwin` | **NOT_VERIFIED** | none / none | - | not-executed | Target 'macos-x86_64' belum dapat diverifikasi pada host ini: clang tidak tersedia; Apple MacOSX.sdk / OSXCross sysroot (wajib runner macos-latest/macos-13) |
+| `macos-arm64` | `arm64-apple-darwin` | **NOT_VERIFIED** | none / none | - | not-executed | Target 'macos-arm64' belum dapat diverifikasi pada host ini: clang tidak tersedia; Apple MacOSX.sdk / OSXCross sysroot (wajib runner macos-latest/macos-13) |
 
-| Target | Triple | Host | Compiler / Linker | Format / Arch | SHA-256 Executable | Mode Eksekusi | Status | Keterangan |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :---: | :--- |
-| `windows-x86_64` | `x86_64-pc-windows-msvc` | linux/x64 | none / none | N/A | - | `cross-compiled-not-executed` | **NOT_VERIFIED** | Toolchain LLVM/Clang tidak ditemukan di PATH atau NUSANTARA_LLVM_PATH.; Cross-SDK Windows (x86_64) belum tersedia di host x86_64-unknown-linux-gnu (pasang MinGW-w64/llvm-mingw atau MSVC + Windows SDK ARM64 di runner Windows/windows-11-arm). |
-| `windows-arm64` | `aarch64-pc-windows-msvc` | linux/x64 | none / none | N/A | - | `cross-compiled-not-executed` | **NOT_VERIFIED** | Toolchain LLVM/Clang tidak ditemukan di PATH atau NUSANTARA_LLVM_PATH.; Cross-SDK Windows (aarch64) belum tersedia di host x86_64-unknown-linux-gnu (pasang MinGW-w64/llvm-mingw atau MSVC + Windows SDK ARM64 di runner Windows/windows-11-arm). |
-| `linux-x86_64` | `x86_64-unknown-linux-gnu` | linux/x64 | none / none | N/A | - | `not-executed` | **NOT_VERIFIED** | Toolchain LLVM/Clang tidak ditemukan di PATH atau NUSANTARA_LLVM_PATH. |
-| `linux-arm64` | `aarch64-unknown-linux-gnu` | linux/x64 | none / none | N/A | - | `cross-compiled-not-executed` | **NOT_VERIFIED** | Toolchain LLVM/Clang tidak ditemukan di PATH atau NUSANTARA_LLVM_PATH.; Cross-SDK Linux ARM64 belum tersedia (pasang gcc-aarch64-linux-gnu / sysroot arm64 atau setel NUSANTARA_SYSROOT_LINUX_ARM64). |
-| `macos-x86_64` | `x86_64-apple-darwin` | linux/x64 | none / none | N/A | - | `cross-compiled-not-executed` | **NOT_VERIFIED** | Toolchain LLVM/Clang tidak ditemukan di PATH atau NUSANTARA_LLVM_PATH.; Cross-compile ke macOS (x86_64) dari x86_64-unknown-linux-gnu membutuhkan OSXCross/Apple SDK atau runner macos-15-intel / macos-13 (atau macos-latest + Rosetta 2). |
-| `macos-arm64` | `arm64-apple-darwin` | linux/x64 | none / none | N/A | - | `cross-compiled-not-executed` | **NOT_VERIFIED** | Toolchain LLVM/Clang tidak ditemukan di PATH atau NUSANTARA_LLVM_PATH.; Cross-compile ke macOS (aarch64) dari x86_64-unknown-linux-gnu membutuhkan OSXCross/Apple SDK atau runner macos-latest. |
-
-## Temuan Audit & Integritas
-
-- **[WARNING / TARGET_NOT_VERIFIED]** `windows-x86_64`: Toolchain LLVM/Clang tidak ditemukan di PATH atau NUSANTARA_LLVM_PATH.; Cross-SDK Windows (x86_64) belum tersedia di host x86_64-unknown-linux-gnu (pasang MinGW-w64/llvm-mingw atau MSVC + Windows SDK ARM64 di runner Windows/windows-11-arm).
-- **[WARNING / TARGET_NOT_VERIFIED]** `windows-arm64`: Toolchain LLVM/Clang tidak ditemukan di PATH atau NUSANTARA_LLVM_PATH.; Cross-SDK Windows (aarch64) belum tersedia di host x86_64-unknown-linux-gnu (pasang MinGW-w64/llvm-mingw atau MSVC + Windows SDK ARM64 di runner Windows/windows-11-arm).
-- **[WARNING / TARGET_NOT_VERIFIED]** `linux-x86_64`: Toolchain LLVM/Clang tidak ditemukan di PATH atau NUSANTARA_LLVM_PATH.
-- **[WARNING / TARGET_NOT_VERIFIED]** `linux-arm64`: Toolchain LLVM/Clang tidak ditemukan di PATH atau NUSANTARA_LLVM_PATH.; Cross-SDK Linux ARM64 belum tersedia (pasang gcc-aarch64-linux-gnu / sysroot arm64 atau setel NUSANTARA_SYSROOT_LINUX_ARM64).
-- **[WARNING / TARGET_NOT_VERIFIED]** `macos-x86_64`: Toolchain LLVM/Clang tidak ditemukan di PATH atau NUSANTARA_LLVM_PATH.; Cross-compile ke macOS (x86_64) dari x86_64-unknown-linux-gnu membutuhkan OSXCross/Apple SDK atau runner macos-15-intel / macos-13 (atau macos-latest + Rosetta 2).
-- **[WARNING / TARGET_NOT_VERIFIED]** `macos-arm64`: Toolchain LLVM/Clang tidak ditemukan di PATH atau NUSANTARA_LLVM_PATH.; Cross-compile ke macOS (aarch64) dari x86_64-unknown-linux-gnu membutuhkan OSXCross/Apple SDK atau runner macos-latest.
-
----
-Gerbang sertifikasi Phase 23 belum berstatus CERTIFIED; Phase 23 tetap berstatus SELESAI SEBAGIAN hingga seluruh 6 target berstatus PASS.
+## Temuan Audit
+- **[WARNING][TARGET_NOT_VERIFIED]** `windows-x86_64`: Target 'windows-x86_64' belum dapat diverifikasi pada host ini: MSVC CRT (libcmt.lib/msvcrt.lib) & Windows SDK (kernel32.lib/ucrt.lib) tidak tersedia di host non-Windows.
+- **[WARNING][TARGET_NOT_VERIFIED]** `windows-arm64`: Target 'windows-arm64' belum dapat diverifikasi pada host ini: MSVC CRT (libcmt.lib/msvcrt.lib) & Windows SDK (kernel32.lib/ucrt.lib) tidak tersedia di host non-Windows.
+- **[WARNING][TARGET_NOT_VERIFIED]** `linux-x86_64`: Target 'linux-x86_64' belum dapat diverifikasi pada host ini: clang (driver compiler + linker C runtime) tidak ditemukan di PATH.
+- **[WARNING][TARGET_NOT_VERIFIED]** `linux-arm64`: Target 'linux-arm64' belum dapat diverifikasi pada host ini: llvm / clang (objek generator) tidak tersedia.; libc6-dev-arm64-cross (/usr/aarch64-linux-gnu) tidak ditemukan.
+- **[WARNING][TARGET_NOT_VERIFIED]** `macos-x86_64`: Target 'macos-x86_64' belum dapat diverifikasi pada host ini: clang tidak tersedia; Apple MacOSX.sdk / OSXCross sysroot (wajib runner macos-latest/macos-13)
+- **[WARNING][TARGET_NOT_VERIFIED]** `macos-arm64`: Target 'macos-arm64' belum dapat diverifikasi pada host ini: clang tidak tersedia; Apple MacOSX.sdk / OSXCross sysroot (wajib runner macos-latest/macos-13)

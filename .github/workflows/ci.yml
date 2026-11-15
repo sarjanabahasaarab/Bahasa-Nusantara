@@ -207,13 +207,14 @@ jobs:
           fi
           clang --version
 
-      - name: Uji LLVM Backend (Phase 44) & Build System (Phase 23) dengan Clang Aktif
+      - name: Uji LLVM Backend (Phase 44), Linker (Phase 45) & Build System (Phase 23) dengan Clang Aktif
         shell: bash
         env:
           NUSANTARA_REQUIRE_CLANG: ${{ matrix.require_clang }}
           NUSANTARA_BUILD_REPORT_DIR: dist-native/reports
         run: |
           npm run test:llvm-v44
+          npm run test:linker-v45
           npm run test:build-v23
 
       - name: Kompilasi, Validasi, Eksekusi & Buat Evidence JSON (${{ matrix.target }})

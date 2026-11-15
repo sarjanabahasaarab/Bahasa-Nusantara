@@ -2,9 +2,8 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * NUSANTARA BUILD SYSTEM - Native Build Pipeline
- * Mengorkestrasi AOTCompiler -> ObjectGenerator -> LinkerManager -> BinaryInspector -> DependencyInspector
- * serta eksekusi biner hasil kompilasi secara nyata.
+ * NUSANTARA BUILD SYSTEM - Pipeline Kompilasi Native Nyata (Phase 23)
+ * Target Milestone: v0.23.0 / v0.23.5
  */
 
 import { AOTCompiler } from '../compiler/aot/aot-compiler';
@@ -12,570 +11,443 @@ import { BinaryInspector } from '../compiler/executable/binary-inspector';
 import { DependencyInspector } from '../compiler/linker/dependency-inspector';
 import { LinkerManager } from '../compiler/linker/linker-manager';
 import { safeCP, safeFS, safePath } from '../compiler/llvm/node-compat';
+import { ObjectGenerator } from '../compiler/llvm/object-generator';
+import { TargetTripleManager } from '../compiler/llvm/target-triple';
+import { LLVMToolchainManager } from '../compiler/llvm/toolchain-manager';
 import { ArchiveBuilder } from './archive-builder';
 import { TargetMatrixManager } from './target-matrix';
-import {
-  ExecutionVerificationResult,
-  LinkingMode,
-  NativeBuildOptions,
-  NativeBuildResult,
-} from './types';
+import { LinkingMode, NativeBuildOptions, NativeBuildResult } from './types';
 
 export class NativeBuildPipeline {
   public static build(options: NativeBuildOptions): NativeBuildResult {
-    const start = Date.now();
-    const diag: string[] = [];
+    const diagnostics: string[] = [];
+    const requestedTarget = options.target;
+    const strictTarget = TargetTripleManager.resolveStrict(requestedTarget);
+    const targetInfo = strictTarget.info;
     const linkingMode: LinkingMode = options.linkingMode || 'auto';
 
-    // 1. Validasi & inspeksi kapabilitas target
-    const capability = TargetMatrixManager.inspectTargetCapability(options.target, {
-      customToolchainPath: options.customToolchainPath,
-      sysrootOverride: options.sysrootOverride,
-    });
-    diag.push(...capability.diagnostics);
-
-    if (!capability.supported || !capability.targetInfo) {
+    if (!strictTarget.supported || !targetInfo.targetId) {
+      const msg = strictTarget.error || `Target build '${requestedTarget}' tidak didukung.`;
+      diagnostics.push(msg);
       return {
         success: false,
         statusCode: 'TARGET_TIDAK_DIDUKUNG',
-        target: capability,
+        target: requestedTarget || '(unknown)',
+        triple: targetInfo.triple,
+        isCross: targetInfo.isCross,
         linkingMode,
-        durationMs: Date.now() - start,
-        diagnostics: [...diag, ...capability.missingRequirements],
+        actualStaticLink: false,
+        executedOnHost: false,
+        executionMode: 'not-executed',
+        diagnostics,
       };
     }
 
-    if (!capability.toolchainAvailable) {
-      return {
-        success: false,
-        statusCode: 'TOOLCHAIN_TIDAK_TERSEDIA',
-        target: capability,
-        linkingMode,
-        durationMs: Date.now() - start,
-        diagnostics: [...diag, ...capability.missingRequirements],
-      };
-    }
+    const canonicalTarget = targetInfo.targetId;
+    const toolchain = new LLVMToolchainManager(options.customToolchainPath).detect();
+    const capability = TargetMatrixManager.inspectTargetCapability(canonicalTarget, toolchain);
 
-    if (capability.isCross && !capability.crossSdkAvailable) {
-      return {
-        success: false,
-        statusCode: 'CROSS_SDK_TIDAK_TERSEDIA',
-        target: capability,
-        linkingMode,
-        durationMs: Date.now() - start,
-        diagnostics: [...diag, ...capability.missingRequirements],
-      };
-    }
-
-    // 2. Baca kode sumber
+    // Ambil kode sumber .nusantara
     let sourceCode = options.sourceCode;
     if (!sourceCode && options.sourceFilePath) {
       if (!safeFS.existsSync(options.sourceFilePath)) {
+        diagnostics.push(`Berkas sumber tidak ditemukan: ${options.sourceFilePath}`);
         return {
           success: false,
           statusCode: 'GALAT_KOMPILASI',
-          target: capability,
+          target: canonicalTarget,
+          canonicalTarget,
+          triple: targetInfo.triple,
+          isCross: targetInfo.isCross,
           linkingMode,
-          durationMs: Date.now() - start,
-          diagnostics: [...diag, `Berkas sumber tidak ditemukan: ${options.sourceFilePath}`],
+          actualStaticLink: false,
+          executedOnHost: false,
+          executionMode: 'not-executed',
+          diagnostics,
         };
       }
       sourceCode = safeFS.readFileSync(options.sourceFilePath, 'utf-8');
     }
 
     if (!sourceCode) {
+      diagnostics.push('Kode sumber (.nusantara) tidak diberikan untuk kompilasi native.');
       return {
         success: false,
         statusCode: 'GALAT_KOMPILASI',
-        target: capability,
+        target: canonicalTarget,
+        canonicalTarget,
+        triple: targetInfo.triple,
+        isCross: targetInfo.isCross,
         linkingMode,
-        durationMs: Date.now() - start,
-        diagnostics: [...diag, 'Kode sumber NUSANTARA atau jalur berkas .nusantara wajib diberikan.'],
+        actualStaticLink: false,
+        executedOnHost: false,
+        executionMode: 'not-executed',
+        diagnostics,
       };
     }
 
-    const outDir = options.outputDirectory || './dist';
-    if (!safeFS.existsSync(outDir)) {
-      safeFS.mkdirSync(outDir, { recursive: true });
-    }
-
-    const rawAppName =
+    const outDir = safePath.resolve(options.outputDirectory);
+    safeFS.mkdirSync(outDir, { recursive: true });
+    const appName =
       options.appName ||
       (options.sourceFilePath
         ? safePath.basename(options.sourceFilePath, safePath.extname(options.sourceFilePath))
         : 'program');
 
-    if (rawAppName.includes('..') || rawAppName.includes('/') || rawAppName.includes('\\')) {
-      return {
-        success: false,
-        statusCode: 'GALAT_VALIDASI',
-        target: capability,
-        linkingMode,
-        durationMs: Date.now() - start,
-        diagnostics: [...diag, `Nama aplikasi tidak aman: '${rawAppName}'`],
-      };
-    }
-
-    const objPath = safePath.join(outDir, `${rawAppName}${capability.targetInfo.objectExtension}`);
-    const llPath = safePath.join(outDir, `${rawAppName}.ll`);
-    const exePath = safePath.join(outDir, `${rawAppName}${capability.targetInfo.executableExtension}`);
-
-    // 3. Kompilasi AST -> NIR -> LLVM IR -> Object (.o/.obj)
-    const compiler = new AOTCompiler(options.customToolchainPath);
-    const aotRes = compiler.compileSource(sourceCode, {
-      targetTriple: capability.triple,
-      optLevel: options.optLevel || (options.debug ? 'O0' : 'O2'),
-      debug: options.debug,
+    // Tahap 1 & 2: Parser -> NIR -> Verifier -> LLVM IR (termasuk validasi ketat @.str.*)
+    const llPath = safePath.join(outDir, `${appName}.ll`);
+    const aot = new AOTCompiler(options.customToolchainPath);
+    const irRes = aot.compileSource(sourceCode, {
+      targetTriple: targetInfo.triple,
+      optLevel: options.optLevel || 'O2',
       emitLLVM: true,
-      emitObject: true,
-      outputPath: objPath,
+      emitObject: false,
+      outputPath: llPath,
       customToolchainPath: options.customToolchainPath,
     });
 
-    diag.push(...aotRes.diagnostics);
-
-    const llContent = aotRes.optimizedIR || aotRes.llvmIR;
-    let llvmIRSha256: string | undefined;
-    if (llContent) {
-      safeFS.writeFileSync(llPath, llContent, 'utf-8');
-      llvmIRSha256 = ArchiveBuilder.computeSha256(safeFS.readFileBufferSync(llPath));
+    // Pastikan berkas .ll benar-benar tertulis meski toolchain LLVM tidak ada
+    const finalIRText = irRes.optimizedIR || irRes.llvmIR;
+    if (finalIRText && !safeFS.existsSync(llPath)) {
+      safeFS.writeFileSync(llPath, finalIRText, 'utf-8');
     }
+    const llvmIRSha256 =
+      finalIRText && safeFS.existsSync(llPath)
+        ? ArchiveBuilder.computeSha256(safeFS.readFileBufferSync(llPath))
+        : undefined;
 
-    const compilerInfo = {
-      name: aotRes.toolchain.binaries.clang.found
-        ? aotRes.toolchain.binaries.clang.command
-        : aotRes.toolchain.binaries.llc.found
-        ? aotRes.toolchain.binaries.llc.command
-        : 'none',
-      version: aotRes.toolchain.version || 'N/A',
-      command: aotRes.toolchain.binaries.clang.command,
-    };
-
-    if (!aotRes.success || !aotRes.objectPath) {
+    if (!irRes.success || !finalIRText) {
+      diagnostics.push(...irRes.diagnostics);
       return {
         success: false,
         statusCode: 'GALAT_KOMPILASI',
-        target: capability,
+        target: canonicalTarget,
+        canonicalTarget,
+        triple: targetInfo.triple,
+        isCross: targetInfo.isCross,
+        linkingMode,
+        actualStaticLink: false,
         llvmIRPath: safeFS.existsSync(llPath) ? llPath : undefined,
         llvmIRSha256,
-        llvmValidationTool: aotRes.llvmValidationTool,
-        compilerInfo,
-        linkingMode,
-        durationMs: Date.now() - start,
-        diagnostics: diag,
+        llvmValidationTool: irRes.llvmValidationTool,
+        executedOnHost: false,
+        executionMode: 'not-executed',
+        diagnostics,
       };
     }
 
-    const objectSha256 = safeFS.existsSync(aotRes.objectPath)
-      ? ArchiveBuilder.computeSha256(safeFS.readFileBufferSync(aotRes.objectPath))
-      : undefined;
-
-    // 4. Tautkan object + runtime C menjadi executable native
-    const isStatic = linkingMode === 'static';
-    if (isStatic && capability.os === 'darwin') {
-      diag.push('Catatan: macOS tidak mendukung full static linking user-space (-static) tanpa libSystem.dylib.');
+    // Tolak eksplisit sisa simbol @.str._v* sebelum memanggil clang/llc
+    if (/@\.str\._v\d+/.test(finalIRText)) {
+      diagnostics.push('Terdeteksi referensi string LLVM IR tidak valid (@.str._v*) sebelum generasi objek.');
+      return {
+        success: false,
+        statusCode: 'GALAT_KOMPILASI',
+        target: canonicalTarget,
+        canonicalTarget,
+        triple: targetInfo.triple,
+        isCross: targetInfo.isCross,
+        linkingMode,
+        actualStaticLink: false,
+        llvmIRPath: llPath,
+        llvmIRSha256,
+        llvmValidationTool: irRes.llvmValidationTool,
+        executedOnHost: false,
+        executionMode: 'not-executed',
+        diagnostics,
+      };
     }
 
-    const combinedLibraryPaths = [
-      ...(options.libraryPaths || []),
-      ...(capability.extraLibraryPaths || []),
-    ];
+    // Tahap 3: Cek ketersediaan toolchain & SDK untuk target ini
+    if (!capability.canBuildNative) {
+      const statusCode =
+        !toolchain.available || (!capability.clangAvailable && !capability.llcAvailable)
+          ? 'TOOLCHAIN_TIDAK_TERSEDIA'
+          : targetInfo.isCross
+          ? 'CROSS_SDK_TIDAK_TERSEDIA'
+          : 'TOOLCHAIN_TIDAK_TERSEDIA';
 
-    const linker = new LinkerManager({
-      targetTriple: capability.triple,
+      diagnostics.push(
+        `[TIDAK TERSEDIA: ${statusCode}] ${capability.diagnosticMessage}`
+      );
+      if (capability.missingRequirements.length > 0) {
+        diagnostics.push(`Persyaratan hilang: ${capability.missingRequirements.join('; ')}`);
+      }
+      return {
+        success: false,
+        statusCode,
+        target: canonicalTarget,
+        canonicalTarget,
+        triple: targetInfo.triple,
+        isCross: targetInfo.isCross,
+        linkingMode,
+        actualStaticLink: false,
+        sdkUsed: capability.sdkName,
+        llvmIRPath: llPath,
+        llvmIRSha256,
+        llvmValidationTool: irRes.llvmValidationTool,
+        executedOnHost: false,
+        executionMode: 'not-executed',
+        diagnostics,
+      };
+    }
+
+    // Tahap 4: Compile LLVM IR -> Object File (.o / .obj)
+    const objPath = safePath.join(outDir, `${appName}${targetInfo.objectExtension}`);
+    const objGen = new ObjectGenerator(toolchain, targetInfo);
+    const objRes = objGen.generateObject(finalIRText, objPath);
+    diagnostics.push(...objRes.diagnostics);
+
+    if (!objRes.success || !safeFS.existsSync(objPath)) {
+      return {
+        success: false,
+        statusCode: 'GALAT_KOMPILASI',
+        target: canonicalTarget,
+        canonicalTarget,
+        triple: targetInfo.triple,
+        isCross: targetInfo.isCross,
+        linkingMode,
+        actualStaticLink: false,
+        compilerToolUsed: objRes.toolUsed,
+        sdkUsed: capability.sdkName,
+        llvmIRPath: llPath,
+        llvmIRSha256,
+        llvmValidationTool: irRes.llvmValidationTool,
+        executedOnHost: false,
+        executionMode: 'not-executed',
+        diagnostics,
+      };
+    }
+    const objectSha256 = ArchiveBuilder.computeSha256(safeFS.readFileBufferSync(objPath));
+
+    // Tahap 5: Tentukan static vs dynamic linking nyata
+    let wantStatic = false;
+    if (linkingMode === 'static') {
+      if (targetInfo.os === 'darwin') {
+        diagnostics.push(
+          'Mode static penuh (-static) tidak didukung pada user-space macOS/Darwin karena Apple melarang binary tanpa libSystem.B.dylib.'
+        );
+        return {
+          success: false,
+          statusCode: 'GALAT_LINKER',
+          target: canonicalTarget,
+          canonicalTarget,
+          triple: targetInfo.triple,
+          isCross: targetInfo.isCross,
+          linkingMode,
+          actualStaticLink: false,
+          compilerToolUsed: objRes.toolUsed,
+          llvmIRPath: llPath,
+          llvmIRSha256,
+          objectPath: objPath,
+          objectSha256,
+          executedOnHost: false,
+          executionMode: 'not-executed',
+          diagnostics,
+        };
+      }
+      wantStatic = true;
+    }
+
+    const exePath = safePath.join(outDir, `${appName}${targetInfo.executableExtension}`);
+    const linkerMgr = new LinkerManager({
+      targetTriple: targetInfo.triple,
       customToolchainPath: options.customToolchainPath,
     });
 
-    const linkRes = linker.link({
-      objectFiles: [aotRes.objectPath],
+    const linkRes = linkerMgr.link({
+      objectFiles: [objPath],
       outputExecutable: exePath,
-      isStatic,
-      staticLibraries: options.staticLibraries,
-      sharedLibraries: options.sharedLibraries,
-      libraryPaths: combinedLibraryPaths.length > 0 ? combinedLibraryPaths : undefined,
+      isStatic: wantStatic,
       debug: options.debug,
       strip: options.strip,
-      sysroot: capability.sysrootPath,
-      targetTriple: capability.triple,
+      sysroot: options.sysroot || capability.sysroot,
+      targetTriple: targetInfo.triple,
       customToolchainPath: options.customToolchainPath,
       crossCompilerCommand: capability.crossCompilerCommand,
-      explicitSysrootOverride: Boolean(options.sysrootOverride),
+      explicitSysrootOverride: Boolean(options.sysroot),
     });
-
-    diag.push(...linkRes.diagnostics);
-
-    const linkerToolName =
-      linkRes.toolUsed ||
-      (capability.crossCompilerCommand && capability.crossCompilerCommand !== 'clang'
-        ? capability.crossCompilerCommand
-        : linker.toolchain.binaries.lld.found
-        ? linker.toolchain.binaries.lld.command
-        : linker.toolchain.binaries.clang.command);
-    const linkerInfo = {
-      name: linkerToolName || 'unknown',
-      version: this.queryToolVersion(linkerToolName),
-      commandExecuted: linkRes.commandExecuted,
-    };
+    diagnostics.push(...linkRes.diagnostics);
 
     if (!linkRes.success || !safeFS.existsSync(exePath)) {
       return {
         success: false,
         statusCode: 'GALAT_LINKER',
-        target: capability,
-        objectPath: aotRes.objectPath,
-        llvmIRPath: safeFS.existsSync(llPath) ? llPath : undefined,
-        llvmIRSha256,
-        objectSha256,
-        llvmValidationTool: aotRes.llvmValidationTool,
-        compilerInfo,
-        linkerInfo,
+        target: canonicalTarget,
+        canonicalTarget,
+        triple: targetInfo.triple,
+        isCross: targetInfo.isCross,
         linkingMode,
-        durationMs: Date.now() - start,
-        diagnostics: diag,
+        actualStaticLink: wantStatic,
+        compilerToolUsed: objRes.toolUsed,
+        linkerToolUsed: linkRes.toolUsed,
+        linkerCommand: linkRes.commandExecuted,
+        sdkUsed: capability.sdkName,
+        llvmIRPath: llPath,
+        llvmIRSha256,
+        llvmValidationTool: irRes.llvmValidationTool,
+        objectPath: objPath,
+        objectSha256,
+        executedOnHost: false,
+        executionMode: 'not-executed',
+        diagnostics,
       };
     }
 
-    // Pastikan executable bit pada POSIX
-    if (typeof process !== 'undefined' && process.platform !== 'win32') {
-      safeFS.chmodSync(exePath, 0o755);
-    }
-
-    // 5. Validasi ketat struktur biner executable (ELF64 / PE32+ / Mach-O64)
-    const binaryMetadata = BinaryInspector.inspectStrict(exePath);
-    const expectedArch = capability.arch;
-    const archMismatch =
-      binaryMetadata.architecture !== 'UNKNOWN' &&
-      expectedArch !== 'unknown' &&
-      binaryMetadata.architecture !== expectedArch;
-    const osMismatch =
-      binaryMetadata.operatingSystem !== 'unknown' && binaryMetadata.operatingSystem !== capability.os;
-
-    if (!binaryMetadata.isValidExecutable || archMismatch || osMismatch) {
-      const reasons = [...(binaryMetadata.validationErrors || [])];
-      if (archMismatch) {
-        reasons.push(
-          `Arsitektur biner '${binaryMetadata.architecture}' tidak cocok dengan target '${expectedArch}'.`
-        );
-      }
-      if (osMismatch) {
-        reasons.push(
-          `OS biner '${binaryMetadata.operatingSystem}' tidak cocok dengan target '${capability.os}'.`
-        );
-      }
-      diag.push(...reasons);
-      return {
-        success: false,
-        statusCode: 'BINER_TIDAK_SAH',
-        target: capability,
-        executablePath: exePath,
-        objectPath: aotRes.objectPath,
-        llvmIRPath: safeFS.existsSync(llPath) ? llPath : undefined,
-        llvmIRSha256,
-        objectSha256,
-        llvmValidationTool: aotRes.llvmValidationTool,
-        compilerInfo,
-        linkerInfo,
-        linkingMode,
-        binaryMetadata,
-        durationMs: Date.now() - start,
-        diagnostics: diag,
-      };
-    }
-
-    // 6. Inspeksi dependensi runtime nyata pada biner
-    const depInspector = new DependencyInspector();
-    const depTargetOs = capability.os === 'unknown' ? 'linux' : capability.os;
-    const dependencyReport = depInspector.inspect(exePath, depTargetOs);
-    diag.push(...dependencyReport.diagnostics);
-
-    if (!dependencyReport.allResolved) {
-      return {
-        success: false,
-        statusCode: 'GALAT_LINKER',
-        target: capability,
-        executablePath: exePath,
-        objectPath: aotRes.objectPath,
-        llvmIRPath: safeFS.existsSync(llPath) ? llPath : undefined,
-        llvmIRSha256,
-        objectSha256,
-        llvmValidationTool: aotRes.llvmValidationTool,
-        compilerInfo,
-        linkerInfo,
-        linkingMode,
-        binaryMetadata,
-        dependencyReport,
-        durationMs: Date.now() - start,
-        diagnostics: diag,
-      };
-    }
-
+    // Tahap 6: Inspeksi biner ketat (ELF / PE-COFF / Mach-O)
+    const meta = BinaryInspector.inspectStrict(exePath);
     const exeBytes = safeFS.readFileBufferSync(exePath);
-    const executableSha256 = ArchiveBuilder.computeSha256(exeBytes);
+    const exeSha256 = ArchiveBuilder.computeSha256(exeBytes);
 
-    // 7. Opsional: Verifikasi eksekusi biner secara nyata bila berjalan di host, QEMU user-mode, atau Rosetta 2
-    let executionVerification: ExecutionVerificationResult | undefined;
-    if (options.verifyExecution) {
-      if (capability.isCross) {
-        let crossExec: ExecutionVerificationResult | undefined;
+    if (
+      !meta.isValidExecutable ||
+      meta.format !== targetInfo.objectFormat ||
+      meta.architecture !== targetInfo.arch
+    ) {
+      diagnostics.push(
+        `Validasi biner ketat gagal: expected format=${targetInfo.objectFormat}/arch=${targetInfo.arch}, aktual format=${meta.format}/arch=${meta.architecture} (${(meta.validationErrors || []).join('; ')}).`
+      );
+      return {
+        success: false,
+        statusCode: 'BINER_TIDAK_VALID',
+        target: canonicalTarget,
+        canonicalTarget,
+        triple: targetInfo.triple,
+        isCross: targetInfo.isCross,
+        linkingMode,
+        actualStaticLink: wantStatic,
+        compilerToolUsed: objRes.toolUsed,
+        linkerToolUsed: linkRes.toolUsed,
+        linkerCommand: linkRes.commandExecuted,
+        sdkUsed: capability.sdkName,
+        llvmIRPath: llPath,
+        llvmIRSha256,
+        llvmValidationTool: irRes.llvmValidationTool,
+        objectPath: objPath,
+        objectSha256,
+        executablePath: exePath,
+        executableSha256: exeSha256,
+        executableSizeBytes: exeBytes.byteLength,
+        binaryMetadata: meta,
+        executedOnHost: false,
+        executionMode: 'not-executed',
+        diagnostics,
+      };
+    }
 
-        if (
-          capability.canonicalTarget === 'linux-arm64' &&
-          typeof process !== 'undefined' &&
-          process.platform === 'linux'
-        ) {
-          crossExec = this.executeWithQemuUser(
-            exePath,
-            options.executionArgs || [],
-            options.executionTimeoutMs || 10000,
-            capability.sysrootPath
-          );
-        } else if (
-          capability.canonicalTarget === 'macos-x86_64' &&
-          typeof process !== 'undefined' &&
-          process.platform === 'darwin'
-        ) {
-          crossExec = this.executeWithRosetta(
-            exePath,
-            options.executionArgs || [],
-            options.executionTimeoutMs || 10000
-          );
-        }
+    const depOs = targetInfo.os === 'unknown' ? 'linux' : targetInfo.os;
+    const depReport = new DependencyInspector().inspect(exePath, depOs);
+    diagnostics.push(...depReport.diagnostics);
 
-        if (crossExec) {
-          executionVerification = crossExec;
-          if (crossExec.executed && !crossExec.success) {
-            diag.push(
-              `Eksekusi cross-target (${crossExec.executionMode}) gagal (exit=${crossExec.exitCode}): ${crossExec.stderr}`
-            );
-            return {
-              success: false,
-              statusCode: 'BINER_TIDAK_SAH',
-              target: capability,
-              executablePath: exePath,
-              objectPath: aotRes.objectPath,
-              llvmIRPath: safeFS.existsSync(llPath) ? llPath : undefined,
-              llvmIRSha256,
-              objectSha256,
-              llvmValidationTool: aotRes.llvmValidationTool,
-              compilerInfo,
-              linkerInfo,
-              linkingMode,
-              binaryMetadata,
-              dependencyReport,
-              executionVerification,
-              executableSha256,
-              durationMs: Date.now() - start,
-              diagnostics: diag,
-            };
-          }
-        } else {
-          executionVerification = {
-            executed: false,
-            success: false,
-            exitCode: null,
-            stdout: '',
-            stderr: '',
-            timedOut: false,
-            executionMode: 'cross-compiled-not-executed',
-            reason: `Biner target '${capability.canonicalTarget}' merupakan hasil cross-compile; eksekusi langsung memerlukan runner/perangkat target asli (${capability.recommendedRunner}).`,
-          };
-        }
-      } else {
-        executionVerification = this.executeBinary(
-          exePath,
-          options.executionArgs || [],
-          options.executionTimeoutMs || 10000
-        );
-        if (!executionVerification.success) {
-          diag.push(
-            `Eksekusi biner verifikasi gagal (exit=${executionVerification.exitCode}): ${executionVerification.stderr}`
-          );
-          return {
-            success: false,
-            statusCode: 'BINER_TIDAK_SAH',
-            target: capability,
-            executablePath: exePath,
-            objectPath: aotRes.objectPath,
-            llvmIRPath: safeFS.existsSync(llPath) ? llPath : undefined,
-            llvmIRSha256,
-            objectSha256,
-            llvmValidationTool: aotRes.llvmValidationTool,
-            compilerInfo,
-            linkerInfo,
-            linkingMode,
-            binaryMetadata,
-            dependencyReport,
-            executionVerification,
-            executableSha256,
-            durationMs: Date.now() - start,
-            diagnostics: diag,
-          };
+    // Tahap 7: Eksekusi nyata (native / qemu-aarch64-static / rosetta2)
+    let executedOnHost = false;
+    let executionMode = capability.executionMode;
+    let executionExitCode: number | null | undefined;
+    let executionStdout: string | undefined;
+    let executionStderr: string | undefined;
+
+    const shouldExecute = options.verifyExecution !== false && capability.canExecuteOnHost;
+    if (shouldExecute) {
+      if (typeof process !== 'undefined' && process.platform !== 'win32') {
+        try {
+          safeFS.chmodSync(exePath, 0o755);
+        } catch {
+          // abaikan
         }
       }
+
+      let runCmd = exePath;
+      let runArgs: string[] = [];
+      if (capability.executionMode === 'qemu-user' && capability.emulatorCommand) {
+        runCmd = capability.emulatorCommand;
+        if (capability.sysroot && safeFS.existsSync(capability.sysroot)) {
+          runArgs = ['-L', capability.sysroot, exePath];
+        } else {
+          runArgs = [exePath];
+        }
+      } else if (capability.executionMode === 'rosetta2') {
+        runCmd = 'arch';
+        runArgs = ['-x86_64', exePath];
+      }
+
+      const execRes = safeCP.spawnSync(runCmd, runArgs, {
+        encoding: 'utf-8',
+        timeout: 15000,
+        shell: false,
+      });
+
+      executedOnHost = true;
+      executionExitCode = execRes.status;
+      executionStdout = execRes.stdout || '';
+      executionStderr = execRes.stderr || '';
+
+      if (execRes.status !== 0) {
+        diagnostics.push(
+          `Eksekusi biner gagal (${executionMode}, cmd='${runCmd} ${runArgs.join(' ')}', exit=${execRes.status}): ${executionStderr || executionStdout}`
+        );
+        return {
+          success: false,
+          statusCode: 'EKSEKUSI_GAGAL',
+          target: canonicalTarget,
+          canonicalTarget,
+          triple: targetInfo.triple,
+          isCross: targetInfo.isCross,
+          linkingMode,
+          actualStaticLink: Boolean(depReport.isStatic || wantStatic),
+          compilerToolUsed: objRes.toolUsed,
+          linkerToolUsed: linkRes.toolUsed,
+          linkerCommand: linkRes.commandExecuted,
+          sdkUsed: capability.sdkName,
+          llvmIRPath: llPath,
+          llvmIRSha256,
+          llvmValidationTool: irRes.llvmValidationTool,
+          objectPath: objPath,
+          objectSha256,
+          executablePath: exePath,
+          executableSha256: exeSha256,
+          executableSizeBytes: exeBytes.byteLength,
+          binaryMetadata: meta,
+          dependencyReport: depReport,
+          executedOnHost,
+          executionMode,
+          executionExitCode,
+          executionStdout,
+          executionStderr,
+          diagnostics,
+        };
+      }
+    } else if (!capability.canExecuteOnHost) {
+      executionMode = 'cross-compiled-not-executed';
     }
 
     return {
       success: true,
-      statusCode: 'SUKSES',
-      target: capability,
-      executablePath: exePath,
-      objectPath: aotRes.objectPath,
-      llvmIRPath: safeFS.existsSync(llPath) ? llPath : undefined,
-      llvmIRSha256,
-      objectSha256,
-      llvmValidationTool: aotRes.llvmValidationTool,
-      compilerInfo,
-      linkerInfo,
+      statusCode: 'BERHASIL',
+      target: canonicalTarget,
+      canonicalTarget,
+      triple: targetInfo.triple,
+      isCross: targetInfo.isCross,
       linkingMode,
-      binaryMetadata,
-      dependencyReport,
-      executionVerification,
-      executableSha256,
-      durationMs: Date.now() - start,
-      diagnostics: diag,
+      actualStaticLink: Boolean(depReport.isStatic || wantStatic),
+      compilerToolUsed: objRes.toolUsed,
+      linkerToolUsed: linkRes.toolUsed,
+      linkerCommand: linkRes.commandExecuted,
+      sdkUsed: capability.sdkName,
+      llvmIRPath: llPath,
+      llvmIRSha256,
+      llvmValidationTool: irRes.llvmValidationTool,
+      objectPath: objPath,
+      objectSha256,
+      executablePath: exePath,
+      executableSha256: exeSha256,
+      executableSizeBytes: exeBytes.byteLength,
+      binaryMetadata: meta,
+      dependencyReport: depReport,
+      executedOnHost,
+      executionMode,
+      executionExitCode,
+      executionStdout,
+      executionStderr,
+      diagnostics,
     };
-  }
-
-  public static executeWithQemuUser(
-    executablePath: string,
-    args: string[] = [],
-    timeoutMs: number = 10000,
-    sysrootPath?: string
-  ): ExecutionVerificationResult | undefined {
-    const absPath = safePath.resolve(executablePath);
-    const qemuCandidates = ['qemu-aarch64-static', 'qemu-aarch64'];
-    let qemuCmd: string | undefined;
-    for (const candidate of qemuCandidates) {
-      try {
-        const check = safeCP.spawnSync(candidate, ['--version'], { encoding: 'utf-8', timeout: 3000 });
-        if (check.status === 0) {
-          qemuCmd = candidate;
-          break;
-        }
-      } catch {
-        // lanjut kandidat berikutnya
-      }
-    }
-    if (!qemuCmd) return undefined;
-
-    const qemuArgs: string[] = [];
-    const sysroot = sysrootPath || (safeFS.existsSync('/usr/aarch64-linux-gnu') ? '/usr/aarch64-linux-gnu' : undefined);
-    if (sysroot) {
-      qemuArgs.push('-L', sysroot);
-    }
-    qemuArgs.push(absPath, ...args);
-
-    const res = safeCP.spawnSync(qemuCmd, qemuArgs, {
-      encoding: 'utf-8',
-      timeout: timeoutMs,
-      shell: false,
-    });
-    const timedOut = Boolean(res.error && (res.error as any).code === 'ETIMEDOUT');
-    return {
-      executed: !res.error || timedOut,
-      success: res.status === 0 && !timedOut && !res.error,
-      exitCode: res.status,
-      stdout: res.stdout || '',
-      stderr: res.stderr || (res.error ? res.error.message : ''),
-      timedOut,
-      executionMode: 'qemu-user',
-      reason: res.error ? res.error.message : `Dieksekusi via ${qemuCmd}`,
-    };
-  }
-
-  public static executeBinary(
-    executablePath: string,
-    args: string[] = [],
-    timeoutMs: number = 10000
-  ): ExecutionVerificationResult {
-    const absPath = safePath.resolve(executablePath);
-    if (!safeFS.existsSync(absPath)) {
-      return {
-        executed: false,
-        success: false,
-        exitCode: null,
-        stdout: '',
-        stderr: '',
-        timedOut: false,
-        executionMode: 'not-executed',
-        reason: `Biner tidak ditemukan: ${absPath}`,
-      };
-    }
-
-    const res = safeCP.spawnSync(absPath, args, {
-      encoding: 'utf-8',
-      timeout: timeoutMs,
-      shell: false,
-    });
-
-    const timedOut = Boolean(res.error && (res.error as any).code === 'ETIMEDOUT');
-    return {
-      executed: !res.error || timedOut,
-      success: res.status === 0 && !timedOut && !res.error,
-      exitCode: res.status,
-      stdout: res.stdout || '',
-      stderr: res.stderr || (res.error ? res.error.message : ''),
-      timedOut,
-      executionMode: !res.error || timedOut ? 'native' : 'not-executed',
-      reason: res.error ? res.error.message : undefined,
-    };
-  }
-
-  public static executeWithRosetta(
-    executablePath: string,
-    args: string[] = [],
-    timeoutMs: number = 10000
-  ): ExecutionVerificationResult {
-    const absPath = safePath.resolve(executablePath);
-    const res = safeCP.spawnSync('arch', ['-x86_64', absPath, ...args], {
-      encoding: 'utf-8',
-      timeout: timeoutMs,
-      shell: false,
-    });
-    const timedOut = Boolean(res.error && (res.error as any).code === 'ETIMEDOUT');
-    const stderrStr = res.stderr || (res.error ? res.error.message : '');
-    const rosettaMissing =
-      Boolean(res.error) ||
-      /Bad CPU type|rosetta|oahd|cannot execute|EBADARCH/i.test(stderrStr);
-
-    if (rosettaMissing && res.status !== 0) {
-      return {
-        executed: false,
-        success: false,
-        exitCode: null,
-        stdout: '',
-        stderr: stderrStr,
-        timedOut,
-        executionMode: 'cross-compiled-not-executed',
-        reason: `Rosetta 2 (arch -x86_64) tidak tersedia untuk mengeksekusi macos-x86_64 di host Apple Silicon: ${stderrStr}`.trim(),
-      };
-    }
-
-    return {
-      executed: !res.error || timedOut,
-      success: res.status === 0 && !timedOut && !res.error,
-      exitCode: res.status,
-      stdout: res.stdout || '',
-      stderr: stderrStr,
-      timedOut,
-      executionMode: 'rosetta2',
-      reason: 'Dieksekusi melalui Rosetta 2 (arch -x86_64)',
-    };
-  }
-
-  private static queryToolVersion(toolCmd?: string): string {
-    if (!toolCmd || toolCmd === 'unknown') return 'N/A';
-    try {
-      const res = safeCP.spawnSync(toolCmd, ['--version'], {
-        encoding: 'utf-8',
-        timeout: 3000,
-        shell: false,
-      });
-      const out = (res.stdout || res.stderr || '').trim();
-      if (out) return out.split(/\r?\n/)[0].trim();
-    } catch {
-      // Abaikan
-    }
-    return 'N/A';
   }
 }

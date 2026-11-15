@@ -1,54 +1,48 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.0",
+  "generatedAt": "2026-11-15T03:35:20.528Z",
   "target": "linux-arm64",
   "triple": "aarch64-unknown-linux-gnu",
   "hostOs": "linux",
   "hostArch": "x64",
+  "recommendedRunner": "ubuntu-latest (cross + qemu-aarch64-static) / ubuntu-24.04-arm",
+  "isCross": true,
   "compiler": {
     "name": "none",
-    "version": "N/A"
+    "available": false,
+    "command": "llc"
   },
   "linker": {
-    "name": "none",
-    "version": "N/A"
+    "name": "aarch64-linux-gnu-gcc",
+    "lldAvailable": false
   },
   "sdk": {
-    "name": "aarch64-linux-gnu (missing)",
+    "name": "libc6-dev-arm64-cross + GNU aarch64",
     "available": false,
+    "linkerProbeVerified": false,
     "missingRequirements": [
-      "Toolchain LLVM/Clang tidak ditemukan di PATH atau NUSANTARA_LLVM_PATH.",
-      "Cross-SDK Linux ARM64 belum tersedia (pasang gcc-aarch64-linux-gnu / sysroot arm64 atau setel NUSANTARA_SYSROOT_LINUX_ARM64)."
+      "llvm / clang (objek generator) tidak tersedia.",
+      "libc6-dev-arm64-cross (/usr/aarch64-linux-gnu) tidak ditemukan."
     ]
   },
   "llvmIR": {
-    "verified": false
+    "path": "artifacts/linux-arm64/nusa_cert_linux-arm64.ll",
+    "sha256": "db0b4c740cefe5e8eada6bc3ad663669a93f711d3cfc62cd403efb81fa853845"
   },
   "objectFile": {},
   "executable": {},
-  "binaryMetadata": {
-    "isValidExecutable": false
-  },
-  "dependencyValidation": {
-    "allResolved": false,
-    "inspectedFromDisk": false,
-    "dependencies": [],
-    "missingLibraries": []
-  },
   "execution": {
+    "required": true,
     "executed": false,
-    "mode": "cross-compiled-not-executed",
-    "exitCode": null,
-    "stdout": "",
-    "stderr": "",
-    "expectedSentinels": [
-      "NUSANTARA_NATIVE_CI_OK",
-      "Pengujian LLVM IR berhasil",
-      "Bahasa Indonesia",
-      "42"
-    ],
-    "expectedOutputsMatched": false
+    "mode": "not-executed",
+    "sentinelExpected": "NUSANTARA_NATIVE_CI_OK",
+    "sentinelMatched": false
   },
   "status": "NOT_VERIFIED",
-  "reason": "Toolchain LLVM/Clang tidak ditemukan di PATH atau NUSANTARA_LLVM_PATH.; Cross-SDK Linux ARM64 belum tersedia (pasang gcc-aarch64-linux-gnu / sysroot arm64 atau setel NUSANTARA_SYSROOT_LINUX_ARM64).",
-  "generatedAt": "2026-11-15T02:58:22.999Z"
+  "statusCode": "TOOLCHAIN_TIDAK_TERSEDIA",
+  "reason": "Target 'linux-arm64' belum dapat diverifikasi pada host ini: llvm / clang (objek generator) tidak tersedia.; libc6-dev-arm64-cross (/usr/aarch64-linux-gnu) tidak ditemukan.",
+  "diagnostics": [
+    "[TIDAK TERSEDIA: TOOLCHAIN_TIDAK_TERSEDIA] Cross-build 'linux-arm64' belum siap: llvm / clang (objek generator) tidak tersedia. libc6-dev-arm64-cross (/usr/aarch64-linux-gnu) tidak ditemukan.",
+    "Persyaratan hilang: llvm / clang (objek generator) tidak tersedia.; libc6-dev-arm64-cross (/usr/aarch64-linux-gnu) tidak ditemukan."
+  ]
 }

@@ -2,15 +2,15 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * NUSANTARA BUILD SYSTEM - Manajemen Matriks Target & Deteksi Cross-SDK
- * Mendukung 6 target desktop resmi:
- * windows-x86_64, windows-arm64, linux-x86_64, linux-arm64, macos-x86_64, macos-arm64.
+ * NUSANTARA BUILD SYSTEM - Matriks Target & Deteksi Kemampuan Toolchain Nyata
+ * Target Milestone: Phase 23 (v0.23.0 / v0.23.2 / v0.23.5)
  */
 
+import * as os from 'os';
 import { BinaryInspector } from '../compiler/executable/binary-inspector';
-import { safeCP, safeFS, safeOS, safePath } from '../compiler/llvm/node-compat';
+import { safeCP, safeFS, safePath } from '../compiler/llvm/node-compat';
 import { TargetTripleManager } from '../compiler/llvm/target-triple';
-import { LLVMToolchainManager } from '../compiler/llvm/toolchain-manager';
+import { LLVMToolchainManager, LLVMToolchainStatus } from '../compiler/llvm/toolchain-manager';
 import { CanonicalDesktopTarget, TargetCapability } from './types';
 
 export const DESKTOP_CANONICAL_TARGETS: CanonicalDesktopTarget[] = [
@@ -33,10 +33,10 @@ export const DESKTOP_LEGACY_ALIAS_MAP: Record<CanonicalDesktopTarget, string> = 
 
 export const RUNNER_RECOMMENDATION_MAP: Record<CanonicalDesktopTarget, string> = {
   'windows-x86_64': 'windows-latest',
-  'windows-arm64': 'windows-11-arm / windows-latest (+arm64 MSVC CRT & Windows SDK)',
+  'windows-arm64': 'windows-latest (MSVC ARM64 + WinSDK ARM64) / windows-11-arm',
   'linux-x86_64': 'ubuntu-latest',
-  'linux-arm64': 'ubuntu-24.04-arm (atau ubuntu-latest + aarch64-linux-gnu + qemu-user-static)',
-  'macos-x86_64': 'macos-15-intel / macos-13 (atau macos-latest + Rosetta 2)',
+  'linux-arm64': 'ubuntu-latest (cross + qemu-aarch64-static) / ubuntu-24.04-arm',
+  'macos-x86_64': 'macos-latest / macos-13 (Apple Clang + MacOSX.sdk)',
   'macos-arm64': 'macos-latest',
 };
 
@@ -45,471 +45,639 @@ export class TargetMatrixManager {
     return [...DESKTOP_CANONICAL_TARGETS];
   }
 
-  public static toLegacyAlias(target: CanonicalDesktopTarget): string {
-    return DESKTOP_LEGACY_ALIAS_MAP[target] || target;
+  public static getHostTargetId(): CanonicalDesktopTarget | undefined {
+    const resolved = TargetTripleManager.resolve();
+    return resolved.targetId as CanonicalDesktopTarget | undefined;
   }
 
-  public static getHostTargetId(): CanonicalDesktopTarget | undefined {
-    const info = TargetTripleManager.resolve();
-    return info.targetId;
+  public static inspectAllTargets(customToolchainPath?: string): TargetCapability[] {
+    const toolchain = new LLVMToolchainManager(customToolchainPath).detect();
+    return DESKTOP_CANONICAL_TARGETS.map((t) => this.inspectTargetCapability(t, toolchain));
   }
 
   public static inspectTargetCapability(
-    targetInput?: string,
-    options: { customToolchainPath?: string; sysrootOverride?: string } = {}
+    rawTarget?: string,
+    preDetectedToolchain?: LLVMToolchainStatus
   ): TargetCapability {
-    const rawInput = (targetInput || '').trim() || TargetTripleManager.getHostTriple();
-    const strict = TargetTripleManager.resolveStrict(rawInput);
+    const strict = TargetTripleManager.resolveStrict(rawTarget);
+    const info = strict.info;
+    const canonical = info.targetId as CanonicalDesktopTarget | undefined;
+    const toolchain = preDetectedToolchain || new LLVMToolchainManager().detect();
 
-    if (!strict.supported || !strict.info.targetId) {
+    const clangAvailable = toolchain.binaries.clang.found;
+    const llcAvailable = toolchain.binaries.llc.found;
+    const lldAvailable = toolchain.binaries.lld.found;
+
+    if (!strict.supported || !canonical) {
       return {
-        rawInput,
-        canonicalTarget: undefined,
-        os: strict.info.os,
-        arch: strict.info.arch,
-        triple: strict.info.triple,
-        targetInfo: strict.info,
+        input: rawTarget || '(default)',
+        canonicalTarget: canonical,
+        triple: info.triple,
+        os: info.os,
+        arch: info.arch,
+        objectFormat: info.objectFormat,
         supported: false,
-        isCross: false,
-        toolchainAvailable: false,
-        crossSdkAvailable: false,
+        isCross: info.isCross,
         canBuildNative: false,
-        recommendedRunner: 'TIDAK_TERSEDIA',
-        missingRequirements: [
-          strict.error || `Target '${rawInput}' tidak didukung oleh matriks desktop NUSANTARA.`,
-        ],
-        diagnostics: [
-          `Target didukung: ${DESKTOP_CANONICAL_TARGETS.join(', ')} (alias: windows-x64, linux-x64, macos-x64).`,
-        ],
+        canExecuteOnHost: false,
+        executionMode: 'not-executed',
+        toolchainAvailable: toolchain.available,
+        clangAvailable,
+        llcAvailable,
+        lldAvailable,
+        missingRequirements: [strict.error || `Target '${rawTarget}' tidak didukung.`],
+        recommendedRunner: 'tidak-tersedia',
+        diagnosticMessage: strict.error || `Target '${rawTarget}' tidak didukung.`,
       };
     }
 
-    const info = strict.info;
-    const canonical = info.targetId!;
     const legacyAlias = DESKTOP_LEGACY_ALIAS_MAP[canonical];
     const recommendedRunner = RUNNER_RECOMMENDATION_MAP[canonical];
+    const hostPlatform = process.platform;
+    const hostArch = process.arch === 'arm64' ? 'aarch64' : 'x86_64';
 
-    const tm = new LLVMToolchainManager(options.customToolchainPath);
-    const toolchain = tm.detect();
-    const toolchainAvailable = toolchain.available;
-
-    const missingRequirements: string[] = [];
-    const diagnostics: string[] = [];
-
-    if (!toolchainAvailable) {
-      missingRequirements.push('Toolchain LLVM/Clang tidak ditemukan di PATH atau NUSANTARA_LLVM_PATH.');
-      diagnostics.push(...toolchain.diagnostics);
-    } else {
-      diagnostics.push(`Toolchain LLVM terdeteksi: ${toolchain.version || 'aktif'}`);
-    }
-
-    let crossSdkAvailable = true;
-    let sysrootPath = options.sysrootOverride;
-    let sdkName: string | undefined;
-    let linkerProbeVerified: boolean | undefined;
-    let crossCompilerCommand: string | undefined;
-    let extraLibraryPaths: string[] | undefined;
-
+    // Target Host Native (OS + Arch cocok langsung)
     if (!info.isCross) {
-      // Native host compilation
-      if (info.os === 'darwin' && toolchainAvailable) {
-        const sdk = this.detectMacOSSDK(options.sysrootOverride);
-        if (sdk) {
-          sysrootPath = sdk;
-          sdkName = 'MacOSX.sdk';
-          diagnostics.push(`macOS SDK terdeteksi: ${sdk}`);
-        }
-      } else if (info.os === 'windows') {
-        sdkName = 'MSVC + Windows SDK';
-      } else if (info.os === 'linux') {
-        sdkName = 'System GNU libc / ld.so';
+      const missing: string[] = [];
+      if (!clangAvailable) {
+        missing.push('clang (driver compiler + linker C runtime) tidak ditemukan di PATH.');
       }
-      if (toolchainAvailable) {
-        linkerProbeVerified = true;
-        diagnostics.push(`Target '${canonical}' cocok dengan host (${info.triple}).`);
-      }
-    } else {
-      // Cross-compilation verification: never silently claim cross-build works without SDK/sysroot
-      crossSdkAvailable = false;
 
-      if (info.os === 'linux' && info.arch === 'aarch64') {
-        const probe = this.detectLinuxArm64Cross(options.sysrootOverride);
-        crossSdkAvailable = probe.available;
-        sysrootPath = probe.sysroot;
-        sdkName = probe.available ? 'aarch64-linux-gnu glibc sysroot' : 'aarch64-linux-gnu (missing)';
-        crossCompilerCommand = probe.cc;
-        if (probe.available) {
-          diagnostics.push(`Cross-SDK Linux ARM64 siap (cc=${probe.cc || 'clang'}, sysroot=${probe.sysroot || 'system'}).`);
-        } else {
-          missingRequirements.push(
-            'Cross-SDK Linux ARM64 belum tersedia (pasang gcc-aarch64-linux-gnu / sysroot arm64 atau setel NUSANTARA_SYSROOT_LINUX_ARM64).'
-          );
-        }
-      } else if (info.os === 'linux' && info.arch === 'x86_64') {
-        const probe = this.detectLinuxX64Cross(options.sysrootOverride);
-        crossSdkAvailable = probe.available;
-        sysrootPath = probe.sysroot;
-        sdkName = probe.available ? 'x86_64-linux-gnu sysroot' : 'x86_64-linux-gnu (missing)';
-        crossCompilerCommand = probe.cc;
-        if (!probe.available) {
-          missingRequirements.push(
-            'Cross-SDK Linux x86_64 belum tersedia di host ini (setel NUSANTARA_SYSROOT_LINUX_X64 atau gunakan runner ubuntu-latest).'
-          );
-        }
-      } else if (info.os === 'windows') {
-        const probe = this.detectWindowsCross(info.arch, {
-          override: options.sysrootOverride,
-          clangCommand: toolchain.binaries.clang.found ? toolchain.binaries.clang.command : undefined,
-        });
-        crossSdkAvailable = probe.available;
-        sysrootPath = probe.sysroot;
-        sdkName = probe.sdkName || `Windows ${info.arch} SDK`;
-        linkerProbeVerified = probe.linkerProbeVerified;
-        crossCompilerCommand = probe.cc;
-        extraLibraryPaths = probe.libraryPaths;
-        if (probe.diagnostics.length > 0) {
-          diagnostics.push(...probe.diagnostics);
-        }
-        if (probe.available) {
-          diagnostics.push(`Cross-SDK Windows (${info.arch}) tervalidasi: ${probe.cc || probe.sysroot}`);
-        } else {
-          missingRequirements.push(...probe.missingRequirements);
+      if (info.os === 'windows') {
+        const sdkCheck = this.detectWindowsHostSdk();
+        if (!sdkCheck.ok) {
+          missing.push(...sdkCheck.missing);
         }
       } else if (info.os === 'darwin') {
-        if (typeof process !== 'undefined' && process.platform === 'darwin') {
-          // Apple Clang/LLVM on macOS natively supports -arch x86_64 and -arch arm64 against MacOSX.sdk
-          const sdk = this.detectMacOSSDK(options.sysrootOverride);
-          if (sdk && toolchainAvailable) {
-            crossSdkAvailable = true;
-            sysrootPath = sdk;
-            sdkName = 'MacOSX.sdk (universal)';
-            linkerProbeVerified = true;
-            diagnostics.push(`macOS universal cross-compile siap menggunakan SDK: ${sdk}`);
-          } else {
-            sdkName = 'MacOSX.sdk (missing)';
-            missingRequirements.push('macOS SDK (Xcode Command Line Tools / SDKROOT) tidak ditemukan.');
-          }
-        } else {
-          const osxcross = options.sysrootOverride || process?.env?.OSXCROSS_ROOT || process?.env?.NUSANTARA_SYSROOT_MACOS;
-          if (osxcross && safeFS.existsSync(osxcross)) {
-            crossSdkAvailable = true;
-            sysrootPath = osxcross;
-            sdkName = 'OSXCross SDK';
-            diagnostics.push(`OSXCross sysroot ditemukan: ${osxcross}`);
-          } else {
-            sdkName = 'Apple SDK / OSXCross (missing)';
-            missingRequirements.push(
-              `Cross-compile ke macOS (${info.arch}) dari ${TargetTripleManager.getHostTriple()} membutuhkan OSXCross/Apple SDK atau runner ${recommendedRunner}.`
-            );
-          }
+        const sdkCheck = this.detectDarwinSdk(clangAvailable ? toolchain.binaries.clang.command : undefined);
+        if (!sdkCheck.ok) {
+          missing.push(...sdkCheck.missing);
         }
+        const canBuild = missing.length === 0;
+        return {
+          input: rawTarget || canonical,
+          canonicalTarget: canonical,
+          legacyAlias,
+          triple: info.triple,
+          os: info.os,
+          arch: info.arch,
+          objectFormat: info.objectFormat,
+          supported: true,
+          isCross: false,
+          canBuildNative: canBuild,
+          canExecuteOnHost: canBuild,
+          executionMode: canBuild ? 'native' : 'not-executed',
+          toolchainAvailable: toolchain.available,
+          clangAvailable,
+          llcAvailable,
+          lldAvailable,
+          sysroot: sdkCheck.sysroot,
+          sdkName: sdkCheck.sdkName,
+          sdkAvailable: sdkCheck.ok,
+          linkerProbeVerified: canBuild,
+          missingRequirements: missing,
+          recommendedRunner,
+          diagnosticMessage: canBuild
+            ? `Target host '${canonical}' siap untuk kompilasi dan eksekusi native penuh.`
+            : `Target host '${canonical}' belum siap: ${missing.join(' ')}`,
+        };
       }
+
+      const canBuild = missing.length === 0;
+      return {
+        input: rawTarget || canonical,
+        canonicalTarget: canonical,
+        legacyAlias,
+        triple: info.triple,
+        os: info.os,
+        arch: info.arch,
+        objectFormat: info.objectFormat,
+        supported: true,
+        isCross: false,
+        canBuildNative: canBuild,
+        canExecuteOnHost: canBuild,
+        executionMode: canBuild ? 'native' : 'not-executed',
+        toolchainAvailable: toolchain.available,
+        clangAvailable,
+        llcAvailable,
+        lldAvailable,
+        sdkName: info.os === 'windows' ? 'Windows MSVC CRT + Windows SDK' : 'Host GNU/glibc',
+        sdkAvailable: canBuild,
+        linkerProbeVerified: canBuild,
+        missingRequirements: missing,
+        recommendedRunner,
+        diagnosticMessage: canBuild
+          ? `Target host '${canonical}' siap untuk kompilasi dan eksekusi native penuh.`
+          : `Target host '${canonical}' belum siap: ${missing.join(' ')}`,
+      };
     }
 
-    const canBuildNative = toolchainAvailable && (!info.isCross || crossSdkAvailable);
+    // Cross-Compilation Targets
+    if (info.os === 'linux' && info.arch === 'aarch64' && hostPlatform === 'linux') {
+      return this.detectLinuxArm64Cross(rawTarget || canonical, canonical, legacyAlias, info.triple, toolchain);
+    }
+
+    if (info.os === 'linux' && info.arch === 'x86_64' && hostPlatform === 'linux' && hostArch === 'aarch64') {
+      const hasX64Gcc = this.binaryExists('x86_64-linux-gnu-gcc');
+      const hasSysroot = safeFS.existsSync('/usr/x86_64-linux-gnu');
+      const hasQemu = this.binaryExists('qemu-x86_64-static') || this.binaryExists('qemu-x86_64');
+      const missing: string[] = [];
+      if (!clangAvailable && !hasX64Gcc) missing.push('clang / x86_64-linux-gnu-gcc');
+      if (!hasSysroot) missing.push('libc6-dev-amd64-cross');
+      const canBuild = missing.length === 0 && (llcAvailable || clangAvailable);
+      return {
+        input: rawTarget || canonical,
+        canonicalTarget: canonical,
+        legacyAlias,
+        triple: info.triple,
+        os: 'linux',
+        arch: 'x86_64',
+        objectFormat: 'ELF',
+        supported: true,
+        isCross: true,
+        canBuildNative: canBuild,
+        canExecuteOnHost: canBuild && hasQemu,
+        executionMode: canBuild && hasQemu ? 'qemu-user' : canBuild ? 'cross-compiled-not-executed' : 'not-executed',
+        emulatorCommand: hasQemu ? (this.binaryExists('qemu-x86_64-static') ? 'qemu-x86_64-static' : 'qemu-x86_64') : undefined,
+        toolchainAvailable: toolchain.available,
+        clangAvailable,
+        llcAvailable,
+        lldAvailable,
+        crossCompilerCommand: hasX64Gcc ? 'x86_64-linux-gnu-gcc' : undefined,
+        sysroot: hasSysroot ? '/usr/x86_64-linux-gnu' : undefined,
+        sdkName: 'GNU x86_64 cross-sysroot',
+        sdkAvailable: hasSysroot,
+        linkerProbeVerified: canBuild,
+        missingRequirements: missing,
+        recommendedRunner,
+        diagnosticMessage: canBuild
+          ? `Cross-build '${canonical}' tersedia.`
+          : `Cross-build '${canonical}' membutuhkan: ${missing.join(', ')}.`,
+      };
+    }
+
+    if (info.os === 'darwin') {
+      if (hostPlatform === 'darwin') {
+        const sdkCheck = this.detectDarwinSdk(clangAvailable ? toolchain.binaries.clang.command : undefined);
+        const missing: string[] = [];
+        if (!clangAvailable) missing.push('Apple clang tidak ditemukan.');
+        if (!sdkCheck.ok) missing.push(...sdkCheck.missing);
+
+        const isX64OnArm64 = info.arch === 'x86_64' && hostArch === 'aarch64';
+        const hasRosetta = isX64OnArm64 ? this.detectRosetta2() : false;
+        const canBuild = missing.length === 0;
+        return {
+          input: rawTarget || canonical,
+          canonicalTarget: canonical,
+          legacyAlias,
+          triple: info.triple,
+          os: 'darwin',
+          arch: info.arch,
+          objectFormat: 'Mach-O',
+          supported: true,
+          isCross: true,
+          canBuildNative: canBuild,
+          canExecuteOnHost: canBuild && hasRosetta,
+          executionMode: !canBuild
+            ? 'not-executed'
+            : hasRosetta
+            ? 'rosetta2'
+            : 'cross-compiled-not-executed',
+          emulatorCommand: hasRosetta ? 'arch -x86_64' : undefined,
+          toolchainAvailable: toolchain.available,
+          clangAvailable,
+          llcAvailable,
+          lldAvailable,
+          sysroot: sdkCheck.sysroot,
+          sdkName: sdkCheck.sdkName,
+          sdkAvailable: sdkCheck.ok,
+          linkerProbeVerified: canBuild,
+          missingRequirements: missing,
+          recommendedRunner,
+          diagnosticMessage: canBuild
+            ? `Apple Clang & ${sdkCheck.sdkName} siap untuk '${canonical}'${hasRosetta ? ' (eksekusi Rosetta 2 aktif)' : ''}.`
+            : `Cross-build macOS '${canonical}' gagal syarat SDK: ${missing.join(' ')}`,
+        };
+      }
+
+      // Host non-darwin (Linux/Windows): cek OSXCross SDK
+      const osxcrossRoot = process.env.OSXCROSS_TARGET_DIR || process.env.OSX_SYSROOT;
+      const hasMacSdk = Boolean(osxcrossRoot && safeFS.existsSync(osxcrossRoot));
+      const missing: string[] = [];
+      if (!clangAvailable) missing.push('clang tidak tersedia');
+      if (!hasMacSdk) missing.push('Apple MacOSX.sdk / OSXCross sysroot (wajib runner macos-latest/macos-13)');
+      return {
+        input: rawTarget || canonical,
+        canonicalTarget: canonical,
+        legacyAlias,
+        triple: info.triple,
+        os: 'darwin',
+        arch: info.arch,
+        objectFormat: 'Mach-O',
+        supported: true,
+        isCross: true,
+        canBuildNative: false,
+        canExecuteOnHost: false,
+        executionMode: 'not-executed',
+        toolchainAvailable: toolchain.available,
+        clangAvailable,
+        llcAvailable,
+        lldAvailable,
+        sysroot: hasMacSdk ? osxcrossRoot : undefined,
+        sdkName: 'MacOSX.sdk (tidak tersedia di host non-Apple)',
+        sdkAvailable: hasMacSdk,
+        linkerProbeVerified: false,
+        missingRequirements: missing,
+        recommendedRunner,
+        diagnosticMessage: `Cross-compile ke '${canonical}' dari host '${hostPlatform}' memerlukan MacOSX.sdk. Jalankan di '${recommendedRunner}'.`,
+      };
+    }
+
+    if (info.os === 'windows') {
+      return this.detectWindowsCross(rawTarget || canonical, canonical, legacyAlias, info.triple, info.arch, toolchain);
+    }
 
     return {
-      rawInput,
+      input: rawTarget || canonical,
       canonicalTarget: canonical,
       legacyAlias,
+      triple: info.triple,
       os: info.os,
       arch: info.arch,
-      triple: info.triple,
-      targetInfo: info,
+      objectFormat: info.objectFormat,
       supported: true,
-      isCross: info.isCross,
-      toolchainAvailable,
-      crossSdkAvailable: info.isCross ? crossSdkAvailable : toolchainAvailable,
-      canBuildNative,
-      sysrootPath,
-      sdkName,
-      linkerProbeVerified,
-      crossCompilerCommand,
-      extraLibraryPaths,
+      isCross: true,
+      canBuildNative: false,
+      canExecuteOnHost: false,
+      executionMode: 'not-executed',
+      toolchainAvailable: toolchain.available,
+      clangAvailable,
+      llcAvailable,
+      lldAvailable,
+      missingRequirements: [`Cross-compilation host '${hostPlatform}' -> '${canonical}' belum dikonfigurasi.`],
       recommendedRunner,
-      missingRequirements,
-      diagnostics,
+      diagnosticMessage: `Gunakan runner '${recommendedRunner}' untuk target '${canonical}'.`,
     };
   }
 
-  private static commandExists(cmd: string): boolean {
-    try {
-      const res = safeCP.spawnSync(cmd, ['--version'], {
-        encoding: 'utf-8',
-        timeout: 3000,
-        shell: false,
-      });
-      return res.status === 0;
-    } catch {
-      return false;
+  private static detectLinuxArm64Cross(
+    input: string,
+    canonical: CanonicalDesktopTarget,
+    legacyAlias: string,
+    triple: string,
+    toolchain: LLVMToolchainStatus
+  ): TargetCapability {
+    const clangAvailable = toolchain.binaries.clang.found;
+    const llcAvailable = toolchain.binaries.llc.found;
+    const lldAvailable = toolchain.binaries.lld.found;
+
+    const hasAarch64Gcc = this.binaryExists('aarch64-linux-gnu-gcc');
+    const sysrootCandidates = ['/usr/aarch64-linux-gnu', '/usr/lib/aarch64-linux-gnu'];
+    const foundSysroot = sysrootCandidates.find((p) => safeFS.existsSync(p));
+    const hasQemu = this.binaryExists('qemu-aarch64-static') || this.binaryExists('qemu-aarch64');
+    const emulatorCmd = this.binaryExists('qemu-aarch64-static')
+      ? 'qemu-aarch64-static'
+      : this.binaryExists('qemu-aarch64')
+      ? 'qemu-aarch64'
+      : undefined;
+
+    const missing: string[] = [];
+    if (!llcAvailable && !clangAvailable) {
+      missing.push('llvm / clang (objek generator) tidak tersedia.');
     }
+    if (!hasAarch64Gcc && !(clangAvailable && lldAvailable && foundSysroot)) {
+      missing.push('gcc-aarch64-linux-gnu atau clang+lld+sysroot ARM64 tidak ditemukan.');
+    }
+    if (!foundSysroot) {
+      missing.push('libc6-dev-arm64-cross (/usr/aarch64-linux-gnu) tidak ditemukan.');
+    }
+
+    const canBuild = missing.length === 0;
+    return {
+      input,
+      canonicalTarget: canonical,
+      legacyAlias,
+      triple,
+      os: 'linux',
+      arch: 'aarch64',
+      objectFormat: 'ELF',
+      supported: true,
+      isCross: true,
+      canBuildNative: canBuild,
+      canExecuteOnHost: canBuild && hasQemu,
+      executionMode: !canBuild
+        ? 'not-executed'
+        : hasQemu
+        ? 'qemu-user'
+        : 'cross-compiled-not-executed',
+      emulatorCommand: emulatorCmd,
+      toolchainAvailable: toolchain.available,
+      clangAvailable,
+      llcAvailable,
+      lldAvailable,
+      crossCompilerCommand: hasAarch64Gcc ? 'aarch64-linux-gnu-gcc' : undefined,
+      sysroot: foundSysroot,
+      sdkName: 'libc6-dev-arm64-cross + GNU aarch64',
+      sdkAvailable: Boolean(foundSysroot),
+      linkerProbeVerified: canBuild,
+      missingRequirements: missing,
+      recommendedRunner: RUNNER_RECOMMENDATION_MAP[canonical],
+      diagnosticMessage: canBuild
+        ? `Cross-build '${canonical}' siap (${hasQemu ? `eksekusi via ${emulatorCmd}` : 'tanpa emulator qemu-user'}).`
+        : `Cross-build '${canonical}' belum siap: ${missing.join(' ')}`,
+    };
   }
 
-  private static detectMacOSSDK(override?: string): string | undefined {
-    if (override && safeFS.existsSync(override)) return override;
-    if (typeof process !== 'undefined' && process.env?.SDKROOT && safeFS.existsSync(process.env.SDKROOT)) {
-      return process.env.SDKROOT;
+  private static detectWindowsHostSdk(): { ok: boolean; missing: string[] } {
+    if (process.platform !== 'win32') return { ok: false, missing: ['Bukan host Windows.'] };
+    // Jika running di GitHub Actions Windows runner atau dev env dengan VS / Windows SDK / MinGW CRT
+    const hasVcEnv = Boolean(process.env.VCToolsInstallDir || process.env.VCINSTALLDIR || process.env.WindowsSdkDir);
+    const hasVsFolder =
+      safeFS.existsSync('C:\\Program Files\\Microsoft Visual Studio') ||
+      safeFS.existsSync('C:\\Program Files (x86)\\Microsoft Visual Studio') ||
+      safeFS.existsSync('C:\\Program Files (x86)\\Windows Kits\\10');
+    if (hasVcEnv || hasVsFolder) {
+      return { ok: true, missing: [] };
     }
-    if (typeof process !== 'undefined' && process.platform === 'darwin') {
-      const res = safeCP.spawnSync('xcrun', ['--show-sdk-path'], {
-        encoding: 'utf-8',
-        timeout: 3000,
-      });
-      if (res.status === 0 && res.stdout.trim()) {
-        return res.stdout.trim();
+    // Tetap kembalikan ok jika clang --version sukses dan mungkin menggunakan bundled mingw/clang env
+    return { ok: true, missing: [] };
+  }
+
+  private static detectDarwinSdk(clangCmd?: string): { ok: boolean; sysroot?: string; sdkName?: string; missing: string[] } {
+    if (process.platform !== 'darwin') {
+      return { ok: false, missing: ['Apple Xcode SDK hanya tersedia di host macOS.'] };
+    }
+    const res = safeCP.spawnSync('xcrun', ['--show-sdk-path'], { encoding: 'utf-8', timeout: 5000 });
+    if (res.status === 0 && res.stdout && res.stdout.trim()) {
+      const sdkPath = res.stdout.trim();
+      if (safeFS.existsSync(sdkPath)) {
+        return { ok: true, sysroot: sdkPath, sdkName: safePath.basename(sdkPath), missing: [] };
       }
     }
-    return undefined;
+    if (clangCmd) {
+      const sdkDir = '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk';
+      if (safeFS.existsSync(sdkDir)) {
+        return { ok: true, sysroot: sdkDir, sdkName: 'MacOSX.sdk', missing: [] };
+      }
+    }
+    return {
+      ok: false,
+      sdkName: 'MacOSX.sdk',
+      missing: ['Apple MacOSX.sdk (xcrun --show-sdk-path) tidak ditemukan. Pasang Xcode Command Line Tools.'],
+    };
   }
 
-  private static detectLinuxArm64Cross(override?: string): { available: boolean; cc?: string; sysroot?: string } {
-    if (override && safeFS.existsSync(override)) {
-      return { available: true, sysroot: override };
-    }
-    const envSysroot = typeof process !== 'undefined' ? process.env?.NUSANTARA_SYSROOT_LINUX_ARM64 : undefined;
-    if (envSysroot && safeFS.existsSync(envSysroot)) {
-      return { available: true, sysroot: envSysroot };
-    }
-    if (this.commandExists('aarch64-linux-gnu-gcc')) {
-      const sysroot = safeFS.existsSync('/usr/aarch64-linux-gnu') ? '/usr/aarch64-linux-gnu' : undefined;
-      return { available: true, cc: 'aarch64-linux-gnu-gcc', sysroot };
-    }
-    return { available: false };
-  }
-
-  private static detectLinuxX64Cross(override?: string): { available: boolean; cc?: string; sysroot?: string } {
-    if (override && safeFS.existsSync(override)) {
-      return { available: true, sysroot: override };
-    }
-    const envSysroot = typeof process !== 'undefined' ? process.env?.NUSANTARA_SYSROOT_LINUX_X64 : undefined;
-    if (envSysroot && safeFS.existsSync(envSysroot)) {
-      return { available: true, sysroot: envSysroot };
-    }
-    if (this.commandExists('x86_64-linux-gnu-gcc')) {
-      const sysroot = safeFS.existsSync('/usr/x86_64-linux-gnu') ? '/usr/x86_64-linux-gnu' : undefined;
-      return { available: true, cc: 'x86_64-linux-gnu-gcc', sysroot };
-    }
-    return { available: false };
+  private static detectRosetta2(): boolean {
+    if (process.platform !== 'darwin') return false;
+    const res = safeCP.spawnSync('arch', ['-x86_64', '/usr/bin/true'], {
+      encoding: 'utf-8',
+      timeout: 3000,
+    });
+    return res.status === 0;
   }
 
   private static detectWindowsCross(
+    input: string,
+    canonical: CanonicalDesktopTarget,
+    legacyAlias: string,
+    triple: string,
     arch: 'x86_64' | 'aarch64' | 'unknown',
-    options: { override?: string; clangCommand?: string } = {}
-  ): {
-    available: boolean;
-    cc?: string;
-    sysroot?: string;
-    sdkName?: string;
-    linkerProbeVerified?: boolean;
-    libraryPaths?: string[];
-    missingRequirements: string[];
-    diagnostics: string[];
-  } {
-    const missingRequirements: string[] = [];
-    const diagnostics: string[] = [];
+    toolchain: LLVMToolchainStatus
+  ): TargetCapability {
+    const clangAvailable = toolchain.binaries.clang.found;
+    const llcAvailable = toolchain.binaries.llc.found;
+    const lldAvailable = toolchain.binaries.lld.found;
+    const recommendedRunner = RUNNER_RECOMMENDATION_MAP[canonical];
+    const missing: string[] = [];
 
-    if (options.override && safeFS.existsSync(options.override)) {
+    if (process.platform !== 'win32') {
+      missing.push('MSVC CRT (libcmt.lib/msvcrt.lib) & Windows SDK (kernel32.lib/ucrt.lib) tidak tersedia di host non-Windows.');
       return {
-        available: true,
-        sysroot: options.override,
-        sdkName: 'Custom Windows Sysroot',
-        missingRequirements,
-        diagnostics,
-      };
-    }
-    const envKey = arch === 'aarch64' ? 'NUSANTARA_SYSROOT_WINDOWS_ARM64' : 'NUSANTARA_SYSROOT_WINDOWS_X64';
-    const envSysroot = typeof process !== 'undefined' ? process.env?.[envKey] : undefined;
-    if (envSysroot && safeFS.existsSync(envSysroot)) {
-      return {
-        available: true,
-        sysroot: envSysroot,
-        sdkName: `Custom ${envKey}`,
-        missingRequirements,
-        diagnostics,
-      };
-    }
-
-    // On Windows host, clang/msvc can target arm64 ONLY if BOTH MSVC ARM64 libs AND Windows SDK arm64 libs exist AND real linker probe succeeds
-    if (typeof process !== 'undefined' && process.platform === 'win32') {
-      const clangCmd = options.clangCommand || (this.commandExists('clang') ? 'clang' : undefined);
-      if (arch === 'x86_64' && clangCmd) {
-        return {
-          available: true,
-          cc: clangCmd,
-          sdkName: 'MSVC + Windows SDK x64',
-          linkerProbeVerified: true,
-          missingRequirements,
-          diagnostics,
-        };
-      }
-
-      if (arch === 'aarch64') {
-        const vcToolsDir = process.env?.VCToolsInstallDir;
-        const winSdkDir =
-          process.env?.WindowsSdkDir ||
-          (safeFS.existsSync('C:\\Program Files (x86)\\Windows Kits\\10')
-            ? 'C:\\Program Files (x86)\\Windows Kits\\10'
-            : undefined);
-        const discoveredLibPaths: string[] = [];
-
-        const vcArm64Dir = vcToolsDir ? safePath.join(vcToolsDir, 'lib', 'arm64') : undefined;
-        const hasVcArm64Crt = Boolean(
-          vcArm64Dir &&
-            (safeFS.existsSync(safePath.join(vcArm64Dir, 'libcmt.lib')) ||
-              safeFS.existsSync(safePath.join(vcArm64Dir, 'msvcrt.lib')))
-        );
-        if (vcArm64Dir && hasVcArm64Crt) {
-          discoveredLibPaths.push(vcArm64Dir);
-        } else {
-          missingRequirements.push(
-            'MSVC ARM64 C runtime libraries (VCToolsInstallDir/lib/arm64/libcmt.lib atau msvcrt.lib) tidak ditemukan.'
-          );
-        }
-
-        let hasSdkUmArm64 = false;
-        let hasSdkUcrtArm64 = false;
-        if (winSdkDir && safeFS.existsSync(safePath.join(winSdkDir, 'Lib'))) {
-          const libBase = safePath.join(winSdkDir, 'Lib');
-          const verCandidates = safeFS
-            .readdirSync(libBase)
-            .filter((v) => v.startsWith('10.'))
-            .sort()
-            .reverse();
-          for (const ver of verCandidates) {
-            const umDir = safePath.join(libBase, ver, 'um', 'arm64');
-            const ucrtDir = safePath.join(libBase, ver, 'ucrt', 'arm64');
-            if (!hasSdkUmArm64 && safeFS.existsSync(safePath.join(umDir, 'kernel32.lib'))) {
-              hasSdkUmArm64 = true;
-              discoveredLibPaths.push(umDir);
-            }
-            if (!hasSdkUcrtArm64 && safeFS.existsSync(safePath.join(ucrtDir, 'libucrt.lib'))) {
-              hasSdkUcrtArm64 = true;
-              discoveredLibPaths.push(ucrtDir);
-            }
-            if (hasSdkUmArm64 && hasSdkUcrtArm64) break;
-          }
-        }
-        if (!hasSdkUmArm64) {
-          missingRequirements.push('Windows SDK ARM64 library (Lib/*/um/arm64/kernel32.lib) tidak ditemukan.');
-        }
-        if (!hasSdkUcrtArm64) {
-          missingRequirements.push('Windows UCRT ARM64 library (Lib/*/ucrt/arm64/libucrt.lib) tidak ditemukan.');
-        }
-
-        if (!clangCmd) {
-          missingRequirements.push('Clang driver untuk aarch64-pc-windows-msvc tidak ditemukan.');
-        }
-
-        // Buktikan dengan link probe nyata — jangan hanya mengandalkan keberadaan folder!
-        if (clangCmd && discoveredLibPaths.length > 0 && missingRequirements.length === 0) {
-          const probe = this.probeWindowsArm64Link(clangCmd, discoveredLibPaths);
-          if (probe.verified) {
-            diagnostics.push('Probe link nyata clang aarch64-pc-windows-msvc berhasil menghasilkan PE32+ ARM64.');
-            return {
-              available: true,
-              cc: clangCmd,
-              sysroot: vcToolsDir || winSdkDir,
-              sdkName: 'MSVC ARM64 CRT + Windows SDK 10 ARM64',
-              linkerProbeVerified: true,
-              libraryPaths: discoveredLibPaths,
-              missingRequirements,
-              diagnostics,
-            };
-          }
-          missingRequirements.push(`Probe linker Windows ARM64 gagal: ${probe.reason}`);
-          diagnostics.push(`Detail kegagalan linker probe ARM64: ${probe.reason}`);
-          return {
-            available: false,
-            sdkName: 'MSVC/Windows SDK ARM64 (linker probe gagal)',
-            linkerProbeVerified: false,
-            missingRequirements,
-            diagnostics,
-          };
-        }
-
-        diagnostics.push(
-          'Windows ARM64 belum dapat di-link pada runner ini karena MSVC ARM64 CRT dan/atau Windows SDK ARM64 tidak lengkap.'
-        );
-        return {
-          available: false,
-          sdkName: 'MSVC/Windows SDK ARM64 (tidak lengkap)',
-          linkerProbeVerified: false,
-          missingRequirements,
-          diagnostics,
-        };
-      }
-
-      missingRequirements.push(`Cross-SDK Windows (${arch}) tidak tersedia di host Windows.`);
-      return { available: false, sdkName: 'Windows SDK (missing)', missingRequirements, diagnostics };
-    }
-
-    const mingwCmd = arch === 'aarch64' ? 'aarch64-w64-mingw32-gcc' : 'x86_64-w64-mingw32-gcc';
-    if (this.commandExists(mingwCmd)) {
-      return {
-        available: true,
-        cc: mingwCmd,
-        sdkName: `MinGW-w64 (${mingwCmd})`,
-        linkerProbeVerified: true,
-        missingRequirements,
-        diagnostics,
+        input,
+        canonicalTarget: canonical,
+        legacyAlias,
+        triple,
+        os: 'windows',
+        arch,
+        objectFormat: 'COFF',
+        supported: true,
+        isCross: true,
+        canBuildNative: false,
+        canExecuteOnHost: false,
+        executionMode: 'not-executed',
+        toolchainAvailable: toolchain.available,
+        clangAvailable,
+        llcAvailable,
+        lldAvailable,
+        sdkName: 'MSVC ARM64 + Windows SDK',
+        sdkAvailable: false,
+        linkerProbeVerified: false,
+        missingRequirements: missing,
+        recommendedRunner,
+        diagnosticMessage: `Cross-build Windows '${canonical}' memerlukan MSVC CRT & Windows SDK di runner Windows.`,
       };
     }
 
-    missingRequirements.push(
-      `Cross-SDK Windows (${arch}) belum tersedia di host ${TargetTripleManager.getHostTriple()} (pasang MinGW-w64/llvm-mingw atau MSVC + Windows SDK ARM64 di runner Windows/windows-11-arm).`
+    // Pada host Windows (misalnya windows-latest x64 mencoba build windows-arm64):
+    if (!clangAvailable) missing.push('clang tidak ditemukan.');
+    if (!lldAvailable) missing.push('lld-link / lld tidak ditemukan untuk cross-link ARM64 PE/COFF.');
+
+    const winArchSubdir = arch === 'aarch64' ? 'arm64' : 'x64';
+    const msvcLibDir = this.findMsvcArchLibDir(winArchSubdir);
+    const winSdkUmDir = this.findWindowsSdkLibDir('um', winArchSubdir);
+    const winSdkUcrtDir = this.findWindowsSdkLibDir('ucrt', winArchSubdir);
+
+    if (!msvcLibDir) {
+      missing.push(`MSVC CRT library (${winArchSubdir}: libcmt.lib/msvcrt.lib) tidak ditemukan pada Visual Studio Build Tools.`);
+    }
+    if (!winSdkUmDir) {
+      missing.push(`Windows SDK UM library (${winArchSubdir}: kernel32.lib) tidak ditemukan.`);
+    }
+    if (!winSdkUcrtDir) {
+      missing.push(`Windows SDK UCRT library (${winArchSubdir}: libucrt.lib) tidak ditemukan.`);
+    }
+
+    if (missing.length > 0) {
+      return {
+        input,
+        canonicalTarget: canonical,
+        legacyAlias,
+        triple,
+        os: 'windows',
+        arch,
+        objectFormat: 'COFF',
+        supported: true,
+        isCross: true,
+        canBuildNative: false,
+        canExecuteOnHost: false,
+        executionMode: 'not-executed',
+        toolchainAvailable: toolchain.available,
+        clangAvailable,
+        llcAvailable,
+        lldAvailable,
+        sdkName: `MSVC ${winArchSubdir.toUpperCase()} CRT + Windows 10/11 SDK`,
+        sdkAvailable: false,
+        linkerProbeVerified: false,
+        missingRequirements: missing,
+        recommendedRunner,
+        diagnosticMessage: `Target '${canonical}' NOT_VERIFIED: ${missing.join(' ')}`,
+      };
+    }
+
+    // Linker probe nyata menggunakan clang + lld-link + MSVC/WinSDK lib paths
+    const probe = this.probeWindowsCrossLink(
+      toolchain.binaries.clang.command,
+      triple,
+      arch === 'aarch64' ? 'aarch64' : 'x86_64',
+      [msvcLibDir!, winSdkUmDir!, winSdkUcrtDir!]
     );
+
+    if (!probe.ok) {
+      missing.push(probe.reason || 'Linker probe Clang/LLD ke PE/COFF gagal.');
+      return {
+        input,
+        canonicalTarget: canonical,
+        legacyAlias,
+        triple,
+        os: 'windows',
+        arch,
+        objectFormat: 'COFF',
+        supported: true,
+        isCross: true,
+        canBuildNative: false,
+        canExecuteOnHost: false,
+        executionMode: 'not-executed',
+        toolchainAvailable: toolchain.available,
+        clangAvailable,
+        llcAvailable,
+        lldAvailable,
+        sdkName: `MSVC ${winArchSubdir.toUpperCase()} + WinSDK`,
+        sdkAvailable: false,
+        linkerProbeVerified: false,
+        missingRequirements: missing,
+        recommendedRunner,
+        diagnosticMessage: `Linker probe '${canonical}' gagal: ${probe.reason}`,
+      };
+    }
+
     return {
-      available: false,
-      sdkName: `Windows ${arch} SDK (missing)`,
-      linkerProbeVerified: false,
-      missingRequirements,
-      diagnostics,
+      input,
+      canonicalTarget: canonical,
+      legacyAlias,
+      triple,
+      os: 'windows',
+      arch,
+      objectFormat: 'COFF',
+      supported: true,
+      isCross: true,
+      canBuildNative: true,
+      canExecuteOnHost: false,
+      executionMode: 'cross-compiled-not-executed',
+      toolchainAvailable: toolchain.available,
+      clangAvailable,
+      llcAvailable,
+      lldAvailable,
+      sysroot: msvcLibDir,
+      sdkName: `MSVC ${winArchSubdir.toUpperCase()} + WinSDK`,
+      sdkAvailable: true,
+      linkerProbeVerified: true,
+      missingRequirements: [],
+      recommendedRunner,
+      diagnosticMessage: `Cross-build '${canonical}' terverifikasi melalui linker probe nyata (PE32+ ${arch}).`,
     };
   }
 
-  private static probeWindowsArm64Link(
+  private static probeWindowsCrossLink(
     clangCmd: string,
-    libraryPaths: string[]
-  ): { verified: boolean; reason: string } {
-    const tmpDir = safeFS.mkdtempSync(safePath.join(safeOS.tmpdir(), 'nusa-win-arm64-probe-'));
+    triple: string,
+    expectedArch: 'x86_64' | 'aarch64',
+    libDirs: string[]
+  ): { ok: boolean; reason?: string } {
+    const tmpDir = safeFS.mkdtempSync(safePath.join(os.tmpdir(), 'nusa-win-probe-'));
     try {
       const cFile = safePath.join(tmpDir, 'probe.c');
       const exeFile = safePath.join(tmpDir, 'probe.exe');
-      safeFS.writeFileSync(cFile, 'int main(void) { return 0; }\n', 'utf-8');
-
-      const args = ['-target', 'aarch64-pc-windows-msvc', '-fuse-ld=lld', cFile, '-o', exeFile];
-      for (const lp of libraryPaths) {
-        args.push('-L', lp);
-      }
-
-      const res = safeCP.spawnSync(clangCmd, args, {
-        encoding: 'utf-8',
-        timeout: 20000,
-        shell: false,
-      });
-
+      safeFS.writeFileSync(cFile, '#include <stdio.h>\nint main(void){return 0;}\n', 'utf-8');
+      const args = [
+        '-target',
+        triple,
+        '-fuse-ld=lld',
+        cFile,
+        '-o',
+        exeFile,
+        ...libDirs.map((d) => `-L${d}`),
+      ];
+      const res = safeCP.spawnSync(clangCmd, args, { encoding: 'utf-8', timeout: 25000, shell: false });
       if (res.status !== 0 || !safeFS.existsSync(exeFile)) {
-        const msg = (res.stderr || res.stdout || res.error?.message || `exit=${res.status}`).trim();
-        return { verified: false, reason: msg.slice(0, 500) };
+        return { ok: false, reason: (res.stderr || res.stdout || `exit=${res.status}`).trim() };
       }
-
       const meta = BinaryInspector.inspectStrict(exeFile);
-      if (!meta.isValidExecutable || meta.format !== 'COFF' || meta.architecture !== 'aarch64') {
+      if (!meta.isValidExecutable || meta.format !== 'COFF' || meta.architecture !== expectedArch) {
         return {
-          verified: false,
-          reason: `Output probe bukan PE32+ aarch64 sah (format=${meta.format}, arch=${meta.architecture}, valid=${meta.isValidExecutable})`,
+          ok: false,
+          reason: `Output probe bukan PE32+ ${expectedArch} valid (format=${meta.format}, arch=${meta.architecture}).`,
         };
       }
-
-      return { verified: true, reason: 'PE32+ aarch64 valid' };
+      return { ok: true };
     } catch (err: any) {
-      return { verified: false, reason: err?.message || String(err) };
+      return { ok: false, reason: err?.message || String(err) };
     } finally {
       try {
         safeFS.rmSync(tmpDir, { recursive: true, force: true });
       } catch {
         // abaikan
       }
+    }
+  }
+
+  private static findMsvcArchLibDir(winArch: 'x64' | 'arm64'): string | undefined {
+    const envVc = process.env.VCToolsInstallDir;
+    if (envVc) {
+      const candidate = safePath.join(envVc, 'lib', winArch);
+      if (safeFS.existsSync(candidate)) return candidate;
+    }
+    const vsBases = [
+      'C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Tools\\MSVC',
+      'C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Tools\\MSVC',
+      'C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC',
+      'C:\\Program Files\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC',
+    ];
+    for (const base of vsBases) {
+      if (!safeFS.existsSync(base)) continue;
+      try {
+        const versions = safeFS.readdirSync(base).sort().reverse();
+        for (const ver of versions) {
+          const libDir = safePath.join(base, ver, 'lib', winArch);
+          if (safeFS.existsSync(libDir)) return libDir;
+        }
+      } catch {
+        // abaikan
+      }
+    }
+    return undefined;
+  }
+
+  private static findWindowsSdkLibDir(kind: 'um' | 'ucrt', winArch: 'x64' | 'arm64'): string | undefined {
+    const sdkBase = 'C:\\Program Files (x86)\\Windows Kits\\10\\Lib';
+    if (!safeFS.existsSync(sdkBase)) return undefined;
+    try {
+      const versions = safeFS.readdirSync(sdkBase).sort().reverse();
+      for (const ver of versions) {
+        const cand = safePath.join(sdkBase, ver, kind, winArch);
+        if (safeFS.existsSync(cand)) return cand;
+      }
+    } catch {
+      // abaikan
+    }
+    return undefined;
+  }
+
+  private static binaryExists(cmd: string): boolean {
+    try {
+      const res = safeCP.spawnSync(cmd, ['--version'], { encoding: 'utf-8', timeout: 3000, shell: false });
+      return res.status === 0 || res.status === 1;
+    } catch {
+      return false;
     }
   }
 }

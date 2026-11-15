@@ -26,8 +26,8 @@ import {
   StandalonePackager,
 } from '../../src/compiler/executable';
 import { NusantaraCLI } from '../../src/paket/cli';
-import { LLVMToolchainManager } from '../../src/compiler/llvm';
-import { safeFS, safePath, safeOS } from '../../src/compiler/llvm/node-compat';
+import { LLVMToolchainManager, TargetTripleManager } from '../../src/compiler/llvm';
+import { safeCP, safeFS, safePath, safeOS } from '../../src/compiler/llvm/node-compat';
 
 function pastikan(kondisi: boolean, pesan: string): void {
   if (!kondisi) {
@@ -465,24 +465,157 @@ uji('9.2 Perintah "nusantara package" menghasilkan paket standalone', () => {
 // -----------------------------------------------------------------------------
 console.log('\n[KELOMPOK 10] Verifikasi Eksekusi Linker Native');
 
-uji('10.1 Pengujian tautan biner native nyata via Clang/LLD', () => {
+uji('10.1 Pengujian kompilasi objek nyata + tautan biner native + inspeksi + eksekusi (Clang/LLD)', () => {
   const toolchain = new LLVMToolchainManager().detect();
-  if (!toolchain.binaries.clang.found && !toolchain.binaries.lld.found) {
+  const clangAvail = toolchain.binaries.clang.found;
+  const lldAvail = toolchain.binaries.lld.found;
+
+  if (!clangAvail) {
+    console.log(
+      `    [INFO] Clang driver tidak terpasang di host (lld=${lldAvail ? toolchain.binaries.lld.command : 'tidak ada'}); melewati uji linking nyata.`
+    );
     return 'SKIPPED';
   }
 
-  // Jika toolchain clang atau lld terpasang di host
-  const linkerMgr = new LinkerManager();
+  const targetInfo = TargetTripleManager.resolve();
+  const linkerMgr = new LinkerManager({ targetTriple: targetInfo.triple });
   const tmpDir = safeFS.mkdtempSync(safePath.join(safeOS.tmpdir(), 'nusantara-link-test-'));
-  const outExe = safePath.join(tmpDir, 'test_program');
+  const cPath = safePath.join(tmpDir, 'link_test_main.c');
+  const objPath = safePath.join(tmpDir, `link_test_obj${targetInfo.objectExtension}`);
+  const outExe = safePath.join(tmpDir, `test_program${targetInfo.executableExtension}`);
 
   try {
-    const res = linkerMgr.link({
-      objectFiles: [],
+    // 1. Tulis sumber C minimal yang memanggil runtime Nusantara
+    const cSrc = [
+      '#include <stdint.h>',
+      'extern void nusantara_cetak_teks(const char* str);',
+      'int32_t utama(void) {',
+      '  nusantara_cetak_teks("NUSANTARA_PHASE45_LINKER_OK");',
+      '  return 0;',
+      '}',
+      '',
+    ].join('\n');
+    safeFS.writeFileSync(cPath, cSrc, 'utf-8');
+
+    // 2. Kompilasi menjadi berkas objek nyata (.o / .obj)
+    const objArgs = [
+      '-target',
+      targetInfo.triple,
+      ...(targetInfo.os !== 'windows' ? ['-fPIC'] : []),
+      '-c',
+      cPath,
+      '-o',
+      objPath,
+    ];
+    const objCompile = safeCP.spawnSync(toolchain.binaries.clang.command, objArgs, {
+      encoding: 'utf-8',
+      timeout: 30000,
+      shell: false,
+    });
+    if (objCompile.status !== 0 || !safeFS.existsSync(objPath)) {
+      throw new Error(
+        `Kompilasi berkas objek gagal (target=${targetInfo.triple}, cmd='${toolchain.binaries.clang.command} ${objArgs.join(' ')}', exit=${objCompile.status}): ${objCompile.stderr || objCompile.stdout}`
+      );
+    }
+
+    const objBytes = Buffer.from(safeFS.readFileBufferSync(objPath));
+    pastikan(objBytes.length > 0, 'Berkas objek hasil kompilasi harus berukuran > 0 byte');
+    if (targetInfo.objectFormat === 'ELF') {
+      pastikan(
+        objBytes[0] === 0x7f && objBytes[1] === 0x45 && objBytes[2] === 0x4c && objBytes[3] === 0x46,
+        'Header berkas objek Linux harus ELF magic'
+      );
+    } else if (targetInfo.objectFormat === 'Mach-O') {
+      pastikan(
+        objBytes.length >= 4 &&
+          ((objBytes[0] === 0xcf && objBytes[1] === 0xfa && objBytes[2] === 0xed && objBytes[3] === 0xfe) ||
+            (objBytes[0] === 0xfe && objBytes[1] === 0xed && objBytes[2] === 0xfa && objBytes[3] === 0xcf)),
+        'Header berkas objek macOS harus Mach-O 64-bit magic'
+      );
+    } else if (targetInfo.objectFormat === 'COFF') {
+      const coffMachine = objBytes.readUInt16LE(0);
+      pastikan(
+        coffMachine === 0x8664 || coffMachine === 0xaa64 || coffMachine === 0x0000,
+        `Header berkas objek Windows COFF harus valid (machine=0x${coffMachine.toString(16)})`
+      );
+    }
+
+    // 3. Tautkan berkas objek menggunakan LinkerManager (dynamic linking standar Linux/macOS/Windows)
+    const linkRes = linkerMgr.link({
+      objectFiles: [objPath],
       outputExecutable: outExe,
+      isStatic: false,
+      targetTriple: targetInfo.triple,
+    });
+    if (!linkRes.success) {
+      throw new Error(
+        `Linker native gagal (target=${linkRes.targetTriple || targetInfo.triple}, exit=${linkRes.exitCode}, cmd='${linkRes.commandExecuted || '-'}', stdout='${linkRes.stdout || ''}', stderr='${linkRes.stderr || ''}'): ${linkRes.diagnostics.join(' | ')}`
+      );
+    }
+
+    pastikan(safeFS.existsSync(outExe), `Executable keluaran tidak ditemukan: ${outExe}`);
+
+    // 4. Validasi ketat biner hasil tautan via BinaryInspector
+    const meta = BinaryInspector.inspectStrict(outExe);
+    pastikan(
+      Boolean(meta.isValidExecutable),
+      `Executable hasil link gagal inspeksi ketat: ${(meta.validationErrors || []).join('; ')}`
+    );
+    samaDengan(meta.format, targetInfo.objectFormat, 'Format executable harus cocok dengan host');
+    samaDengan(meta.architecture, targetInfo.arch, 'Arsitektur executable harus cocok dengan host');
+    samaDengan(meta.binaryType, 'EXECUTABLE', 'Tipe biner harus EXECUTABLE');
+
+    // 5. Eksekusi executable nyata dan verifikasi sentinel stdout + exit code 0
+    if (process.platform !== 'win32') {
+      safeFS.chmodSync(outExe, 0o755);
+    }
+    const execRes = safeCP.spawnSync(outExe, [], {
+      encoding: 'utf-8',
+      timeout: 15000,
+      shell: false,
+    });
+    samaDengan(
+      execRes.status,
+      0,
+      `Eksekusi executable harus keluar 0 (stderr=${execRes.stderr || ''})`
+    );
+    pastikan(
+      (execRes.stdout || '').includes('NUSANTARA_PHASE45_LINKER_OK'),
+      `Stdout executable tidak memuat sentinel NUSANTARA_PHASE45_LINKER_OK (aktual='${execRes.stdout || ''}')`
+    );
+  } finally {
+    safeFS.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+uji('10.2 Linker menolak objectFiles kosong dan static linking pada Darwin dengan diagnostik jelas', () => {
+  const linkerEmpty = new LinkerManager();
+  const resEmpty = linkerEmpty.link({
+    objectFiles: [],
+    outputExecutable: '/tmp/tidak_akan_dibuat',
+    isStatic: false,
+  });
+  pastikan(!resEmpty.success, 'Linker wajib menolak daftar objectFiles kosong');
+  pastikan(
+    resEmpty.diagnostics.some((d) => d.includes('OBJ_INPUT_KOSONG')),
+    'Diagnostik harus mencantumkan kode OBJ_INPUT_KOSONG'
+  );
+
+  const tmpDir = safeFS.mkdtempSync(safePath.join(safeOS.tmpdir(), 'nusantara-link-darwin-'));
+  try {
+    const fakeObj = safePath.join(tmpDir, 'stub.o');
+    safeFS.writeFileSync(fakeObj, Buffer.from([0xcf, 0xfa, 0xed, 0xfe, 0x07, 0x00, 0x00, 0x01]));
+    const darwinLinker = new LinkerManager({ targetTriple: 'arm64-apple-darwin' });
+    const resDarwinStatic = darwinLinker.link({
+      objectFiles: [fakeObj],
+      outputExecutable: safePath.join(tmpDir, 'out_darwin'),
       isStatic: true,
     });
-    pastikan(res.success, 'Linker native harus berhasil jika toolchain terpasang');
+    pastikan(!resDarwinStatic.success, 'Static linking pada Darwin wajib ditolak');
+    pastikan(
+      resDarwinStatic.diagnostics.some((d) => d.includes('STATIC_TIDAK_DIDUKUNG_DARWIN')),
+      'Diagnostik harus mencantumkan STATIC_TIDAK_DIDUKUNG_DARWIN'
+    );
   } finally {
     safeFS.rmSync(tmpDir, { recursive: true, force: true });
   }

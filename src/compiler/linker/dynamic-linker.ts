@@ -37,6 +37,38 @@ export class DynamicLinker {
   public linkDynamic(options: DynamicLinkingOptions): LinkingExecutionResult {
     const diagReport: string[] = [];
 
+    if (!options.objectFiles || options.objectFiles.length === 0) {
+      this.diag.galat(
+        'OBJ_INPUT_KOSONG',
+        'Dynamic linking memerlukan minimal satu berkas objek (.o / .obj); daftar objectFiles kosong.'
+      );
+      return {
+        success: false,
+        targetTriple: this.targetInfo.triple,
+        diagnostics: this.diag.dapatkanPesanFormatted(),
+      };
+    }
+
+    for (const objPath of options.objectFiles) {
+      if (!safeFS.existsSync(objPath)) {
+        this.diag.galat('OBJ_TIDAK_DITEMUKAN', `Berkas objek tidak ditemukan di disk: ${objPath}`);
+        return {
+          success: false,
+          targetTriple: this.targetInfo.triple,
+          diagnostics: this.diag.dapatkanPesanFormatted(),
+        };
+      }
+      const stat = safeFS.statSync(objPath);
+      if (!stat || stat.size <= 0) {
+        this.diag.galat('OBJ_KOSONG', `Berkas objek berukuran 0 byte: ${objPath}`);
+        return {
+          success: false,
+          targetTriple: this.targetInfo.triple,
+          diagnostics: this.diag.dapatkanPesanFormatted(),
+        };
+      }
+    }
+
     const useCrossGcc = Boolean(
       options.crossCompilerCommand &&
         options.crossCompilerCommand !== 'clang' &&
@@ -47,17 +79,19 @@ export class DynamicLinker {
       ? options.crossCompilerCommand
       : this.toolchain.binaries.clang.found
       ? this.toolchain.binaries.clang.command
-      : this.toolchain.binaries.lld.found
-      ? this.toolchain.binaries.lld.command
       : undefined;
 
     if (!linkerBinary) {
+      const lldNote = this.toolchain.binaries.lld.found
+        ? ` (LLD terdeteksi: ${this.toolchain.binaries.lld.command}, namun driver Clang/C tetap diperlukan untuk menautkan runtime C dan libc sistem)`
+        : '';
       this.diag.galat(
         'TOOLCHAIN_LINKER_HILANG',
-        'Tidak ditemukan linker native (clang atau lld) untuk menjalankan dynamic linking.'
+        `Tidak ditemukan driver compiler/linker (clang atau cross-gcc) untuk menjalankan dynamic linking${lldNote}.`
       );
       return {
         success: false,
+        targetTriple: this.targetInfo.triple,
         diagnostics: this.diag.dapatkanPesanFormatted(),
       };
     }
@@ -66,6 +100,11 @@ export class DynamicLinker {
     const runtimeCPath = safePath.join(tmpDir, 'runtime.c');
 
     try {
+      const outParent = safePath.dirname(safePath.resolve(options.outputExecutable));
+      if (!safeFS.existsSync(outParent)) {
+        safeFS.mkdirSync(outParent, { recursive: true });
+      }
+
       safeFS.writeFileSync(runtimeCPath, NativeRuntimeManager.generateRuntimeCSource(), 'utf-8');
 
       const args: string[] = [];
@@ -85,7 +124,6 @@ export class DynamicLinker {
         }
       }
 
-      // Jika bukan library bersama (.so), sertakan runtime C stub
       if (!options.isSharedLibraryOutput) {
         args.push(runtimeCPath);
       } else {
@@ -102,20 +140,17 @@ export class DynamicLinker {
         args.push('-s');
       }
 
-      // Search paths
       if (options.libraryPaths) {
         for (const lp of options.libraryPaths) {
           args.push(`-L${lp}`);
         }
       }
 
-      // RPATH untuk resolusi runtime dynamic libraries
       if (options.rpaths && options.rpaths.length > 0) {
         for (const rp of options.rpaths) {
           args.push(`-Wl,-rpath,${rp}`);
         }
       } else {
-        // Default rpath ke lokasi direktori biner executable ($ORIGIN pada Linux atau @executable_path pada macOS)
         if (this.targetInfo.os === 'linux') {
           args.push('-Wl,-rpath,$ORIGIN');
           args.push('-Wl,-rpath,$ORIGIN/lib');
@@ -125,7 +160,6 @@ export class DynamicLinker {
         }
       }
 
-      // Shared libraries
       if (options.sharedLibraries) {
         for (const lib of options.sharedLibraries) {
           if (lib.endsWith('.so') || lib.endsWith('.dylib') || lib.endsWith('.dll')) {
@@ -136,27 +170,44 @@ export class DynamicLinker {
         }
       }
 
+      const cmdStr = `${linkerBinary} ${args.join(' ')}`;
+
       const res = safeCP.spawnSync(linkerBinary, args, {
         encoding: 'utf-8',
         timeout: 45000,
         shell: false,
       });
 
+      const stdoutText = (res.stdout || '').trim();
+      const stderrText = (res.stderr || '').trim();
+
       if (res.status === 0 && safeFS.existsSync(options.outputExecutable)) {
-        diagReport.push(`Dynamic linking berhasil: ${options.outputExecutable}`);
+        diagReport.push(`Dynamic linking berhasil (${this.targetInfo.triple}): ${options.outputExecutable}`);
         return {
           success: true,
           executablePath: options.outputExecutable,
-          commandExecuted: `${linkerBinary} ${args.join(' ')}`,
+          commandExecuted: cmdStr,
           toolUsed: linkerBinary,
+          targetTriple: this.targetInfo.triple,
+          exitCode: res.status,
+          stdout: stdoutText,
+          stderr: stderrText,
           diagnostics: diagReport,
         };
       } else {
-        const errMsg = (res.stderr || res.stdout || '').trim();
-        this.diag.galat('DYNAMIC_LINK_GAGAL', `Dynamic linking gagal: ${errMsg}`);
+        const errMsg = stderrText || stdoutText || `exit code=${res.status}`;
+        this.diag.galat(
+          'DYNAMIC_LINK_GAGAL',
+          `Dynamic linking gagal untuk target '${this.targetInfo.triple}' (exit=${res.status}): ${errMsg}`
+        );
         return {
           success: false,
-          commandExecuted: `${linkerBinary} ${args.join(' ')}`,
+          commandExecuted: cmdStr,
+          toolUsed: linkerBinary,
+          targetTriple: this.targetInfo.triple,
+          exitCode: res.status,
+          stdout: stdoutText,
+          stderr: stderrText,
           diagnostics: this.diag.dapatkanPesanFormatted(),
         };
       }

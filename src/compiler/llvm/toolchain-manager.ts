@@ -54,6 +54,8 @@ export class LLVMToolchainManager {
           if (linkFallback.found) return linkFallback;
           const ldFallback = this.checkBinary('ld.lld');
           if (ldFallback.found) return ldFallback;
+          const ld64Fallback = this.checkBinary('ld64.lld');
+          if (ld64Fallback.found) return ld64Fallback;
           return lldPrimary;
         })();
 
@@ -138,8 +140,9 @@ export class LLVMToolchainManager {
           shell: false,
         });
 
-        if (res.status === 0 && res.stdout) {
-          const firstLine = res.stdout.split('\n')[0].trim();
+        const versionOut = (res.stdout || res.stderr || '').trim();
+        if (res.status === 0 && versionOut) {
+          const firstLine = versionOut.split(/\r?\n/)[0].trim();
           return {
             name: tool,
             command: p,

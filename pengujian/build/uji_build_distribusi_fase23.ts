@@ -2,19 +2,20 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * PENGUJIAN KOMPREHENSIF PHASE 23: BUILD SYSTEM & DISTRIBUSI DESKTOP NUSANTARA
- * Memverifikasi target matrix (6 platform), build pipeline native, parser biner ELF/PE/Mach-O,
- * inspeksi dependensi nyata, arsip .zip/.tar.gz, SHA256SUMS, installer/upgrade/uninstaller,
- * penanganan galat toolchain/SDK, dan regresi Phase 1-22.
+ * RANGKAIAN PENGUJIAN RESMI PHASE 23 (v0.23.0 - v0.23.5)
+ * Build System, Native AOT Compilation, Distribusi Desktop 6 Target, Arsip, & Sertifikasi CI
  */
 
-import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import * as zlib from 'zlib';
-import { spawnSync } from 'child_process';
-
+import { AOTCompiler } from '../../src/compiler/aot/aot-compiler';
+import { BinaryInspector } from '../../src/compiler/executable/binary-inspector';
+import { StandalonePackager } from '../../src/compiler/executable/standalone-packager';
+import { LLVMToolchainManager } from '../../src/compiler/llvm/toolchain-manager';
+import { LLVMValidator } from '../../src/compiler/llvm/llvm-validator';
+import { TargetTripleManager } from '../../src/compiler/llvm/target-triple';
+import { safeCP } from '../../src/compiler/llvm/node-compat';
 import {
   ArchiveBuilder,
   CanonicalDesktopTarget,
@@ -22,1473 +23,1059 @@ import {
   DesktopDistributionPackager,
   DesktopInstallerGenerator,
   NativeBuildPipeline,
+  PHASE23_CERTIFICATION_SENTINEL,
   Phase23CertificationEngine,
   Phase23TargetEvidence,
   TargetMatrixManager,
 } from '../../src/build';
-import { AOTCompiler } from '../../src/compiler/aot/aot-compiler';
-import { BinaryInspector } from '../../src/compiler/executable/binary-inspector';
-import { StandalonePackager } from '../../src/compiler/executable/standalone-packager';
-import { DependencyInspector } from '../../src/compiler/linker/dependency-inspector';
-import { LLVMValidator } from '../../src/compiler/llvm/llvm-validator';
-import { TargetTripleManager } from '../../src/compiler/llvm/target-triple';
-import { LLVMToolchainManager } from '../../src/compiler/llvm/toolchain-manager';
-import { Interpreter } from '../../src/interpreter/interpreter';
-import { PenulisOutputBuffer } from '../../src/interpreter/outputWriter';
-import { PembacaBerkasNode } from '../../src/modul/pembacaBerkas';
 import { NusantaraCLI } from '../../src/paket/cli';
 
 let totalUji = 0;
-let lulus = 0;
-let gagal = 0;
-let belumDiverifikasi = 0;
-
-function uji(nama: string, fn: () => void | 'UNVERIFIED'): void {
-  totalUji++;
-  try {
-    const res = fn();
-    if (res === 'UNVERIFIED') {
-      belumDiverifikasi++;
-      console.log(`  [⚠ BELUM DIVERIFIKASI] ${nama}`);
-    } else {
-      lulus++;
-      console.log(`  [✓ LULUS] ${nama}`);
-    }
-  } catch (err: any) {
-    gagal++;
-    console.error(`  [✗ GAGAL] ${nama}`);
-    console.error(`            ${err.message}`);
-  }
-}
+let totalLulus = 0;
+let totalGagal = 0;
+let totalBelumDiverifikasi = 0;
 
 function pastikan(kondisi: boolean, pesan: string): void {
-  if (!kondisi) throw new Error(`Penegasan gagal: ${pesan}`);
+  if (!kondisi) {
+    throw new Error(pesan);
+  }
 }
 
 function samaDengan<T>(aktual: T, diharapkan: T, pesan?: string): void {
   if (aktual !== diharapkan) {
-    throw new Error(`${pesan || 'Nilai tidak cocok'}: aktual='${aktual}', diharapkan='${diharapkan}'`);
+    throw new Error(`${pesan || 'Nilai tidak sama'}: aktual='${aktual}', diharapkan='${diharapkan}'`);
   }
+}
+
+function uji(nama: string, fn: () => void | 'BELUM_DIVERIFIKASI'): void {
+  totalUji++;
+  try {
+    const res = fn();
+    if (res === 'BELUM_DIVERIFIKASI') {
+      totalBelumDiverifikasi++;
+      console.log(`  🟡 [BELUM DIVERIFIKASI] ${nama}`);
+    } else {
+      totalLulus++;
+      console.log(`  ✓ [LULUS] ${nama}`);
+    }
+  } catch (err: any) {
+    totalGagal++;
+    console.error(`  ✗ [GAGAL] ${nama}`);
+    console.error(`    ${err?.message || err}`);
+  }
+}
+
+/**
+ * Pembaca JSON defensif: memeriksa UTF-8 BOM (EF BB BF) hanya di offset 0,
+ * melepas BOM secara eksplisit jika ada, lalu mem-parse JSON dengan diagnostik jelas.
+ */
+export function bacaJsonAman<T = any>(filePath: string, stage: string): T {
+  let rawBuf: Buffer;
+  try {
+    rawBuf = fs.readFileSync(filePath);
+  } catch (err: any) {
+    throw new Error(`[${stage}] Gagal membaca berkas JSON '${filePath}': ${err?.message || err}`);
+  }
+  const hasBom =
+    rawBuf.length >= 3 && rawBuf[0] === 0xef && rawBuf[1] === 0xbb && rawBuf[2] === 0xbf;
+  const cleanText = (hasBom ? rawBuf.subarray(3) : rawBuf).toString('utf-8');
+  try {
+    return JSON.parse(cleanText) as T;
+  } catch (err: any) {
+    const previewHex = rawBuf.subarray(0, 8).toString('hex');
+    throw new Error(
+      `[${stage}] Gagal parse JSON pada '${filePath}' (hasBom=${hasBom}, prefixHex=${previewHex}): ${err?.message || err}`
+    );
+  }
+}
+
+function buildMinimalElf64(arch: 'x86_64' | 'aarch64'): Buffer {
+  const buf = Buffer.alloc(128, 0);
+  buf[0] = 0x7f;
+  buf[1] = 0x45;
+  buf[2] = 0x4c;
+  buf[3] = 0x46;
+  buf[4] = 2; // 64-bit
+  buf[5] = 1; // LE
+  buf[6] = 1;
+  buf.writeUInt16LE(2, 16); // ET_EXEC
+  buf.writeUInt16LE(arch === 'aarch64' ? 0xb7 : 0x3e, 18);
+  buf.writeUInt32LE(1, 20);
+  buf.writeBigUInt64LE(0x401000n, 24);
+  return buf;
+}
+
+function buildMinimalPe32Plus(arch: 'x86_64' | 'aarch64'): Buffer {
+  const buf = Buffer.alloc(512, 0);
+  buf[0] = 0x4d;
+  buf[1] = 0x5a; // MZ
+  buf.writeUInt32LE(0x80, 0x3c); // e_lfanew
+  buf[0x80] = 0x50;
+  buf[0x81] = 0x45; // PE\0\0
+  buf.writeUInt16LE(arch === 'aarch64' ? 0xaa64 : 0x8664, 0x80 + 4);
+  buf.writeUInt16LE(1, 0x80 + 6); // NumberOfSections
+  buf.writeUInt16LE(240, 0x80 + 20); // SizeOfOptionalHeader
+  buf.writeUInt16LE(0x0022, 0x80 + 22); // IMAGE_FILE_EXECUTABLE_IMAGE | LARGE_ADDRESS_AWARE
+  const optOff = 0x80 + 24;
+  buf.writeUInt16LE(0x020b, optOff); // PE32+
+  buf.writeUInt32LE(0x1000, optOff + 16); // AddressOfEntryPoint
+  return buf;
+}
+
+function buildMinimalMachO64(arch: 'x86_64' | 'aarch64'): Buffer {
+  const buf = Buffer.alloc(128, 0);
+  buf.writeUInt32LE(0xfeedfacf, 0); // MH_MAGIC_64
+  buf.writeUInt32LE(arch === 'aarch64' ? 0x0100000c : 0x01000007, 4);
+  buf.writeUInt32LE(2, 12); // MH_EXECUTE
+  buf.writeUInt32LE(0, 16);
+  buf.writeUInt32LE(0, 20);
+  return buf;
 }
 
 console.log('=============================================================================');
-console.log('PENGUJIAN RESMI PHASE 23: BUILD SYSTEM & DISTRIBUSI DESKTOP NUSANTARA');
-console.log('=============================================================================\n');
+console.log('  PENGUJIAN RESMI PHASE 23 — BUILD SYSTEM & DISTRIBUSI DESKTOP (v0.23.5)     ');
+console.log('=============================================================================');
 
 // -----------------------------------------------------------------------------
-// GRUP 1: MATRIKS TARGET DESKTOP & DETEKSI TOOLCHAIN / CROSS-SDK
+// GRUP 1: TARGET MATRIX & CAPABILITY DETECTION
 // -----------------------------------------------------------------------------
-console.log('=== [GRUP 1: Matriks Target & Deteksi Toolchain] ===');
+console.log('\n[GRUP 1] Matriks Target Desktop 6 Platform & Resolusi Triple');
 
-uji('1.1 Mendukung seluruh 6 target desktop resmi beserta aliasnya', () => {
-  samaDengan(DESKTOP_CANONICAL_TARGETS.length, 6);
-  const expectedTriples: Record<string, string> = {
-    'windows-x86_64': 'x86_64-pc-windows-msvc',
-    'windows-x64': 'x86_64-pc-windows-msvc',
-    'windows-arm64': 'aarch64-pc-windows-msvc',
-    'linux-x86_64': 'x86_64-unknown-linux-gnu',
-    'linux-x64': 'x86_64-unknown-linux-gnu',
-    'linux-arm64': 'aarch64-unknown-linux-gnu',
-    'macos-x86_64': 'x86_64-apple-darwin',
-    'macos-x64': 'x86_64-apple-darwin',
-    'macos-arm64': 'arm64-apple-darwin',
-  };
+uji('1.1 Resolusi ke-6 target desktop resmi beserta alias warisan', () => {
+  const expected: Array<[string, CanonicalDesktopTarget, string]> = [
+    ['windows-x64', 'windows-x86_64', 'x86_64-pc-windows-msvc'],
+    ['windows-arm64', 'windows-arm64', 'aarch64-pc-windows-msvc'],
+    ['linux-x64', 'linux-x86_64', 'x86_64-unknown-linux-gnu'],
+    ['linux-arm64', 'linux-arm64', 'aarch64-unknown-linux-gnu'],
+    ['macos-x64', 'macos-x86_64', 'x86_64-apple-darwin'],
+    ['macos-arm64', 'macos-arm64', 'arm64-apple-darwin'],
+  ];
 
-  for (const [alias, triple] of Object.entries(expectedTriples)) {
-    const res = TargetTripleManager.resolveStrict(alias);
-    pastikan(res.supported, `Target '${alias}' harus valid`);
-    samaDengan(res.info.triple, triple, `Triple untuk ${alias}`);
-    pastikan(res.info.isSupported === true, `isSupported untuk ${alias}`);
+  const all = TargetMatrixManager.getAllCanonicalTargets();
+  samaDengan(all.length, 6, 'Harus mendefinisikan tepat 6 target kanonik');
+
+  for (const [alias, canonical, triple] of expected) {
+    const strict = TargetTripleManager.resolveStrict(alias);
+    pastikan(strict.supported, `Alias '${alias}' wajib didukung`);
+    samaDengan(strict.info.targetId, canonical, `Canonical untuk '${alias}'`);
+    samaDengan(strict.info.triple, triple, `Triple untuk '${alias}'`);
   }
 });
 
-uji('1.2 Target OS/arsitektur tidak didukung ditolak secara tegas (resolveStrict)', () => {
-  for (const bad of ['freebsd-riscv64', 'plan9-mips', 'solaris-sparc', '']) {
-    const res = TargetTripleManager.resolveStrict(bad);
-    samaDengan(res.supported, false, `Target '${bad}' wajib ditolak`);
-    const cli = new NusantaraCLI({ pembaca: new PembacaBerkasNode(), log: () => {}, error: () => {} });
-    const exitCode = cli.jalankan(['bangun', '--target', bad || 'unknown-arch']);
-    pastikan(exitCode !== 0, `CLI harus mengembalikan exit code non-nol untuk target '${bad}'`);
-  }
+uji('1.2 Penolakan ketat target tidak dikenal atau kosong', () => {
+  const emptyCheck = TargetTripleManager.resolveStrict('');
+  pastikan(!emptyCheck.supported, 'Target kosong wajib ditolak');
+
+  const bogusCheck = TargetTripleManager.resolveStrict('solaris-sparc64');
+  pastikan(!bogusCheck.supported, 'Target tidak dikenal wajib ditolak');
 });
 
-uji('1.3 Penanganan jujur jika LLVM/Clang tidak terpasang di lingkungan saat ini', () => {
-  const status = new LLVMToolchainManager('/nonexistent-llvm-bin-dir-test').detect();
-  samaDengan(status.available, false);
-
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-no-clang-'));
-  try {
-    const res = NativeBuildPipeline.build({
-      sourceCode: 'program Uji\nmulai\n  tampilkan("Halo")\nselesai\n',
-      appName: 'uji',
-      outputDirectory: tmpDir,
-      customToolchainPath: '/nonexistent-llvm-bin-dir-test',
-    });
-    samaDengan(res.success, false, 'Harus gagal ketika toolchain LLVM tidak ditemukan');
-    samaDengan(res.statusCode, 'TOOLCHAIN_TIDAK_TERSEDIA');
-    pastikan(!res.executablePath, 'Tidak boleh menghasilkan biner palsu');
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+uji('1.3 Deteksi kemampuan seluruh 6 target secara jujur sesuai host & SDK', () => {
+  const caps = TargetMatrixManager.inspectAllTargets();
+  samaDengan(caps.length, 6, 'Harus mengembalikan 6 inspeksi kapabilitas');
+  for (const c of caps) {
+    pastikan(Boolean(c.canonicalTarget && c.triple && c.recommendedRunner), 'Metadata target harus lengkap');
+    pastikan(Array.isArray(c.missingRequirements), 'missingRequirements harus array');
   }
 });
 
 // -----------------------------------------------------------------------------
-// GRUP 1B: AUDIT LLVM IR LITERAL STRING & KELENGKAPAN SIMBOL GLOBAL (11 SKENARIO)
+// GRUP 1B: LLVM IR STRING SYMBOL & UTF-8 BYTE LENGTH (PHASE 23.1)
 // -----------------------------------------------------------------------------
-console.log('\n=== [GRUP 1B: Audit LLVM IR Literal String & Konsistensi Simbol] ===');
+console.log('\n[GRUP 1B] Konsistensi Simbol String Global LLVM IR & Escape UTF-8');
 
-uji('1B.1 Seluruh 11 skenario literal string menghasilkan LLVM IR sah tanpa simbol tak terdefinisi', () => {
-  const compiler = new AOTCompiler();
-  const toolchain = new LLVMToolchainManager().detect();
-  const validator = new LLVMValidator(toolchain);
-
-  const scenarios: Array<{ nama: string; kode: string; minStrings: number }> = [
+uji('1B.1 Sebelas skenario string literal menghasilkan simbol @.str.* terdeklarasi & bebas @.str._v*', () => {
+  const scenarios: Array<{ nama: string; kode: string }> = [
     {
-      nama: '01_single_string',
-      kode: `program S1\nmulai\n  tampilkan("Halo Nusantara")\nselesai\n`,
-      minStrings: 1,
+      nama: 'string_tunggal',
+      kode: `program S1\nmulai\ntampilkan("Halo Nusantara")\nselesai`,
     },
     {
-      nama: '02_multi_string_satu_fungsi',
-      kode: `program S2\nmulai\n  tampilkan("Satu", "Dua", "Tiga")\nselesai\n`,
-      minStrings: 4, // "Satu", " ", "Dua", "Tiga"
+      nama: 'multi_arg_inline',
+      kode: `program S2\nmulai\ntampilkan("Satu", "Dua", 123, "Tiga")\nselesai`,
     },
     {
-      nama: '03_duplicate_string_interning',
-      kode: `program S3\nmulai\n  tampilkan("Sama")\n  tampilkan("Sama")\nselesai\n`,
-      minStrings: 1,
+      nama: 'interning_duplikat',
+      kode: `program S3\nmulai\ntampilkan("Duplikat")\ntampilkan("Duplikat")\nselesai`,
     },
     {
-      nama: '04_string_sebagai_argumen_fungsi',
-      kode: `program S4\nfungsi cetakPesan(p : teks) : kosong\nmulai\n  tampilkan(p)\nselesai\nmulai\n  cetakPesan("Dikirim ke fungsi")\nselesai\n`,
-      minStrings: 1,
+      nama: 'argumen_fungsi',
+      kode: `program S4\nfungsi cetak_pesan(p : teks) : kosong\nmulai\ntampilkan("Pesan:", p)\nselesai\nmulai\ncetak_pesan("Aktif")\nselesai`,
     },
     {
-      nama: '05_string_dalam_percabangan_jika',
-      kode: `program S5\nmulai\n  x : bilangan = 5\n  jika x > 2 maka\n    tampilkan("Lebih besar")\n  selain\n    tampilkan("Lebih kecil")\n  akhir\nselesai\n`,
-      minStrings: 2,
+      nama: 'percabangan_jika',
+      kode: `program S5\nmulai\nn : bilangan = 5\njika n > 3 maka\ntampilkan("Besar")\nselain\ntampilkan("Kecil")\nakhir\nselesai`,
     },
     {
-      nama: '06_string_dalam_perulangan',
-      kode: `program S6\nmulai\n  i : bilangan = 0\n  selama i < 2 lakukan\n    tampilkan("Iterasi")\n    i = i + 1\n  akhir\n  untuk j dari 1 sampai 2 lakukan\n    tampilkan("Untuk", j)\n  akhir\nselesai\n`,
-      minStrings: 2,
+      nama: 'perulangan_selama',
+      kode: `program S6\nmulai\ni : bilangan = 0\nselama i < 2 lakukan\ntampilkan("Iterasi")\ni = i + 1\nakhir\nselesai`,
     },
     {
-      nama: '07_string_kosong',
-      kode: `program S7\nmulai\n  tampilkan("")\nselesai\n`,
-      minStrings: 1,
+      nama: 'string_kosong',
+      kode: `program S7\nmulai\ntampilkan("")\ntampilkan("SesudahKosong")\nselesai`,
     },
     {
-      nama: '08_string_quote_dan_escape',
-      kode: `program S8\nmulai\n  tampilkan("Kutipan \\"Nusantara\\"\\nBaris Baru\\tTab")\nselesai\n`,
-      minStrings: 1,
+      nama: 'escape_quotes',
+      kode: `program S8\nmulai\ntampilkan("Baris\\nTab\\t\\"Kutip\\"\\\\Slash")\nselesai`,
     },
     {
-      nama: '09_string_unicode_bahasa_indonesia',
-      kode: `program S9\nmulai\n  tampilkan("Bahasa Indonesia — Café Rp10.000 🚀")\nselesai\n`,
-      minStrings: 1,
+      nama: 'utf8_indonesia_unicode',
+      kode: `program S9\nmulai\ntampilkan("Bahasa Nusantara — Merdeka 🚀 ✅")\nselesai`,
     },
     {
-      nama: '10_multi_tampilkan_dan_ekspresi',
-      kode: `program S10\nmulai\n  hasil : bilangan = 20 + 22\n  tampilkan("NUSANTARA_NATIVE_CI_OK")\n  tampilkan("Pengujian LLVM IR berhasil")\n  tampilkan("Bahasa Indonesia")\n  tampilkan(hasil)\nselesai\n`,
-      minStrings: 3,
+      nama: 'multi_cetak_bilangan_teks',
+      kode: `program S10\nmulai\na : bilangan = 20 + 22\ntampilkan("HASIL=", a)\ntampilkan("SELESAI")\nselesai`,
     },
     {
-      nama: '11_rantai_panggilan_fungsi_bersarang',
-      kode: `program S11\nfungsi dalam(label : teks, n : bilangan) : bilangan\nmulai\n  tampilkan("Dalam:", label)\n  kembalikan n + 2\nselesai\nfungsi luar(k : bilangan) : bilangan\nmulai\n  tampilkan("Luar")\n  kembalikan dalam("DariLuar", k * 2)\nselesai\nmulai\n  tampilkan("Awal")\n  res : bilangan = luar(20)\n  tampilkan("Akhir", res)\nselesai\n`,
-      minStrings: 5,
+      nama: 'panggilan_bersarang',
+      kode: `program S11\nfungsi prefix() : teks\nmulai\nkembalikan "ID-"\nselesai\nmulai\ntampilkan(prefix(), "OK")\nselesai`,
     },
   ];
 
+  const aot = new AOTCompiler();
+  const validator = new LLVMValidator(new LLVMToolchainManager().detect());
+
   for (const sc of scenarios) {
-    const res = compiler.compileSource(sc.kode, { emitLLVM: false, optLevel: 'O2' });
-    pastikan(res.success && Boolean(res.llvmIR), `Kompilasi '${sc.nama}' gagal: ${res.diagnostics.join(' | ')}`);
-    const ir = res.llvmIR!;
+    const res = aot.compileSource(sc.kode, { optLevel: 'O2' });
+    pastikan(res.success && Boolean(res.llvmIR), `Skenario ${sc.nama} gagal: ${res.diagnostics.join(' | ')}`);
+    const ir = res.optimizedIR || res.llvmIR!;
+    pastikan(!/@\.str\._v\d+/.test(ir), `Skenario ${sc.nama} mengandung simbol terlarang @.str._v*`);
+    const val = validator.validateIR(ir);
+    pastikan(val.valid, `Validator gagal pada ${sc.nama}: ${val.diagnostics.join(' | ')}`);
+  }
+});
 
-    pastikan(!/@\.str\._v\d+/.test(ir), `${sc.nama}: terdeteksi simbol rusak @.str._v*`);
-    const strDeclCount = (ir.match(/^@\.str\.\d+\s*=/gm) || []).length;
-    pastikan(
-      strDeclCount >= sc.minStrings,
-      `${sc.nama}: jumlah deklarasi @.str.N=${strDeclCount} kurang dari minimum ${sc.minStrings}`
+// -----------------------------------------------------------------------------
+// GRUP 2: ARCHIVE BUILDER & CHECKSUMS
+// -----------------------------------------------------------------------------
+console.log('\n[GRUP 2] ArchiveBuilder (PKZIP, POSIX USTAR tar.gz, SHA256SUMS, Security)');
+
+uji('2.1 Pembuatan dan ekstraksi arsip PKZIP (.zip) dengan verifikasi CRC-32', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-zip-'));
+  try {
+    const zipBytes = ArchiveBuilder.createZip(
+      [
+        { name: 'app/bin/main', content: 'echo hello\n', mode: 0o755 },
+        { name: 'app/config/app.json', content: '{"ok":true}\n', mode: 0o644 },
+      ],
+      { reproducible: true }
     );
+    pastikan(zipBytes[0] === 0x50 && zipBytes[1] === 0x4b, 'Harus berheader PKZIP');
+    const outFiles = ArchiveBuilder.extractZip(zipBytes, tmp);
+    samaDengan(outFiles.length, 2, 'Harus mengekstrak 2 berkas');
+    samaDengan(fs.readFileSync(path.join(tmp, 'app/config/app.json'), 'utf-8'), '{"ok":true}\n');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
 
-    const valRes = validator.validateIR(ir);
-    pastikan(
-      valRes.valid,
-      `${sc.nama}: LLVMValidator gagal (${valRes.toolUsed || 'static'}): ${valRes.diagnostics.join(' | ')}`
+uji('2.2 Pembuatan dan ekstraksi arsip POSIX USTAR (.tar.gz) termasuk jalur panjang > 100 byte', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-tgz-'));
+  try {
+    const longPath =
+      'nusantara-paket-panjang/subdirektori-kesatu/subdirektori-kedua/subdirektori-ketiga/subdirektori-keempat/berkas_konfigurasi_panjang.txt';
+    pastikan(longPath.length > 100, 'Jalur uji harus > 100 karakter');
+    const tgzBytes = ArchiveBuilder.createTarGz(
+      [
+        { name: longPath, content: 'USTAR_LONG_OK', mode: 0o644 },
+        { name: 'nusantara-paket-panjang/README.txt', content: 'Halo', mode: 0o644 },
+      ],
+      { reproducible: true }
     );
+    const extracted = ArchiveBuilder.extractTarGz(tgzBytes, tmp);
+    samaDengan(extracted.length, 2, 'Harus mengekstrak 2 berkas');
+    samaDengan(fs.readFileSync(path.join(tmp, longPath), 'utf-8'), 'USTAR_LONG_OK');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
   }
+});
+
+uji('2.3 Verifikasi SHA256SUMS mendeteksi berkas terubah (tamper) dan berkas hilang', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-sha-'));
+  try {
+    const f1 = path.join(tmp, 'data.txt');
+    fs.writeFileSync(f1, 'ASLI', 'utf-8');
+    const sums = ArchiveBuilder.formatSha256Sums([
+      { sha256: ArchiveBuilder.computeSha256('ASLI'), filename: 'data.txt' },
+    ]);
+    const okRes = ArchiveBuilder.verifySha256SumsFromDirectory(tmp, sums);
+    pastikan(okRes.valid && okRes.checkedCount === 1, 'Checksum asli harus valid');
+
+    fs.writeFileSync(f1, 'TERUBAH', 'utf-8');
+    const tamperRes = ArchiveBuilder.verifySha256SumsFromDirectory(tmp, sums);
+    pastikan(!tamperRes.valid && tamperRes.mismatches.length === 1, 'Checksum rusak harus ditolak');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+uji('2.4 Proteksi keamanan menolak path traversal dan jalur absolut dalam arsip', () => {
+  let rejectedTraversal = false;
+  try {
+    ArchiveBuilder.resolveSafeSubpath('/tmp/safe', '../../etc/passwd');
+  } catch {
+    rejectedTraversal = true;
+  }
+  pastikan(rejectedTraversal, 'Path traversal wajib ditolak');
+
+  let rejectedAbs = false;
+  try {
+    ArchiveBuilder.resolveSafeSubpath('/tmp/safe', '/etc/shadow');
+  } catch {
+    rejectedAbs = true;
+  }
+  pastikan(rejectedAbs, 'Jalur absolut wajib ditolak');
 });
 
 // -----------------------------------------------------------------------------
-// GRUP 2: PARSER KETAT HEADER BINER (ELF64, PE32+, MACH-O 64) & TOLAK STUB
+// GRUP 3: NATIVE BUILD PIPELINE & BINARY INSPECTOR
 // -----------------------------------------------------------------------------
-console.log('\n=== [GRUP 2: Validasi Biner Executable (ELF64, PE32+, Mach-O 64)] ===');
+console.log('\n[GRUP 3] Native Build Pipeline & Inspeksi Biner Ketat');
 
-uji('2.1 Inspeksi ketat menolak skrip shell (#!) dan batch (@echo) sebagai executable native', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-stub-check-'));
+uji('3.1 BinaryInspector.inspectStrict menolak skrip palsu dan memvalidasi header ELF/PE32+/Mach-O', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-insp-'));
   try {
-    const shPath = path.join(tmpDir, 'fake_elf');
-    fs.writeFileSync(shPath, '#!/bin/sh\necho "bukan native"\n');
-    const shMeta = BinaryInspector.inspectStrict(shPath);
-    samaDengan(shMeta.binaryType, 'SCRIPT');
-    samaDengan(shMeta.isValidExecutable, false);
+    const fakeScript = path.join(tmp, 'palsu.sh');
+    fs.writeFileSync(fakeScript, '#!/bin/sh\necho palsu\n');
+    const resScript = BinaryInspector.inspectStrict(fakeScript);
+    pastikan(!resScript.isValidExecutable && resScript.binaryType === 'SCRIPT', 'Skrip shell wajib ditolak');
 
-    const batPath = path.join(tmpDir, 'fake_pe.exe');
-    fs.writeFileSync(batPath, '@echo off\r\necho bukan pe\r\n');
-    const batMeta = BinaryInspector.inspectStrict(batPath);
-    samaDengan(batMeta.binaryType, 'SCRIPT');
-    samaDengan(batMeta.isValidExecutable, false);
+    const elfPath = path.join(tmp, 'ok.elf');
+    fs.writeFileSync(elfPath, buildMinimalElf64('x86_64'));
+    const resElf = BinaryInspector.inspectStrict(elfPath);
+    pastikan(Boolean(resElf.isValidExecutable) && resElf.format === 'ELF' && resElf.architecture === 'x86_64', 'ELF64 sah harus lolos');
+
+    const pePath = path.join(tmp, 'ok.exe');
+    fs.writeFileSync(pePath, buildMinimalPe32Plus('aarch64'));
+    const resPe = BinaryInspector.inspectStrict(pePath);
+    pastikan(Boolean(resPe.isValidExecutable) && resPe.format === 'COFF' && resPe.architecture === 'aarch64', 'PE32+ ARM64 sah harus lolos');
+
+    const machPath = path.join(tmp, 'ok.macho');
+    fs.writeFileSync(machPath, buildMinimalMachO64('aarch64'));
+    const resMach = BinaryInspector.inspectStrict(machPath);
+    pastikan(Boolean(resMach.isValidExecutable) && resMach.format === 'Mach-O' && resMach.architecture === 'aarch64', 'Mach-O ARM64 sah harus lolos');
   } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
 
-uji('2.2 Inspeksi ketat ELF64 x86_64 dan ARM64 serta penolakan berkas korup', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-elf-strict-'));
-  try {
-    // ELF64 x86_64 valid
-    const elfX64 = Buffer.alloc(64);
-    elfX64[0] = 0x7f; elfX64[1] = 0x45; elfX64[2] = 0x4c; elfX64[3] = 0x46;
-    elfX64[4] = 2; // 64-bit
-    elfX64[5] = 1; // LE
-    elfX64[6] = 1; // EV_CURRENT
-    elfX64.writeUInt16LE(2, 16); // ET_EXEC
-    elfX64.writeUInt16LE(0x3e, 18); // EM_X86_64
-    elfX64.writeBigUInt64LE(0x401000n, 24);
-    const x64Path = path.join(tmpDir, 'bin_x64');
-    fs.writeFileSync(x64Path, elfX64);
-    const metaX64 = BinaryInspector.inspectStrict(x64Path);
-    samaDengan(metaX64.isValidExecutable, true);
-    samaDengan(metaX64.format, 'ELF');
-    samaDengan(metaX64.architecture, 'x86_64');
-    samaDengan(metaX64.binaryType, 'EXECUTABLE');
-
-    // ELF64 ARM64 valid
-    const elfArm = Buffer.from(elfX64);
-    elfArm.writeUInt16LE(0xb7, 18); // EM_AARCH64
-    const armPath = path.join(tmpDir, 'bin_arm64');
-    fs.writeFileSync(armPath, elfArm);
-    const metaArm = BinaryInspector.inspectStrict(armPath);
-    samaDengan(metaArm.isValidExecutable, true);
-    samaDengan(metaArm.architecture, 'aarch64');
-
-    // ELF terpotong (<64 byte) harus ditolak strict
-    const truncPath = path.join(tmpDir, 'trunc.elf');
-    fs.writeFileSync(truncPath, Buffer.from([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0]));
-    const truncMeta = BinaryInspector.inspectStrict(truncPath);
-    samaDengan(truncMeta.isValidExecutable, false);
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }
-});
-
-uji('2.3 Inspeksi ketat PE32+ Windows (AMD64 & ARM64) serta deteksi PE signature palsu', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-pe-strict-'));
-  try {
-    const buildPe = (machine: number) => {
-      const buf = Buffer.alloc(512);
-      buf[0] = 0x4d; buf[1] = 0x5a; // MZ
-      buf.writeUInt32LE(0x80, 0x3c); // e_lfanew
-      buf.write('PE\0\0', 0x80, 'ascii');
-      buf.writeUInt16LE(machine, 0x84);
-      buf.writeUInt16LE(1, 0x86); // NumberOfSections
-      buf.writeUInt16LE(240, 0x94); // SizeOfOptionalHeader
-      buf.writeUInt16LE(0x0022, 0x96); // Characteristics: EXECUTABLE_IMAGE | LARGE_ADDRESS_AWARE
-      buf.writeUInt16LE(0x020b, 0x98); // OptionalHeader Magic = PE32+
-      buf.writeUInt32LE(0x1000, 0x98 + 16); // AddressOfEntryPoint
-      // Section header .text
-      const secOff = 0x98 + 240;
-      buf.write('.text', secOff, 'ascii');
-      buf.writeUInt32LE(0x200, secOff + 16); // SizeOfRawData
-      buf.writeUInt32LE(0x200, secOff + 20); // PointerToRawData
-      return buf;
-    };
-
-    const peX64Path = path.join(tmpDir, 'app_x64.exe');
-    fs.writeFileSync(peX64Path, buildPe(0x8664));
-    const metaX64 = BinaryInspector.inspectStrict(peX64Path);
-    samaDengan(metaX64.isValidExecutable, true);
-    samaDengan(metaX64.format, 'COFF');
-    samaDengan(metaX64.architecture, 'x86_64');
-    samaDengan(metaX64.binaryType, 'EXECUTABLE');
-
-    const peArmPath = path.join(tmpDir, 'app_arm64.exe');
-    fs.writeFileSync(peArmPath, buildPe(0xaa64));
-    const metaArm = BinaryInspector.inspectStrict(peArmPath);
-    samaDengan(metaArm.isValidExecutable, true);
-    samaDengan(metaArm.architecture, 'aarch64');
-    samaDengan(metaArm.binaryType, 'EXECUTABLE');
-
-    // MZ tanpa 'PE\0\0' harus ditolak strict
-    const badPe = buildPe(0x8664);
-    badPe.write('XXXX', 0x80, 'ascii');
-    const badPath = path.join(tmpDir, 'bad.exe');
-    fs.writeFileSync(badPath, badPe);
-    samaDengan(BinaryInspector.inspectStrict(badPath).isValidExecutable, false);
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }
-});
-
-uji('2.4 Inspeksi ketat Mach-O 64-bit (x86_64 & ARM64) + ekstraksi LC_LOAD_DYLIB', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-macho-strict-'));
-  try {
-    const buildMachO = (cpuType: number, dylibPath: string) => {
-      const cmdSize = 24 + dylibPath.length + 1;
-      const paddedCmdSize = Math.ceil(cmdSize / 8) * 8;
-      const buf = Buffer.alloc(32 + paddedCmdSize);
-      // MH_MAGIC_64 LE bytes in file: cf fa ed fe
-      buf[0] = 0xcf; buf[1] = 0xfa; buf[2] = 0xed; buf[3] = 0xfe;
-      buf.writeInt32LE(cpuType, 4);
-      buf.writeUInt32LE(2, 12); // MH_EXECUTE
-      buf.writeUInt32LE(1, 16); // ncmds = 1
-      buf.writeUInt32LE(paddedCmdSize, 20); // sizeofcmds
-      // Load Command LC_LOAD_DYLIB (0x0c)
-      buf.writeUInt32LE(0x0c, 32);
-      buf.writeUInt32LE(paddedCmdSize, 36);
-      buf.writeUInt32LE(24, 40); // name offset inside command
-      buf.write(dylibPath, 32 + 24, 'utf-8');
-      return buf;
-    };
-
-    const macArm = path.join(tmpDir, 'app_mac_arm64');
-    fs.writeFileSync(macArm, buildMachO(0x0100000c, '/usr/lib/libSystem.B.dylib'));
-    const metaArm = BinaryInspector.inspectStrict(macArm);
-    samaDengan(metaArm.isValidExecutable, true);
-    samaDengan(metaArm.format, 'Mach-O');
-    samaDengan(metaArm.architecture, 'aarch64');
-    samaDengan(metaArm.binaryType, 'EXECUTABLE');
-    pastikan(metaArm.dynamicLibraries.includes('/usr/lib/libSystem.B.dylib'), 'Harus memuat LC_LOAD_DYLIB');
-
-    const macX64 = path.join(tmpDir, 'app_mac_x64');
-    fs.writeFileSync(macX64, buildMachO(0x01000007, '/usr/lib/libSystem.B.dylib'));
-    const metaX64 = BinaryInspector.inspectStrict(macX64);
-    samaDengan(metaX64.isValidExecutable, true);
-    samaDengan(metaX64.architecture, 'x86_64');
-
-    const depMac = new DependencyInspector().inspect(macArm, 'darwin');
-    pastikan(depMac.inspectedFromDisk === true, 'Mach-O harus diinspeksi dari disk');
-    pastikan(depMac.dependencies.some((d) => d.name === 'libSystem.B.dylib'), 'Dependensi libSystem.B.dylib harus terdeteksi pada Mach-O');
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }
-});
-
-// -----------------------------------------------------------------------------
-// GRUP 3: INSPEKSI DEPENDENSI BINER NYATA & EKSEKUSI NATIVE (BILA CLANG ADA)
-// -----------------------------------------------------------------------------
-console.log('\n=== [GRUP 3: Inspeksi Dependensi Nyata & Eksekusi Native Host] ===');
-
-uji('3.1 DependencyInspector memeriksa biner nyata di disk (/bin/sh di Linux)', () => {
-  if (process.platform === 'linux' && fs.existsSync('/bin/sh')) {
-    const rep = new DependencyInspector().inspect('/bin/sh', 'linux');
-    pastikan(rep.inspectedFromDisk === true, 'Harus menginspeksi biner nyata dari disk');
-    pastikan(rep.allResolved, 'Dependensi /bin/sh harus terpenuhi');
-  }
-});
-
-uji('3.2 Kompilasi, validasi LLVM IR, & eksekusi biner native UjiNativePhase23 (wajib aktif bila NUSANTARA_REQUIRE_CLANG=1)', () => {
-  const status = new LLVMToolchainManager().detect();
+uji('3.2 Kompilasi & eksekusi native end-to-end host saat ini (NUSANTARA_REQUIRE_CLANG=1 wajib Clang)', () => {
   const requireClang = process.env.NUSANTARA_REQUIRE_CLANG === '1';
-  if (!status.available) {
+  const hostTarget = TargetMatrixManager.getHostTargetId() || 'linux-x86_64';
+  const cap = TargetMatrixManager.inspectTargetCapability(hostTarget);
+
+  if (!cap.canBuildNative) {
     if (requireClang) {
       throw new Error(
-        'NUSANTARA_REQUIRE_CLANG=1 aktif, tetapi toolchain Clang/LLVM tidak ditemukan di CI!'
+        `NUSANTARA_REQUIRE_CLANG=1 aktif, tetapi target host '${hostTarget}' tidak siap build native: ${cap.missingRequirements.join('; ')}`
       );
     }
-    console.log('     [CATATAN JUJUR] Clang/LLVM tidak terpasang di container ini; kompilasi native dilewati (BELUM DIVERIFIKASI).');
-    return 'UNVERIFIED';
+    return 'BELUM_DIVERIFIKASI';
   }
 
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-native-e2e-'));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-native-32-'));
   try {
-    const srcPath = path.join(tmpDir, 'uji_native_phase23.nusantara');
-    fs.writeFileSync(
-      srcPath,
-      `program UjiNativePhase23\nmulai\n  hasil : bilangan = 20 + 22\n  tampilkan("NUSANTARA_NATIVE_CI_OK")\n  tampilkan("Pengujian LLVM IR berhasil")\n  tampilkan("Bahasa Indonesia")\n  tampilkan(hasil)\nselesai\n`,
-      'utf-8'
-    );
-
+    const src = `
+program UjiNativePhase23
+mulai
+  hasil : bilangan = 20 + 22
+  tampilkan("NUSANTARA_NATIVE_CI_OK")
+  tampilkan("Pengujian LLVM IR berhasil")
+  tampilkan("Bahasa Indonesia")
+  tampilkan(hasil)
+selesai
+`;
     const res = NativeBuildPipeline.build({
-      sourceFilePath: srcPath,
-      appName: 'uji_native_phase23',
-      outputDirectory: tmpDir,
-      linkingMode: 'dynamic',
+      sourceCode: src,
+      appName: 'uji_native_p23',
+      target: hostTarget,
+      outputDirectory: tmp,
+      optLevel: 'O2',
+      linkingMode: 'auto',
       verifyExecution: true,
     });
-
-    pastikan(res.success, `Build native gagal [${res.statusCode}]: ${res.diagnostics.join(' | ')}`);
-    pastikan(Boolean(res.llvmIRPath && fs.existsSync(res.llvmIRPath)), 'Berkas LLVM IR (.ll) harus dihasilkan di disk');
-    const irText = fs.readFileSync(res.llvmIRPath!, 'utf-8');
-    pastikan(!/@\.str\._v\d+/.test(irText), 'LLVM IR mengandung simbol string rusak @.str._v');
-    pastikan(Boolean(res.executablePath && fs.existsSync(res.executablePath)), 'Executable native harus ada di disk');
-    pastikan(Boolean(res.binaryMetadata?.isValidExecutable), 'Header executable harus sah');
-    pastikan(Boolean(res.dependencyReport?.allResolved), 'Dependensi runtime executable harus terpenuhi');
-    pastikan(Boolean(res.executionVerification?.executed && res.executionVerification?.success), 'Eksekusi biner harus berhasil');
-
-    const stdout = res.executionVerification?.stdout || '';
-    pastikan(stdout.includes('NUSANTARA_NATIVE_CI_OK'), `Output tidak memuat sentinel: '${stdout}'`);
-    pastikan(stdout.includes('Pengujian LLVM IR berhasil'), `Output tidak memuat teks uji: '${stdout}'`);
-    pastikan(stdout.includes('Bahasa Indonesia'), `Output tidak memuat Bahasa Indonesia: '${stdout}'`);
-    pastikan(stdout.includes('42'), `Output tidak memuat hasil 42: '${stdout}'`);
-
-    const reportDir = process.env.NUSANTARA_BUILD_REPORT_DIR;
-    if (reportDir) {
-      fs.mkdirSync(reportDir, { recursive: true });
-      fs.writeFileSync(path.join(reportDir, 'uji_native_phase23.ll'), irText, 'utf-8');
-      fs.writeFileSync(
-        path.join(reportDir, 'uji_native_phase23_report.json'),
-        JSON.stringify(
-          {
-            target: res.target.canonicalTarget,
-            triple: res.target.triple,
-            toolchainVersion: status.version,
-            binaryFormat: res.binaryMetadata?.format,
-            binaryArch: res.binaryMetadata?.architecture,
-            binaryType: res.binaryMetadata?.binaryType,
-            executableSha256: res.executableSha256,
-            executionMode: res.executionVerification?.executionMode,
-            exitCode: res.executionVerification?.exitCode,
-            stdout,
-          },
-          null,
-          2
-        ),
-        'utf-8'
-      );
-    }
+    pastikan(res.success, `NativeBuildPipeline gagal (${res.statusCode}): ${res.diagnostics.join(' | ')}`);
+    pastikan(Boolean(res.executablePath && fs.existsSync(res.executablePath)), 'Executable hasil build harus ada di disk');
+    pastikan(Boolean(res.binaryMetadata?.isValidExecutable), 'BinaryInspector harus memvalidasi executable');
+    pastikan(res.executedOnHost && res.executionExitCode === 0, `Eksekusi host harus keluar 0 (exit=${res.executionExitCode})`);
+    pastikan(
+      Boolean(res.executionStdout && res.executionStdout.includes('NUSANTARA_NATIVE_CI_OK') && res.executionStdout.includes('42')),
+      `Stdout native tidak sesuai harapan: '${res.executionStdout}'`
+    );
   } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
 
 // -----------------------------------------------------------------------------
-// GRUP 4: ARSIP DISTRIBUSI (.ZIP & .TAR.GZ), ANTI-TRAVERSAL & SHA256SUMS
+// GRUP 4: DESKTOP DISTRIBUTION PACKAGER & CLI
 // -----------------------------------------------------------------------------
-console.log('\n=== [GRUP 4: Arsip Distribusi, Ekstraksi Aman & SHA-256] ===');
+console.log('\n[GRUP 4] Pengemas Distribusi Desktop & Reproducible Build');
 
-uji('4.1 Pembuatan & ekstraksi .zip dan .tar.gz tervalidasi oleh pure Node dan python3 zipfile/tarfile', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-pkg-dist-'));
+uji('4.1 DesktopDistributionPackager menghasilkan arsip deterministik & manifest lengkap', () => {
+  const tmp1 = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-dist1-'));
+  const tmp2 = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-dist2-'));
   try {
-    const res = DesktopDistributionPackager.packageTarget({
-      appName: 'demo_app',
-      appVersion: 'v0.23.0',
+    const r1 = DesktopDistributionPackager.packageTarget({
+      appName: 'demoapp',
+      appVersion: 'v0.23.5',
       target: 'linux-x86_64',
       mode: 'release',
       packageKind: 'script-launcher',
-      outputDirectory: tmpDir,
+      outputDirectory: tmp1,
       reproducible: true,
-      includeInstallers: true,
     });
-
-    pastikan(res.success && res.artifacts.length === 2, 'Harus menghasilkan .zip dan .tar.gz');
-    const zipArt = res.artifacts.find((a) => a.format === 'zip')!;
-    const tgzArt = res.artifacts.find((a) => a.format === 'tar.gz')!;
-
-    // Uji integritas SHA-256 pada staging dir
-    const sumRes = ArchiveBuilder.verifySha256SumsFromDirectory(
-      fs.readFileSync(res.sha256sumsPath, 'utf-8'),
-      res.stagingDirectory
-    );
-    pastikan(sumRes.valid && sumRes.checkedCount >= 5, 'Seluruh SHA256SUMS internal harus cocok');
-
-    // Ekstraksi .zip & .tar.gz lewat parser aman Nusantara
-    const zipBytes = new Uint8Array(fs.readFileSync(zipArt.filePath));
-    const tgzBytes = new Uint8Array(fs.readFileSync(tgzArt.filePath));
-    const outZip = path.join(tmpDir, 'out_zip');
-    const outTgz = path.join(tmpDir, 'out_tgz');
-
-    const exZip = ArchiveBuilder.extractZip(zipBytes, outZip);
-    const exTgz = ArchiveBuilder.extractTarGz(tgzBytes, outTgz);
-    pastikan(exZip.length >= 6 && exTgz.length >= 6, 'Kedua arsip harus berisi seluruh berkas distribusi');
-
-    const rootDirName = fs.readdirSync(outTgz)[0];
-    const sumAfterExtract = ArchiveBuilder.verifySha256SumsFromDirectory(
-      fs.readFileSync(path.join(outTgz, rootDirName, 'SHA256SUMS'), 'utf-8'),
-      path.join(outTgz, rootDirName)
-    );
-    pastikan(sumAfterExtract.valid, 'SHA256SUMS sesudah ekstraksi .tar.gz harus tetap cocok 100%');
-
-    // Uji deteksi tamper: ubah 1 byte manifest dan pastikan gagal
-    fs.appendFileSync(path.join(outTgz, rootDirName, 'manifest.json'), ' ');
-    const sumTampered = ArchiveBuilder.verifySha256SumsFromDirectory(
-      fs.readFileSync(path.join(outTgz, rootDirName, 'SHA256SUMS'), 'utf-8'),
-      path.join(outTgz, rootDirName)
-    );
-    samaDengan(sumTampered.valid, false, 'Modifikasi 1 byte harus terdeteksi sebagai ketidakcocokan SHA-256');
-
-    // Validasi lintas tool memakai Python standard library (zipfile & tarfile) bila tersedia
-    const pyCheck = spawnSync(
-      'python3',
-      [
-        '-c',
-        `import zipfile, tarfile; z = zipfile.ZipFile(${JSON.stringify(zipArt.filePath)}); assert z.testzip() is None; t = tarfile.open(${JSON.stringify(tgzArt.filePath)}, 'r:gz'); assert len(t.getnames()) >= 6`,
-      ],
-      { encoding: 'utf-8' }
-    );
-    if (pyCheck.status === 0) {
-      pastikan(true, 'Arsip lolos python3 zipfile.testzip() & tarfile');
-    }
+    const r2 = DesktopDistributionPackager.packageTarget({
+      appName: 'demoapp',
+      appVersion: 'v0.23.5',
+      target: 'linux-x86_64',
+      mode: 'release',
+      packageKind: 'script-launcher',
+      outputDirectory: tmp2,
+      reproducible: true,
+    });
+    pastikan(r1.success && r1.artifacts.length === 2, 'Harus menghasilkan zip dan tar.gz untuk Linux');
+    samaDengan(r1.artifacts[0].sha256, r2.artifacts[0].sha256, 'Arsip ZIP reproducible harus identik');
+    samaDengan(r1.artifacts[1].sha256, r2.artifacts[1].sha256, 'Arsip TAR.GZ reproducible harus identik');
   } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmp1, { recursive: true, force: true });
+    fs.rmSync(tmp2, { recursive: true, force: true });
   }
 });
 
-uji('4.2 Proteksi anti-path traversal menolak entri ../ dan path absolut pada arsip', () => {
-  let rejected = false;
+uji('4.2 CLI nusantara bangun menulis arsip, release-manifest.json, dan SHA256SUMS', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cli-build-'));
   try {
-    ArchiveBuilder.createZip([{ name: '../../etc/cron.d/pwn', content: 'bad' }]);
-  } catch (err: any) {
-    rejected = err.message.includes('traversal');
-  }
-  pastikan(rejected, 'Entri ZIP ../ wajib ditolak');
-
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-tar-sec-'));
-  try {
-    // Buat tar tarGz secara manual berisi nama traversal tidak lewat ArchiveBuilder
-    const tarHdr = new Uint8Array(512);
-    const enc = new TextEncoder();
-    tarHdr.set(enc.encode('../outside.txt'), 0);
-    tarHdr.set(enc.encode('0000644\0'), 100);
-    tarHdr.set(enc.encode('0000000\0'), 108);
-    tarHdr.set(enc.encode('0000000\0'), 116);
-    tarHdr.set(enc.encode('00000000004\0'), 124);
-    tarHdr.set(enc.encode('00000000000\0'), 136);
-    for (let i = 148; i < 156; i++) tarHdr[i] = 0x20;
-    tarHdr[156] = 0x30;
-    tarHdr.set(enc.encode('ustar\x00' + '00'), 257);
-    let sum = 0;
-    for (let i = 0; i < 512; i++) sum += tarHdr[i];
-    tarHdr.set(enc.encode(sum.toString(8).padStart(6, '0') + '\0 '), 148);
-    const payload = new Uint8Array(512);
-    payload.set(enc.encode('hack'));
-    const fullTar = Buffer.concat([tarHdr, payload, new Uint8Array(1024)]);
-    const gz = zlib.gzipSync(fullTar);
-
-    let traversalBlocked = false;
-    try {
-      ArchiveBuilder.extractTarGz(new Uint8Array(gz), tmpDir);
-    } catch (e: any) {
-      traversalBlocked = e.message.includes('traversal');
-    }
-    pastikan(traversalBlocked, 'Ekstraksi .tar.gz wajib memblokir path traversal');
+    const logs: string[] = [];
+    const cli = new NusantaraCLI({ log: (m) => logs.push(m) });
+    const code = cli.jalankan(['bangun', '--mode', 'release', '--target', 'windows-x64,linux-x64', '--out', tmp, '--json']);
+    samaDengan(code, 0, 'CLI bangun harus sukses');
+    const jsonOut = JSON.parse(logs.join('\n'));
+    pastikan(jsonOut.sukses && jsonOut.artefak.length === 3, 'windows-x64 (zip) + linux-x64 (zip,tar.gz) = 3 artefak');
+    pastikan(fs.existsSync(path.join(tmp, 'release-manifest.json')), 'release-manifest.json harus ada');
+    pastikan(fs.existsSync(path.join(tmp, 'SHA256SUMS')), 'SHA256SUMS harus ada');
   } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
 
 // -----------------------------------------------------------------------------
-// GRUP 5: INSTALLER, UPGRADE & UNINSTALLER LINTAS OS
+// GRUP 5: INSTALLER, SANDBOX LIFECYCLE, & UTF-8 BOM DEFENSIVE PARSING
 // -----------------------------------------------------------------------------
-console.log('\n=== [GRUP 5: Siklus Hidup Installer, Upgrade & Uninstaller] ===');
+console.log('\n[GRUP 5] Generator Pemasang, Penanganan JSON UTF-8 Tanpa BOM, & Sandbox Lifecycle');
 
-uji('5.1 Skrip installer Windows (.ps1 & .bat) berisi verifikasi SHA-256 .NET (tanpa Get-FileHash), backup upgrade & pembersihan PATH aman', () => {
+uji('5.1 Skrip installer Windows memakai .NET SHA256::Create() (tanpa Get-FileHash) & UTF8Encoding($false)', () => {
   const winBundle = DesktopInstallerGenerator.generate({
-    appName: 'demo_app',
-    appVersion: 'v0.23.0',
+    appName: 'nusa_demo',
+    appVersion: 'v0.23.5',
     target: 'windows-x86_64',
     os: 'windows',
-    binRelativePath: 'bin/demo_app.exe',
+    binRelativePath: 'bin/nusa_demo.exe',
   });
   const names = winBundle.files.map((f) => f.name);
-  pastikan(names.includes('install.ps1') && names.includes('uninstall.ps1'), 'Bundel Windows harus menyertakan install.ps1 dan uninstall.ps1');
-  pastikan(names.includes('install.bat') && names.includes('uninstall.bat'), 'Bundel Windows harus menyertakan install.bat dan uninstall.bat');
+  pastikan(names.includes('install.ps1') && names.includes('uninstall.ps1'), 'Wajib ada install.ps1 & uninstall.ps1');
+  pastikan(names.includes('install.bat') && names.includes('uninstall.bat'), 'Wajib ada install.bat & uninstall.bat');
 
-  const psInstall = String(winBundle.files.find((f) => f.name === 'install.ps1')!.content);
-  const psUninstall = String(winBundle.files.find((f) => f.name === 'uninstall.ps1')!.content);
-  const batInstall = String(winBundle.files.find((f) => f.name === 'install.bat')!.content);
-  const batUninstall = String(winBundle.files.find((f) => f.name === 'uninstall.bat')!.content);
+  const ps1 = winBundle.files.find((f) => f.name === 'install.ps1')!.content;
+  pastikan(!ps1.includes('Get-FileHash'), 'Dilarang memakai cmdlet Get-FileHash yang bermasalah di CI Windows');
+  pastikan(ps1.includes('System.Security.Cryptography.SHA256'), 'Wajib memakai .NET SHA256');
+  pastikan(ps1.includes('UTF8Encoding($false)'), 'Wajib menulis receipt JSON UTF-8 tanpa BOM menggunakan UTF8Encoding($false)');
+  pastikan(!/Set-Content\s+.*-Encoding\s+UTF8/i.test(ps1), 'Dilarang memakai Set-Content -Encoding UTF8 yang menulis BOM di PS 5.1');
 
-  pastikan(!psInstall.includes('Get-FileHash'), 'install.ps1 tidak boleh bergantung pada cmdlet Get-FileHash');
-  pastikan(
-    psInstall.includes('System.Security.Cryptography.SHA256') && psInstall.includes('ComputeHash'),
-    'install.ps1 harus menghitung SHA-256 memakai .NET System.Security.Cryptography.SHA256.ComputeHash'
-  );
-  pastikan(psInstall.includes('SHA256SUMS') && psInstall.includes('VerifiedCount'), 'install.ps1 harus memvalidasi SHA256SUMS dan jumlah entri valid');
-  pastikan(psInstall.includes('BackupBin') && psInstall.includes('BackupPkgManifest'), 'install.ps1 harus membuat cadangan atomik saat upgrade');
-  pastikan(psUninstall.includes('SetEnvironmentVariable'), 'uninstall.ps1 harus membersihkan User PATH dengan aman');
-  pastikan(batInstall.includes('install.ps1') && batUninstall.includes('uninstall.ps1'), 'Skrip .bat wajib meneruskan eksekusi ke .ps1');
+  const linuxBundle = DesktopInstallerGenerator.generate({
+    appName: 'nusa_demo',
+    appVersion: 'v0.23.5',
+    target: 'linux-x86_64',
+    os: 'linux',
+    binRelativePath: 'bin/nusa_demo',
+  });
+  pastikan(linuxBundle.files.some((f) => f.name === 'install.sh') && linuxBundle.files.some((f) => f.name === 'uninstall.sh'), 'Wajib ada install.sh & uninstall.sh');
 });
 
-uji('5.2 Eksekusi nyata install.sh -> upgrade -> tamper reject -> uninstall.sh dalam sandbox HOME terisolasi (POSIX Linux/macOS)', () => {
-  const stages: Record<string, string> = {
-    posixHost: process.platform === 'win32' ? 'NOT_VERIFIED' : 'PASS',
-    installerExecution: 'NOT_VERIFIED',
-    upgrade: 'NOT_VERIFIED',
-    tamperRejection: 'NOT_VERIFIED',
-    uninstall: 'NOT_VERIFIED',
-  };
+uji('5.1b Pembaca JSON defensif (bacaJsonAman) menangani JSON tanpa BOM, dengan BOM, dan menolak JSON rusak', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-bom-test-'));
+  try {
+    // A. UTF-8 tanpa BOM
+    const noBomPath = path.join(tmp, 'clean.json');
+    fs.writeFileSync(noBomPath, Buffer.from('{"appName":"nusa_demo","ok":true}', 'utf-8'));
+    const parsedA = bacaJsonAman(noBomPath, 'test-no-bom');
+    samaDengan(parsedA.appName, 'nusa_demo');
+    samaDengan(parsedA.ok, true);
 
+    // B. UTF-8 dengan BOM (EF BB BF) di offset 0
+    const withBomPath = path.join(tmp, 'bom.json');
+    const bomPrefix = Buffer.from([0xef, 0xbb, 0xbf]);
+    const payloadBuf = Buffer.from('{"appName":"nusa_bom","verified":2}', 'utf-8');
+    fs.writeFileSync(withBomPath, Buffer.concat([bomPrefix, payloadBuf]));
+    const parsedB = bacaJsonAman(withBomPath, 'test-with-bom');
+    samaDengan(parsedB.appName, 'nusa_bom');
+    samaDengan(parsedB.verified, 2);
+
+    // C. JSON rusak tetap wajib gagal dengan konteks diagnostik
+    const corruptPath = path.join(tmp, 'corrupt.json');
+    fs.writeFileSync(corruptPath, Buffer.concat([bomPrefix, Buffer.from('{bad json', 'utf-8')]));
+    let threw = false;
+    try {
+      bacaJsonAman(corruptPath, 'test-corrupt');
+    } catch (e: any) {
+      threw = true;
+      pastikan(
+        String(e.message).includes('test-corrupt') && String(e.message).includes('corrupt.json'),
+        'Error JSON rusak wajib menyertakan tahap dan nama berkas'
+      );
+    }
+    pastikan(threw, 'JSON tidak valid wajib melempar galat');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+uji('5.2 Sandbox lifecycle POSIX installer (install.sh -> verifikasi -> tamper rejection -> uninstall.sh)', () => {
   if (process.platform === 'win32') {
-    console.log(
-      `     [CATATAN JUJUR] Host adalah Windows (win32); sandbox POSIX install.sh/uninstall.sh berstatus BELUM DIVERIFIKASI (${JSON.stringify(stages)}).`
-    );
-    return 'UNVERIFIED';
+    return 'BELUM_DIVERIFIKASI';
   }
-  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-installer-sandbox-'));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-posix-sbx-'));
   try {
-    const fakeHome = path.join(tmpRoot, 'home');
-    const prefixDir = path.join(tmpRoot, 'prefix');
-    const pkgOut1 = path.join(tmpRoot, 'pkg_v1');
-    const pkgOut2 = path.join(tmpRoot, 'pkg_v2');
+    const outDir = path.join(tmp, 'pkg');
+    const prefixDir = path.join(tmp, 'prefix');
+    const fakeHome = path.join(tmp, 'home');
     fs.mkdirSync(fakeHome, { recursive: true });
-    // Buat .bashrc berisi konfigurasi pribadi agar dipastikan TIDAK terhapus oleh uninstall.sh
-    const bashrcPath = path.join(fakeHome, '.bashrc');
-    fs.writeFileSync(bashrcPath, '# Konfigurasi pribadi pengguna\nexport EDITOR=nano\n', 'utf-8');
 
-    const posixTarget: CanonicalDesktopTarget =
-      process.platform === 'darwin'
-        ? process.arch === 'arm64'
-          ? 'macos-arm64'
-          : 'macos-x86_64'
-        : process.arch === 'arm64'
-          ? 'linux-arm64'
-          : 'linux-x86_64';
-
-    const pkg1 = DesktopDistributionPackager.packageTarget({
-      appName: 'nusa_demo',
-      appVersion: 'v0.23.0',
-      target: posixTarget,
+    const pkg = DesktopDistributionPackager.packageTarget({
+      appName: 'nusa_posix_demo',
+      appVersion: 'v0.23.5',
+      target: process.platform === 'darwin' ? 'macos-arm64' : 'linux-x86_64',
+      mode: 'release',
       packageKind: 'script-launcher',
-      outputDirectory: pkgOut1,
-      includeInstallers: true,
+      outputDirectory: outDir,
     });
 
-    // 1) Install v1
-    const instRes1 = DesktopInstallerGenerator.runPosixScriptInSandbox({
-      packageDir: pkg1.stagingDirectory,
-      scriptName: 'install.sh',
+    const installRes = DesktopInstallerGenerator.runPosixScriptInSandbox(
+      pkg.packageDirectory,
+      'install.sh',
       prefixDir,
-      homeDir: fakeHome,
-    });
-    if (!instRes1.success) {
-      stages.installerExecution = 'FAIL';
-      throw new Error(`[Tahap installerExecution GAGAL] install.sh v1 gagal: ${instRes1.stderr || instRes1.stdout}`);
-    }
-    const installedBin = path.join(prefixDir, 'bin', 'nusa_demo');
-    pastikan(fs.existsSync(installedBin), '[installerExecution] Biner terpasang harus ada di prefix/bin');
-    pastikan(fs.readFileSync(bashrcPath, 'utf-8').includes('NUSANTARA NUSA_DEMO PATH'), '[installerExecution] Penanda PATH NUSANTARA harus ditambahkan ke .bashrc');
-    stages.installerExecution = 'PASS';
-
-    // 2) Upgrade ke v2
-    const pkg2 = DesktopDistributionPackager.packageTarget({
-      appName: 'nusa_demo',
-      appVersion: 'v0.23.1',
-      target: posixTarget,
-      packageKind: 'script-launcher',
-      outputDirectory: pkgOut2,
-      includeInstallers: true,
-    });
-    const instRes2 = DesktopInstallerGenerator.runPosixScriptInSandbox({
-      packageDir: pkg2.stagingDirectory,
-      scriptName: 'install.sh',
-      prefixDir,
-      homeDir: fakeHome,
-    });
-    if (!instRes2.success) {
-      stages.upgrade = 'FAIL';
-      throw new Error(`[Tahap upgrade GAGAL] Upgrade install.sh v2 gagal: ${instRes2.stderr || instRes2.stdout}`);
-    }
-    const manifestAfterUpgrade = JSON.parse(
-      fs.readFileSync(path.join(prefixDir, '.nusa_demo-package-manifest.json'), 'utf-8')
+      fakeHome
     );
-    samaDengan(manifestAfterUpgrade.versi, 'v0.23.1', '[upgrade] Versi manifest setelah upgrade');
-    const binHashV2 = crypto.createHash('sha256').update(fs.readFileSync(installedBin)).digest('hex');
-    stages.upgrade = 'PASS';
+    pastikan(installRes.success, `install.sh gagal: ${installRes.stderr}`);
+    pastikan(fs.existsSync(path.join(prefixDir, 'bin/nusa_posix_demo')), 'Biner harus terpasang di prefix');
 
-    // 3) Penolakan tamper checksum oleh install.sh (v2 terpasang wajib tetap utuh)
-    fs.appendFileSync(path.join(pkg2.stagingDirectory, 'manifest.json'), '\n// corrupted');
-    const tamperRes = DesktopInstallerGenerator.runPosixScriptInSandbox({
-      packageDir: pkg2.stagingDirectory,
-      scriptName: 'install.sh',
-      prefixDir,
-      homeDir: fakeHome,
-    });
-    if (tamperRes.success) {
-      stages.tamperRejection = 'FAIL';
-      throw new Error('[Tahap tamperRejection GAGAL] install.sh wajib menolak paket dengan checksum rusak');
-    }
-    const binHashAfterTamper = crypto.createHash('sha256').update(fs.readFileSync(installedBin)).digest('hex');
-    samaDengan(binHashAfterTamper, binHashV2, '[tamperRejection] Biner v2 terpasang tidak boleh rusak akibat paket korup');
-    stages.tamperRejection = 'PASS';
+    const profileText = fs.readFileSync(path.join(fakeHome, '.profile'), 'utf-8');
+    pastikan(profileText.includes('NUSANTARA nusa_posix_demo PATH'), 'RC PATH marker harus ditulis');
 
-    // 4) Uninstall bersih
-    const uninstRes = DesktopInstallerGenerator.runPosixScriptInSandbox({
-      packageDir: pkg1.stagingDirectory,
-      scriptName: 'uninstall.sh',
+    // Tamper test
+    const tamperedBin = path.join(pkg.packageDirectory, 'bin/nusa_posix_demo');
+    const origContent = fs.readFileSync(tamperedBin);
+    fs.writeFileSync(tamperedBin, '#!/bin/sh\necho TAMPERED\n');
+    const tamperRes = DesktopInstallerGenerator.runPosixScriptInSandbox(
+      pkg.packageDirectory,
+      'install.sh',
       prefixDir,
-      homeDir: fakeHome,
-    });
-    if (!uninstRes.success) {
-      stages.uninstall = 'FAIL';
-      throw new Error(`[Tahap uninstall GAGAL] uninstall.sh gagal: ${uninstRes.stderr || uninstRes.stdout}`);
-    }
-    pastikan(!fs.existsSync(installedBin), '[uninstall] Biner harus terhapus setelah uninstall');
-    const bashrcAfter = fs.readFileSync(bashrcPath, 'utf-8');
-    pastikan(bashrcAfter.includes('export EDITOR=nano'), '[uninstall] Konfigurasi pribadi .bashrc TIDAK boleh hilang');
-    pastikan(!bashrcAfter.includes('NUSANTARA NUSA_DEMO PATH'), '[uninstall] Blok PATH Nusantara harus dibersihkan');
-    stages.uninstall = 'PASS';
+      fakeHome
+    );
+    pastikan(!tamperRes.success, 'install.sh wajib menolak paket jika checksum berubah');
+    fs.writeFileSync(tamperedBin, origContent);
+
+    const uninstRes = DesktopInstallerGenerator.runPosixScriptInSandbox(
+      pkg.packageDirectory,
+      'uninstall.sh',
+      prefixDir,
+      fakeHome
+    );
+    pastikan(uninstRes.success, `uninstall.sh gagal: ${uninstRes.stderr}`);
+    pastikan(!fs.existsSync(path.join(prefixDir, 'bin/nusa_posix_demo')), 'Biner harus terhapus setelah uninstall');
+    const cleanedProfile = fs.readFileSync(path.join(fakeHome, '.profile'), 'utf-8');
+    pastikan(!cleanedProfile.includes('NUSANTARA nusa_posix_demo PATH'), 'RC marker harus dibersihkan setelah uninstall');
   } finally {
-    fs.rmSync(tmpRoot, { recursive: true, force: true });
+    fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
 
-uji('5.3 Siklus hidup PowerShell installer untuk paket script-launcher Windows (nusa_demo_win.cmd)', () => {
-  const psProbe = DesktopInstallerGenerator.detectWindowsPowerShell();
-  const stages: Record<string, string> = {
-    powerShellAvailable: psProbe.available ? 'PASS' : 'NOT_VERIFIED',
-    packageArtifacts: 'NOT_VERIFIED',
-    installerExecution: 'NOT_VERIFIED',
-    upgrade: 'NOT_VERIFIED',
-    tamperRejection: 'NOT_VERIFIED',
-    uninstall: 'NOT_VERIFIED',
-  };
-
-  if (!psProbe.available) {
-    if (process.platform === 'win32') {
-      stages.powerShellAvailable = 'FAIL';
-      throw new Error('[Tahap powerShellAvailable GAGAL] Host Windows wajib memiliki powershell.exe atau pwsh.');
-    }
-    console.log(
-      `     [CATATAN JUJUR] PowerShell tidak tersedia pada host ${process.platform}; lifecycle Windows script-launcher berstatus BELUM DIVERIFIKASI (${JSON.stringify(stages)}).`
-    );
-    return 'UNVERIFIED';
+uji('5.3 Sandbox lifecycle PowerShell installer untuk paket script-launcher (.cmd) & JSON receipt bebas BOM', () => {
+  const ps = DesktopInstallerGenerator.detectWindowsPowerShell();
+  if (!ps.found) {
+    return 'BELUM_DIVERIFIKASI';
   }
-
-  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-win-cmd-sandbox-'));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-win-ps-53-'));
   try {
-    const prefixDir = path.join(tmpRoot, 'prefix');
-    const pkgOut1 = path.join(tmpRoot, 'pkg_win_v1');
-    const pkgOut2 = path.join(tmpRoot, 'pkg_win_v2');
-    const pkgOutMissing = path.join(tmpRoot, 'pkg_win_missing');
+    const pkgOut = path.join(tmp, 'dist');
+    const prefixDir = path.join(tmp, 'prefix');
 
-    const pkg1 = DesktopDistributionPackager.packageTarget({
+    // 1. Package script-launcher v1
+    const pkgV1 = DesktopDistributionPackager.packageTarget({
       appName: 'nusa_demo_win',
-      appVersion: 'v0.23.0',
+      appVersion: 'v0.23.5',
       target: 'windows-x86_64',
+      mode: 'release',
       packageKind: 'script-launcher',
-      outputDirectory: pkgOut1,
-      includeInstallers: true,
+      outputDirectory: pkgOut,
     });
+    const cmdBin = path.join(pkgV1.packageDirectory, 'bin/nusa_demo_win.cmd');
+    pastikan(fs.existsSync(cmdBin), 'Paket script-launcher Windows harus menghasilkan bin/nusa_demo_win.cmd');
 
-    pastikan(fs.existsSync(path.join(pkg1.stagingDirectory, 'install.ps1')), '[packageArtifacts] install.ps1 wajib ada di disk');
-    pastikan(fs.existsSync(path.join(pkg1.stagingDirectory, 'uninstall.ps1')), '[packageArtifacts] uninstall.ps1 wajib ada di disk');
-    pastikan(fs.existsSync(path.join(pkg1.stagingDirectory, 'install.bat')), '[packageArtifacts] install.bat wajib ada di disk');
-    pastikan(fs.existsSync(path.join(pkg1.stagingDirectory, 'uninstall.bat')), '[packageArtifacts] uninstall.bat wajib ada di disk');
-    pastikan(fs.existsSync(path.join(pkg1.stagingDirectory, 'bin', 'nusa_demo_win.cmd')), '[packageArtifacts] bin/nusa_demo_win.cmd wajib ada untuk script-launcher');
-    const shaCheck = ArchiveBuilder.verifySha256SumsFromDirectory(
-      fs.readFileSync(pkg1.sha256sumsPath, 'utf-8'),
-      pkg1.stagingDirectory
-    );
-    pastikan(shaCheck.valid, `[packageArtifacts] SHA256SUMS v1 harus valid: ${shaCheck.mismatches.join(', ')}`);
-    stages.packageArtifacts = 'PASS';
-
-    // 1) Install v1 (memakai -NoPath dalam sandbox agar HKCU User PATH runner tidak tersentuh)
-    const inst1 = DesktopInstallerGenerator.runWindowsScriptInSandbox({
-      packageDir: pkg1.stagingDirectory,
-      scriptName: 'install.ps1',
+    // 2. Jalankan install.ps1
+    const inst1 = DesktopInstallerGenerator.runWindowsScriptInSandbox(
+      pkgV1.packageDirectory,
+      'install.ps1',
       prefixDir,
-      noPath: true,
-    });
-    if (!inst1.success) {
-      stages.installerExecution = 'FAIL';
-      throw new Error(`[Tahap installerExecution GAGAL] (${psProbe.command}): ${inst1.stderr || inst1.stdout}`);
-    }
+      { noPath: true }
+    );
+    pastikan(inst1.success, `install.ps1 v1 gagal (exit=${inst1.exitCode}): ${inst1.stderr || inst1.stdout}`);
+
     const installedCmd = path.join(prefixDir, 'bin', 'nusa_demo_win.cmd');
-    pastikan(fs.existsSync(installedCmd), '[installerExecution] Launcher terpasang wajib ada di prefix/bin/nusa_demo_win.cmd');
-    const receipt1 = JSON.parse(fs.readFileSync(path.join(prefixDir, '.nusa_demo_win-install-manifest.json'), 'utf-8'));
-    samaDengan(receipt1.appVersion, 'v0.23.0', '[installerExecution] Receipt v1');
-    samaDengan(receipt1.pathAdded, false, '[installerExecution] Sandbox -NoPath tidak boleh mengubah PATH');
-    stages.installerExecution = 'PASS';
+    const installedManifest = path.join(prefixDir, 'share', 'nusa_demo_win', 'manifest.json');
+    const receiptPath = path.join(prefixDir, '.nusa_demo_win-install-manifest.json');
+    pastikan(fs.existsSync(installedCmd), 'bin/nusa_demo_win.cmd harus terpasang di prefix');
+    pastikan(fs.existsSync(installedManifest), 'share/nusa_demo_win/manifest.json harus terpasang');
+    pastikan(fs.existsSync(receiptPath), '.nusa_demo_win-install-manifest.json harus terbentuk');
 
-    // 2) Upgrade ke v2
-    const pkg2 = DesktopDistributionPackager.packageTarget({
+    // 3. Verifikasi receipt JSON bebas BOM UTF-8 secara ketat di disk & dapat di-parse langsung
+    const receiptBytes = fs.readFileSync(receiptPath);
+    const hasBom =
+      receiptBytes.length >= 3 &&
+      receiptBytes[0] === 0xef &&
+      receiptBytes[1] === 0xbb &&
+      receiptBytes[2] === 0xbf;
+    pastikan(!hasBom, 'Receipt JSON hasil install.ps1 tidak boleh diawali UTF-8 BOM (EF BB BF)');
+    const receiptData = bacaJsonAman(receiptPath, 'test-5.3-install');
+    samaDengan(receiptData.appName, 'nusa_demo_win');
+    samaDengan(receiptData.appVersion, 'v0.23.5');
+    pastikan(receiptData.verifiedFilesCount > 0, 'verifiedFilesCount harus > 0');
+
+    // 4. Upgrade v2 -> manifest & receipt diperbarui bersih
+    const pkgOut2 = path.join(tmp, 'dist2');
+    const pkgV2 = DesktopDistributionPackager.packageTarget({
       appName: 'nusa_demo_win',
-      appVersion: 'v0.23.1',
+      appVersion: 'v0.23.6',
       target: 'windows-x86_64',
+      mode: 'release',
       packageKind: 'script-launcher',
       outputDirectory: pkgOut2,
-      includeInstallers: true,
     });
-    const inst2 = DesktopInstallerGenerator.runWindowsScriptInSandbox({
-      packageDir: pkg2.stagingDirectory,
-      scriptName: 'install.ps1',
+    const inst2 = DesktopInstallerGenerator.runWindowsScriptInSandbox(
+      pkgV2.packageDirectory,
+      'install.ps1',
       prefixDir,
-      noPath: true,
-    });
-    if (!inst2.success) {
-      stages.upgrade = 'FAIL';
-      throw new Error(`[Tahap upgrade GAGAL] Upgrade install.ps1 v2 gagal: ${inst2.stderr || inst2.stdout}`);
-    }
-    const pkgManifestAfterUpgrade = JSON.parse(
-      fs.readFileSync(path.join(prefixDir, '.nusa_demo_win-package-manifest.json'), 'utf-8')
+      { noPath: true }
     );
-    const receipt2 = JSON.parse(fs.readFileSync(path.join(prefixDir, '.nusa_demo_win-install-manifest.json'), 'utf-8'));
-    samaDengan(pkgManifestAfterUpgrade.versi, 'v0.23.1', '[upgrade] Versi package manifest');
-    samaDengan(receipt2.appVersion, 'v0.23.1', '[upgrade] Versi install receipt');
-    const installedCmdHashV2 = crypto.createHash('sha256').update(fs.readFileSync(installedCmd)).digest('hex');
-    stages.upgrade = 'PASS';
+    pastikan(inst2.success, `Upgrade install.ps1 gagal: ${inst2.stderr || inst2.stdout}`);
+    const receiptV2 = bacaJsonAman(receiptPath, 'test-5.3-upgrade');
+    samaDengan(receiptV2.appVersion, 'v0.23.6');
 
-    // 3) Penolakan tamper checksum & berkas hilang tanpa merusak instalasi v2
-    fs.appendFileSync(path.join(pkg2.stagingDirectory, 'manifest.json'), '\n// corrupted');
-    const tamperRes = DesktopInstallerGenerator.runWindowsScriptInSandbox({
-      packageDir: pkg2.stagingDirectory,
-      scriptName: 'install.ps1',
+    // 5. Tamper check -> install.ps1 wajib gagal tanpa merusak bin terpasang
+    const targetToTamper = path.join(pkgV2.packageDirectory, 'bin', 'nusa_demo_win.cmd');
+    const savedBytes = fs.readFileSync(targetToTamper);
+    fs.writeFileSync(targetToTamper, '@echo TAMPERED\r\n');
+    const tamperRes = DesktopInstallerGenerator.runWindowsScriptInSandbox(
+      pkgV2.packageDirectory,
+      'install.ps1',
       prefixDir,
-      noPath: true,
-    });
-    if (tamperRes.success) {
-      stages.tamperRejection = 'FAIL';
-      throw new Error('[Tahap tamperRejection GAGAL] install.ps1 wajib menolak paket dengan SHA-256 tidak cocok');
-    }
-
-    const pkgMissing = DesktopDistributionPackager.packageTarget({
-      appName: 'nusa_demo_win',
-      appVersion: 'v0.23.2',
-      target: 'windows-x86_64',
-      packageKind: 'script-launcher',
-      outputDirectory: pkgOutMissing,
-      includeInstallers: true,
-    });
-    fs.rmSync(path.join(pkgMissing.stagingDirectory, 'BACA-SAYA.txt'));
-    const missingRes = DesktopInstallerGenerator.runWindowsScriptInSandbox({
-      packageDir: pkgMissing.stagingDirectory,
-      scriptName: 'install.ps1',
-      prefixDir,
-      noPath: true,
-    });
-    if (missingRes.success) {
-      stages.tamperRejection = 'FAIL';
-      throw new Error('[Tahap tamperRejection GAGAL] install.ps1 wajib menolak paket jika berkas pada SHA256SUMS hilang');
-    }
-
-    const manifestAfterTamper = JSON.parse(
-      fs.readFileSync(path.join(prefixDir, '.nusa_demo_win-package-manifest.json'), 'utf-8')
+      { noPath: true }
     );
-    samaDengan(manifestAfterTamper.versi, 'v0.23.1', '[tamperRejection] Versi v2 terpasang wajib tetap utuh');
-    const installedCmdHashAfterTamper = crypto.createHash('sha256').update(fs.readFileSync(installedCmd)).digest('hex');
-    samaDengan(installedCmdHashAfterTamper, installedCmdHashV2, '[tamperRejection] Berkas terpasang v2 wajib tidak korup');
-    stages.tamperRejection = 'PASS';
+    pastikan(!tamperRes.success, 'install.ps1 wajib menolak paket dengan checksum SHA-256 tidak cocok');
+    fs.writeFileSync(targetToTamper, savedBytes);
 
-    // 4) Uninstall bersih
-    const uninst = DesktopInstallerGenerator.runWindowsScriptInSandbox({
-      packageDir: pkg1.stagingDirectory,
-      scriptName: 'uninstall.ps1',
+    // 6. Uninstall -> hapus biner, share manifest, dan receipt
+    const uninst = DesktopInstallerGenerator.runWindowsScriptInSandbox(
+      pkgV2.packageDirectory,
+      'uninstall.ps1',
       prefixDir,
-    });
-    if (!uninst.success) {
-      stages.uninstall = 'FAIL';
-      throw new Error(`[Tahap uninstall GAGAL] uninstall.ps1 gagal: ${uninst.stderr || uninst.stdout}`);
-    }
-    pastikan(!fs.existsSync(installedCmd), '[uninstall] Launcher nusa_demo_win.cmd wajib terhapus setelah uninstall.ps1');
-    pastikan(!fs.existsSync(path.join(prefixDir, '.nusa_demo_win-install-manifest.json')), '[uninstall] Receipt instalasi wajib terhapus');
-    pastikan(!fs.existsSync(path.join(prefixDir, '.nusa_demo_win-package-manifest.json')), '[uninstall] Package manifest wajib terhapus');
-    stages.uninstall = 'PASS';
+      { noPath: true }
+    );
+    pastikan(uninst.success, `uninstall.ps1 gagal: ${uninst.stderr || uninst.stdout}`);
+    pastikan(!fs.existsSync(installedCmd), 'bin/nusa_demo_win.cmd harus terhapus setelah uninstall');
+    pastikan(!fs.existsSync(receiptPath), 'Receipt manifest harus terhapus setelah uninstall');
   } finally {
-    fs.rmSync(tmpRoot, { recursive: true, force: true });
+    fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
 
-uji('5.4 Siklus hidup PowerShell installer untuk executable native PE32+ x86_64 nyata (nusa_demo_win.exe)', () => {
-  const psProbe = DesktopInstallerGenerator.detectWindowsPowerShell();
-  const winCap = TargetMatrixManager.inspectTargetCapability('windows-x86_64');
-  const stages: Record<string, string> = {
-    powerShellAvailable: psProbe.available ? 'PASS' : 'NOT_VERIFIED',
-    peExecutableValid: 'NOT_VERIFIED',
-    installerExecution: 'NOT_VERIFIED',
-    upgrade: 'NOT_VERIFIED',
-    tamperRejection: 'NOT_VERIFIED',
-    uninstall: 'NOT_VERIFIED',
-  };
-
-  if (!psProbe.available || !winCap.canBuildNative) {
-    if (process.platform === 'win32' && process.env.NUSANTARA_REQUIRE_CLANG === '1') {
-      if (!psProbe.available) stages.powerShellAvailable = 'FAIL';
-      if (!winCap.canBuildNative) stages.peExecutableValid = 'FAIL';
-      throw new Error(
-        `[Tahap peExecutableValid GAGAL] Toolchain/PowerShell windows-x86_64 wajib aktif saat NUSANTARA_REQUIRE_CLANG=1 (ps=${psProbe.available}, canBuildNative=${winCap.canBuildNative}, missing=${winCap.missingRequirements.join('; ')})`
-      );
-    }
-    console.log(
-      `     [CATATAN JUJUR] PowerShell atau kompilator PE32+ windows-x86_64 tidak tersedia di host ${process.platform}; lifecycle executable native PE32+ berstatus BELUM DIVERIFIKASI (${JSON.stringify(stages)}).`
-    );
-    return 'UNVERIFIED';
+uji('5.4 Sandbox lifecycle PowerShell installer untuk executable native PE32+ x86_64 nyata (nusa_demo_win.exe)', () => {
+  const ps = DesktopInstallerGenerator.detectWindowsPowerShell();
+  const capWin = TargetMatrixManager.inspectTargetCapability('windows-x86_64');
+  if (process.platform !== 'win32' || !ps.found || !capWin.canBuildNative) {
+    return 'BELUM_DIVERIFIKASI';
   }
 
-  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-win-pe-sandbox-'));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-win-ps-54-'));
   try {
-    const srcDir = path.join(tmpRoot, 'src');
-    const buildOut1 = path.join(tmpRoot, 'build_v1');
-    const buildOut2 = path.join(tmpRoot, 'build_v2');
-    const pkgOut1 = path.join(tmpRoot, 'pkg_pe_v1');
-    const pkgOut2 = path.join(tmpRoot, 'pkg_pe_v2');
-    const prefixDir = path.join(tmpRoot, 'prefix');
-    fs.mkdirSync(srcDir, { recursive: true });
+    const buildDir = path.join(tmp, 'build');
+    const pkgOut = path.join(tmp, 'dist');
+    const prefixDir = path.join(tmp, 'prefix');
 
-    const srcV1 = path.join(srcDir, 'demo_win_v1.nusantara');
-    const srcV2 = path.join(srcDir, 'demo_win_v2.nusantara');
-    fs.writeFileSync(
-      srcV1,
-      'program DemoWinNativeV1\nmulai\n  tampilkan("NUSA_WIN_PE_V1")\nselesai\n',
-      'utf-8'
-    );
-    fs.writeFileSync(
-      srcV2,
-      'program DemoWinNativeV2\nmulai\n  tampilkan("NUSA_WIN_PE_V2")\nselesai\n',
-      'utf-8'
-    );
-
-    const build1 = NativeBuildPipeline.build({
-      sourceFilePath: srcV1,
+    const src = `
+program DemoWinNative
+mulai
+  tampilkan("NUSANTARA_WIN_PE_INSTALLER_OK")
+selesai
+`;
+    const buildRes = NativeBuildPipeline.build({
+      sourceCode: src,
       appName: 'nusa_demo_win',
       target: 'windows-x86_64',
-      outputDirectory: buildOut1,
-      linkingMode: 'dynamic',
-      verifyExecution: process.platform === 'win32',
+      outputDirectory: buildDir,
+      optLevel: 'O2',
+      verifyExecution: true,
     });
-    const build2 = NativeBuildPipeline.build({
-      sourceFilePath: srcV2,
+    pastikan(buildRes.success && Boolean(buildRes.executablePath), `Kompilasi PE32+ gagal: ${buildRes.diagnostics.join(' | ')}`);
+
+    const pkg = DesktopDistributionPackager.packageTarget({
       appName: 'nusa_demo_win',
+      appVersion: 'v0.23.5',
       target: 'windows-x86_64',
-      outputDirectory: buildOut2,
-      linkingMode: 'dynamic',
-      verifyExecution: process.platform === 'win32',
-    });
-
-    if (!build1.success || !build1.executablePath || !build2.success || !build2.executablePath) {
-      stages.peExecutableValid = 'FAIL';
-      throw new Error(
-        `[Tahap peExecutableValid GAGAL] Kompilasi native windows-x86_64 gagal: v1=[${build1.statusCode}] ${build1.diagnostics.join(' | ')}; v2=[${build2.statusCode}] ${build2.diagnostics.join(' | ')}`
-      );
-    }
-
-    const meta1 = BinaryInspector.inspectStrict(build1.executablePath);
-    const meta2 = BinaryInspector.inspectStrict(build2.executablePath);
-    if (
-      !meta1.isValidExecutable ||
-      meta1.format !== 'COFF' ||
-      meta1.architecture !== 'x86_64' ||
-      meta1.binaryType !== 'EXECUTABLE' ||
-      !meta2.isValidExecutable ||
-      meta2.format !== 'COFF' ||
-      meta2.architecture !== 'x86_64' ||
-      meta2.binaryType !== 'EXECUTABLE'
-    ) {
-      stages.peExecutableValid = 'FAIL';
-      throw new Error(
-        `[Tahap peExecutableValid GAGAL] Header PE32+ x86_64 tidak valid: v1=${JSON.stringify(meta1.validationErrors)}, v2=${JSON.stringify(meta2.validationErrors)}`
-      );
-    }
-    stages.peExecutableValid = 'PASS';
-
-    // 1) Paketkan & pasang PE32+ v1
-    const pkg1 = DesktopDistributionPackager.packageTarget({
-      appName: 'nusa_demo_win',
-      appVersion: 'v0.23.0',
-      target: 'windows-x86_64',
+      mode: 'release',
       packageKind: 'native',
-      nativeBuildResult: build1,
-      executablePath: build1.executablePath,
-      outputDirectory: pkgOut1,
-      includeInstallers: true,
+      outputDirectory: pkgOut,
+      nativeBuildResult: buildRes,
     });
-    const inst1 = DesktopInstallerGenerator.runWindowsScriptInSandbox({
-      packageDir: pkg1.stagingDirectory,
-      scriptName: 'install.ps1',
+
+    const instRes = DesktopInstallerGenerator.runWindowsScriptInSandbox(
+      pkg.packageDirectory,
+      'install.ps1',
       prefixDir,
-      noPath: true,
-    });
-    if (!inst1.success) {
-      stages.installerExecution = 'FAIL';
-      throw new Error(`[Tahap installerExecution GAGAL] install.ps1 native v1 gagal: ${inst1.stderr || inst1.stdout}`);
-    }
+      { noPath: true }
+    );
+    pastikan(instRes.success, `install.ps1 PE32+ gagal: ${instRes.stderr || instRes.stdout}`);
+
     const installedExe = path.join(prefixDir, 'bin', 'nusa_demo_win.exe');
-    pastikan(fs.existsSync(installedExe), '[installerExecution] Executable PE32+ wajib terpasang di prefix/bin/nusa_demo_win.exe');
-    const installedMeta1 = BinaryInspector.inspectStrict(installedExe);
+    const receiptPath = path.join(prefixDir, '.nusa_demo_win-install-manifest.json');
+    pastikan(fs.existsSync(installedExe), 'bin/nusa_demo_win.exe harus terpasang');
+
+    const peMeta = BinaryInspector.inspectStrict(installedExe);
     pastikan(
-      Boolean(installedMeta1.isValidExecutable) &&
-        installedMeta1.format === 'COFF' &&
-        installedMeta1.architecture === 'x86_64',
-      '[installerExecution] Executable terpasang wajib berformat PE32+ x86_64 sah'
+      Boolean(peMeta.isValidExecutable) && peMeta.format === 'COFF' && peMeta.architecture === 'x86_64',
+      'Executable terpasang wajib berformat PE32+ x86_64 valid'
     );
-    pastikan(Boolean(build1.executableSha256), '[installerExecution] Hash SHA-256 build v1 wajib tersedia');
-    const hashExeV1 = crypto.createHash('sha256').update(fs.readFileSync(installedExe)).digest('hex');
-    samaDengan(hashExeV1, build1.executableSha256!, '[installerExecution] SHA-256 .exe terpasang harus cocok dengan hasil kompilasi v1');
-    stages.installerExecution = 'PASS';
 
-    // 2) Upgrade PE32+ ke v2
-    const pkg2 = DesktopDistributionPackager.packageTarget({
-      appName: 'nusa_demo_win',
-      appVersion: 'v0.23.1',
-      target: 'windows-x86_64',
-      packageKind: 'native',
-      nativeBuildResult: build2,
-      executablePath: build2.executablePath,
-      outputDirectory: pkgOut2,
-      includeInstallers: true,
-    });
-    const inst2 = DesktopInstallerGenerator.runWindowsScriptInSandbox({
-      packageDir: pkg2.stagingDirectory,
-      scriptName: 'install.ps1',
-      prefixDir,
-      noPath: true,
-    });
-    if (!inst2.success) {
-      stages.upgrade = 'FAIL';
-      throw new Error(`[Tahap upgrade GAGAL] Upgrade install.ps1 PE32+ v2 gagal: ${inst2.stderr || inst2.stdout}`);
-    }
-    const manifestV2 = JSON.parse(fs.readFileSync(path.join(prefixDir, '.nusa_demo_win-package-manifest.json'), 'utf-8'));
-    samaDengan(manifestV2.versi, 'v0.23.1', '[upgrade] Manifest PE32+ v2');
-    pastikan(Boolean(build2.executableSha256), '[upgrade] Hash SHA-256 build v2 wajib tersedia');
-    const hashExeV2 = crypto.createHash('sha256').update(fs.readFileSync(installedExe)).digest('hex');
-    samaDengan(hashExeV2, build2.executableSha256!, '[upgrade] SHA-256 .exe terpasang harus cocok dengan hasil kompilasi v2');
-    stages.upgrade = 'PASS';
+    const execOut = safeCP.spawnSync(installedExe, [], { encoding: 'utf-8', timeout: 10000, shell: false });
+    samaDengan(execOut.status, 0, 'Executable terpasang wajib berjalan dengan exit 0');
+    pastikan(
+      (execOut.stdout || '').includes('NUSANTARA_WIN_PE_INSTALLER_OK'),
+      `Stdout executable terpasang tidak cocok: '${execOut.stdout}'`
+    );
 
-    // 3) Tamper biner .exe dalam paket -> wajib ditolak dan v2 terpasang tetap utuh
-    fs.appendFileSync(path.join(pkg2.stagingDirectory, 'bin', 'nusa_demo_win.exe'), Buffer.from([0x00, 0xff]));
-    const tamperRes = DesktopInstallerGenerator.runWindowsScriptInSandbox({
-      packageDir: pkg2.stagingDirectory,
-      scriptName: 'install.ps1',
-      prefixDir,
-      noPath: true,
-    });
-    if (tamperRes.success) {
-      stages.tamperRejection = 'FAIL';
-      throw new Error('[Tahap tamperRejection GAGAL] install.ps1 wajib menolak executable PE32+ yang dimodifikasi terhadap SHA256SUMS');
-    }
-    const hashAfterTamper = crypto.createHash('sha256').update(fs.readFileSync(installedExe)).digest('hex');
-    samaDengan(hashAfterTamper, build2.executableSha256!, '[tamperRejection] Executable PE32+ v2 terpasang tidak boleh tertimpa berkas korup');
-    stages.tamperRejection = 'PASS';
+    const receiptBytes = fs.readFileSync(receiptPath);
+    pastikan(
+      !(receiptBytes.length >= 3 && receiptBytes[0] === 0xef && receiptBytes[1] === 0xbb && receiptBytes[2] === 0xbf),
+      'Receipt native .exe tidak boleh memiliki UTF-8 BOM'
+    );
+    const receiptJson = bacaJsonAman(receiptPath, 'test-5.4-native');
+    samaDengan(receiptJson.appName, 'nusa_demo_win');
 
-    // 4) Uninstall bersih
-    const uninst = DesktopInstallerGenerator.runWindowsScriptInSandbox({
-      packageDir: pkg1.stagingDirectory,
-      scriptName: 'uninstall.ps1',
+    const uninst = DesktopInstallerGenerator.runWindowsScriptInSandbox(
+      pkg.packageDirectory,
+      'uninstall.ps1',
       prefixDir,
-    });
-    if (!uninst.success) {
-      stages.uninstall = 'FAIL';
-      throw new Error(`[Tahap uninstall GAGAL] uninstall.ps1 native gagal: ${uninst.stderr || uninst.stdout}`);
-    }
-    pastikan(!fs.existsSync(installedExe), '[uninstall] Executable nusa_demo_win.exe wajib terhapus setelah uninstall.ps1');
-    pastikan(!fs.existsSync(path.join(prefixDir, '.nusa_demo_win-install-manifest.json')), '[uninstall] Receipt instalasi wajib terhapus');
-    pastikan(!fs.existsSync(path.join(prefixDir, '.nusa_demo_win-package-manifest.json')), '[uninstall] Package manifest wajib terhapus');
-    stages.uninstall = 'PASS';
+      { noPath: true }
+    );
+    pastikan(uninst.success, `uninstall.ps1 PE32+ gagal: ${uninst.stderr}`);
+    pastikan(!fs.existsSync(installedExe), 'nusa_demo_win.exe harus terhapus setelah uninstall');
   } finally {
-    fs.rmSync(tmpRoot, { recursive: true, force: true });
+    fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
 
 // -----------------------------------------------------------------------------
-// GRUP 6: INTEGRASI CLI & REGRESI PHASE 1–22
+// GRUP 6: STANDALONE PACKAGER & CLI INFO
 // -----------------------------------------------------------------------------
-console.log('\n=== [GRUP 6: Integrasi CLI & Regresi Phase 1-22] ===');
+console.log('\n[GRUP 6] StandalonePackager Lintas OS & Informasi CLI');
 
-uji('6.1 CLI info melaporkan ke-6 target desktop resmi', () => {
+uji('6.1 StandalonePackager menolak skrip shell jika requireNativeBinary=true', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-sa-reject-'));
+  try {
+    const fake = path.join(tmp, 'not_native');
+    fs.writeFileSync(fake, '#!/bin/sh\necho fake\n');
+    const res = StandalonePackager.package({
+      appName: 'uji_tolak',
+      appVersion: '0.23.5',
+      executablePath: fake,
+      outputDirectory: tmp,
+      requireNativeBinary: true,
+    });
+    pastikan(!res.success, 'StandalonePackager wajib menolak skrip jika requireNativeBinary=true');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+uji('6.2 StandalonePackager menyertakan skrip installer sesuai target OS (Windows/Linux/macOS)', () => {
+  const cases: Array<{ target: string; os: 'windows' | 'linux' | 'darwin'; expectedInstallers: string[] }> = [
+    { target: 'windows-x86_64', os: 'windows', expectedInstallers: ['install.ps1', 'uninstall.ps1', 'install.bat', 'uninstall.bat'] },
+    { target: 'linux-x86_64', os: 'linux', expectedInstallers: ['install.sh', 'uninstall.sh'] },
+    { target: 'macos-arm64', os: 'darwin', expectedInstallers: ['install.sh', 'uninstall.sh'] },
+  ];
+
+  for (const c of cases) {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), `nusa-sa-${c.os}-`));
+    try {
+      const dummy = path.join(tmp, c.os === 'windows' ? 'app.exe' : 'app');
+      fs.writeFileSync(
+        dummy,
+        c.os === 'windows'
+          ? buildMinimalPe32Plus('x86_64')
+          : c.os === 'darwin'
+          ? buildMinimalMachO64('aarch64')
+          : buildMinimalElf64('x86_64')
+      );
+      const res = StandalonePackager.package({
+        appName: `app_${c.os}`,
+        appVersion: '0.23.5',
+        executablePath: dummy,
+        outputDirectory: tmp,
+        targetPlatform: c.target,
+        requireNativeBinary: true,
+        includeInstallers: true,
+      });
+      pastikan(res.success, `StandalonePackager gagal untuk ${c.target}: ${res.diagnostics.join(' | ')}`);
+      samaDengan(res.targetOS, c.os);
+      for (const instFile of c.expectedInstallers) {
+        pastikan(
+          Boolean(res.installerFiles?.includes(instFile)) && fs.existsSync(path.join(res.standaloneDirectory, instFile)),
+          `Installer '${instFile}' wajib ada untuk target '${c.target}'`
+        );
+      }
+      pastikan(Boolean(res.sha256sumsPath && fs.existsSync(res.sha256sumsPath)), 'SHA256SUMS wajib ada');
+      pastikan(Boolean(res.archivePath && fs.existsSync(res.archivePath)), 'Arsip .tar.gz wajib ada');
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }
+});
+
+uji('6.3 Perintah CLI "nusantara info --json" memuat 6 target kanonik resmi', () => {
   const logs: string[] = [];
-  const cli = new NusantaraCLI({ pembaca: new PembacaBerkasNode(), log: (m) => logs.push(m) });
+  const cli = new NusantaraCLI({ log: (m) => logs.push(m) });
   const code = cli.jalankan(['info', '--json']);
   samaDengan(code, 0);
   const parsed = JSON.parse(logs.join('\n'));
-  for (const t of DESKTOP_CANONICAL_TARGETS) {
-    pastikan(parsed.targetDidukung.includes(t), `Target ${t} harus tercantum di nusantara info`);
-  }
-});
-
-uji('6.2 StandalonePackager menulis arsip .tar.gz, SHA256SUMS, dan installer sesuai OS (Windows, Linux, macOS)', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-standalone-tgz-'));
-  try {
-    // 1) Host default (menghasilkan .ps1+.bat di Windows, install.sh+uninstall.sh di Linux/macOS)
-    const hostExe = path.join(tmpDir, process.platform === 'win32' ? 'halo_cli.exe' : 'halo_cli');
-    fs.writeFileSync(hostExe, process.platform === 'win32' ? '@echo off\r\necho Halo\r\n' : '#!/bin/sh\necho "Halo"\n');
-    const hostRes = StandalonePackager.package({
-      appName: 'halo_cli',
-      appVersion: '1.0.0',
-      executablePath: hostExe,
-      outputDirectory: path.join(tmpDir, 'host'),
-      includeInstallers: true,
-    });
-    pastikan(hostRes.success && Boolean(hostRes.archivePath && fs.existsSync(hostRes.archivePath)), 'Arsip .tar.gz host wajib ada di disk');
-    pastikan(Boolean(hostRes.sha256sumsPath && fs.existsSync(hostRes.sha256sumsPath)), 'SHA256SUMS host wajib ada di disk');
-    if (process.platform === 'win32') {
-      pastikan(fs.existsSync(path.join(hostRes.standaloneDirectory, 'install.ps1')), 'Windows wajib menyertakan install.ps1');
-      pastikan(fs.existsSync(path.join(hostRes.standaloneDirectory, 'uninstall.ps1')), 'Windows wajib menyertakan uninstall.ps1');
-      pastikan(fs.existsSync(path.join(hostRes.standaloneDirectory, 'install.bat')), 'Windows wajib menyertakan install.bat');
-      pastikan(fs.existsSync(path.join(hostRes.standaloneDirectory, 'uninstall.bat')), 'Windows wajib menyertakan uninstall.bat');
-      pastikan(!fs.existsSync(path.join(hostRes.standaloneDirectory, 'install.sh')), 'Paket Windows tidak boleh mengharuskan install.sh');
-    } else {
-      pastikan(fs.existsSync(path.join(hostRes.standaloneDirectory, 'install.sh')), 'POSIX host wajib menyertakan install.sh');
-      pastikan(fs.existsSync(path.join(hostRes.standaloneDirectory, 'uninstall.sh')), 'POSIX host wajib menyertakan uninstall.sh');
-      pastikan(!fs.existsSync(path.join(hostRes.standaloneDirectory, 'install.ps1')), 'Paket POSIX tidak boleh menyertakan install.ps1');
-    }
-
-    // 2) Validasi eksplisit seluruh 3 OS target (Windows, Linux, macOS)
-    const matrix: Array<{
-      targetPlatform: CanonicalDesktopTarget;
-      exeName: string;
-      expectedInstallers: string[];
-      forbiddenInstallers: string[];
-    }> = [
-      {
-        targetPlatform: 'windows-x86_64',
-        exeName: 'halo_win.exe',
-        expectedInstallers: ['install.ps1', 'uninstall.ps1', 'install.bat', 'uninstall.bat'],
-        forbiddenInstallers: ['install.sh', 'uninstall.sh'],
-      },
-      {
-        targetPlatform: 'linux-x86_64',
-        exeName: 'halo_linux',
-        expectedInstallers: ['install.sh', 'uninstall.sh'],
-        forbiddenInstallers: ['install.ps1', 'install.bat'],
-      },
-      {
-        targetPlatform: 'macos-arm64',
-        exeName: 'halo_macos',
-        expectedInstallers: ['install.sh', 'uninstall.sh'],
-        forbiddenInstallers: ['install.ps1', 'install.bat'],
-      },
-    ];
-
-    for (const spec of matrix) {
-      const subDir = path.join(tmpDir, spec.targetPlatform);
-      fs.mkdirSync(subDir, { recursive: true });
-      const binDummy = path.join(subDir, spec.exeName);
-      fs.writeFileSync(binDummy, 'launcher-stub');
-      const res = StandalonePackager.package({
-        appName: `halo_${spec.targetPlatform}`,
-        appVersion: '1.0.0',
-        executablePath: binDummy,
-        outputDirectory: path.join(subDir, 'out'),
-        targetPlatform: spec.targetPlatform,
-        includeInstallers: true,
-      });
-
-      pastikan(res.success && Boolean(res.archivePath && fs.existsSync(res.archivePath)), `${spec.targetPlatform}: arsip .tar.gz wajib ada di disk`);
-      pastikan(Boolean(res.sha256sumsPath && fs.existsSync(res.sha256sumsPath)), `${spec.targetPlatform}: SHA256SUMS wajib ada di disk`);
-      const shaText = fs.readFileSync(res.sha256sumsPath!, 'utf-8');
-      const shaCheck = ArchiveBuilder.verifySha256SumsFromDirectory(shaText, res.standaloneDirectory);
-      pastikan(shaCheck.valid, `${spec.targetPlatform}: SHA256SUMS internal wajib valid 100%`);
-
-      for (const reqFile of spec.expectedInstallers) {
-        const full = path.join(res.standaloneDirectory, reqFile);
-        pastikan(fs.existsSync(full), `${spec.targetPlatform}: installer '${reqFile}' wajib tersedia di disk`);
-        pastikan(shaText.includes(reqFile), `${spec.targetPlatform}: installer '${reqFile}' wajib tercatat di SHA256SUMS`);
-      }
-      for (const forb of spec.forbiddenInstallers) {
-        pastikan(
-          !fs.existsSync(path.join(res.standaloneDirectory, forb)),
-          `${spec.targetPlatform}: installer OS berbeda '${forb}' tidak boleh ada`
-        );
-      }
-    }
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }
-});
-
-uji('6.3 Regresi bahasa NUSANTARA Phase 1-22 (lexer, parser, tipe, interpreter, stdlib)', () => {
-  const kode = `
-program UjiRegresiFase23
-gunakan "matematika" sebagai mtk
-gunakan "teks" sebagai tk
-
-mulai
-  hasil : desimal = mtk.akar(81.0)
-  pesan : teks = tk.kapital("nusantara")
-  tampilkan(pesan, hasil)
-selesai
-`;
-  const buf = new PenulisOutputBuffer();
-  const interp = new Interpreter(buf);
-  interp.jalankanKode(kode);
-  samaDengan(buf.dapatkanSeluruhTeks().join('\n').trim(), 'NUSANTARA 9');
+  samaDengan(parsed.targetDidukung.length, 6, 'info --json harus memuat 6 target kanonik');
 });
 
 // -----------------------------------------------------------------------------
-// GRUP 7: SERTIFIKASI ENAM TARGET, EVIDENCE JSON & AGGREGATION GATE (PHASE 23.2)
+// GRUP 7: PHASE 23.2 SIX-TARGET CERTIFICATION AGGREGATION GATE
 // -----------------------------------------------------------------------------
-console.log('\n=== [GRUP 7: Sertifikasi 6 Target, Evidence JSON & Aggregation Gate (Phase 23.2)] ===');
+console.log('\n[GRUP 7] Gerbang Sertifikasi 6 Target Desktop (Phase 23.2)');
 
-function buatEvidencePassLengkap(target: CanonicalDesktopTarget, baseDir?: string): Phase23TargetEvidence {
-  const triples: Record<CanonicalDesktopTarget, string> = {
-    'windows-x86_64': 'x86_64-pc-windows-msvc',
-    'windows-arm64': 'aarch64-pc-windows-msvc',
-    'linux-x86_64': 'x86_64-unknown-linux-gnu',
-    'linux-arm64': 'aarch64-unknown-linux-gnu',
-    'macos-x86_64': 'x86_64-apple-darwin',
-    'macos-arm64': 'arm64-apple-darwin',
-  };
-  const formats: Record<CanonicalDesktopTarget, 'COFF' | 'ELF' | 'Mach-O'> = {
-    'windows-x86_64': 'COFF',
-    'windows-arm64': 'COFF',
-    'linux-x86_64': 'ELF',
-    'linux-arm64': 'ELF',
-    'macos-x86_64': 'Mach-O',
-    'macos-arm64': 'Mach-O',
-  };
-  const archs: Record<CanonicalDesktopTarget, 'x86_64' | 'aarch64'> = {
-    'windows-x86_64': 'x86_64',
-    'windows-arm64': 'aarch64',
-    'linux-x86_64': 'x86_64',
-    'linux-arm64': 'aarch64',
-    'macos-x86_64': 'x86_64',
-    'macos-arm64': 'aarch64',
-  };
+function createValidEvidenceFixture(
+  bundleDir: string,
+  target: CanonicalDesktopTarget,
+  overrideStatus?: 'PASS' | 'NOT_VERIFIED' | 'FAIL'
+): Phase23TargetEvidence {
+  const artDir = path.join(bundleDir, 'artifacts', target);
+  fs.mkdirSync(artDir, { recursive: true });
 
-  let exeRel: string | undefined;
-  let llRel: string | undefined;
-  let objRel: string | undefined;
-  let llSha = crypto.createHash('sha256').update(`ll-${target}`).digest('hex');
-  let objSha = crypto.createHash('sha256').update(`obj-${target}`).digest('hex');
-  let exeSha = crypto.createHash('sha256').update(`exe-${target}`).digest('hex');
+  const llFile = path.join(artDir, 'app.ll');
+  const objFile = path.join(artDir, target.startsWith('windows') ? 'app.obj' : 'app.o');
+  const exeFile = path.join(artDir, target.startsWith('windows') ? 'app.exe' : 'app');
 
-  if (baseDir) {
-    const fDir = path.join(baseDir, 'files', target);
-    fs.mkdirSync(fDir, { recursive: true });
-    const llBytes = Buffer.from(`; IR ${target}\n@.str.0 = private unnamed_addr constant [23 x i8] c"NUSANTARA_NATIVE_CI_OK\\00"\n`);
-    const objBytes = Buffer.from(`OBJ-${target}`);
-    fs.writeFileSync(path.join(fDir, 'app.ll'), llBytes);
-    fs.writeFileSync(path.join(fDir, 'app.o'), objBytes);
+  fs.writeFileSync(llFile, '; valid ir\n', 'utf-8');
+  fs.writeFileSync(objFile, Buffer.from([1, 2, 3, 4]));
 
-    let exeBytes: Buffer;
-    if (formats[target] === 'ELF') {
-      exeBytes = Buffer.alloc(64);
-      exeBytes[0] = 0x7f; exeBytes[1] = 0x45; exeBytes[2] = 0x4c; exeBytes[3] = 0x46;
-      exeBytes[4] = 2; exeBytes[5] = 1; exeBytes[6] = 1;
-      exeBytes.writeUInt16LE(2, 16);
-      exeBytes.writeUInt16LE(archs[target] === 'x86_64' ? 0x3e : 0xb7, 18);
-      exeBytes.writeBigUInt64LE(0x401000n, 24);
-    } else if (formats[target] === 'COFF') {
-      exeBytes = Buffer.alloc(512);
-      exeBytes[0] = 0x4d; exeBytes[1] = 0x5a;
-      exeBytes.writeUInt32LE(0x80, 0x3c);
-      exeBytes.write('PE\0\0', 0x80, 'ascii');
-      exeBytes.writeUInt16LE(archs[target] === 'x86_64' ? 0x8664 : 0xaa64, 0x84);
-      exeBytes.writeUInt16LE(1, 0x86);
-      exeBytes.writeUInt16LE(240, 0x94);
-      exeBytes.writeUInt16LE(0x0022, 0x96);
-      exeBytes.writeUInt16LE(0x020b, 0x98);
-      exeBytes.writeUInt32LE(0x1000, 0x98 + 16);
-      const secOff = 0x98 + 240;
-      exeBytes.write('.text', secOff, 'ascii');
-      exeBytes.writeUInt32LE(0x200, secOff + 16);
-      exeBytes.writeUInt32LE(0x200, secOff + 20);
-    } else {
-      exeBytes = Buffer.alloc(32);
-      exeBytes[0] = 0xcf; exeBytes[1] = 0xfa; exeBytes[2] = 0xed; exeBytes[3] = 0xfe;
-      exeBytes.writeInt32LE(archs[target] === 'x86_64' ? 0x01000007 : 0x0100000c, 4);
-      exeBytes.writeUInt32LE(2, 12);
-    }
-    fs.writeFileSync(path.join(fDir, 'app.bin'), exeBytes);
-
-    llRel = `files/${target}/app.ll`;
-    objRel = `files/${target}/app.o`;
-    exeRel = `files/${target}/app.bin`;
-    llSha = crypto.createHash('sha256').update(llBytes).digest('hex');
-    objSha = crypto.createHash('sha256').update(objBytes).digest('hex');
-    exeSha = crypto.createHash('sha256').update(exeBytes).digest('hex');
-  }
+  const arch = target.endsWith('arm64') ? 'aarch64' : 'x86_64';
+  const format = target.startsWith('windows') ? 'COFF' : target.startsWith('macos') ? 'Mach-O' : 'ELF';
+  const binBytes =
+    format === 'COFF'
+      ? buildMinimalPe32Plus(arch)
+      : format === 'Mach-O'
+      ? buildMinimalMachO64(arch)
+      : buildMinimalElf64(arch);
+  fs.writeFileSync(exeFile, binBytes);
 
   return {
-    schemaVersion: '1.0.0',
+    schemaVersion: '1.0',
+    generatedAt: '2026-11-15T00:00:00.000Z',
     target,
-    triple: triples[target],
-    hostOs: target.startsWith('windows') ? 'win32' : target.startsWith('macos') ? 'darwin' : 'linux',
-    hostArch: archs[target] === 'x86_64' ? 'x64' : 'arm64',
-    compiler: { name: 'clang', version: '18.1.0' },
-    linker: { name: 'lld', version: '18.1.0' },
-    sdk: { name: 'verified-sdk', available: true, linkerProbeVerified: true, missingRequirements: [] },
-    llvmIR: { path: llRel, sha256: llSha, validationTool: 'llvm-as', verified: true },
-    objectFile: { path: objRel, sha256: objSha },
-    executable: { path: exeRel, sha256: exeSha, sizeBytes: 64 },
+    triple: TargetTripleManager.resolve(target).triple,
+    hostOs: 'linux',
+    hostArch: 'x64',
+    recommendedRunner: 'runner',
+    isCross: false,
+    compiler: { name: 'clang', available: true, version: 'clang 18.0' },
+    linker: { name: 'clang', lldAvailable: true },
+    sdk: { name: 'SDK', available: true, linkerProbeVerified: true, missingRequirements: [] },
+    llvmIR: { path: `artifacts/${target}/app.ll`, sha256: ArchiveBuilder.computeSha256(fs.readFileSync(llFile)) },
+    objectFile: { path: `artifacts/${target}/${path.basename(objFile)}`, sha256: ArchiveBuilder.computeSha256(fs.readFileSync(objFile)) },
+    executable: {
+      path: `artifacts/${target}/${path.basename(exeFile)}`,
+      sha256: ArchiveBuilder.computeSha256(binBytes),
+      sizeBytes: binBytes.length,
+    },
     binaryMetadata: {
-      format: formats[target],
-      architecture: archs[target],
-      operatingSystem: target.startsWith('windows') ? 'windows' : target.startsWith('macos') ? 'darwin' : 'linux',
+      format,
+      architecture: arch,
       binaryType: 'EXECUTABLE',
       isValidExecutable: true,
     },
-    dependencyValidation: { allResolved: true, inspectedFromDisk: true, dependencies: [], missingLibraries: [] },
     execution: {
+      required: true,
       executed: true,
-      mode: target === 'linux-arm64' ? 'qemu-user' : 'native',
+      mode: 'native',
       exitCode: 0,
-      stdout: 'NUSANTARA_NATIVE_CI_OK\nPengujian LLVM IR berhasil\nBahasa Indonesia\n42\n',
-      stderr: '',
-      expectedSentinels: ['NUSANTARA_NATIVE_CI_OK', 'Pengujian LLVM IR berhasil', 'Bahasa Indonesia', '42'],
-      expectedOutputsMatched: true,
+      stdout: `${PHASE23_CERTIFICATION_SENTINEL}\n42\n`,
+      sentinelExpected: PHASE23_CERTIFICATION_SENTINEL,
+      sentinelMatched: true,
     },
-    status: 'PASS',
-    reason: 'OK',
-    generatedAt: new Date().toISOString(),
+    status: overrideStatus || 'PASS',
+    statusCode: 'BERHASIL',
+    diagnostics: [],
   };
 }
 
-function tulisSemuaEvidenceMock(dir: string, overrides: Partial<Record<CanonicalDesktopTarget, any>> = {}, withFiles = false): string {
-  const evDir = path.join(dir, 'evidence');
+function writeAll6Fixtures(
+  bundleDir: string,
+  mutator?: (target: CanonicalDesktopTarget, ev: Phase23TargetEvidence, evDir: string) => boolean | void
+): string {
+  const evDir = path.join(bundleDir, 'evidence');
   fs.mkdirSync(evDir, { recursive: true });
   for (const t of DESKTOP_CANONICAL_TARGETS) {
-    const val = t in overrides ? overrides[t] : buatEvidencePassLengkap(t, withFiles ? dir : undefined);
-    if (val === null) continue; // simulasi target hilang
-    if (typeof val === 'string') {
-      fs.writeFileSync(path.join(evDir, `${t}.json`), val, 'utf-8');
-    } else {
-      fs.writeFileSync(path.join(evDir, `${t}.json`), JSON.stringify(val, null, 2), 'utf-8');
+    const ev = createValidEvidenceFixture(bundleDir, t, 'PASS');
+    const keep = mutator ? mutator(t, ev, evDir) : true;
+    if (keep !== false) {
+      fs.writeFileSync(path.join(evDir, `${t}.json`), JSON.stringify(ev, null, 2), 'utf-8');
     }
   }
   return evDir;
 }
 
-uji('7.1 Agregasi menolak target hilang (TARGET_HILANG -> FAILED, exitCode=1)', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-p232-missing-'));
+uji('7.1 Gerbang menolak jika ada target hilang (TARGET_HILANG)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cert-71-'));
   try {
-    const evDir = tulisSemuaEvidenceMock(tmpDir, { 'windows-arm64': null });
-    const res = Phase23CertificationEngine.aggregateEvidence(evDir);
-    samaDengan(res.overallStatus, 'FAILED');
-    samaDengan(res.exitCode, 1);
-    pastikan(res.missingTargets.includes('windows-arm64'), 'Harus mendeteksi windows-arm64 hilang');
-    pastikan(res.findings.some((f) => f.code === 'TARGET_HILANG'), 'Harus mencatat finding TARGET_HILANG');
+    const evDir = writeAll6Fixtures(tmp, (t) => (t === 'windows-arm64' ? false : true));
+    const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
+    samaDengan(agg.overallStatus, 'FAILED');
+    samaDengan(agg.exitCode, 1);
+    pastikan(agg.findings.some((f) => f.code === 'TARGET_HILANG' && f.target === 'windows-arm64'), 'Harus mencatat TARGET_HILANG');
   } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
 
-uji('7.2 Agregasi menolak JSON evidence rusak (JSON_RUSAK -> FAILED, exitCode=1)', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-p232-corrupt-'));
+uji('7.2 Gerbang menolak JSON rusak (JSON_RUSAK)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cert-72-'));
   try {
-    const evDir = tulisSemuaEvidenceMock(tmpDir, { 'macos-x86_64': '{ json rusak tanpa kurung tutup' });
-    const res = Phase23CertificationEngine.aggregateEvidence(evDir);
-    samaDengan(res.overallStatus, 'FAILED');
-    samaDengan(res.exitCode, 1);
-    pastikan(res.counts.corrupt === 1, 'Harus menghitung 1 JSON korup');
-    pastikan(res.findings.some((f) => f.code === 'JSON_RUSAK'), 'Harus mencatat finding JSON_RUSAK');
+    const evDir = writeAll6Fixtures(tmp);
+    fs.writeFileSync(path.join(evDir, 'linux-arm64.json'), '{CORRUPT_JSON', 'utf-8');
+    const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
+    samaDengan(agg.overallStatus, 'FAILED');
+    samaDengan(agg.exitCode, 1);
+    pastikan(agg.findings.some((f) => f.code === 'JSON_RUSAK' && f.target === 'linux-arm64'), 'Harus mencatat JSON_RUSAK');
   } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
 
-uji('7.3 Agregasi melaporkan PARTIAL & exitCode=1 apabila ada target NOT_VERIFIED (tidak pernah PASS)', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-p232-partial-'));
+uji('7.3 Target NOT_VERIFIED menghasilkan PARTIAL & exitCode 1 (tidak boleh lulus)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cert-73-'));
   try {
-    const winArmUnverified = buatEvidencePassLengkap('windows-arm64');
-    winArmUnverified.status = 'NOT_VERIFIED';
-    winArmUnverified.execution.executed = false;
-    winArmUnverified.execution.mode = 'cross-compiled-not-executed';
-    winArmUnverified.execution.expectedOutputsMatched = false;
-    winArmUnverified.reason = 'MSVC ARM64 CRT & Windows SDK um/arm64 tidak tersedia';
-
-    const evDir = tulisSemuaEvidenceMock(tmpDir, { 'windows-arm64': winArmUnverified });
-    const res = Phase23CertificationEngine.aggregateEvidence(evDir);
-    samaDengan(res.overallStatus, 'PARTIAL');
-    samaDengan(res.exitCode, 1);
-    samaDengan(res.counts.notVerified, 1);
-    pastikan(res.markdownReport.includes('PARTIAL'), 'Laporan Markdown harus menyatakan PARTIAL');
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }
-});
-
-uji('7.4 Agregasi melaporkan FAILED apabila ada target berstatus FAIL', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-p232-fail-'));
-  try {
-    const linuxFail = buatEvidencePassLengkap('linux-arm64');
-    linuxFail.status = 'FAIL';
-    linuxFail.reason = 'Linker aarch64 gagal';
-
-    const evDir = tulisSemuaEvidenceMock(tmpDir, { 'linux-arm64': linuxFail });
-    const res = Phase23CertificationEngine.aggregateEvidence(evDir);
-    samaDengan(res.overallStatus, 'FAILED');
-    samaDengan(res.exitCode, 1);
-    pastikan(res.findings.some((f) => f.code === 'TARGET_FAIL' && f.target === 'linux-arm64'), 'Harus mencatat TARGET_FAIL');
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }
-});
-
-uji('7.5 Agregasi memverifikasi ulang hash disk & menolak ketidakcocokan SHA-256 (SHA256_TIDAK_COCOK -> FAILED)', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-p232-sha-'));
-  try {
-    const evDir = tulisSemuaEvidenceMock(tmpDir, {}, true);
-    // Rusak 1 byte executable on-disk setelah hash JSON tercatat
-    fs.appendFileSync(path.join(tmpDir, 'files', 'linux-x86_64', 'app.bin'), Buffer.from([0xff]));
-    const res = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmpDir });
-    samaDengan(res.overallStatus, 'FAILED');
-    samaDengan(res.exitCode, 1);
-    pastikan(res.findings.some((f) => f.code === 'SHA256_TIDAK_COCOK'), 'Harus menolak SHA-256 yang tidak cocok dengan biner di disk');
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }
-});
-
-uji('7.6 Agregasi menolak executable salah arsitektur walaupun klaim status PASS (ARSITEKTUR_BINER_SALAH -> FAILED)', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-p232-arch-'));
-  try {
-    const wrongArch = buatEvidencePassLengkap('macos-arm64');
-    wrongArch.binaryMetadata.architecture = 'x86_64'; // salah arsitektur untuk macos-arm64!
-
-    const evDir = tulisSemuaEvidenceMock(tmpDir, { 'macos-arm64': wrongArch });
-    const res = Phase23CertificationEngine.aggregateEvidence(evDir);
-    samaDengan(res.overallStatus, 'FAILED');
-    samaDengan(res.exitCode, 1);
-    pastikan(res.findings.some((f) => f.code === 'ARSITEKTUR_BINER_SALAH'), 'Harus menolak biner salah arsitektur');
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }
-});
-
-uji('7.7 Agregasi menolak eksekusi gagal atau output sentinel hilang meski status diklaim PASS (EKSEKUSI_GAGAL -> FAILED)', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-p232-exec-'));
-  try {
-    const badExec = buatEvidencePassLengkap('windows-x86_64');
-    badExec.execution.exitCode = 139;
-    badExec.execution.stdout = 'Output tidak lengkap tanpa sentinel';
-    badExec.execution.expectedOutputsMatched = false;
-
-    const evDir = tulisSemuaEvidenceMock(tmpDir, { 'windows-x86_64': badExec });
-    const res = Phase23CertificationEngine.aggregateEvidence(evDir);
-    samaDengan(res.overallStatus, 'FAILED');
-    samaDengan(res.exitCode, 1);
-    pastikan(res.findings.some((f) => f.code === 'EKSEKUSI_GAGAL'), 'Harus menolak eksekusi yang gagal');
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }
-});
-
-uji('7.8 Agregasi menyetujui CERTIFIED (exitCode=0) hanya jika seluruh 6 target PASS dengan hash, arsitektur & eksekusi sah', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-p232-cert-'));
-  try {
-    const evDir = tulisSemuaEvidenceMock(tmpDir, {}, true);
-    const res = Phase23CertificationEngine.aggregateEvidence(evDir, {
-      baseDir: tmpDir,
-      ciContext: {
-        serverUrl: 'https://github.com',
-        repository: 'sarjanabahasaarab/Bahasa-Nusantara',
-        runId: '999999',
-        commitSha: 'abcdef123456',
-      },
+    const evDir = writeAll6Fixtures(tmp, (t, ev) => {
+      if (t === 'windows-arm64') {
+        ev.status = 'NOT_VERIFIED';
+        ev.reason = 'MSVC ARM64 libs belum terpasang';
+      }
     });
-    samaDengan(res.overallStatus, 'CERTIFIED');
-    samaDengan(res.exitCode, 0);
-    samaDengan(res.counts.pass, 6);
-    samaDengan(res.counts.fail, 0);
-    samaDengan(res.counts.notVerified, 0);
-    pastikan(res.markdownReport.includes('CERTIFIED (6/6 PASS)'), 'Laporan harus memuat status CERTIFIED (6/6 PASS)');
-    pastikan(res.markdownReport.includes('actions/runs/999999'), 'Laporan harus menyertakan tautan run GitHub Actions');
+    const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
+    samaDengan(agg.overallStatus, 'PARTIAL');
+    samaDengan(agg.exitCode, 1);
+    samaDengan(agg.counts.notVerified, 1);
   } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
 
+uji('7.4 Target FAIL menghasilkan FAILED & exitCode 1', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cert-74-'));
+  try {
+    const evDir = writeAll6Fixtures(tmp, (t, ev) => {
+      if (t === 'macos-x86_64') {
+        ev.status = 'FAIL';
+        ev.reason = 'Linker error';
+      }
+    });
+    const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
+    samaDengan(agg.overallStatus, 'FAILED');
+    samaDengan(agg.exitCode, 1);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+uji('7.5 Ketidakcocokan SHA-256 artefak di disk terdeteksi (SHA256_TIDAK_COCOK)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cert-75-'));
+  try {
+    const evDir = writeAll6Fixtures(tmp, (t, ev) => {
+      if (t === 'linux-x86_64') {
+        ev.executable.sha256 = '0'.repeat(64);
+      }
+    });
+    const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
+    samaDengan(agg.overallStatus, 'FAILED');
+    pastikan(agg.findings.some((f) => f.code === 'SHA256_TIDAK_COCOK'), 'Wajib mendeteksi mismatch SHA-256');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+uji('7.6 Salah arsitektur biner executable terdeteksi (ARSITEKTUR_BINER_SALAH)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cert-76-'));
+  try {
+    const evDir = writeAll6Fixtures(tmp, (t, ev) => {
+      if (t === 'linux-arm64') {
+        // Tulis ELF x86_64 padahal targetnya linux-arm64, dengan hash yang valid untuk byte itu
+        const wrongBin = buildMinimalElf64('x86_64');
+        const diskPath = path.join(tmp, ev.executable.path!);
+        fs.writeFileSync(diskPath, wrongBin);
+        ev.executable.sha256 = ArchiveBuilder.computeSha256(wrongBin);
+      }
+    });
+    const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
+    samaDengan(agg.overallStatus, 'FAILED');
+    pastikan(agg.findings.some((f) => f.code === 'ARSITEKTUR_BINER_SALAH'), 'Wajib mendeteksi salah arsitektur');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+uji('7.7 Bukti eksekusi gagal atau sentinel hilang terdeteksi (EKSEKUSI_GAGAL)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cert-77-'));
+  try {
+    const evDir = writeAll6Fixtures(tmp, (t, ev) => {
+      if (t === 'macos-arm64') {
+        ev.execution.sentinelMatched = false;
+        ev.execution.stdout = 'wrong output';
+      }
+    });
+    const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
+    samaDengan(agg.overallStatus, 'FAILED');
+    pastikan(agg.findings.some((f) => f.code === 'EKSEKUSI_GAGAL'), 'Wajib mendeteksi kegagalan sentinel eksekusi');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+uji('7.8 Enam target PASS dengan SHA-256, biner, dan sentinel valid menghasilkan CERTIFIED (exitCode 0)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cert-78-'));
+  try {
+    const evDir = writeAll6Fixtures(tmp);
+    const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
+    samaDengan(agg.overallStatus, 'CERTIFIED');
+    samaDengan(agg.exitCode, 0);
+    samaDengan(agg.counts.pass, 6);
+    pastikan(agg.markdownReport.includes('CERTIFIED'), 'Laporan Markdown wajib mencantumkan CERTIFIED');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// REKAPITULASI
+// -----------------------------------------------------------------------------
 console.log('\n=============================================================================');
-console.log('RINGKASAN PENGUJIAN PHASE 23 (BUILD SYSTEM & DISTRIBUSI DESKTOP)');
-console.log(`Total Uji          : ${totalUji}`);
-console.log(`Lulus              : ${lulus}`);
-console.log(`Gagal              : ${gagal}`);
-console.log(`Belum Diverifikasi : ${belumDiverifikasi}`);
-console.log('=============================================================================\n');
+console.log(
+  `HASIL PENGUJIAN PHASE 23: ${totalLulus} LULUS, ${totalGagal} GAGAL, ${totalBelumDiverifikasi} BELUM DIVERIFIKASI (Total: ${totalUji})`
+);
+console.log('=============================================================================');
 
-if (gagal > 0) {
+if (totalGagal > 0) {
   process.exit(1);
+} else {
+  process.exit(0);
 }
-

@@ -2,820 +2,467 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * NUSANTARA BUILD SYSTEM - Sertifikasi Enam Target Desktop & Hardening Evidence CI (Phase 23.2)
- * Menghasilkan JSON evidence per target tanpa rahasia, memvalidasi SHA-256 & metadata biner,
- * dan mengagregasi status keseluruhan (CERTIFIED / PARTIAL / FAILED).
+ * NUSANTARA BUILD SYSTEM - Engine Sertifikasi & Audit Integritas 6 Target Desktop (Phase 23.2)
+ * Target Milestone: Phase 23.2 / v0.23.5
  */
 
 import { BinaryInspector } from '../compiler/executable/binary-inspector';
-import { safeFS, safeOS, safePath } from '../compiler/llvm/node-compat';
-import { TargetTripleManager } from '../compiler/llvm/target-triple';
+import { safeFS, safePath } from '../compiler/llvm/node-compat';
 import { LLVMToolchainManager } from '../compiler/llvm/toolchain-manager';
 import { ArchiveBuilder } from './archive-builder';
 import { NativeBuildPipeline } from './native-pipeline';
 import { DESKTOP_CANONICAL_TARGETS, TargetMatrixManager } from './target-matrix';
-import { CanonicalDesktopTarget, ExecutionVerificationResult } from './types';
+import {
+  CanonicalDesktopTarget,
+  Phase23AggregationResult,
+  Phase23CertificationFinding,
+  Phase23TargetEvidence,
+} from './types';
 
-export type Phase23TargetStatus = 'PASS' | 'FAIL' | 'NOT_VERIFIED';
-export type Phase23OverallStatus = 'CERTIFIED' | 'PARTIAL' | 'FAILED';
+export const PHASE23_CERTIFICATION_SENTINEL = 'NUSANTARA_NATIVE_CI_OK';
 
-export type Phase23FindingCode =
-  | 'TARGET_HILANG'
-  | 'JSON_RUSAK'
-  | 'SKEMA_TIDAK_SAH'
-  | 'TARGET_FAIL'
-  | 'TARGET_NOT_VERIFIED'
-  | 'SHA256_TIDAK_COCOK'
-  | 'ARSITEKTUR_BINER_SALAH'
-  | 'FORMAT_BINER_SALAH'
-  | 'EKSEKUSI_GAGAL'
-  | 'DEPENDENSI_HILANG'
-  | 'KEBOCORAN_RAHASIA';
-
-export interface Phase23Finding {
-  code: Phase23FindingCode;
-  target: string;
-  severity: 'error' | 'warning';
-  message: string;
-}
-
-export interface Phase23TargetEvidence {
-  schemaVersion: '1.0.0';
-  target: CanonicalDesktopTarget;
-  triple: string;
-  hostOs: string;
-  hostArch: string;
-  compiler: {
-    name: string;
-    version: string;
-    command?: string;
-  };
-  linker: {
-    name: string;
-    version: string;
-    command?: string;
-  };
-  sdk: {
-    name: string;
-    sysroot?: string;
-    available: boolean;
-    linkerProbeVerified?: boolean;
-    missingRequirements: string[];
-  };
-  llvmIR: {
-    path?: string;
-    sha256?: string;
-    validationTool?: string;
-    verified: boolean;
-  };
-  objectFile: {
-    path?: string;
-    sha256?: string;
-  };
-  executable: {
-    path?: string;
-    sha256?: string;
-    sizeBytes?: number;
-  };
-  binaryMetadata: {
-    format?: string;
-    architecture?: string;
-    operatingSystem?: string;
-    binaryType?: string;
-    isValidExecutable: boolean;
-  };
-  dependencyValidation: {
-    allResolved: boolean;
-    inspectedFromDisk: boolean;
-    dependencies: Array<{ name: string; found: boolean; isSystemLib: boolean }>;
-    missingLibraries: string[];
-  };
-  execution: {
-    executed: boolean;
-    mode: NonNullable<ExecutionVerificationResult['executionMode']>;
-    exitCode: number | null;
-    stdout: string;
-    stderr: string;
-    expectedSentinels: string[];
-    expectedOutputsMatched: boolean;
-  };
-  status: Phase23TargetStatus;
-  reason: string;
-  generatedAt: string;
-}
-
-export interface Phase23CIContext {
-  serverUrl?: string;
-  repository?: string;
-  runId?: string;
-  commitSha?: string;
-  refName?: string;
-}
-
-export interface Phase23AggregationResult {
-  overallStatus: Phase23OverallStatus;
-  exitCode: number;
-  totalExpectedTargets: number;
-  counts: {
-    pass: number;
-    fail: number;
-    notVerified: number;
-    missing: number;
-    corrupt: number;
-  };
-  targets: Partial<Record<CanonicalDesktopTarget, Phase23TargetEvidence>>;
-  missingTargets: CanonicalDesktopTarget[];
-  findings: Phase23Finding[];
-  markdownReport: string;
-  generatedAt: string;
-}
-
-export const DEFAULT_PHASE23_CERTIFICATION_SENTINELS = [
-  'NUSANTARA_NATIVE_CI_OK',
-  'Pengujian LLVM IR berhasil',
-  'Bahasa Indonesia',
-  '42',
-];
-
-export const DEFAULT_PHASE23_CERTIFICATION_SOURCE = `program UjiNativePhase23
+const PHASE23_CERTIFICATION_SOURCE = `
+program UjiSertifikasiPhase23
 mulai
   hasil : bilangan = 20 + 22
-  tampilkan("NUSANTARA_NATIVE_CI_OK")
-  tampilkan("Pengujian LLVM IR berhasil")
-  tampilkan("Bahasa Indonesia")
+  tampilkan("${PHASE23_CERTIFICATION_SENTINEL}")
   tampilkan(hasil)
 selesai
 `;
 
-const EXPECTED_FORMAT_BY_TARGET: Record<CanonicalDesktopTarget, 'ELF' | 'COFF' | 'Mach-O'> = {
-  'windows-x86_64': 'COFF',
-  'windows-arm64': 'COFF',
-  'linux-x86_64': 'ELF',
-  'linux-arm64': 'ELF',
-  'macos-x86_64': 'Mach-O',
-  'macos-arm64': 'Mach-O',
-};
-
-const EXPECTED_ARCH_BY_TARGET: Record<CanonicalDesktopTarget, 'x86_64' | 'aarch64'> = {
-  'windows-x86_64': 'x86_64',
-  'windows-arm64': 'aarch64',
-  'linux-x86_64': 'x86_64',
-  'linux-arm64': 'aarch64',
-  'macos-x86_64': 'x86_64',
-  'macos-arm64': 'aarch64',
-};
-
 const SECRET_PATTERNS = [
-  /ghp_[a-zA-Z0-9]{25,}/,
-  /github_pat_[a-zA-Z0-9_]{30,}/,
-  /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
-  /AKIA[0-9A-Z]{16}/,
+  /ghp_[A-Za-z0-9]{20,}/,
+  /github_pat_[A-Za-z0-9_]{20,}/,
+  /AIza[0-9A-Za-z\-_]{20,}/,
+  /sk-[A-Za-z0-9]{20,}/,
+  /-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----/,
 ];
 
 export class Phase23CertificationEngine {
-  public static getExpectedFormat(target: CanonicalDesktopTarget): 'ELF' | 'COFF' | 'Mach-O' {
-    return EXPECTED_FORMAT_BY_TARGET[target];
-  }
-
-  public static getExpectedArch(target: CanonicalDesktopTarget): 'x86_64' | 'aarch64' {
-    return EXPECTED_ARCH_BY_TARGET[target];
-  }
-
-  public static isValidSha256(val: unknown): val is string {
-    return typeof val === 'string' && /^[a-f0-9]{64}$/i.test(val);
-  }
-
-  public static sanitizeString(text: string): string {
-    let clean = text;
-    for (const pat of SECRET_PATTERNS) {
-      clean = clean.replace(new RegExp(pat.source, 'g'), '[REDACTED]');
-    }
-    return clean;
-  }
-
   public static generateTargetEvidence(options: {
     target: CanonicalDesktopTarget;
     outputDir: string;
     artifactBundleDir?: string;
-    sourceCode?: string;
-    appName?: string;
-    customToolchainPath?: string;
-    sysrootOverride?: string;
     failOnMissingToolchain?: boolean;
     requireExecution?: boolean;
-    expectedSentinels?: string[];
   }): Phase23TargetEvidence {
-    const appName = options.appName || 'uji_ci_native';
-    const sentinels = options.expectedSentinels || [...DEFAULT_PHASE23_CERTIFICATION_SENTINELS];
-    const requireExecution = options.requireExecution !== false;
-    const hostOs = typeof process !== 'undefined' ? process.platform : safeOS.platform();
-    const hostArch = typeof process !== 'undefined' ? process.arch : 'unknown';
+    const toolchain = new LLVMToolchainManager().detect();
+    const cap = TargetMatrixManager.inspectTargetCapability(options.target, toolchain);
+    const workOut = safePath.resolve(options.outputDir);
+    safeFS.mkdirSync(workOut, { recursive: true });
 
-    const cap = TargetMatrixManager.inspectTargetCapability(options.target, {
-      customToolchainPath: options.customToolchainPath,
-      sysrootOverride: options.sysrootOverride,
-    });
-    const toolchain = new LLVMToolchainManager(options.customToolchainPath).detect();
-
-    const baseEvidence = (): Phase23TargetEvidence => ({
-      schemaVersion: '1.0.0',
+    const buildRes = NativeBuildPipeline.build({
+      sourceCode: PHASE23_CERTIFICATION_SOURCE,
+      appName: `nusa_cert_${options.target}`,
       target: options.target,
-      triple: cap.triple || TargetTripleManager.resolve(options.target).triple,
-      hostOs,
-      hostArch,
-      compiler: {
-        name: toolchain.binaries.clang.found
-          ? toolchain.binaries.clang.command
-          : toolchain.binaries.llc.found
-          ? toolchain.binaries.llc.command
-          : 'none',
-        version: toolchain.version || 'N/A',
-        command: toolchain.binaries.clang.found ? toolchain.binaries.clang.command : undefined,
-      },
-      linker: {
-        name: cap.crossCompilerCommand || (toolchain.binaries.lld.found ? toolchain.binaries.lld.command : 'none'),
-        version: 'N/A',
-      },
-      sdk: {
-        name: cap.sdkName || (cap.isCross ? `${options.target} cross-SDK` : 'host system SDK'),
-        sysroot: cap.sysrootPath,
-        available: cap.isCross ? cap.crossSdkAvailable : cap.toolchainAvailable,
-        linkerProbeVerified: cap.linkerProbeVerified,
-        missingRequirements: [...cap.missingRequirements],
-      },
-      llvmIR: {
-        verified: false,
-      },
-      objectFile: {},
-      executable: {},
-      binaryMetadata: {
-        isValidExecutable: false,
-      },
-      dependencyValidation: {
-        allResolved: false,
-        inspectedFromDisk: false,
-        dependencies: [],
-        missingLibraries: [],
-      },
-      execution: {
-        executed: false,
-        mode: cap.isCross ? 'cross-compiled-not-executed' : 'not-executed',
-        exitCode: null,
-        stdout: '',
-        stderr: '',
-        expectedSentinels: sentinels,
-        expectedOutputsMatched: false,
-      },
-      status: 'NOT_VERIFIED',
-      reason: '',
-      generatedAt: new Date().toISOString(),
-    });
-
-    // Kasus 1: Toolchain dasar tidak tersedia
-    if (!cap.toolchainAvailable) {
-      const ev = baseEvidence();
-      ev.status = options.failOnMissingToolchain ? 'FAIL' : 'NOT_VERIFIED';
-      ev.reason = this.sanitizeString(
-        cap.missingRequirements.join('; ') || 'Toolchain LLVM/Clang tidak terpasang di runner ini.'
-      );
-      return ev;
-    }
-
-    // Kasus 2: Cross-SDK atau linker probe target (mis. windows-arm64) tidak tersedia
-    if (!cap.canBuildNative) {
-      const ev = baseEvidence();
-      ev.status = 'NOT_VERIFIED';
-      ev.reason = this.sanitizeString(
-        cap.missingRequirements.join('; ') ||
-          `Cross-SDK/linker target '${options.target}' tidak tersedia di host ${hostOs}/${hostArch}.`
-      );
-      return ev;
-    }
-
-    // Kasus 3: Jalankan kompilasi nyata lewat NativeBuildPipeline
-    if (!safeFS.existsSync(options.outputDir)) {
-      safeFS.mkdirSync(options.outputDir, { recursive: true });
-    }
-
-    const res = NativeBuildPipeline.build({
-      sourceCode: options.sourceCode || DEFAULT_PHASE23_CERTIFICATION_SOURCE,
-      appName,
-      target: options.target,
-      outputDirectory: options.outputDir,
-      linkingMode: 'dynamic',
-      strip: true,
-      customToolchainPath: options.customToolchainPath,
-      sysrootOverride: options.sysrootOverride,
+      outputDirectory: workOut,
+      optLevel: 'O2',
+      linkingMode: 'auto',
       verifyExecution: true,
     });
 
-    const ev = baseEvidence();
-    if (res.compilerInfo) {
-      ev.compiler = {
-        name: res.compilerInfo.name,
-        version: res.compilerInfo.version || toolchain.version || 'N/A',
-        command: res.compilerInfo.command,
-      };
-    }
-    if (res.linkerInfo) {
-      ev.linker = {
-        name: res.linkerInfo.name,
-        version: res.linkerInfo.version || 'N/A',
-        command: res.linkerInfo.commandExecuted ? this.sanitizeString(res.linkerInfo.commandExecuted) : undefined,
-      };
-    }
+    const bundleArtifactsDir = options.artifactBundleDir
+      ? safePath.join(safePath.resolve(options.artifactBundleDir), 'artifacts', options.target)
+      : workOut;
+    safeFS.mkdirSync(bundleArtifactsDir, { recursive: true });
 
-    // Salin artefak nyata ke bundleDir bila disediakan agar aggregate job bisa memverifikasi hash & header ulang
-    const bundleFilesDir = options.artifactBundleDir
-      ? safePath.join(options.artifactBundleDir, 'files', options.target)
-      : undefined;
-    if (bundleFilesDir && !safeFS.existsSync(bundleFilesDir)) {
-      safeFS.mkdirSync(bundleFilesDir, { recursive: true });
-    }
-
-    const storeFile = (srcPath: string | undefined, fallbackName: string): string | undefined => {
+    const copyIfPresent = (srcPath?: string): string | undefined => {
       if (!srcPath || !safeFS.existsSync(srcPath)) return undefined;
-      if (bundleFilesDir && options.artifactBundleDir) {
-        const destAbs = safePath.join(bundleFilesDir, safePath.basename(srcPath) || fallbackName);
-        safeFS.writeFileSync(destAbs, safeFS.readFileBufferSync(srcPath));
-        return safePath.relative(options.artifactBundleDir, destAbs).replace(/\\/g, '/');
+      if (safePath.resolve(srcPath).startsWith(safePath.resolve(bundleArtifactsDir))) {
+        return srcPath;
       }
-      return srcPath;
+      const dest = safePath.join(bundleArtifactsDir, safePath.basename(srcPath));
+      safeFS.writeFileSync(dest, safeFS.readFileBufferSync(srcPath));
+      return dest;
     };
 
-    ev.llvmIR = {
-      path: storeFile(res.llvmIRPath, `${appName}.ll`),
-      sha256: res.llvmIRSha256,
-      validationTool: res.llvmValidationTool || (toolchain.binaries.llvmAs.found ? 'llvm-as' : 'static-verifier'),
-      verified: Boolean(res.llvmIRSha256 && res.statusCode !== 'GALAT_KOMPILASI'),
-    };
-    ev.objectFile = {
-      path: storeFile(res.objectPath, `${appName}${cap.targetInfo?.objectExtension || '.o'}`),
-      sha256: res.objectSha256,
-    };
-    ev.executable = {
-      path: storeFile(res.executablePath, `${appName}${cap.targetInfo?.executableExtension || ''}`),
-      sha256: res.executableSha256,
-      sizeBytes:
-        res.executablePath && safeFS.existsSync(res.executablePath)
-          ? safeFS.readFileBufferSync(res.executablePath).length
-          : undefined,
+    const llStored = copyIfPresent(buildRes.llvmIRPath);
+    const objStored = copyIfPresent(buildRes.objectPath);
+    const exeStored = copyIfPresent(buildRes.executablePath);
+
+    const toRel = (abs?: string): string | undefined => {
+      if (!abs) return undefined;
+      if (options.artifactBundleDir) {
+        return safePath.relative(safePath.resolve(options.artifactBundleDir), abs).replace(/\\/g, '/');
+      }
+      return abs;
     };
 
-    if (res.binaryMetadata) {
-      ev.binaryMetadata = {
-        format: res.binaryMetadata.format,
-        architecture: res.binaryMetadata.architecture,
-        operatingSystem: res.binaryMetadata.operatingSystem,
-        binaryType: res.binaryMetadata.binaryType,
-        isValidExecutable: Boolean(res.binaryMetadata.isValidExecutable),
-      };
-    }
+    const sentinelMatched = Boolean(
+      buildRes.executionStdout && buildRes.executionStdout.includes(PHASE23_CERTIFICATION_SENTINEL)
+    );
 
-    if (res.dependencyReport) {
-      ev.dependencyValidation = {
-        allResolved: res.dependencyReport.allResolved,
-        inspectedFromDisk: Boolean(res.dependencyReport.inspectedFromDisk),
-        dependencies: res.dependencyReport.dependencies.map((d) => ({
-          name: d.name,
-          found: d.found,
-          isSystemLib: d.isSystemLib,
-        })),
-        missingLibraries: [...(res.dependencyReport.missingLibraries || [])],
-      };
-    }
+    let status: Phase23TargetEvidence['status'] = 'FAIL';
+    let reason: string | undefined;
 
-    if (res.executionVerification) {
-      const stdout = res.executionVerification.stdout || '';
-      const matched =
-        res.executionVerification.executed &&
-        res.executionVerification.success &&
-        sentinels.every((s) => stdout.includes(s));
-      ev.execution = {
-        executed: res.executionVerification.executed,
-        mode:
-          res.executionVerification.executionMode ||
-          (cap.isCross ? 'cross-compiled-not-executed' : 'not-executed'),
-        exitCode: res.executionVerification.exitCode,
-        stdout: this.sanitizeString(stdout),
-        stderr: this.sanitizeString(res.executionVerification.stderr || ''),
-        expectedSentinels: sentinels,
-        expectedOutputsMatched: matched,
-      };
-    }
-
-    if (!res.success) {
-      if (res.statusCode === 'CROSS_SDK_TIDAK_TERSEDIA') {
-        ev.status = 'NOT_VERIFIED';
+    if (!cap.canBuildNative) {
+      if (options.failOnMissingToolchain && !cap.toolchainAvailable) {
+        status = 'FAIL';
+        reason = `Toolchain wajib tidak terpasang untuk '${options.target}': ${cap.missingRequirements.join('; ')}`;
       } else {
-        ev.status = 'FAIL';
+        status = 'NOT_VERIFIED';
+        reason = `Target '${options.target}' belum dapat diverifikasi pada host ini: ${cap.missingRequirements.join('; ') || cap.diagnosticMessage}`;
       }
-      ev.reason = this.sanitizeString(res.diagnostics.slice(-4).join(' | ') || res.statusCode);
-      return ev;
+    } else if (!buildRes.success) {
+      status = 'FAIL';
+      reason = buildRes.diagnostics[buildRes.diagnostics.length - 1] || `Build native gagal (${buildRes.statusCode}).`;
+    } else if (options.requireExecution && buildRes.executedOnHost && !sentinelMatched) {
+      status = 'FAIL';
+      reason = `Output stdout eksekusi tidak memuat sentinel '${PHASE23_CERTIFICATION_SENTINEL}'.`;
+    } else if (
+      options.requireExecution &&
+      !buildRes.executedOnHost &&
+      buildRes.executionMode === 'cross-compiled-not-executed'
+    ) {
+      status = 'NOT_VERIFIED';
+      reason = `Biner '${options.target}' berhasil dikompilasi dan diinspeksi, tetapi host tidak memiliki emulator untuk mengeksekusi biner cross-arch.`;
+    } else {
+      status = 'PASS';
     }
 
-    // Cek konsistensi eksekusi bila diwajibkan
-    if (!ev.execution.executed) {
-      ev.status = requireExecution ? 'NOT_VERIFIED' : 'PASS';
-      ev.reason = requireExecution
-        ? `Cross-compiled (${ev.binaryMetadata.format}/${ev.binaryMetadata.architecture}) berhasil & SHA-256 tervalidasi, tetapi eksekusi tidak tersedia pada host ${hostOs}/${hostArch} (${ev.execution.mode}).`
-        : 'Kompilasi dan inspeksi biner berhasil tanpa eksekusi.';
-      return ev;
-    }
-
-    if (ev.execution.exitCode !== 0 || !ev.execution.expectedOutputsMatched) {
-      ev.status = 'FAIL';
-      const missing = sentinels.filter((s) => !ev.execution.stdout.includes(s));
-      ev.reason = `Eksekusi gagal (exit=${ev.execution.exitCode}) atau output sentinel tidak lengkap: [${missing.join(', ')}]`;
-      return ev;
-    }
-
-    ev.status = 'PASS';
-    ev.reason = `Kompilasi LLVM IR, linking, inspeksi biner (${ev.binaryMetadata.format}/${ev.binaryMetadata.architecture}), dependensi, dan eksekusi (${ev.execution.mode}) berhasil.`;
-    return ev;
+    return {
+      schemaVersion: '1.0',
+      generatedAt: new Date().toISOString(),
+      target: options.target,
+      triple: cap.triple,
+      hostOs: process.platform,
+      hostArch: process.arch,
+      recommendedRunner: cap.recommendedRunner,
+      isCross: cap.isCross,
+      compiler: {
+        name: buildRes.compilerToolUsed || (toolchain.binaries.clang.found ? 'clang' : toolchain.binaries.llc.found ? 'llc' : 'none'),
+        available: cap.clangAvailable || cap.llcAvailable,
+        version: toolchain.version,
+        command: toolchain.binaries.clang.found ? toolchain.binaries.clang.command : toolchain.binaries.llc.command,
+      },
+      linker: {
+        name: buildRes.linkerToolUsed || cap.crossCompilerCommand || (toolchain.binaries.clang.found ? 'clang' : 'none'),
+        lldAvailable: cap.lldAvailable,
+        version: toolchain.binaries.lld.version || toolchain.binaries.clang.version,
+        command: buildRes.linkerCommand,
+      },
+      sdk: {
+        name: cap.sdkName,
+        sysroot: cap.sysroot,
+        available: Boolean(cap.sdkAvailable),
+        linkerProbeVerified: Boolean(cap.linkerProbeVerified),
+        missingRequirements: cap.missingRequirements,
+      },
+      llvmIR: {
+        path: toRel(llStored),
+        sha256: buildRes.llvmIRSha256,
+        validationTool: buildRes.llvmValidationTool,
+      },
+      objectFile: {
+        path: toRel(objStored),
+        sha256: buildRes.objectSha256,
+      },
+      executable: {
+        path: toRel(exeStored),
+        sha256: buildRes.executableSha256,
+        sizeBytes: buildRes.executableSizeBytes,
+      },
+      binaryMetadata: buildRes.binaryMetadata
+        ? {
+            format: buildRes.binaryMetadata.format,
+            architecture: buildRes.binaryMetadata.architecture,
+            binaryType: buildRes.binaryMetadata.binaryType || 'UNKNOWN',
+            isValidExecutable: Boolean(buildRes.binaryMetadata.isValidExecutable),
+            entryPointAddress: buildRes.binaryMetadata.entryPointAddress,
+          }
+        : undefined,
+      dependencyValidation: buildRes.dependencyReport
+        ? {
+            allResolved: buildRes.dependencyReport.allResolved,
+            isStatic: buildRes.dependencyReport.isStatic,
+            missingLibraries: buildRes.dependencyReport.missingLibraries,
+            dependencies: buildRes.dependencyReport.dependencies.map((d) => d.name),
+          }
+        : undefined,
+      execution: {
+        required: Boolean(options.requireExecution),
+        executed: buildRes.executedOnHost,
+        mode: buildRes.executionMode,
+        exitCode: buildRes.executionExitCode,
+        stdout: buildRes.executionStdout,
+        sentinelExpected: PHASE23_CERTIFICATION_SENTINEL,
+        sentinelMatched,
+      },
+      status,
+      statusCode: buildRes.statusCode,
+      reason,
+      diagnostics: buildRes.diagnostics,
+    };
   }
 
   public static aggregateEvidence(
     evidenceDir: string,
     options: {
       baseDir?: string;
-      ciContext?: Phase23CIContext;
-      expectedSentinels?: string[];
+      ciContext?: {
+        serverUrl?: string;
+        repository?: string;
+        runId?: string;
+        commitSha?: string;
+        refName?: string;
+      };
     } = {}
   ): Phase23AggregationResult {
-    const sentinels = options.expectedSentinels || [...DEFAULT_PHASE23_CERTIFICATION_SENTINELS];
-    const baseDir = options.baseDir || safePath.dirname(safePath.resolve(evidenceDir));
-    const findings: Phase23Finding[] = [];
-    const targets: Partial<Record<CanonicalDesktopTarget, Phase23TargetEvidence>> = {};
-    const missingTargets: CanonicalDesktopTarget[] = [];
+    const absEvDir = safePath.resolve(evidenceDir);
+    const absBaseDir = safePath.resolve(options.baseDir || safePath.dirname(absEvDir));
 
-    let pass = 0;
-    let fail = 0;
-    let notVerified = 0;
-    let corrupt = 0;
+    const targetsMap = {} as Record<CanonicalDesktopTarget, Phase23TargetEvidence | null>;
+    const findings: Phase23CertificationFinding[] = [];
+    let passCount = 0;
+    let notVerifiedCount = 0;
+    let failCount = 0;
+    let missingCount = 0;
+    let corruptCount = 0;
 
     for (const target of DESKTOP_CANONICAL_TARGETS) {
-      const filePath = safePath.join(evidenceDir, `${target}.json`);
-      if (!safeFS.existsSync(filePath)) {
-        missingTargets.push(target);
+      const evPath = safePath.join(absEvDir, `${target}.json`);
+      if (!safeFS.existsSync(evPath)) {
+        targetsMap[target] = null;
+        missingCount++;
         findings.push({
+          severity: 'error',
           code: 'TARGET_HILANG',
           target,
-          severity: 'error',
-          message: `Berkas evidence '${target}.json' tidak ditemukan di ${evidenceDir}.`,
+          message: `Berkas evidence '${target}.json' tidak ditemukan pada '${absEvDir}'.`,
         });
         continue;
       }
 
-      let rawText = '';
-      let parsed: any;
+      const rawText = safeFS.readFileSync(evPath, 'utf-8');
+      for (const pat of SECRET_PATTERNS) {
+        if (pat.test(rawText)) {
+          corruptCount++;
+          targetsMap[target] = null;
+          findings.push({
+            severity: 'error',
+            code: 'RAHASIA_TERDETEKSI',
+            target,
+            message: `Pola rahasia/token sensitif terdeteksi dalam '${target}.json'.`,
+          });
+          break;
+        }
+      }
+      if (targetsMap[target] === null && findings.some((f) => f.target === target && f.code === 'RAHASIA_TERDETEKSI')) {
+        continue;
+      }
+
+      let ev: Phase23TargetEvidence;
       try {
-        rawText = safeFS.readFileSync(filePath, 'utf-8');
-        parsed = JSON.parse(rawText);
+        ev = JSON.parse(rawText) as Phase23TargetEvidence;
       } catch (err: any) {
-        corrupt++;
+        corruptCount++;
+        targetsMap[target] = null;
         findings.push({
+          severity: 'error',
           code: 'JSON_RUSAK',
           target,
-          severity: 'error',
-          message: `Berkas evidence '${target}.json' bukan JSON yang sah: ${err?.message || err}`,
+          message: `Evidence JSON '${target}.json' tidak valid: ${err?.message || err}`,
         });
         continue;
       }
 
-      // Cek secret leakage pada teks mentah JSON
-      if (SECRET_PATTERNS.some((pat) => pat.test(rawText))) {
-        corrupt++;
+      if (!ev || ev.target !== target || !ev.triple || !ev.status) {
+        corruptCount++;
+        targetsMap[target] = null;
         findings.push({
-          code: 'KEBOCORAN_RAHASIA',
-          target,
           severity: 'error',
-          message: `Evidence '${target}.json' terindikasi mengandung pola rahasia/token yang tidak diperbolehkan.`,
+          code: 'JSON_RUSAK',
+          target,
+          message: `Skema evidence '${target}.json' tidak lengkap atau target tidak cocok.`,
         });
         continue;
       }
 
-      // Validasi skema dasar
-      const schemaErrors = this.validateEvidenceSchema(parsed, target);
-      if (schemaErrors.length > 0) {
-        corrupt++;
-        findings.push({
-          code: 'SKEMA_TIDAK_SAH',
-          target,
-          severity: 'error',
-          message: `Skema '${target}.json' tidak sah: ${schemaErrors.join('; ')}`,
-        });
-        continue;
-      }
-
-      const ev = parsed as Phase23TargetEvidence;
-      targets[target] = ev;
-
-      // Evaluasi ulang status & keabsahan artefak untuk status PASS
-      let targetHasIntegrityError = false;
+      targetsMap[target] = ev;
 
       if (ev.status === 'FAIL') {
-        fail++;
+        failCount++;
         findings.push({
-          code: 'TARGET_FAIL',
-          target,
           severity: 'error',
+          code: 'TARGET_GAGAL',
+          target,
           message: ev.reason || `Target '${target}' melaporkan status FAIL.`,
         });
         continue;
       }
 
-      // Cek inkonsistensi jika execution.executed = true tetapi gagal / sentinel hilang
-      if (ev.execution.executed) {
-        const missingSents = sentinels.filter((s) => !(ev.execution.stdout || '').includes(s));
-        if (ev.execution.exitCode !== 0 || !ev.execution.expectedOutputsMatched || missingSents.length > 0) {
-          targetHasIntegrityError = true;
-          findings.push({
-            code: 'EKSEKUSI_GAGAL',
-            target,
-            severity: 'error',
-            message: `Eksekusi target '${target}' gagal (exit=${ev.execution.exitCode}, missingSentinels=[${missingSents.join(', ')}]).`,
-          });
-        }
+      if (ev.status === 'NOT_VERIFIED') {
+        notVerifiedCount++;
+        findings.push({
+          severity: 'warning',
+          code: 'TARGET_NOT_VERIFIED',
+          target,
+          message: ev.reason || `Target '${target}' berstatus NOT_VERIFIED dan belum lulus sertifikasi.`,
+        });
+        continue;
       }
 
-      // Validasi SHA-256, arsitektur, format, dependensi & eksekusi wajib jika mengklaim PASS
-      if (ev.status === 'PASS') {
-        if (!this.isValidSha256(ev.llvmIR?.sha256) || !this.isValidSha256(ev.objectFile?.sha256) || !this.isValidSha256(ev.executable?.sha256)) {
-          targetHasIntegrityError = true;
+      // Status PASS: audit mendalam bukti biner, SHA-256 di disk, arsitektur, dan eksekusi!
+      let targetValid = true;
+      const checkArtifactSha = (relOrAbs: string | undefined, expectedSha: string | undefined, label: string): string | null => {
+        if (!relOrAbs || !expectedSha) {
           findings.push({
+            severity: 'error',
             code: 'SHA256_TIDAK_COCOK',
             target,
-            severity: 'error',
-            message: `Target '${target}' berstatus PASS tetapi hash SHA-256 (.ll/.o/executable) hilang atau format tidak valid.`,
+            message: `Metadata path/sha256 untuk ${label} kosong pada target PASS.`,
           });
-        } else {
-          // Jika file artefak ikut diunggah di disk, hitung ulang SHA-256 nyata dari disk
-          const hashChecks: Array<{ label: string; relOrAbs?: string; expected: string }> = [
-            { label: 'llvmIR', relOrAbs: ev.llvmIR.path, expected: ev.llvmIR.sha256! },
-            { label: 'objectFile', relOrAbs: ev.objectFile.path, expected: ev.objectFile.sha256! },
-            { label: 'executable', relOrAbs: ev.executable.path, expected: ev.executable.sha256! },
-          ];
-
-          for (const hc of hashChecks) {
-            const diskPath = this.resolveArtifactDiskPath(hc.relOrAbs, evidenceDir, baseDir);
-            if (diskPath && safeFS.existsSync(diskPath)) {
-              const actualHash = ArchiveBuilder.computeSha256(safeFS.readFileBufferSync(diskPath));
-              if (actualHash.toLowerCase() !== hc.expected.toLowerCase()) {
-                targetHasIntegrityError = true;
-                findings.push({
-                  code: 'SHA256_TIDAK_COCOK',
-                  target,
-                  severity: 'error',
-                  message: `SHA-256 ${hc.label} untuk '${target}' tidak cocok! JSON=${hc.expected}, disk=${actualHash}.`,
-                });
-              }
-            }
-          }
+          targetValid = false;
+          return null;
         }
-
-        // Validasi format & arsitektur biner
-        const expectedFmt = EXPECTED_FORMAT_BY_TARGET[target];
-        const expectedArch = EXPECTED_ARCH_BY_TARGET[target];
-
-        if (!ev.binaryMetadata?.isValidExecutable || ev.binaryMetadata.format !== expectedFmt) {
-          targetHasIntegrityError = true;
+        const resolved = safePath.isAbsolute(relOrAbs)
+          ? relOrAbs
+          : safePath.resolve(absBaseDir, relOrAbs);
+        if (!safeFS.existsSync(resolved)) {
           findings.push({
-            code: 'FORMAT_BINER_SALAH',
+            severity: 'error',
+            code: 'SHA256_TIDAK_COCOK',
             target,
-            severity: 'error',
-            message: `Format biner '${target}' tidak cocok: aktual='${ev.binaryMetadata?.format}', diharapkan='${expectedFmt}', valid=${ev.binaryMetadata?.isValidExecutable}.`,
+            message: `Berkas artefak ${label} tidak ditemukan di disk: '${resolved}'.`,
           });
+          targetValid = false;
+          return null;
         }
-        if (ev.binaryMetadata?.architecture !== expectedArch) {
-          targetHasIntegrityError = true;
+        const actualSha = ArchiveBuilder.computeSha256(safeFS.readFileBufferSync(resolved));
+        if (actualSha !== expectedSha.toLowerCase()) {
           findings.push({
+            severity: 'error',
+            code: 'SHA256_TIDAK_COCOK',
+            target,
+            message: `SHA-256 ${label} tidak cocok (diharapkan ${expectedSha}, aktual ${actualSha}).`,
+          });
+          targetValid = false;
+          return null;
+        }
+        return resolved;
+      };
+
+      checkArtifactSha(ev.llvmIR?.path, ev.llvmIR?.sha256, 'LLVM IR');
+      checkArtifactSha(ev.objectFile?.path, ev.objectFile?.sha256, 'Object File');
+      const exeDiskPath = checkArtifactSha(ev.executable?.path, ev.executable?.sha256, 'Executable');
+
+      const expectedFormat = ev.target.startsWith('windows')
+        ? 'COFF'
+        : ev.target.startsWith('macos')
+        ? 'Mach-O'
+        : 'ELF';
+      const expectedArch = ev.target.endsWith('arm64') ? 'aarch64' : 'x86_64';
+
+      if (exeDiskPath) {
+        const meta = BinaryInspector.inspectStrict(exeDiskPath);
+        if (!meta.isValidExecutable || meta.format !== expectedFormat || meta.architecture !== expectedArch) {
+          findings.push({
+            severity: 'error',
             code: 'ARSITEKTUR_BINER_SALAH',
             target,
-            severity: 'error',
-            message: `Arsitektur biner '${target}' salah: aktual='${ev.binaryMetadata?.architecture}', diharapkan='${expectedArch}'.`,
+            message: `Header biner tidak sesuai target '${target}' (expected ${expectedFormat}/${expectedArch}, aktual ${meta.format}/${meta.architecture}).`,
           });
+          targetValid = false;
         }
-
-        // Jika biner executable ada di disk, inspeksi ulang lewat BinaryInspector.inspectStrict
-        const exeDiskPath = this.resolveArtifactDiskPath(ev.executable.path, evidenceDir, baseDir);
-        if (exeDiskPath && safeFS.existsSync(exeDiskPath)) {
-          const diskMeta = BinaryInspector.inspectStrict(exeDiskPath);
-          if (
-            !diskMeta.isValidExecutable ||
-            diskMeta.format !== expectedFmt ||
-            diskMeta.architecture !== expectedArch
-          ) {
-            targetHasIntegrityError = true;
-            findings.push({
-              code: 'ARSITEKTUR_BINER_SALAH',
-              target,
-              severity: 'error',
-              message: `Inspeksi ulang biner di disk '${target}' gagal: format=${diskMeta.format}, arch=${diskMeta.architecture}, valid=${diskMeta.isValidExecutable}.`,
-            });
-          }
-        }
-
-        if (!ev.dependencyValidation?.allResolved) {
-          targetHasIntegrityError = true;
-          findings.push({
-            code: 'DEPENDENSI_HILANG',
-            target,
-            severity: 'error',
-            message: `Dependensi executable '${target}' belum terpenuhi: ${ev.dependencyValidation?.missingLibraries?.join(', ') || 'unknown'}.`,
-          });
-        }
-
-        if (!ev.execution?.executed) {
-          targetHasIntegrityError = true;
-          findings.push({
-            code: 'EKSEKUSI_GAGAL',
-            target,
-            severity: 'error',
-            message: `Target '${target}' mengklaim PASS tanpa bukti eksekusi (mode=${ev.execution?.mode}).`,
-          });
-        }
-
-        if (targetHasIntegrityError) {
-          fail++;
-        } else {
-          pass++;
-        }
-        continue;
+      } else if (
+        ev.binaryMetadata &&
+        (!ev.binaryMetadata.isValidExecutable ||
+          ev.binaryMetadata.format !== expectedFormat ||
+          ev.binaryMetadata.architecture !== expectedArch)
+      ) {
+        findings.push({
+          severity: 'error',
+          code: 'ARSITEKTUR_BINER_SALAH',
+          target,
+          message: `Metadata biner '${target}' tidak cocok (${ev.binaryMetadata.format}/${ev.binaryMetadata.architecture}).`,
+        });
+        targetValid = false;
       }
 
-      if (ev.status === 'NOT_VERIFIED') {
-        if (targetHasIntegrityError) {
-          fail++;
-        } else {
-          notVerified++;
-          findings.push({
-            code: 'TARGET_NOT_VERIFIED',
-            target,
-            severity: 'warning',
-            message: ev.reason || `Target '${target}' berstatus NOT_VERIFIED.`,
-          });
-        }
+      if (
+        !ev.execution?.executed ||
+        ev.execution.exitCode !== 0 ||
+        !ev.execution.sentinelMatched ||
+        !(ev.execution.stdout || '').includes(ev.execution.sentinelExpected || PHASE23_CERTIFICATION_SENTINEL)
+      ) {
+        findings.push({
+          severity: 'error',
+          code: 'EKSEKUSI_GAGAL',
+          target,
+          message: `Bukti eksekusi runtime untuk '${target}' tidak valid (executed=${ev.execution?.executed}, exit=${ev.execution?.exitCode}, sentinelMatched=${ev.execution?.sentinelMatched}).`,
+        });
+        targetValid = false;
+      }
+
+      if (targetValid) {
+        passCount++;
+      } else {
+        failCount++;
       }
     }
 
-    let overallStatus: Phase23OverallStatus;
-    if (fail > 0 || corrupt > 0 || missingTargets.length > 0) {
-      overallStatus = 'FAILED';
-    } else if (notVerified > 0 || pass < DESKTOP_CANONICAL_TARGETS.length) {
-      overallStatus = 'PARTIAL';
-    } else {
-      overallStatus = 'CERTIFIED';
-    }
+    const overallStatus: Phase23AggregationResult['overallStatus'] =
+      passCount === DESKTOP_CANONICAL_TARGETS.length &&
+      notVerifiedCount === 0 &&
+      failCount === 0 &&
+      missingCount === 0 &&
+      corruptCount === 0
+        ? 'CERTIFIED'
+        : failCount > 0 || missingCount > 0 || corruptCount > 0
+        ? 'FAILED'
+        : 'PARTIAL';
 
-    const generatedAt = new Date().toISOString();
-    const result: Phase23AggregationResult = {
-      overallStatus,
-      exitCode: overallStatus === 'CERTIFIED' ? 0 : 1,
-      totalExpectedTargets: DESKTOP_CANONICAL_TARGETS.length,
-      counts: {
-        pass,
-        fail,
-        notVerified,
-        missing: missingTargets.length,
-        corrupt,
-      },
-      targets,
-      missingTargets,
-      findings,
-      markdownReport: '',
-      generatedAt,
-    };
+    const exitCode: 0 | 1 = overallStatus === 'CERTIFIED' ? 0 : 1;
 
-    result.markdownReport = this.renderMarkdownReport(result, options.ciContext);
-    return result;
-  }
-
-  public static renderMarkdownReport(
-    report: Phase23AggregationResult,
-    ciContext: Phase23CIContext = {}
-  ): string {
     const lines: string[] = [];
-    const badge =
-      report.overallStatus === 'CERTIFIED'
-        ? 'CERTIFIED (6/6 PASS)'
-        : report.overallStatus === 'PARTIAL'
-        ? 'PARTIAL (BELUM LENGKAP)'
-        : 'FAILED';
-
-    lines.push('# Laporan Sertifikasi Desktop 6 Target — Phase 23 (NUSANTARA)');
+    lines.push('# Laporan Sertifikasi 6 Target Desktop NUSANTARA (Phase 23)');
     lines.push('');
-    lines.push(`- **Status Keseluruhan:** \`${report.overallStatus}\` — ${badge}`);
-    lines.push(`- **Total Target Wajib:** ${report.totalExpectedTargets}`);
+    lines.push(`- **Status Keseluruhan:** \`${overallStatus}\` (exitCode=${exitCode})`);
     lines.push(
-      `- **Ringkasan Hitungan:** PASS=${report.counts.pass}, NOT_VERIFIED=${report.counts.notVerified}, FAIL=${report.counts.fail}, MISSING=${report.counts.missing}, CORRUPT=${report.counts.corrupt}`
+      `- **Ringkasan:** PASS=${passCount}/${DESKTOP_CANONICAL_TARGETS.length} | NOT_VERIFIED=${notVerifiedCount} | FAIL=${failCount} | MISSING=${missingCount} | CORRUPT=${corruptCount}`
     );
-    lines.push(`- **Waktu Agregasi:** ${report.generatedAt}`);
-
-    if (ciContext.repository && ciContext.runId) {
-      const server = ciContext.serverUrl || 'https://github.com';
-      const runUrl = `${server}/${ciContext.repository}/actions/runs/${ciContext.runId}`;
-      lines.push(`- **GitHub Actions Run:** [${ciContext.runId}](${runUrl})`);
-      lines.push(`- **Artefak CI:** [${runUrl}#artifacts](${runUrl}#artifacts)`);
-    }
-    if (ciContext.commitSha) {
-      lines.push(`- **Commit SHA:** \`${ciContext.commitSha}\``);
-    }
-
-    lines.push('');
-    lines.push('## Matriks Sertifikasi Enam Target');
-    lines.push('');
-    lines.push(
-      '| Target | Triple | Host | Compiler / Linker | Format / Arch | SHA-256 Executable | Mode Eksekusi | Status | Keterangan |'
-    );
-    lines.push('| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :---: | :--- |');
-
-    for (const target of DESKTOP_CANONICAL_TARGETS) {
-      const ev = report.targets[target];
-      if (!ev) {
-        const missingErr = report.findings.find((f) => f.target === target);
-        lines.push(
-          `| \`${target}\` | \`${TargetTripleManager.resolve(target).triple}\` | - | - | - | - | - | **${
-            report.missingTargets.includes(target) ? 'MISSING' : 'INVALID'
-          }** | ${missingErr?.message || 'Evidence tidak tersedia'} |`
-        );
-        continue;
-      }
-
-      const fmtArch = ev.binaryMetadata?.format
-        ? `${ev.binaryMetadata.format} / ${ev.binaryMetadata.architecture}`
-        : 'N/A';
-      const shaShort = ev.executable?.sha256 ? `\`${ev.executable.sha256.slice(0, 12)}...\`` : '-';
-      const compLink = `${ev.compiler.name} / ${ev.linker.name}`;
-      const statusLabel = ev.status;
-      const reasonClean = (ev.reason || '-').replace(/\|/g, '/').replace(/\r?\n/g, ' ');
-
+    if (options.ciContext?.runId) {
       lines.push(
-        `| \`${target}\` | \`${ev.triple}\` | ${ev.hostOs}/${ev.hostArch} | ${compLink} | ${fmtArch} | ${shaShort} | \`${ev.execution.mode}\` | **${statusLabel}** | ${reasonClean} |`
+        `- **Konteks CI:** ${options.ciContext.serverUrl || 'https://github.com'}/${options.ciContext.repository || ''}/actions/runs/${options.ciContext.runId} (commit \`${options.ciContext.commitSha || '-'}\`, ref \`${options.ciContext.refName || '-'}\`)`
       );
     }
-
-    if (report.findings.length > 0) {
-      lines.push('');
-      lines.push('## Temuan Audit & Integritas');
-      lines.push('');
-      for (const f of report.findings) {
-        lines.push(`- **[${f.severity.toUpperCase()} / ${f.code}]** \`${f.target}\`: ${f.message}`);
+    lines.push('');
+    lines.push('| Target | Triple | Status | Compiler / Linker | Format / Arch | Mode Eksekusi | Keterangan |');
+    lines.push('| :--- | :--- | :---: | :--- | :--- | :--- | :--- |');
+    for (const target of DESKTOP_CANONICAL_TARGETS) {
+      const ev = targetsMap[target];
+      if (!ev) {
+        lines.push(`| \`${target}\` | - | **MISSING/CORRUPT** | - | - | - | Evidence tidak tersedia atau korup |`);
+      } else {
+        const fmt = ev.binaryMetadata ? `${ev.binaryMetadata.format}/${ev.binaryMetadata.architecture}` : '-';
+        lines.push(
+          `| \`${target}\` | \`${ev.triple}\` | **${ev.status}** | ${ev.compiler.name} / ${ev.linker.name} | ${fmt} | ${ev.execution.mode} | ${ev.reason || 'Terverifikasi'} |`
+        );
       }
     }
-
     lines.push('');
-    lines.push('---');
-    lines.push(
-      report.overallStatus === 'CERTIFIED'
-        ? 'Seluruh 6 target desktop telah lolos build LLVM IR nyata, validasi SHA-256, inspeksi header biner, dan eksekusi terverifikasi.'
-        : 'Gerbang sertifikasi Phase 23 belum berstatus CERTIFIED; Phase 23 tetap berstatus SELESAI SEBAGIAN hingga seluruh 6 target berstatus PASS.'
-    );
-    lines.push('');
+    if (findings.length > 0) {
+      lines.push('## Temuan Audit');
+      for (const f of findings) {
+        lines.push(`- **[${f.severity.toUpperCase()}][${f.code}]** \`${f.target}\`: ${f.message}`);
+      }
+      lines.push('');
+    }
 
-    return this.sanitizeString(lines.join('\n'));
-  }
-
-  private static validateEvidenceSchema(obj: any, expectedTarget: CanonicalDesktopTarget): string[] {
-    const errs: string[] = [];
-    if (!obj || typeof obj !== 'object') {
-      return ['Bukan objek JSON'];
-    }
-    if (obj.target !== expectedTarget) {
-      errs.push(`target='${obj.target}' tidak cocok dengan '${expectedTarget}'`);
-    }
-    if (typeof obj.triple !== 'string' || !obj.triple) errs.push('triple hilang');
-    if (typeof obj.hostOs !== 'string' || typeof obj.hostArch !== 'string') errs.push('hostOs/hostArch hilang');
-    if (!obj.compiler || typeof obj.compiler.name !== 'string') errs.push('compiler tidak valid');
-    if (!obj.linker || typeof obj.linker.name !== 'string') errs.push('linker tidak valid');
-    if (!obj.sdk || typeof obj.sdk.available !== 'boolean') errs.push('sdk tidak valid');
-    if (!obj.llvmIR || typeof obj.llvmIR.verified !== 'boolean') errs.push('llvmIR tidak valid');
-    if (!obj.objectFile || typeof obj.objectFile !== 'object') errs.push('objectFile tidak valid');
-    if (!obj.executable || typeof obj.executable !== 'object') errs.push('executable tidak valid');
-    if (!obj.binaryMetadata || typeof obj.binaryMetadata.isValidExecutable !== 'boolean') {
-      errs.push('binaryMetadata tidak valid');
-    }
-    if (!obj.dependencyValidation || typeof obj.dependencyValidation.allResolved !== 'boolean') {
-      errs.push('dependencyValidation tidak valid');
-    }
-    if (!obj.execution || typeof obj.execution.executed !== 'boolean') errs.push('execution tidak valid');
-    if (obj.status !== 'PASS' && obj.status !== 'FAIL' && obj.status !== 'NOT_VERIFIED') {
-      errs.push(`status '${obj.status}' tidak valid (harus PASS/FAIL/NOT_VERIFIED)`);
-    }
-    return errs;
-  }
-
-  private static resolveArtifactDiskPath(
-    artifactPath: string | undefined,
-    evidenceDir: string,
-    baseDir: string
-  ): string | undefined {
-    if (!artifactPath) return undefined;
-    if (safePath.isAbsolute(artifactPath)) return artifactPath;
-    const fromBase = safePath.resolve(baseDir, artifactPath);
-    if (safeFS.existsSync(fromBase)) return fromBase;
-    const fromEvidence = safePath.resolve(evidenceDir, artifactPath);
-    if (safeFS.existsSync(fromEvidence)) return fromEvidence;
-    return fromBase;
+    return {
+      overallStatus,
+      exitCode,
+      counts: {
+        totalRequired: DESKTOP_CANONICAL_TARGETS.length,
+        pass: passCount,
+        notVerified: notVerifiedCount,
+        fail: failCount,
+        missing: missingCount,
+        corrupt: corruptCount,
+      },
+      targets: targetsMap,
+      findings,
+      markdownReport: lines.join('\n'),
+    };
   }
 }

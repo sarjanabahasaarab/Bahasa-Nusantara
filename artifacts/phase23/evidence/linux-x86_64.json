@@ -1,53 +1,47 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.0",
+  "generatedAt": "2026-11-15T03:35:20.386Z",
   "target": "linux-x86_64",
   "triple": "x86_64-unknown-linux-gnu",
   "hostOs": "linux",
   "hostArch": "x64",
+  "recommendedRunner": "ubuntu-latest",
+  "isCross": false,
   "compiler": {
     "name": "none",
-    "version": "N/A"
+    "available": false,
+    "command": "llc"
   },
   "linker": {
     "name": "none",
-    "version": "N/A"
+    "lldAvailable": false
   },
   "sdk": {
-    "name": "System GNU libc / ld.so",
+    "name": "Host GNU/glibc",
     "available": false,
+    "linkerProbeVerified": false,
     "missingRequirements": [
-      "Toolchain LLVM/Clang tidak ditemukan di PATH atau NUSANTARA_LLVM_PATH."
+      "clang (driver compiler + linker C runtime) tidak ditemukan di PATH."
     ]
   },
   "llvmIR": {
-    "verified": false
+    "path": "artifacts/linux-x86_64/nusa_cert_linux-x86_64.ll",
+    "sha256": "87f313f4bc56cf788a9d4125cc4353b9b9e2256f63d185c9e44874d1561a3e0c"
   },
   "objectFile": {},
   "executable": {},
-  "binaryMetadata": {
-    "isValidExecutable": false
-  },
-  "dependencyValidation": {
-    "allResolved": false,
-    "inspectedFromDisk": false,
-    "dependencies": [],
-    "missingLibraries": []
-  },
   "execution": {
+    "required": true,
     "executed": false,
     "mode": "not-executed",
-    "exitCode": null,
-    "stdout": "",
-    "stderr": "",
-    "expectedSentinels": [
-      "NUSANTARA_NATIVE_CI_OK",
-      "Pengujian LLVM IR berhasil",
-      "Bahasa Indonesia",
-      "42"
-    ],
-    "expectedOutputsMatched": false
+    "sentinelExpected": "NUSANTARA_NATIVE_CI_OK",
+    "sentinelMatched": false
   },
   "status": "NOT_VERIFIED",
-  "reason": "Toolchain LLVM/Clang tidak ditemukan di PATH atau NUSANTARA_LLVM_PATH.",
-  "generatedAt": "2026-11-15T02:58:22.890Z"
+  "statusCode": "TOOLCHAIN_TIDAK_TERSEDIA",
+  "reason": "Target 'linux-x86_64' belum dapat diverifikasi pada host ini: clang (driver compiler + linker C runtime) tidak ditemukan di PATH.",
+  "diagnostics": [
+    "[TIDAK TERSEDIA: TOOLCHAIN_TIDAK_TERSEDIA] Target host 'linux-x86_64' belum siap: clang (driver compiler + linker C runtime) tidak ditemukan di PATH.",
+    "Persyaratan hilang: clang (driver compiler + linker C runtime) tidak ditemukan di PATH."
+  ]
 }
