@@ -41,6 +41,7 @@ export interface AOTCompileResult {
   objectPath?: string;
   executablePath?: string;
   toolchain: LLVMToolchainStatus;
+  llvmValidationTool?: string;
   diagnostics: string[];
 }
 
@@ -104,6 +105,7 @@ export class AOTCompiler {
         nirModule: nirMod,
         llvmIR: rawLLVM,
         toolchain: toolchainStatus,
+        llvmValidationTool: valRes.toolUsed,
         diagnostics: valRes.diagnostics,
       };
     }
@@ -131,6 +133,7 @@ export class AOTCompiler {
         llvmIR: rawLLVM,
         optimizedIR: finalIR,
         toolchain: toolchainStatus,
+        llvmValidationTool: valRes.toolUsed,
         diagnostics: diagReport,
       };
     }
@@ -153,6 +156,7 @@ export class AOTCompiler {
         llvmIR: rawLLVM,
         optimizedIR: finalIR,
         toolchain: toolchainStatus,
+        llvmValidationTool: valRes.toolUsed,
         diagnostics: diagReport,
       };
     }
@@ -166,6 +170,7 @@ export class AOTCompiler {
         optimizedIR: finalIR,
         objectPath: objPath,
         toolchain: toolchainStatus,
+        llvmValidationTool: valRes.toolUsed,
         diagnostics: diagReport,
       };
     }
@@ -186,6 +191,7 @@ export class AOTCompiler {
       objectPath: objPath,
       executablePath: linkRes.success ? binPath : undefined,
       toolchain: toolchainStatus,
+      llvmValidationTool: valRes.toolUsed,
       diagnostics: diagReport,
     };
   }

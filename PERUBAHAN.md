@@ -4,6 +4,26 @@ Seluruh perubahan penting pada proyek bahasa pemrograman NUSANTARA dicatat dalam
 
 Format penomoran versi mengacu pada **Semantic Versioning** (`vMAJOR.MINOR.PATCH`). Pada masa pengembangan awal, versi minor mencerminkan tahapan fase roadmap (misal `v0.1.0` untuk Phase 1, `v0.2.0` untuk Phase 2, `v0.3.0` untuk Phase 3, `v0.4.0` untuk Phase 4, `v0.5.0` untuk Phase 5, `v0.6.0` untuk Phase 6, `v0.7.0` untuk Phase 7, `v0.8.0` untuk Phase 8, `v0.9.0` untuk Phase 9, `v0.10.0` untuk Phase 10).
 
+## [v0.23.2 — Hardening Evidence CI & Gerbang Sertifikasi 6 Target Desktop] — 2026-11-14
+### Phase 23.2: CI Evidence Hardening & Six-Target Desktop Certification (`SELESAI SEBAGIAN` — Menunggu Sertifikasi 6/6 Target CI `CERTIFIED`)
+
+Memperketat mekanisme bukti kompilasi, inspeksi biner, pelacakan hash SHA-256, dan agregasi kelulusan pada `.github/workflows/ci.yml` agar target yang belum diverifikasi (`NOT_VERIFIED`) tidak pernah disalahartikan sebagai kelulusan `PASS`:
+
+#### Diperbaiki & Ditambahkan:
+- **Hardening Deteksi & Linker Probe Windows ARM64 (`src/build/target-matrix.ts`, `toolchain-manager.ts`):**
+  - Memeriksa ketersediaan library CRT MSVC ARM64 (`VCToolsInstallDir/lib/arm64/libcmt.lib`), Windows SDK ARM64 (`Lib/*/um/arm64/kernel32.lib`), UCRT ARM64 (`ucrt/arm64/libucrt.lib`), serta menjalankan **linker probe nyata** (`clang -target aarch64-pc-windows-msvc -fuse-ld=lld`) + verifikasi header `PE32+ aarch64` via `BinaryInspector.inspectStrict` sebelum menyatakan `canBuildNative = true`.
+  - Fallback deteksi linker LLD mencakup `lld`, `lld-link`, dan `ld.lld`.
+- **Audit Hash & Mode Eksekusi Jujur (`src/build/native-pipeline.ts`, `types.ts`, `aot-compiler.ts`):**
+  - Menghitung SHA-256 berkas `.ll` dan `.o`/`.obj` selain executable, mencatat `compilerInfo`, `linkerInfo`, dan `llvmValidationTool`.
+  - Memisahkan secara tegas `executionMode`: `native`, `qemu-user`, `rosetta2` (`arch -x86_64` macOS), `cross-compiled-not-executed`, dan `not-executed`.
+- **Mesin Sertifikasi & Agregasi CI (`src/build/certification.ts`, `scripts/phase23-certify.ts`):**
+  - Menghasilkan 6 berkas JSON evidence bebas rahasia (`artifacts/phase23/evidence/<target>.json`) serta mengagregasi ketiganya di job `phase23-certification-gate` ke `PHASE-23-CERTIFICATION-REPORT.md`.
+  - Menolak keras (`exit 1`) status `PARTIAL` maupun `FAILED` apabila terdapat target hilang, JSON rusak, target `NOT_VERIFIED`, `FAIL`, ketidakcocokan SHA-256 terhadap berkas di disk, salah arsitektur/format biner, atau eksekusi/sentinel stdout gagal.
+- **Pengujian (`pengujian/build/uji_build_distribusi_fase23.ts` Grup 7):**
+  - Menambahkan 8 skenario unit & integrasi khusus gerbang sertifikasi (7.1–7.8; total `test:build-v23` menjadi `24 lulus, 0 gagal, 1 belum diverifikasi` saat lokal tanpa `clang`).
+
+---
+
 ## [v0.23.1 — Perbaikan Simbol String LLVM IR & Validasi Build 6 Target] — 2026-11-13
 ### Phase 23.1: LLVM IR String Symbol Repair & Six-Target Native Build Validation (`SELESAI SEBAGIAN` — Menunggu Runner CI Clang/Cross-SDK)
 

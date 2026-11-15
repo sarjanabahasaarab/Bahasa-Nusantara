@@ -49,7 +49,10 @@ export interface TargetCapability {
   crossSdkAvailable: boolean;
   canBuildNative: boolean;
   sysrootPath?: string;
+  sdkName?: string;
+  linkerProbeVerified?: boolean;
   crossCompilerCommand?: string;
+  extraLibraryPaths?: string[];
   recommendedRunner: string;
   missingRequirements: string[];
   diagnostics: string[];
@@ -82,7 +85,12 @@ export interface ExecutionVerificationResult {
   stdout: string;
   stderr: string;
   timedOut: boolean;
-  executionMode?: 'native' | 'qemu-user' | 'not-executed';
+  executionMode?:
+    | 'native'
+    | 'qemu-user'
+    | 'rosetta2'
+    | 'cross-compiled-not-executed'
+    | 'not-executed';
   reason?: string;
 }
 
@@ -93,6 +101,11 @@ export interface NativeBuildResult {
   executablePath?: string;
   objectPath?: string;
   llvmIRPath?: string;
+  llvmIRSha256?: string;
+  objectSha256?: string;
+  llvmValidationTool?: string;
+  compilerInfo?: { name: string; version?: string; command?: string };
+  linkerInfo?: { name: string; version?: string; commandExecuted?: string };
   linkingMode: LinkingMode;
   binaryMetadata?: BinaryMetadata;
   dependencyReport?: DependencyInspectionReport;

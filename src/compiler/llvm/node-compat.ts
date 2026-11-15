@@ -221,4 +221,20 @@ export const safePath = {
     const dotIdx = filePath.lastIndexOf('.');
     return dotIdx === -1 ? '' : filePath.slice(dotIdx);
   },
+
+  isAbsolute(filePath: string): boolean {
+    const path = getRuntimeNodeModule('path');
+    if (path && typeof path.isAbsolute === 'function') {
+      return path.isAbsolute(filePath);
+    }
+    return filePath.startsWith('/') || /^[A-Za-z]:[/\\]/.test(filePath);
+  },
+
+  relative(from: string, to: string): string {
+    const path = getRuntimeNodeModule('path');
+    if (path && typeof path.relative === 'function') {
+      return path.relative(from, to);
+    }
+    return to;
+  },
 };

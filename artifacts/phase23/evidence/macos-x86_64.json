@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0.0",
+  "target": "macos-x86_64",
+  "triple": "x86_64-apple-darwin",
+  "hostOs": "linux",
+  "hostArch": "x64",
+  "compiler": {
+    "name": "none",
+    "version": "N/A"
+  },
+  "linker": {
+    "name": "none",
+    "version": "N/A"
+  },
+  "sdk": {
+    "name": "Apple SDK / OSXCross (missing)",
+    "available": false,
+    "missingRequirements": [
+      "Toolchain LLVM/Clang tidak ditemukan di PATH atau NUSANTARA_LLVM_PATH.",
+      "Cross-compile ke macOS (x86_64) dari x86_64-unknown-linux-gnu membutuhkan OSXCross/Apple SDK atau runner macos-15-intel / macos-13 (atau macos-latest + Rosetta 2)."
+    ]
+  },
+  "llvmIR": {
+    "verified": false
+  },
+  "objectFile": {},
+  "executable": {},
+  "binaryMetadata": {
+    "isValidExecutable": false
+  },
+  "dependencyValidation": {
+    "allResolved": false,
+    "inspectedFromDisk": false,
+    "dependencies": [],
+    "missingLibraries": []
+  },
+  "execution": {
+    "executed": false,
+    "mode": "cross-compiled-not-executed",
+    "exitCode": null,
+    "stdout": "",
+    "stderr": "",
+    "expectedSentinels": [
+      "NUSANTARA_NATIVE_CI_OK",
+      "Pengujian LLVM IR berhasil",
+      "Bahasa Indonesia",
+      "42"
+    ],
+    "expectedOutputsMatched": false
+  },
+  "status": "NOT_VERIFIED",
+  "reason": "Toolchain LLVM/Clang tidak ditemukan di PATH atau NUSANTARA_LLVM_PATH.; Cross-compile ke macOS (x86_64) dari x86_64-unknown-linux-gnu membutuhkan OSXCross/Apple SDK atau runner macos-15-intel / macos-13 (atau macos-latest + Rosetta 2).",
+  "generatedAt": "2026-11-15T01:28:50.977Z"
+}

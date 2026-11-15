@@ -11,3 +11,5 @@ export * from './archive-builder';
 export * from './native-pipeline';
 export * from './installers';
 export * from './distribution-packager';
+export * from './certification';
+

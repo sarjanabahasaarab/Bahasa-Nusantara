@@ -194,7 +194,13 @@ jobs:
                 echo "VCToolsInstallDir=$VC_TOOLS_DIR" >> "$GITHUB_ENV"
                 echo "[OK] MSVC ARM64 libraries ditemukan: $ARM64_VC_LIB"
               else
-                echo "[INFO] MSVC ARM64 libraries tidak terpasang di runner windows-latest ini."
+                echo "[INFO] MSVC ARM64 libraries (VC/Tools/MSVC/*/lib/arm64) tidak terpasang di runner windows-latest ini."
+              fi
+              WIN_SDK_ARM64=$(find "/c/Program Files (x86)/Windows Kits/10/Lib" -type d -path "*/um/arm64" 2>/dev/null | head -n 1 || true)
+              if [ -n "$WIN_SDK_ARM64" ]; then
+                echo "[OK] Windows SDK ARM64 library ditemukan: $WIN_SDK_ARM64"
+              else
+                echo "[INFO] Windows SDK ARM64 library (Lib/*/um/arm64) tidak terpasang di runner windows-latest ini."
               fi
             fi
           fi
@@ -208,113 +214,44 @@ jobs:
           npm run test:llvm-v44
           npm run test:build-v23
 
-      - name: Kompilasi, Validasi & Eksekusi Biner Native Nyata (${{ matrix.target }})
+      - name: Kompilasi, Validasi, Eksekusi & Buat Evidence JSON (${{ matrix.target }})
         shell: bash
         run: |
-          mkdir -p .ci-native-src dist-native/reports
-          cat > .ci-native-src/uji_ci_native.nusantara <<'EOF'
-          program UjiNativePhase23
-          mulai
-            hasil : bilangan = 20 + 22
-            tampilkan("NUSANTARA_NATIVE_CI_OK")
-            tampilkan("Pengujian LLVM IR berhasil")
-            tampilkan("Bahasa Indonesia")
-            tampilkan(hasil)
-          selesai
-          EOF
-          npx tsx -e "
-            import * as fs from 'fs';
-            import * as path from 'path';
-            import { execSync } from 'child_process';
-            import { NativeBuildPipeline, TargetMatrixManager } from './src/build';
-            import { LLVMToolchainManager } from './src/compiler/llvm/toolchain-manager';
+          mkdir -p artifacts/phase23/evidence dist-native/reports
+          npx tsx scripts/phase23-certify.ts generate \
+            --target "${{ matrix.target }}" \
+            --bundle-dir artifacts/phase23 \
+            --fail-on-missing-clang
 
-            const target = '${{ matrix.target }}';
-            const cap = TargetMatrixManager.inspectTargetCapability(target);
-            const toolchain = new LLVMToolchainManager().detect();
-            const isWinArm64 = target === 'windows-arm64';
+      - name: Tulis Evidence Target ke Step Summary
+        if: always()
+        shell: bash
+        run: |
+          EVIDENCE_FILE="artifacts/phase23/evidence/${{ matrix.target }}.json"
+          echo "### Evidence Phase 23.2: \`${{ matrix.target }}\` (\`${{ matrix.triple }}\`)" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "$EVIDENCE_FILE" ]; then
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            cat "$EVIDENCE_FILE" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Evidence JSON tidak terbuat." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
-            if (!cap.canBuildNative && isWinArm64) {
-              const rep = {
-                target,
-                triple: cap.triple,
-                host: process.platform + '/' + process.arch,
-                toolchainVersion: toolchain.version || 'N/A',
-                status: 'NOT_VERIFIED',
-                reason: cap.missingRequirements.join('; ') || 'MSVC ARM64 SDK/libs tidak tersedia pada runner windows-latest',
-              };
-              fs.writeFileSync('dist-native/reports/matrix-' + target + '.json', JSON.stringify(rep, null, 2));
-              console.log('[NOT_VERIFIED] windows-arm64 dilewati jujur:', rep.reason);
-              process.exit(0);
-            }
-
-            const res = NativeBuildPipeline.build({
-              sourceFilePath: '.ci-native-src/uji_ci_native.nusantara',
-              appName: 'uji_ci_native',
-              target,
-              outputDirectory: 'dist-native/out-' + target,
-              linkingMode: 'dynamic',
-              strip: true,
-              verifyExecution: true,
-            });
-
-            if (!res.success || !res.executablePath) {
-              console.error('[FAIL] NativeBuildPipeline gagal:', res.statusCode, res.diagnostics.join(' | '));
-              process.exit(1);
-            }
-
-            const execRes = res.executionVerification;
-            if (('${{ matrix.is_native }}' === 'true' || target === 'linux-arm64')) {
-              if (!execRes || !execRes.executed || !execRes.success) {
-                console.error('[FAIL] Eksekusi target gagal:', execRes);
-                process.exit(1);
-              }
-              const out = execRes.stdout || '';
-              for (const expected of ['NUSANTARA_NATIVE_CI_OK', 'Pengujian LLVM IR berhasil', 'Bahasa Indonesia', '42']) {
-                if (!out.includes(expected)) {
-                  console.error('[FAIL] Stdout tidak memuat:', expected, 'Aktual:', out);
-                  process.exit(1);
-                }
-              }
-            }
-
-            const rep = {
-              target,
-              triple: cap.triple,
-              host: process.platform + '/' + process.arch,
-              toolchainVersion: toolchain.version || 'N/A',
-              llvmAsAvailable: toolchain.binaries.llvmAs.found,
-              crossCompilerCommand: cap.crossCompilerCommand || null,
-              sysroot: cap.sysrootPath || null,
-              binaryFormat: res.binaryMetadata?.format,
-              binaryArch: res.binaryMetadata?.architecture,
-              binaryType: res.binaryMetadata?.binaryType,
-              dependenciesResolved: res.dependencyReport?.allResolved,
-              executableSha256: res.executableSha256,
-              executionMode: execRes?.executionMode || 'not-executed',
-              exitCode: execRes?.exitCode ?? null,
-              stdout: execRes?.stdout || '',
-              status: 'PASS',
-            };
-            fs.writeFileSync('dist-native/reports/matrix-' + target + '.json', JSON.stringify(rep, null, 2));
-            console.log(JSON.stringify(rep, null, 2));
-          "
-          rm -rf .ci-native-src
+      - name: Unggah Evidence Target Phase 23.2
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase23-evidence-${{ matrix.target }}
+          path: artifacts/phase23
+          retention-days: 14
+          if-no-files-found: warn
 
       - name: Validasi Pembuatan Distribusi Target (${{ matrix.target }})
         run: |
           npx tsx -e "import { MesinCI } from './src/cicd'; import { PembacaBerkasNode } from './src/modul/pembacaBerkas'; const ci = new MesinCI({ pembaca: new PembacaBerkasNode(), targetPlatforms: ['${{ matrix.legacy_target }}'] }); const r = ci.jalankan(); if (r.statusAkhir !== 'PASS') process.exit(1);"
 
-      - name: Ringkasan Validasi Target ke Step Summary
-        shell: bash
-        run: |
-          REPORT_FILE="dist-native/reports/matrix-${{ matrix.target }}.json"
-          echo "### Target Matrix: \`${{ matrix.target }}\` (\`${{ matrix.triple }}\`)" >> "$GITHUB_STEP_SUMMARY"
-          if [ -f "$REPORT_FILE" ]; then
-            cat "$REPORT_FILE" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Unggah Artefak Sementara CI (Retention 7 Hari)
+      - name: Unggah Artefak Build CI (Retention 7 Hari)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: nusantara-ci-${{ matrix.target }}
@@ -325,23 +262,79 @@ jobs:
           if-no-files-found: warn
 
   # ============================================================================
-  # 5. CI SUMMARY & STEP SUMMARY GENERATION
+  # 5. PHASE 23.2 SIX-TARGET CERTIFICATION AGGREGATION GATE
+  # ============================================================================
+  phase23-certification-gate:
+    name: NUSANTARA / Gerbang Sertifikasi 6 Target (Phase 23.2)
+    needs: [build-matrix-validation]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Pasang Lingkungan Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Pasang Dependensi
+        run: npm ci
+
+      - name: Unduh Seluruh Evidence 6 Target
+        uses: actions/download-artifact@v4
+        with:
+          pattern: phase23-evidence-*
+          path: artifacts/phase23
+          merge-multiple: true
+
+      - name: Agregasi, Validasi Integritas SHA-256/Biner & Gerbang Sertifikasi Phase 23.2
+        id: certify
+        run: |
+          mkdir -p artifacts/phase23
+          set +e
+          npx tsx scripts/phase23-certify.ts aggregate \
+            --evidence-dir artifacts/phase23/evidence \
+            --report-out artifacts/phase23/PHASE-23-CERTIFICATION-REPORT.md \
+            --json-out artifacts/phase23/certification-summary.json \
+            --step-summary
+          GATE_EXIT=$?
+          set -e
+          cp artifacts/phase23/PHASE-23-CERTIFICATION-REPORT.md PHASE-23-CERTIFICATION-REPORT.md || true
+          exit $GATE_EXIT
+
+      - name: Unggah Laporan Sertifikasi Phase 23
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase23-certification-report
+          path: |
+            PHASE-23-CERTIFICATION-REPORT.md
+            artifacts/phase23
+          retention-days: 30
+          if-no-files-found: warn
+
+  # ============================================================================
+  # 6. CI SUMMARY & STEP SUMMARY GENERATION
   # ============================================================================
   ci-summary:
     name: NUSANTARA / Ringkasan CI
-    needs: [static-checks, test-suite, quality-gate, build-matrix-validation]
+    needs: [static-checks, test-suite, quality-gate, build-matrix-validation, phase23-certification-gate]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Buat Laporan Ringkasan CI Resmi
         run: |
-          echo "## 🇮🇩 NUSANTARA CI SUMMARY (v0.24.0)" >> $GITHUB_STEP_SUMMARY
+          echo "## 🇮🇩 NUSANTARA CI SUMMARY (v0.24.0 + Phase 23.2)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Tahapan Alur Kerja | Status | Runner Host | Keterangan |" >> $GITHUB_STEP_SUMMARY
           echo "| :--- | :---: | :--- | :--- |" >> $GITHUB_STEP_SUMMARY
-          echo "| Pemeriksaan Statis (Lint/TSC) | ${{ needs.static-checks.result == 'success' && '✅ PASS' || '❌ FAIL' }} | ubuntu-latest | Validasi sintaks dan tipe TypeScript |" >> $GITHUB_STEP_SUMMARY
-          echo "| Rangkaian Uji Otomatis | ${{ needs.test-suite.result == 'success' && '✅ PASS' || '❌ FAIL' }} | Ubuntu, Windows, macOS | Seluruh unit, integrasi, dan stdlib |" >> $GITHUB_STEP_SUMMARY
-          echo "| Gerbang Kualitas (Quality Gate) | ${{ needs.quality-gate.result == 'success' && '✅ PASS' || '❌ FAIL' }} | ubuntu-latest | Ambang batas kualitas dan regresi |" >> $GITHUB_STEP_SUMMARY
-          echo "| Matriks Build 6 Target Desktop | ${{ needs.build-matrix-validation.result == 'success' && '✅ PASS' || '❌ FAIL' }} | Multi-OS Matrix | Windows x86_64/ARM64, Linux x86_64/ARM64 (+QEMU user), macOS x86_64/ARM64 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Pemeriksaan Statis (Lint/TSC) | ${{ needs.static-checks.result == 'success' && 'PASS' || 'FAIL' }} | ubuntu-latest | Validasi sintaks dan tipe TypeScript |" >> $GITHUB_STEP_SUMMARY
+          echo "| Rangkaian Uji Otomatis | ${{ needs.test-suite.result == 'success' && 'PASS' || 'FAIL' }} | Ubuntu, Windows, macOS | Seluruh unit, integrasi, dan stdlib |" >> $GITHUB_STEP_SUMMARY
+          echo "| Gerbang Kualitas (Quality Gate) | ${{ needs.quality-gate.result == 'success' && 'PASS' || 'FAIL' }} | ubuntu-latest | Ambang batas kualitas dan regresi |" >> $GITHUB_STEP_SUMMARY
+          echo "| Matriks Build 6 Target Desktop | ${{ needs.build-matrix-validation.result == 'success' && 'SELESAI' || 'GAGAL/TIDAK LENGKAP' }} | Multi-OS Matrix | Eksekusi per-target menghasilkan JSON evidence terpisah |" >> $GITHUB_STEP_SUMMARY
+          echo "| Gerbang Sertifikasi 6 Target (Phase 23.2) | ${{ needs.phase23-certification-gate.result == 'success' && 'CERTIFIED (6/6 PASS)' || 'PARTIAL / FAILED (Belum CERTIFIED)' }} | ubuntu-latest | Wajib 6/6 target PASS + SHA-256 & header biner sah |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Status Release**: \`NOT PUBLISHED\` (CI Pipeline tidak mempublikasikan rilis publik)." >> $GITHUB_STEP_SUMMARY
+

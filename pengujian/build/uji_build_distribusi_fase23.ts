@@ -17,10 +17,13 @@ import { spawnSync } from 'child_process';
 
 import {
   ArchiveBuilder,
+  CanonicalDesktopTarget,
   DESKTOP_CANONICAL_TARGETS,
   DesktopDistributionPackager,
   DesktopInstallerGenerator,
   NativeBuildPipeline,
+  Phase23CertificationEngine,
+  Phase23TargetEvidence,
   TargetMatrixManager,
 } from '../../src/build';
 import { AOTCompiler } from '../../src/compiler/aot/aot-compiler';
@@ -737,6 +740,281 @@ selesai
   samaDengan(buf.dapatkanSeluruhTeks().join('\n').trim(), 'NUSANTARA 9');
 });
 
+// -----------------------------------------------------------------------------
+// GRUP 7: SERTIFIKASI ENAM TARGET, EVIDENCE JSON & AGGREGATION GATE (PHASE 23.2)
+// -----------------------------------------------------------------------------
+console.log('\n=== [GRUP 7: Sertifikasi 6 Target, Evidence JSON & Aggregation Gate (Phase 23.2)] ===');
+
+function buatEvidencePassLengkap(target: CanonicalDesktopTarget, baseDir?: string): Phase23TargetEvidence {
+  const triples: Record<CanonicalDesktopTarget, string> = {
+    'windows-x86_64': 'x86_64-pc-windows-msvc',
+    'windows-arm64': 'aarch64-pc-windows-msvc',
+    'linux-x86_64': 'x86_64-unknown-linux-gnu',
+    'linux-arm64': 'aarch64-unknown-linux-gnu',
+    'macos-x86_64': 'x86_64-apple-darwin',
+    'macos-arm64': 'arm64-apple-darwin',
+  };
+  const formats: Record<CanonicalDesktopTarget, 'COFF' | 'ELF' | 'Mach-O'> = {
+    'windows-x86_64': 'COFF',
+    'windows-arm64': 'COFF',
+    'linux-x86_64': 'ELF',
+    'linux-arm64': 'ELF',
+    'macos-x86_64': 'Mach-O',
+    'macos-arm64': 'Mach-O',
+  };
+  const archs: Record<CanonicalDesktopTarget, 'x86_64' | 'aarch64'> = {
+    'windows-x86_64': 'x86_64',
+    'windows-arm64': 'aarch64',
+    'linux-x86_64': 'x86_64',
+    'linux-arm64': 'aarch64',
+    'macos-x86_64': 'x86_64',
+    'macos-arm64': 'aarch64',
+  };
+
+  let exeRel: string | undefined;
+  let llRel: string | undefined;
+  let objRel: string | undefined;
+  let llSha = crypto.createHash('sha256').update(`ll-${target}`).digest('hex');
+  let objSha = crypto.createHash('sha256').update(`obj-${target}`).digest('hex');
+  let exeSha = crypto.createHash('sha256').update(`exe-${target}`).digest('hex');
+
+  if (baseDir) {
+    const fDir = path.join(baseDir, 'files', target);
+    fs.mkdirSync(fDir, { recursive: true });
+    const llBytes = Buffer.from(`; IR ${target}\n@.str.0 = private unnamed_addr constant [23 x i8] c"NUSANTARA_NATIVE_CI_OK\\00"\n`);
+    const objBytes = Buffer.from(`OBJ-${target}`);
+    fs.writeFileSync(path.join(fDir, 'app.ll'), llBytes);
+    fs.writeFileSync(path.join(fDir, 'app.o'), objBytes);
+
+    let exeBytes: Buffer;
+    if (formats[target] === 'ELF') {
+      exeBytes = Buffer.alloc(64);
+      exeBytes[0] = 0x7f; exeBytes[1] = 0x45; exeBytes[2] = 0x4c; exeBytes[3] = 0x46;
+      exeBytes[4] = 2; exeBytes[5] = 1; exeBytes[6] = 1;
+      exeBytes.writeUInt16LE(2, 16);
+      exeBytes.writeUInt16LE(archs[target] === 'x86_64' ? 0x3e : 0xb7, 18);
+      exeBytes.writeBigUInt64LE(0x401000n, 24);
+    } else if (formats[target] === 'COFF') {
+      exeBytes = Buffer.alloc(512);
+      exeBytes[0] = 0x4d; exeBytes[1] = 0x5a;
+      exeBytes.writeUInt32LE(0x80, 0x3c);
+      exeBytes.write('PE\0\0', 0x80, 'ascii');
+      exeBytes.writeUInt16LE(archs[target] === 'x86_64' ? 0x8664 : 0xaa64, 0x84);
+      exeBytes.writeUInt16LE(1, 0x86);
+      exeBytes.writeUInt16LE(240, 0x94);
+      exeBytes.writeUInt16LE(0x0022, 0x96);
+      exeBytes.writeUInt16LE(0x020b, 0x98);
+      exeBytes.writeUInt32LE(0x1000, 0x98 + 16);
+      const secOff = 0x98 + 240;
+      exeBytes.write('.text', secOff, 'ascii');
+      exeBytes.writeUInt32LE(0x200, secOff + 16);
+      exeBytes.writeUInt32LE(0x200, secOff + 20);
+    } else {
+      exeBytes = Buffer.alloc(32);
+      exeBytes[0] = 0xcf; exeBytes[1] = 0xfa; exeBytes[2] = 0xed; exeBytes[3] = 0xfe;
+      exeBytes.writeInt32LE(archs[target] === 'x86_64' ? 0x01000007 : 0x0100000c, 4);
+      exeBytes.writeUInt32LE(2, 12);
+    }
+    fs.writeFileSync(path.join(fDir, 'app.bin'), exeBytes);
+
+    llRel = `files/${target}/app.ll`;
+    objRel = `files/${target}/app.o`;
+    exeRel = `files/${target}/app.bin`;
+    llSha = crypto.createHash('sha256').update(llBytes).digest('hex');
+    objSha = crypto.createHash('sha256').update(objBytes).digest('hex');
+    exeSha = crypto.createHash('sha256').update(exeBytes).digest('hex');
+  }
+
+  return {
+    schemaVersion: '1.0.0',
+    target,
+    triple: triples[target],
+    hostOs: target.startsWith('windows') ? 'win32' : target.startsWith('macos') ? 'darwin' : 'linux',
+    hostArch: archs[target] === 'x86_64' ? 'x64' : 'arm64',
+    compiler: { name: 'clang', version: '18.1.0' },
+    linker: { name: 'lld', version: '18.1.0' },
+    sdk: { name: 'verified-sdk', available: true, linkerProbeVerified: true, missingRequirements: [] },
+    llvmIR: { path: llRel, sha256: llSha, validationTool: 'llvm-as', verified: true },
+    objectFile: { path: objRel, sha256: objSha },
+    executable: { path: exeRel, sha256: exeSha, sizeBytes: 64 },
+    binaryMetadata: {
+      format: formats[target],
+      architecture: archs[target],
+      operatingSystem: target.startsWith('windows') ? 'windows' : target.startsWith('macos') ? 'darwin' : 'linux',
+      binaryType: 'EXECUTABLE',
+      isValidExecutable: true,
+    },
+    dependencyValidation: { allResolved: true, inspectedFromDisk: true, dependencies: [], missingLibraries: [] },
+    execution: {
+      executed: true,
+      mode: target === 'linux-arm64' ? 'qemu-user' : 'native',
+      exitCode: 0,
+      stdout: 'NUSANTARA_NATIVE_CI_OK\nPengujian LLVM IR berhasil\nBahasa Indonesia\n42\n',
+      stderr: '',
+      expectedSentinels: ['NUSANTARA_NATIVE_CI_OK', 'Pengujian LLVM IR berhasil', 'Bahasa Indonesia', '42'],
+      expectedOutputsMatched: true,
+    },
+    status: 'PASS',
+    reason: 'OK',
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+function tulisSemuaEvidenceMock(dir: string, overrides: Partial<Record<CanonicalDesktopTarget, any>> = {}, withFiles = false): string {
+  const evDir = path.join(dir, 'evidence');
+  fs.mkdirSync(evDir, { recursive: true });
+  for (const t of DESKTOP_CANONICAL_TARGETS) {
+    const val = t in overrides ? overrides[t] : buatEvidencePassLengkap(t, withFiles ? dir : undefined);
+    if (val === null) continue; // simulasi target hilang
+    if (typeof val === 'string') {
+      fs.writeFileSync(path.join(evDir, `${t}.json`), val, 'utf-8');
+    } else {
+      fs.writeFileSync(path.join(evDir, `${t}.json`), JSON.stringify(val, null, 2), 'utf-8');
+    }
+  }
+  return evDir;
+}
+
+uji('7.1 Agregasi menolak target hilang (TARGET_HILANG -> FAILED, exitCode=1)', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-p232-missing-'));
+  try {
+    const evDir = tulisSemuaEvidenceMock(tmpDir, { 'windows-arm64': null });
+    const res = Phase23CertificationEngine.aggregateEvidence(evDir);
+    samaDengan(res.overallStatus, 'FAILED');
+    samaDengan(res.exitCode, 1);
+    pastikan(res.missingTargets.includes('windows-arm64'), 'Harus mendeteksi windows-arm64 hilang');
+    pastikan(res.findings.some((f) => f.code === 'TARGET_HILANG'), 'Harus mencatat finding TARGET_HILANG');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+uji('7.2 Agregasi menolak JSON evidence rusak (JSON_RUSAK -> FAILED, exitCode=1)', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-p232-corrupt-'));
+  try {
+    const evDir = tulisSemuaEvidenceMock(tmpDir, { 'macos-x86_64': '{ json rusak tanpa kurung tutup' });
+    const res = Phase23CertificationEngine.aggregateEvidence(evDir);
+    samaDengan(res.overallStatus, 'FAILED');
+    samaDengan(res.exitCode, 1);
+    pastikan(res.counts.corrupt === 1, 'Harus menghitung 1 JSON korup');
+    pastikan(res.findings.some((f) => f.code === 'JSON_RUSAK'), 'Harus mencatat finding JSON_RUSAK');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+uji('7.3 Agregasi melaporkan PARTIAL & exitCode=1 apabila ada target NOT_VERIFIED (tidak pernah PASS)', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-p232-partial-'));
+  try {
+    const winArmUnverified = buatEvidencePassLengkap('windows-arm64');
+    winArmUnverified.status = 'NOT_VERIFIED';
+    winArmUnverified.execution.executed = false;
+    winArmUnverified.execution.mode = 'cross-compiled-not-executed';
+    winArmUnverified.execution.expectedOutputsMatched = false;
+    winArmUnverified.reason = 'MSVC ARM64 CRT & Windows SDK um/arm64 tidak tersedia';
+
+    const evDir = tulisSemuaEvidenceMock(tmpDir, { 'windows-arm64': winArmUnverified });
+    const res = Phase23CertificationEngine.aggregateEvidence(evDir);
+    samaDengan(res.overallStatus, 'PARTIAL');
+    samaDengan(res.exitCode, 1);
+    samaDengan(res.counts.notVerified, 1);
+    pastikan(res.markdownReport.includes('PARTIAL'), 'Laporan Markdown harus menyatakan PARTIAL');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+uji('7.4 Agregasi melaporkan FAILED apabila ada target berstatus FAIL', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-p232-fail-'));
+  try {
+    const linuxFail = buatEvidencePassLengkap('linux-arm64');
+    linuxFail.status = 'FAIL';
+    linuxFail.reason = 'Linker aarch64 gagal';
+
+    const evDir = tulisSemuaEvidenceMock(tmpDir, { 'linux-arm64': linuxFail });
+    const res = Phase23CertificationEngine.aggregateEvidence(evDir);
+    samaDengan(res.overallStatus, 'FAILED');
+    samaDengan(res.exitCode, 1);
+    pastikan(res.findings.some((f) => f.code === 'TARGET_FAIL' && f.target === 'linux-arm64'), 'Harus mencatat TARGET_FAIL');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+uji('7.5 Agregasi memverifikasi ulang hash disk & menolak ketidakcocokan SHA-256 (SHA256_TIDAK_COCOK -> FAILED)', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-p232-sha-'));
+  try {
+    const evDir = tulisSemuaEvidenceMock(tmpDir, {}, true);
+    // Rusak 1 byte executable on-disk setelah hash JSON tercatat
+    fs.appendFileSync(path.join(tmpDir, 'files', 'linux-x86_64', 'app.bin'), Buffer.from([0xff]));
+    const res = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmpDir });
+    samaDengan(res.overallStatus, 'FAILED');
+    samaDengan(res.exitCode, 1);
+    pastikan(res.findings.some((f) => f.code === 'SHA256_TIDAK_COCOK'), 'Harus menolak SHA-256 yang tidak cocok dengan biner di disk');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+uji('7.6 Agregasi menolak executable salah arsitektur walaupun klaim status PASS (ARSITEKTUR_BINER_SALAH -> FAILED)', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-p232-arch-'));
+  try {
+    const wrongArch = buatEvidencePassLengkap('macos-arm64');
+    wrongArch.binaryMetadata.architecture = 'x86_64'; // salah arsitektur untuk macos-arm64!
+
+    const evDir = tulisSemuaEvidenceMock(tmpDir, { 'macos-arm64': wrongArch });
+    const res = Phase23CertificationEngine.aggregateEvidence(evDir);
+    samaDengan(res.overallStatus, 'FAILED');
+    samaDengan(res.exitCode, 1);
+    pastikan(res.findings.some((f) => f.code === 'ARSITEKTUR_BINER_SALAH'), 'Harus menolak biner salah arsitektur');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+uji('7.7 Agregasi menolak eksekusi gagal atau output sentinel hilang meski status diklaim PASS (EKSEKUSI_GAGAL -> FAILED)', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-p232-exec-'));
+  try {
+    const badExec = buatEvidencePassLengkap('windows-x86_64');
+    badExec.execution.exitCode = 139;
+    badExec.execution.stdout = 'Output tidak lengkap tanpa sentinel';
+    badExec.execution.expectedOutputsMatched = false;
+
+    const evDir = tulisSemuaEvidenceMock(tmpDir, { 'windows-x86_64': badExec });
+    const res = Phase23CertificationEngine.aggregateEvidence(evDir);
+    samaDengan(res.overallStatus, 'FAILED');
+    samaDengan(res.exitCode, 1);
+    pastikan(res.findings.some((f) => f.code === 'EKSEKUSI_GAGAL'), 'Harus menolak eksekusi yang gagal');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+uji('7.8 Agregasi menyetujui CERTIFIED (exitCode=0) hanya jika seluruh 6 target PASS dengan hash, arsitektur & eksekusi sah', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-p232-cert-'));
+  try {
+    const evDir = tulisSemuaEvidenceMock(tmpDir, {}, true);
+    const res = Phase23CertificationEngine.aggregateEvidence(evDir, {
+      baseDir: tmpDir,
+      ciContext: {
+        serverUrl: 'https://github.com',
+        repository: 'sarjanabahasaarab/Bahasa-Nusantara',
+        runId: '999999',
+        commitSha: 'abcdef123456',
+      },
+    });
+    samaDengan(res.overallStatus, 'CERTIFIED');
+    samaDengan(res.exitCode, 0);
+    samaDengan(res.counts.pass, 6);
+    samaDengan(res.counts.fail, 0);
+    samaDengan(res.counts.notVerified, 0);
+    pastikan(res.markdownReport.includes('CERTIFIED (6/6 PASS)'), 'Laporan harus memuat status CERTIFIED (6/6 PASS)');
+    pastikan(res.markdownReport.includes('actions/runs/999999'), 'Laporan harus menyertakan tautan run GitHub Actions');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
 console.log('\n=============================================================================');
 console.log('RINGKASAN PENGUJIAN PHASE 23 (BUILD SYSTEM & DISTRIBUSI DESKTOP)');
 console.log(`Total Uji          : ${totalUji}`);
@@ -748,3 +1026,4 @@ console.log('===================================================================
 if (gagal > 0) {
   process.exit(1);
 }
+

@@ -46,6 +46,17 @@ export class LLVMToolchainManager {
   }
 
   public detect(): LLVMToolchainStatus {
+    const lldPrimary = this.checkBinary('lld');
+    const lldResolved = lldPrimary.found
+      ? lldPrimary
+      : (() => {
+          const linkFallback = this.checkBinary('lld-link');
+          if (linkFallback.found) return linkFallback;
+          const ldFallback = this.checkBinary('ld.lld');
+          if (ldFallback.found) return ldFallback;
+          return lldPrimary;
+        })();
+
     const binaries = {
       clang: this.checkBinary('clang'),
       llc: this.checkBinary('llc'),
@@ -53,7 +64,7 @@ export class LLVMToolchainManager {
       llvmAs: this.checkBinary('llvm-as'),
       llvmDis: this.checkBinary('llvm-dis'),
       llvmObjdump: this.checkBinary('llvm-objdump'),
-      lld: this.checkBinary('lld'),
+      lld: lldResolved,
     };
 
     const diagnostics: string[] = [];

@@ -183,3 +183,21 @@ Pipeline `build-matrix-validation` pada `.github/workflows/ci.yml` telah disiapk
 
 - Tidak ada penonaktifan Test `3.2`, tidak ada `SKIPPED` palsu ketika `NUSANTARA_REQUIRE_CLANG=1`, dan tidak ada biner shell/script palsu.
 - Langkah berikutnya adalah menjalankan pipeline GitHub Actions pada commit berikutnya (setelah pengguna menyetujui commit/push) untuk mengumpulkan log `clang`, `llvm-as`, dan eksekusi biner nyata di runner Ubuntu, Windows, dan macOS.
+
+---
+
+## 9. Pembaruan Phase 23.2 — Hardening Evidence CI & Gerbang Sertifikasi Enam Target
+
+Pada **Phase 23.2**, seluruh alur verifikasi enam target di `.github/workflows/ci.yml` diperkuat melalui modul `Phase23CertificationEngine` (`src/build/certification.ts`) dan CLI `scripts/phase23-certify.ts` dengan ketentuan ketat:
+
+1. **Larangan Menyembunyikan Status `NOT_VERIFIED`:**
+   - Target yang tidak memiliki cross-SDK/linker yang terverifikasi (seperti `windows-arm64` di runner `windows-latest` tanpa MSVC ARM64 CRT `libcmt.lib` dan Windows SDK `um/arm64`/`ucrt/arm64`) **tetap wajib** menulis berkas `artifacts/phase23/evidence/windows-arm64.json` berstatus `NOT_VERIFIED`.
+   - `TargetMatrixManager.detectWindowsCross` tidak lagi hanya memeriksa keberadaan folder, melainkan menjalankan **linker probe nyata** (`clang -target aarch64-pc-windows-msvc -fuse-ld=lld`) dan memeriksa hasil biner `PE32+ aarch64` via `BinaryInspector.inspectStrict`.
+2. **Skema Evidence JSON Terstruktur Per Target (`artifacts/phase23/evidence/<target>.json`):**
+   - Mencatat: `target`, `triple`, `hostOs`, `hostArch`, `compiler` (nama & versi), `linker` (nama, versi & perintah), `sdk` (nama, sysroot, status `linkerProbeVerified`, `missingRequirements`), `llvmIR` (`path`, `sha256`, `validationTool`), `objectFile` (`path`, `sha256`), `executable` (`path`, `sha256`, `sizeBytes`), `binaryMetadata` (`format`, `architecture`, `binaryType`, `isValidExecutable`), `dependencyValidation`, `execution` (`executed`, jujur `native` / `qemu-user` / `rosetta2` / `cross-compiled-not-executed` / `not-executed`, `exitCode`, `stdout`, kecocokan sentinel), `status`, dan `reason`.
+3. **Gerbang Agregasi Wajib (`phase23-certification-gate`):**
+   - Mengunduh seluruh 6 artefak `phase23-evidence-*`, memvalidasi kelengkapan ke-6 target, keabsahan skema JSON, bebas pola rahasia/token, kecocokan SHA-256 aktual terhadap berkas `.ll`/`.o`/executable di disk, arsitektur & format biner (`BinaryInspector.inspectStrict`), dependensi, serta sentinel stdout aktual.
+   - Menghasilkan laporan **`PHASE-23-CERTIFICATION-REPORT.md`**, mengunggahnya sebagai artefak CI, dan **gagal (exit code 1)** apabila status akhir adalah `PARTIAL` atau `FAILED` — status `CERTIFIED` (exit code 0) hanya dicapai bila **seluruh 6 target desktop berstatus `PASS`**.
+4. **Cakupan Uji Phase 23.2 (Grup 7 `uji_build_distribusi_fase23.ts`):**
+   - 8 skenario audit agregasi lulus 100% (7.1–7.8: target hilang, JSON rusak, target `NOT_VERIFIED` -> `PARTIAL`, target `FAIL`, ketidakcocokan SHA-256 di disk, salah arsitektur executable, eksekusi gagal/sentinel hilang, dan 6/6 target `PASS` -> `CERTIFIED`). Sehingga total `test:build-v23` menjadi **24 lulus, 0 gagal, 1 `BELUM DIVERIFIKASI`** secara lokal tanpa `clang`.
+

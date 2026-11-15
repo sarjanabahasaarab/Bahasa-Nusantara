@@ -135,9 +135,21 @@ export class NativeBuildPipeline {
     diag.push(...aotRes.diagnostics);
 
     const llContent = aotRes.optimizedIR || aotRes.llvmIR;
+    let llvmIRSha256: string | undefined;
     if (llContent) {
       safeFS.writeFileSync(llPath, llContent, 'utf-8');
+      llvmIRSha256 = ArchiveBuilder.computeSha256(safeFS.readFileBufferSync(llPath));
     }
+
+    const compilerInfo = {
+      name: aotRes.toolchain.binaries.clang.found
+        ? aotRes.toolchain.binaries.clang.command
+        : aotRes.toolchain.binaries.llc.found
+        ? aotRes.toolchain.binaries.llc.command
+        : 'none',
+      version: aotRes.toolchain.version || 'N/A',
+      command: aotRes.toolchain.binaries.clang.command,
+    };
 
     if (!aotRes.success || !aotRes.objectPath) {
       return {
@@ -145,17 +157,29 @@ export class NativeBuildPipeline {
         statusCode: 'GALAT_KOMPILASI',
         target: capability,
         llvmIRPath: safeFS.existsSync(llPath) ? llPath : undefined,
+        llvmIRSha256,
+        llvmValidationTool: aotRes.llvmValidationTool,
+        compilerInfo,
         linkingMode,
         durationMs: Date.now() - start,
         diagnostics: diag,
       };
     }
 
+    const objectSha256 = safeFS.existsSync(aotRes.objectPath)
+      ? ArchiveBuilder.computeSha256(safeFS.readFileBufferSync(aotRes.objectPath))
+      : undefined;
+
     // 4. Tautkan object + runtime C menjadi executable native
     const isStatic = linkingMode === 'static';
     if (isStatic && capability.os === 'darwin') {
       diag.push('Catatan: macOS tidak mendukung full static linking user-space (-static) tanpa libSystem.dylib.');
     }
+
+    const combinedLibraryPaths = [
+      ...(options.libraryPaths || []),
+      ...(capability.extraLibraryPaths || []),
+    ];
 
     const linker = new LinkerManager({
       targetTriple: capability.triple,
@@ -168,7 +192,7 @@ export class NativeBuildPipeline {
       isStatic,
       staticLibraries: options.staticLibraries,
       sharedLibraries: options.sharedLibraries,
-      libraryPaths: options.libraryPaths,
+      libraryPaths: combinedLibraryPaths.length > 0 ? combinedLibraryPaths : undefined,
       debug: options.debug,
       strip: options.strip,
       sysroot: capability.sysrootPath,
@@ -180,6 +204,19 @@ export class NativeBuildPipeline {
 
     diag.push(...linkRes.diagnostics);
 
+    const linkerToolName =
+      linkRes.toolUsed ||
+      (capability.crossCompilerCommand && capability.crossCompilerCommand !== 'clang'
+        ? capability.crossCompilerCommand
+        : linker.toolchain.binaries.lld.found
+        ? linker.toolchain.binaries.lld.command
+        : linker.toolchain.binaries.clang.command);
+    const linkerInfo = {
+      name: linkerToolName || 'unknown',
+      version: this.queryToolVersion(linkerToolName),
+      commandExecuted: linkRes.commandExecuted,
+    };
+
     if (!linkRes.success || !safeFS.existsSync(exePath)) {
       return {
         success: false,
@@ -187,6 +224,11 @@ export class NativeBuildPipeline {
         target: capability,
         objectPath: aotRes.objectPath,
         llvmIRPath: safeFS.existsSync(llPath) ? llPath : undefined,
+        llvmIRSha256,
+        objectSha256,
+        llvmValidationTool: aotRes.llvmValidationTool,
+        compilerInfo,
+        linkerInfo,
         linkingMode,
         durationMs: Date.now() - start,
         diagnostics: diag,
@@ -228,6 +270,11 @@ export class NativeBuildPipeline {
         executablePath: exePath,
         objectPath: aotRes.objectPath,
         llvmIRPath: safeFS.existsSync(llPath) ? llPath : undefined,
+        llvmIRSha256,
+        objectSha256,
+        llvmValidationTool: aotRes.llvmValidationTool,
+        compilerInfo,
+        linkerInfo,
         linkingMode,
         binaryMetadata,
         durationMs: Date.now() - start,
@@ -249,6 +296,11 @@ export class NativeBuildPipeline {
         executablePath: exePath,
         objectPath: aotRes.objectPath,
         llvmIRPath: safeFS.existsSync(llPath) ? llPath : undefined,
+        llvmIRSha256,
+        objectSha256,
+        llvmValidationTool: aotRes.llvmValidationTool,
+        compilerInfo,
+        linkerInfo,
         linkingMode,
         binaryMetadata,
         dependencyReport,
@@ -260,27 +312,40 @@ export class NativeBuildPipeline {
     const exeBytes = safeFS.readFileBufferSync(exePath);
     const executableSha256 = ArchiveBuilder.computeSha256(exeBytes);
 
-    // 7. Opsional: Verifikasi eksekusi biner secara nyata bila berjalan di host atau QEMU user-mode
+    // 7. Opsional: Verifikasi eksekusi biner secara nyata bila berjalan di host, QEMU user-mode, atau Rosetta 2
     let executionVerification: ExecutionVerificationResult | undefined;
     if (options.verifyExecution) {
       if (capability.isCross) {
-        const qemuExec =
+        let crossExec: ExecutionVerificationResult | undefined;
+
+        if (
           capability.canonicalTarget === 'linux-arm64' &&
           typeof process !== 'undefined' &&
           process.platform === 'linux'
-            ? this.executeWithQemuUser(
-                exePath,
-                options.executionArgs || [],
-                options.executionTimeoutMs || 10000,
-                capability.sysrootPath
-              )
-            : undefined;
+        ) {
+          crossExec = this.executeWithQemuUser(
+            exePath,
+            options.executionArgs || [],
+            options.executionTimeoutMs || 10000,
+            capability.sysrootPath
+          );
+        } else if (
+          capability.canonicalTarget === 'macos-x86_64' &&
+          typeof process !== 'undefined' &&
+          process.platform === 'darwin'
+        ) {
+          crossExec = this.executeWithRosetta(
+            exePath,
+            options.executionArgs || [],
+            options.executionTimeoutMs || 10000
+          );
+        }
 
-        if (qemuExec) {
-          executionVerification = qemuExec;
-          if (!executionVerification.success) {
+        if (crossExec) {
+          executionVerification = crossExec;
+          if (crossExec.executed && !crossExec.success) {
             diag.push(
-              `Eksekusi QEMU user-mode linux-arm64 gagal (exit=${executionVerification.exitCode}): ${executionVerification.stderr}`
+              `Eksekusi cross-target (${crossExec.executionMode}) gagal (exit=${crossExec.exitCode}): ${crossExec.stderr}`
             );
             return {
               success: false,
@@ -289,6 +354,11 @@ export class NativeBuildPipeline {
               executablePath: exePath,
               objectPath: aotRes.objectPath,
               llvmIRPath: safeFS.existsSync(llPath) ? llPath : undefined,
+              llvmIRSha256,
+              objectSha256,
+              llvmValidationTool: aotRes.llvmValidationTool,
+              compilerInfo,
+              linkerInfo,
               linkingMode,
               binaryMetadata,
               dependencyReport,
@@ -306,7 +376,7 @@ export class NativeBuildPipeline {
             stdout: '',
             stderr: '',
             timedOut: false,
-            executionMode: 'not-executed',
+            executionMode: 'cross-compiled-not-executed',
             reason: `Biner target '${capability.canonicalTarget}' merupakan hasil cross-compile; eksekusi langsung memerlukan runner/perangkat target asli (${capability.recommendedRunner}).`,
           };
         }
@@ -327,6 +397,11 @@ export class NativeBuildPipeline {
             executablePath: exePath,
             objectPath: aotRes.objectPath,
             llvmIRPath: safeFS.existsSync(llPath) ? llPath : undefined,
+            llvmIRSha256,
+            objectSha256,
+            llvmValidationTool: aotRes.llvmValidationTool,
+            compilerInfo,
+            linkerInfo,
             linkingMode,
             binaryMetadata,
             dependencyReport,
@@ -346,6 +421,11 @@ export class NativeBuildPipeline {
       executablePath: exePath,
       objectPath: aotRes.objectPath,
       llvmIRPath: safeFS.existsSync(llPath) ? llPath : undefined,
+      llvmIRSha256,
+      objectSha256,
+      llvmValidationTool: aotRes.llvmValidationTool,
+      compilerInfo,
+      linkerInfo,
       linkingMode,
       binaryMetadata,
       dependencyReport,
@@ -439,5 +519,63 @@ export class NativeBuildPipeline {
       executionMode: !res.error || timedOut ? 'native' : 'not-executed',
       reason: res.error ? res.error.message : undefined,
     };
+  }
+
+  public static executeWithRosetta(
+    executablePath: string,
+    args: string[] = [],
+    timeoutMs: number = 10000
+  ): ExecutionVerificationResult {
+    const absPath = safePath.resolve(executablePath);
+    const res = safeCP.spawnSync('arch', ['-x86_64', absPath, ...args], {
+      encoding: 'utf-8',
+      timeout: timeoutMs,
+      shell: false,
+    });
+    const timedOut = Boolean(res.error && (res.error as any).code === 'ETIMEDOUT');
+    const stderrStr = res.stderr || (res.error ? res.error.message : '');
+    const rosettaMissing =
+      Boolean(res.error) ||
+      /Bad CPU type|rosetta|oahd|cannot execute|EBADARCH/i.test(stderrStr);
+
+    if (rosettaMissing && res.status !== 0) {
+      return {
+        executed: false,
+        success: false,
+        exitCode: null,
+        stdout: '',
+        stderr: stderrStr,
+        timedOut,
+        executionMode: 'cross-compiled-not-executed',
+        reason: `Rosetta 2 (arch -x86_64) tidak tersedia untuk mengeksekusi macos-x86_64 di host Apple Silicon: ${stderrStr}`.trim(),
+      };
+    }
+
+    return {
+      executed: !res.error || timedOut,
+      success: res.status === 0 && !timedOut && !res.error,
+      exitCode: res.status,
+      stdout: res.stdout || '',
+      stderr: stderrStr,
+      timedOut,
+      executionMode: 'rosetta2',
+      reason: 'Dieksekusi melalui Rosetta 2 (arch -x86_64)',
+    };
+  }
+
+  private static queryToolVersion(toolCmd?: string): string {
+    if (!toolCmd || toolCmd === 'unknown') return 'N/A';
+    try {
+      const res = safeCP.spawnSync(toolCmd, ['--version'], {
+        encoding: 'utf-8',
+        timeout: 3000,
+        shell: false,
+      });
+      const out = (res.stdout || res.stderr || '').trim();
+      if (out) return out.split(/\r?\n/)[0].trim();
+    } catch {
+      // Abaikan
+    }
+    return 'N/A';
   }
 }

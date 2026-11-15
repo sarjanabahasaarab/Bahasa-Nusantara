@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "1.0.0",
+  "target": "windows-arm64",
+  "triple": "aarch64-pc-windows-msvc",
+  "hostOs": "linux",
+  "hostArch": "x64",
+  "compiler": {
+    "name": "none",
+    "version": "N/A"
+  },
+  "linker": {
+    "name": "none",
+    "version": "N/A"
+  },
+  "sdk": {
+    "name": "Windows aarch64 SDK (missing)",
+    "available": false,
+    "linkerProbeVerified": false,
+    "missingRequirements": [
+      "Toolchain LLVM/Clang tidak ditemukan di PATH atau NUSANTARA_LLVM_PATH.",
+      "Cross-SDK Windows (aarch64) belum tersedia di host x86_64-unknown-linux-gnu (pasang MinGW-w64/llvm-mingw atau MSVC + Windows SDK ARM64 di runner Windows/windows-11-arm)."
+    ]
+  },
+  "llvmIR": {
+    "verified": false
+  },
+  "objectFile": {},
+  "executable": {},
+  "binaryMetadata": {
+    "isValidExecutable": false
+  },
+  "dependencyValidation": {
+    "allResolved": false,
+    "inspectedFromDisk": false,
+    "dependencies": [],
+    "missingLibraries": []
+  },
+  "execution": {
+    "executed": false,
+    "mode": "cross-compiled-not-executed",
+    "exitCode": null,
+    "stdout": "",
+    "stderr": "",
+    "expectedSentinels": [
+      "NUSANTARA_NATIVE_CI_OK",
+      "Pengujian LLVM IR berhasil",
+      "Bahasa Indonesia",
+      "42"
+    ],
+    "expectedOutputsMatched": false
+  },
+  "status": "NOT_VERIFIED",
+  "reason": "Toolchain LLVM/Clang tidak ditemukan di PATH atau NUSANTARA_LLVM_PATH.; Cross-SDK Windows (aarch64) belum tersedia di host x86_64-unknown-linux-gnu (pasang MinGW-w64/llvm-mingw atau MSVC + Windows SDK ARM64 di runner Windows/windows-11-arm).",
+  "generatedAt": "2026-11-15T01:28:50.622Z"
+}
