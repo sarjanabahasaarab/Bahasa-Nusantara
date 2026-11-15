@@ -51,5 +51,5 @@
   },
   "status": "NOT_VERIFIED",
   "reason": "Toolchain LLVM/Clang tidak ditemukan di PATH atau NUSANTARA_LLVM_PATH.; Cross-SDK Windows (aarch64) belum tersedia di host x86_64-unknown-linux-gnu (pasang MinGW-w64/llvm-mingw atau MSVC + Windows SDK ARM64 di runner Windows/windows-11-arm).",
-  "generatedAt": "2026-11-15T01:28:50.622Z"
+  "generatedAt": "2026-11-15T02:58:22.808Z"
 }

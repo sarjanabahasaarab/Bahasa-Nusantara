@@ -217,3 +217,17 @@ Pada **Phase 23.3** (basis commit `705abef72df387e0681c3009bb306d8066a15ff0`), d
    - Memperkuat `install.ps1`/`uninstall.ps1` (guard `lib/` kosong, penyalinan manifest paket upgrade, penghormatan `-NoPath`) dan menambahkan `DesktopInstallerGenerator.runWindowsScriptInSandbox` (`powershell.exe` / `pwsh`) pada Test `5.3`. Di host Linux lokal tanpa `pwsh`, Test `5.3` dilaporkan jujur sebagai `BELUM DIVERIFIKASI`.
 4. **Status Phase 23:** Tetap **`🟠 SELESAI SEBAGIAN`** hingga GitHub Actions menjalankan seluruh runner (`ubuntu-latest`, `windows-latest`, `macos-latest`) dan gerbang sertifikasi menghasilkan laporan `CERTIFIED`.
 
+---
+
+## 11. Pembaruan Phase 23.4 — Perbaikan Siklus Hidup Installer PowerShell & Unblock Matriks CI
+
+Pada **Phase 23.4** (basis commit `f248e82bbc49c31caeece0779e9c6cfc12eb3ea6`), kegagalan regresi `Test 5.3` pada runner GitHub Actions Windows diselesaikan secara tuntas pada dua akar masalah:
+
+1. **Inkompatibilitas `Get-FileHash` di Subproses CI Windows (`src/build/installers.ts`):**
+   - **Penyebab:** `install.ps1` bergantung pada cmdlet `Get-FileHash` (dari modul `Microsoft.PowerShell.Utility`), yang gagal dikenali pada lingkungan eksekusi PowerShell non-interaktif/terisolasi tertentu di runner Windows.
+   - **Perbaikan:** Mengganti `Get-FileHash` dengan `.NET` `[System.Security.Cryptography.SHA256]::Create()` + `ComputeHash` atas `FileStream` (`[System.IO.File]::OpenRead`) + hex lowercase, memvalidasi format 64-hex `SHA256SUMS` & jumlah entri (`VerifiedCount > 0`) sebelum mutasi `$Prefix`, menambahkan backup/rollback atomik manifest paket, menyempurnakan deteksi `System32\WindowsPowerShell\v1.0\powershell.exe`, serta membatasi flag `-ExecutionPolicy Bypass` khusus `win32`.
+2. **Ketidakcocokan Fixture `script-launcher` (`.cmd`) vs `native` (`.exe`) (`pengujian/build/uji_build_distribusi_fase23.ts`):**
+   - **Penyebab:** `Test 5.3` memaketkan `packageKind: 'script-launcher'` (menghasilkan `bin/nusa_demo_win.cmd`), tetapi menegaskan keberadaan `prefix/bin/nusa_demo_win.exe`.
+   - **Perbaikan:** Memisahkan **Test `5.3`** (lifecycle PowerShell installer untuk paket `script-launcher` `nusa_demo_win.cmd` + uji berkas hilang & tamper) dan **Test `5.4`** (lifecycle PowerShell installer untuk executable native `PE32+` `x86_64` nyata `nusa_demo_win.exe` via `NativeBuildPipeline` + `BinaryInspector.inspectStrict`), lengkap dengan pelaporan tahapan eksplisit (`powerShellAvailable`, `peExecutableValid`, `installerExecution`, `upgrade`, `tamperRejection`, `uninstall`).
+   - Total `npm run test:build-v23` di container Linux lokal (tanpa `clang`/`pwsh`): **24 lulus, 0 gagal, 3 `BELUM DIVERIFIKASI` (`27` skenario total)**. Status Phase 23 tetap **`🟠 SELESAI SEBAGIAN`** sampai GitHub Actions menjalankan seluruh runner & gerbang `phase23-certification-gate` mencatat `CERTIFIED (6/6 PASS)`.
+

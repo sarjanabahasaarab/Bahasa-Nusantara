@@ -50,5 +50,5 @@
   },
   "status": "NOT_VERIFIED",
   "reason": "Toolchain LLVM/Clang tidak ditemukan di PATH atau NUSANTARA_LLVM_PATH.; Cross-compile ke macOS (x86_64) dari x86_64-unknown-linux-gnu membutuhkan OSXCross/Apple SDK atau runner macos-15-intel / macos-13 (atau macos-latest + Rosetta 2).",
-  "generatedAt": "2026-11-15T01:28:50.977Z"
+  "generatedAt": "2026-11-15T02:58:23.097Z"
 }

@@ -50,5 +50,5 @@
   },
   "status": "NOT_VERIFIED",
   "reason": "Toolchain LLVM/Clang tidak ditemukan di PATH atau NUSANTARA_LLVM_PATH.; Cross-SDK Linux ARM64 belum tersedia (pasang gcc-aarch64-linux-gnu / sysroot arm64 atau setel NUSANTARA_SYSROOT_LINUX_ARM64).",
-  "generatedAt": "2026-11-15T01:28:50.908Z"
+  "generatedAt": "2026-11-15T02:58:22.999Z"
 }

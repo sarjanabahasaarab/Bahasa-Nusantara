@@ -4,6 +4,25 @@ Seluruh perubahan penting pada proyek bahasa pemrograman NUSANTARA dicatat dalam
 
 Format penomoran versi mengacu pada **Semantic Versioning** (`vMAJOR.MINOR.PATCH`). Pada masa pengembangan awal, versi minor mencerminkan tahapan fase roadmap (misal `v0.1.0` untuk Phase 1, `v0.2.0` untuk Phase 2, `v0.3.0` untuk Phase 3, `v0.4.0` untuk Phase 4, `v0.5.0` untuk Phase 5, `v0.6.0` untuk Phase 6, `v0.7.0` untuk Phase 7, `v0.8.0` untuk Phase 8, `v0.9.0` untuk Phase 9, `v0.10.0` untuk Phase 10).
 
+## [v0.23.4 — Perbaikan Siklus Hidup Installer PowerShell & Unblock Matriks CI] — 2026-11-15
+### Phase 23.4: PowerShell Installer Lifecycle Repair & CI Matrix Unblock (`SELESAI SEBAGIAN` — Menunggu Runner GitHub Actions Windows/macOS/Linux & Sertifikasi 6/6 Target `CERTIFIED`)
+
+Memperbaiki regresi `Test 5.3` pada runner Windows (`Get-FileHash` tidak dikenal & ketidakcocokan ekstensi `.cmd` vs `.exe` pada `script-launcher`), sehingga matriks CI dapat berlanjut penuh ke `build-matrix-validation` & `phase23-certification-gate`:
+
+#### Diperbaiki & Ditambahkan:
+- **Kompatibilitas SHA-256 Lintas PowerShell 5.1 & 7 (`src/build/installers.ts`):**
+  - Mengganti cmdlet `Get-FileHash` pada `install.ps1` dengan fungsi .NET `Get-NusantaraFileSha256` (`System.Security.Cryptography.SHA256::Create()`, `System.IO.File::OpenRead`, dan `BitConverter::ToString(...).ToLowerInvariant()` dengan `try/finally Dispose`) sehingga bebas dari ketergantungan autoload modul `Microsoft.PowerShell.Utility`.
+  - Memperketat parsing `SHA256SUMS` (regex 64-hex, penolakan berkas hilang/kosong/tamper sebelum mutasi `$Prefix`), serta backup/rollback atomik bagi `$DestBin` dan `.package-manifest.json`.
+  - Memperbaiki `detectWindowsPowerShell()` (probing kanonikal `%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe` di `win32`) serta pembatasan `-ExecutionPolicy Bypass` khusus `win32` pada `runWindowsScriptInSandbox()` agar kompatibel dengan `pwsh` POSIX.
+- **Pemisahan Pengujian Lifecycle `script-launcher` vs `native` `PE32+` & Pelaporan Tahapan (`pengujian/build/uji_build_distribusi_fase23.ts`):**
+  - `Test 5.1`: Memverifikasi `install.ps1` memakai `.NET System.Security.Cryptography.SHA256.ComputeHash` tanpa `Get-FileHash`, plus `BackupBin`/`BackupPkgManifest` & pembungkus `.bat`.
+  - `Test 5.2`: Pelacakan status eksplisit per tahapan sandbox POSIX (`posixHost`, `installerExecution`, `upgrade`, `tamperRejection`, `uninstall`) termasuk jaminan keutuhan biner v2 saat paket rusak ditolak.
+  - `Test 5.3`: Menguji siklus hidup lengkap PowerShell installer untuk paket **`script-launcher`** (`prefix/bin/nusa_demo_win.cmd`), mencakup `v1` install (`-NoPath`), `v2` upgrade, penolakan tamper SHA-256 & berkas hilang tanpa merusak `v2`, dan `uninstall.ps1` bersih.
+  - `Test 5.4`: Menambahkan pengujian khusus siklus hidup PowerShell installer untuk executable **native `PE32+` `x86_64`** nyata (`prefix/bin/nusa_demo_win.exe`) yang dikompilasi melalui `NativeBuildPipeline` & divalidasi `BinaryInspector.inspectStrict` (tanpa berkas `.exe` teks palsu; berstatus jujur `BELUM DIVERIFIKASI` pada host tanpa `clang`/`pwsh`).
+  - Hasil aktual `npm run test:build-v23` di Linux x86_64 (tanpa `clang`/`pwsh`): **24 lulus, 0 gagal, 3 `BELUM DIVERIFIKASI`** (`1.473` pemeriksaan gabungan di `npm test`).
+
+---
+
 ## [v0.23.3 — Perbaikan Regresi CI Lintas Platform (Windows & macOS ARM64)] — 2026-11-15
 ### Phase 23.3: Cross-Platform CI Regression Repair (`SELESAI SEBAGIAN` — Menunggu Runner GitHub Actions & Sertifikasi 6/6 Target `CERTIFIED`)
 

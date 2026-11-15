@@ -331,30 +331,54 @@ $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $SumsPath = Join-Path $ScriptDir "SHA256SUMS"
 
-if (-not (Test-Path $SumsPath)) {
+if (-not (Test-Path -LiteralPath $SumsPath -PathType Leaf)) {
   throw "Berkas checksum SHA256SUMS tidak ditemukan di paket."
 }
 
-Write-Host "[INFO] Memverifikasi SHA-256 paket ${appName} ${appVersion}..."
-Get-Content $SumsPath | ForEach-Object {
-  $line = $_.Trim()
-  if ($line -eq "") { return }
-  $parts = $line -split '\\s+', 2
-  $expected = $parts[0].ToLowerInvariant()
-  $rel = $parts[1].Trim()
-  $relNorm = $rel -replace '/', [IO.Path]::DirectorySeparatorChar
-  $targetFile = Join-Path $ScriptDir $relNorm
-  if (-not (Test-Path $targetFile)) {
-    throw "Berkas hilang saat verifikasi checksum: $rel"
-  }
-  $actual = (Get-FileHash -Path $targetFile -Algorithm SHA256).Hash.ToLowerInvariant()
-  if ($actual -ne $expected) {
-    throw "Ketidakcocokan SHA-256 pada $rel (diharapkan=$expected, aktual=$actual)"
+function Get-NusantaraFileSha256 {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$FilePath
+  )
+  $sha256 = [System.Security.Cryptography.SHA256]::Create()
+  $stream = [System.IO.File]::OpenRead($FilePath)
+  try {
+    $hashBytes = $sha256.ComputeHash($stream)
+    return ([System.BitConverter]::ToString($hashBytes) -replace '-', '').ToLowerInvariant()
+  } finally {
+    $stream.Dispose()
+    $sha256.Dispose()
   }
 }
 
+Write-Host "[INFO] Memverifikasi SHA-256 paket ${appName} ${appVersion}..."
+$VerifiedCount = 0
+foreach ($rawLine in (Get-Content -LiteralPath $SumsPath -Encoding UTF8)) {
+  $line = $rawLine.Trim()
+  if ($line -eq "") { continue }
+  if ($line -notmatch '^([0-9a-fA-F]{64})\\s+\\*?(.+)$') {
+    throw "Format baris SHA256SUMS tidak valid: $line"
+  }
+  $expected = $Matches[1].ToLowerInvariant()
+  $rel = $Matches[2].Trim()
+  $relNorm = $rel -replace '/', [System.IO.Path]::DirectorySeparatorChar
+  $targetFile = Join-Path $ScriptDir $relNorm
+  if (-not (Test-Path -LiteralPath $targetFile -PathType Leaf)) {
+    throw "Berkas hilang saat verifikasi checksum: $rel"
+  }
+  $actual = Get-NusantaraFileSha256 -FilePath $targetFile
+  if ($actual -ne $expected) {
+    throw "Ketidakcocokan SHA-256 pada $rel (diharapkan=$expected, aktual=$actual)"
+  }
+  $VerifiedCount++
+}
+
+if ($VerifiedCount -eq 0) {
+  throw "Berkas checksum SHA256SUMS kosong atau tidak memuat entri valid."
+}
+
 $SourceBin = Join-Path (Join-Path $ScriptDir "bin") "${binBase}"
-if (-not (Test-Path $SourceBin)) {
+if (-not (Test-Path -LiteralPath $SourceBin -PathType Leaf)) {
   throw "Executable sumber tidak ditemukan: $SourceBin"
 }
 
@@ -366,28 +390,35 @@ if ($DryRun) {
 $BinDir = Join-Path $Prefix "bin"
 $LibDir = Join-Path $Prefix "lib"
 $DestBin = Join-Path $BinDir "${binBase}"
+$DestPkgManifest = Join-Path $Prefix ".${appName}-package-manifest.json"
 $BackupBin = $null
+$BackupPkgManifest = $null
 
 New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
 New-Item -ItemType Directory -Force -Path $LibDir | Out-Null
 
 try {
-  if (Test-Path $DestBin) {
+  if (Test-Path -LiteralPath $DestBin -PathType Leaf) {
     $BackupBin = "$DestBin.bak.$PID"
-    Copy-Item -Path $DestBin -Destination $BackupBin -Force
+    Copy-Item -LiteralPath $DestBin -Destination $BackupBin -Force
   }
+  if (Test-Path -LiteralPath $DestPkgManifest -PathType Leaf) {
+    $BackupPkgManifest = "$DestPkgManifest.bak.$PID"
+    Copy-Item -LiteralPath $DestPkgManifest -Destination $BackupPkgManifest -Force
+  }
+
   $TempBin = "$DestBin.new.$PID"
-  Copy-Item -Path $SourceBin -Destination $TempBin -Force
-  Move-Item -Path $TempBin -Destination $DestBin -Force
+  Copy-Item -LiteralPath $SourceBin -Destination $TempBin -Force
+  Move-Item -LiteralPath $TempBin -Destination $DestBin -Force
 
   $SourceLib = Join-Path $ScriptDir "lib"
-  if ((Test-Path $SourceLib) -and ((Get-ChildItem -Path $SourceLib -Force | Measure-Object).Count -gt 0)) {
+  if ((Test-Path -LiteralPath $SourceLib -PathType Container) -and ((Get-ChildItem -LiteralPath $SourceLib -Force | Measure-Object).Count -gt 0)) {
     Copy-Item -Path (Join-Path $SourceLib "*") -Destination $LibDir -Recurse -Force
   }
 
   $SourceManifest = Join-Path $ScriptDir "manifest.json"
-  if (Test-Path $SourceManifest) {
-    Copy-Item -Path $SourceManifest -Destination (Join-Path $Prefix ".${appName}-package-manifest.json") -Force
+  if (Test-Path -LiteralPath $SourceManifest -PathType Leaf) {
+    Copy-Item -LiteralPath $SourceManifest -Destination $DestPkgManifest -Force
   }
 
   $PathUpdated = $false
@@ -412,16 +443,22 @@ try {
     binDir = $BinDir
     pathAdded = $PathUpdated
   } | ConvertTo-Json
-  Set-Content -Path (Join-Path $Prefix ".${appName}-install-manifest.json") -Value $Receipt -Encoding UTF8
+  Set-Content -LiteralPath (Join-Path $Prefix ".${appName}-install-manifest.json") -Value $Receipt -Encoding UTF8
 
-  if ($BackupBin -and (Test-Path $BackupBin)) {
-    Remove-Item -Path $BackupBin -Force
+  if ($BackupBin -and (Test-Path -LiteralPath $BackupBin)) {
+    Remove-Item -LiteralPath $BackupBin -Force
+  }
+  if ($BackupPkgManifest -and (Test-Path -LiteralPath $BackupPkgManifest)) {
+    Remove-Item -LiteralPath $BackupPkgManifest -Force
   }
   Write-Host "[SUKSES] ${appName} ${appVersion} terpasang di $DestBin"
 } catch {
-  if ($BackupBin -and (Test-Path $BackupBin)) {
-    Move-Item -Path $BackupBin -Destination $DestBin -Force
-    Write-Warning "Instalasi gagal; versi sebelumnya telah dipulihkan."
+  if ($BackupBin -and (Test-Path -LiteralPath $BackupBin)) {
+    Move-Item -LiteralPath $BackupBin -Destination $DestBin -Force
+    Write-Warning "Instalasi gagal; versi biner sebelumnya telah dipulihkan."
+  }
+  if ($BackupPkgManifest -and (Test-Path -LiteralPath $BackupPkgManifest)) {
+    Move-Item -LiteralPath $BackupPkgManifest -Destination $DestPkgManifest -Force
   }
   throw
 }
@@ -441,8 +478,8 @@ $BinDir = Join-Path $Prefix "bin"
 $DestBin = Join-Path $BinDir "${binBase}"
 $ShouldCleanPath = $true
 
-if (Test-Path $ReceiptPath) {
-  $Receipt = Get-Content $ReceiptPath -Raw | ConvertFrom-Json
+if (Test-Path -LiteralPath $ReceiptPath -PathType Leaf) {
+  $Receipt = Get-Content -LiteralPath $ReceiptPath -Raw -Encoding UTF8 | ConvertFrom-Json
   if ($Receipt.binFile) { $DestBin = $Receipt.binFile }
   if ($Receipt.binDir) { $BinDir = $Receipt.binDir }
   if ($null -ne $Receipt.PSObject.Properties['pathAdded'] -and (-not $Receipt.pathAdded)) {
@@ -450,17 +487,17 @@ if (Test-Path $ReceiptPath) {
   }
 }
 
-if (Test-Path $DestBin) {
-  Remove-Item -Path $DestBin -Force
+if (Test-Path -LiteralPath $DestBin -PathType Leaf) {
+  Remove-Item -LiteralPath $DestBin -Force
   Write-Host "[INFO] Menghapus executable: $DestBin"
 }
 
-if (Test-Path $PkgManifestPath) {
-  Remove-Item -Path $PkgManifestPath -Force
+if (Test-Path -LiteralPath $PkgManifestPath -PathType Leaf) {
+  Remove-Item -LiteralPath $PkgManifestPath -Force
 }
 
-if (Test-Path $ReceiptPath) {
-  Remove-Item -Path $ReceiptPath -Force
+if (Test-Path -LiteralPath $ReceiptPath -PathType Leaf) {
+  Remove-Item -LiteralPath $ReceiptPath -Force
 }
 
 if ($ShouldCleanPath) {
@@ -475,8 +512,8 @@ if ($ShouldCleanPath) {
 }
 
 foreach ($Dir in @($BinDir, (Join-Path $Prefix "lib"), $Prefix)) {
-  if ((Test-Path $Dir) -and ((Get-ChildItem -Path $Dir -Force | Measure-Object).Count -eq 0)) {
-    Remove-Item -Path $Dir -Force
+  if ((Test-Path -LiteralPath $Dir -PathType Container) -and ((Get-ChildItem -LiteralPath $Dir -Force | Measure-Object).Count -eq 0)) {
+    Remove-Item -LiteralPath $Dir -Force
   }
 }
 
@@ -484,12 +521,35 @@ Write-Host "[SUKSES] ${appName} berhasil dicopot dengan bersih."
 `;
   }
 
-  public static detectWindowsPowerShell(): { available: boolean; command: string | null } {
-    const candidates =
-      typeof process !== 'undefined' && process.platform === 'win32'
-        ? ['powershell.exe', 'pwsh']
-        : ['pwsh'];
+  public static detectWindowsPowerShell(): {
+    available: boolean;
+    command: string | null;
+    version: string | null;
+  } {
+    const candidates: string[] = [];
+    if (typeof process !== 'undefined' && process.platform === 'win32') {
+      const sysRoot = process.env.SystemRoot || process.env.WINDIR;
+      if (sysRoot) {
+        const canonicalPs5 = safePath.join(
+          sysRoot,
+          'System32',
+          'WindowsPowerShell',
+          'v1.0',
+          'powershell.exe'
+        );
+        if (safeFS.existsSync(canonicalPs5)) {
+          candidates.push(canonicalPs5);
+        }
+      }
+      candidates.push('powershell.exe', 'pwsh.exe', 'pwsh');
+    } else {
+      candidates.push('pwsh');
+    }
+
+    const seen = new Set<string>();
     for (const cmd of candidates) {
+      if (seen.has(cmd)) continue;
+      seen.add(cmd);
       const probe = safeCP.spawnSync(
         cmd,
         ['-NoProfile', '-NonInteractive', '-Command', '$PSVersionTable.PSVersion.ToString()'],
@@ -500,10 +560,14 @@ Write-Host "[SUKSES] ${appName} berhasil dicopot dengan bersih."
         }
       );
       if (!probe.error && probe.status === 0) {
-        return { available: true, command: cmd };
+        return {
+          available: true,
+          command: cmd,
+          version: (probe.stdout || '').trim().split(/\r?\n/)[0] || null,
+        };
       }
     }
-    return { available: false, command: null };
+    return { available: false, command: null, version: null };
   }
 
   /**
@@ -585,16 +649,12 @@ Write-Host "[SUKSES] ${appName} berhasil dicopot dengan bersih."
       };
     }
 
-    const args = [
-      '-NoProfile',
-      '-NonInteractive',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-File',
-      scriptPath,
-      '-Prefix',
-      options.prefixDir,
-    ];
+    const args = ['-NoProfile', '-NonInteractive'];
+    if (typeof process !== 'undefined' && process.platform === 'win32') {
+      args.push('-ExecutionPolicy', 'Bypass');
+    }
+    args.push('-File', scriptPath, '-Prefix', options.prefixDir);
+
     if (options.scriptName === 'install.ps1') {
       if (options.noPath !== false) {
         args.push('-NoPath');

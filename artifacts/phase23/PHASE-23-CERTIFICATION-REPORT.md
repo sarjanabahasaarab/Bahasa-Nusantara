@@ -3,7 +3,7 @@
 - **Status Keseluruhan:** `PARTIAL` — PARTIAL (BELUM LENGKAP)
 - **Total Target Wajib:** 6
 - **Ringkasan Hitungan:** PASS=0, NOT_VERIFIED=6, FAIL=0, MISSING=0, CORRUPT=0
-- **Waktu Agregasi:** 2026-11-15T01:28:53.032Z
+- **Waktu Agregasi:** 2026-11-15T02:58:23.216Z
 
 ## Matriks Sertifikasi Enam Target
 

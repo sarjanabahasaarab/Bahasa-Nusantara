@@ -583,7 +583,7 @@ uji('4.2 Proteksi anti-path traversal menolak entri ../ dan path absolut pada ar
 // -----------------------------------------------------------------------------
 console.log('\n=== [GRUP 5: Siklus Hidup Installer, Upgrade & Uninstaller] ===');
 
-uji('5.1 Skrip installer Windows (.ps1 & .bat) berisi cek SHA-256, backup upgrade & pembersihan PATH aman', () => {
+uji('5.1 Skrip installer Windows (.ps1 & .bat) berisi verifikasi SHA-256 .NET (tanpa Get-FileHash), backup upgrade & pembersihan PATH aman', () => {
   const winBundle = DesktopInstallerGenerator.generate({
     appName: 'demo_app',
     appVersion: 'v0.23.0',
@@ -597,14 +597,33 @@ uji('5.1 Skrip installer Windows (.ps1 & .bat) berisi cek SHA-256, backup upgrad
 
   const psInstall = String(winBundle.files.find((f) => f.name === 'install.ps1')!.content);
   const psUninstall = String(winBundle.files.find((f) => f.name === 'uninstall.ps1')!.content);
-  pastikan(psInstall.includes('Get-FileHash') && psInstall.includes('SHA256'), 'install.ps1 harus memverifikasi integritas berkas memakai Get-FileHash SHA256');
-  pastikan(psInstall.includes('BackupBin'), 'Harus punya backup saat upgrade');
-  pastikan(psUninstall.includes('SetEnvironmentVariable'), 'Harus membersihkan User PATH dengan aman');
+  const batInstall = String(winBundle.files.find((f) => f.name === 'install.bat')!.content);
+  const batUninstall = String(winBundle.files.find((f) => f.name === 'uninstall.bat')!.content);
+
+  pastikan(!psInstall.includes('Get-FileHash'), 'install.ps1 tidak boleh bergantung pada cmdlet Get-FileHash');
+  pastikan(
+    psInstall.includes('System.Security.Cryptography.SHA256') && psInstall.includes('ComputeHash'),
+    'install.ps1 harus menghitung SHA-256 memakai .NET System.Security.Cryptography.SHA256.ComputeHash'
+  );
+  pastikan(psInstall.includes('SHA256SUMS') && psInstall.includes('VerifiedCount'), 'install.ps1 harus memvalidasi SHA256SUMS dan jumlah entri valid');
+  pastikan(psInstall.includes('BackupBin') && psInstall.includes('BackupPkgManifest'), 'install.ps1 harus membuat cadangan atomik saat upgrade');
+  pastikan(psUninstall.includes('SetEnvironmentVariable'), 'uninstall.ps1 harus membersihkan User PATH dengan aman');
+  pastikan(batInstall.includes('install.ps1') && batUninstall.includes('uninstall.ps1'), 'Skrip .bat wajib meneruskan eksekusi ke .ps1');
 });
 
-uji('5.2 Eksekusi nyata install.sh -> upgrade -> uninstall.sh dalam sandbox HOME terisolasi (POSIX Linux/macOS)', () => {
+uji('5.2 Eksekusi nyata install.sh -> upgrade -> tamper reject -> uninstall.sh dalam sandbox HOME terisolasi (POSIX Linux/macOS)', () => {
+  const stages: Record<string, string> = {
+    posixHost: process.platform === 'win32' ? 'NOT_VERIFIED' : 'PASS',
+    installerExecution: 'NOT_VERIFIED',
+    upgrade: 'NOT_VERIFIED',
+    tamperRejection: 'NOT_VERIFIED',
+    uninstall: 'NOT_VERIFIED',
+  };
+
   if (process.platform === 'win32') {
-    console.log('     [CATATAN JUJUR] Host adalah Windows (win32); sandbox POSIX install.sh/uninstall.sh berstatus BELUM DIVERIFIKASI.');
+    console.log(
+      `     [CATATAN JUJUR] Host adalah Windows (win32); sandbox POSIX install.sh/uninstall.sh berstatus BELUM DIVERIFIKASI (${JSON.stringify(stages)}).`
+    );
     return 'UNVERIFIED';
   }
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-installer-sandbox-'));
@@ -643,10 +662,14 @@ uji('5.2 Eksekusi nyata install.sh -> upgrade -> uninstall.sh dalam sandbox HOME
       prefixDir,
       homeDir: fakeHome,
     });
-    pastikan(instRes1.success, `install.sh v1 gagal: ${instRes1.stderr}`);
+    if (!instRes1.success) {
+      stages.installerExecution = 'FAIL';
+      throw new Error(`[Tahap installerExecution GAGAL] install.sh v1 gagal: ${instRes1.stderr || instRes1.stdout}`);
+    }
     const installedBin = path.join(prefixDir, 'bin', 'nusa_demo');
-    pastikan(fs.existsSync(installedBin), 'Biner terpasang harus ada di prefix/bin');
-    pastikan(fs.readFileSync(bashrcPath, 'utf-8').includes('NUSANTARA NUSA_DEMO PATH'), 'Penanda PATH NUSANTARA harus ditambahkan ke .bashrc');
+    pastikan(fs.existsSync(installedBin), '[installerExecution] Biner terpasang harus ada di prefix/bin');
+    pastikan(fs.readFileSync(bashrcPath, 'utf-8').includes('NUSANTARA NUSA_DEMO PATH'), '[installerExecution] Penanda PATH NUSANTARA harus ditambahkan ke .bashrc');
+    stages.installerExecution = 'PASS';
 
     // 2) Upgrade ke v2
     const pkg2 = DesktopDistributionPackager.packageTarget({
@@ -663,13 +686,18 @@ uji('5.2 Eksekusi nyata install.sh -> upgrade -> uninstall.sh dalam sandbox HOME
       prefixDir,
       homeDir: fakeHome,
     });
-    pastikan(instRes2.success, `Upgrade install.sh v2 gagal: ${instRes2.stderr}`);
+    if (!instRes2.success) {
+      stages.upgrade = 'FAIL';
+      throw new Error(`[Tahap upgrade GAGAL] Upgrade install.sh v2 gagal: ${instRes2.stderr || instRes2.stdout}`);
+    }
     const manifestAfterUpgrade = JSON.parse(
       fs.readFileSync(path.join(prefixDir, '.nusa_demo-package-manifest.json'), 'utf-8')
     );
-    samaDengan(manifestAfterUpgrade.versi, 'v0.23.1');
+    samaDengan(manifestAfterUpgrade.versi, 'v0.23.1', '[upgrade] Versi manifest setelah upgrade');
+    const binHashV2 = crypto.createHash('sha256').update(fs.readFileSync(installedBin)).digest('hex');
+    stages.upgrade = 'PASS';
 
-    // 3) Penolakan tamper checksum oleh install.sh
+    // 3) Penolakan tamper checksum oleh install.sh (v2 terpasang wajib tetap utuh)
     fs.appendFileSync(path.join(pkg2.stagingDirectory, 'manifest.json'), '\n// corrupted');
     const tamperRes = DesktopInstallerGenerator.runPosixScriptInSandbox({
       packageDir: pkg2.stagingDirectory,
@@ -677,7 +705,13 @@ uji('5.2 Eksekusi nyata install.sh -> upgrade -> uninstall.sh dalam sandbox HOME
       prefixDir,
       homeDir: fakeHome,
     });
-    samaDengan(tamperRes.success, false, 'install.sh wajib menolak paket dengan checksum rusak');
+    if (tamperRes.success) {
+      stages.tamperRejection = 'FAIL';
+      throw new Error('[Tahap tamperRejection GAGAL] install.sh wajib menolak paket dengan checksum rusak');
+    }
+    const binHashAfterTamper = crypto.createHash('sha256').update(fs.readFileSync(installedBin)).digest('hex');
+    samaDengan(binHashAfterTamper, binHashV2, '[tamperRejection] Biner v2 terpasang tidak boleh rusak akibat paket korup');
+    stages.tamperRejection = 'PASS';
 
     // 4) Uninstall bersih
     const uninstRes = DesktopInstallerGenerator.runPosixScriptInSandbox({
@@ -686,30 +720,48 @@ uji('5.2 Eksekusi nyata install.sh -> upgrade -> uninstall.sh dalam sandbox HOME
       prefixDir,
       homeDir: fakeHome,
     });
-    pastikan(uninstRes.success, `uninstall.sh gagal: ${uninstRes.stderr}`);
-    pastikan(!fs.existsSync(installedBin), 'Biner harus terhapus setelah uninstall');
+    if (!uninstRes.success) {
+      stages.uninstall = 'FAIL';
+      throw new Error(`[Tahap uninstall GAGAL] uninstall.sh gagal: ${uninstRes.stderr || uninstRes.stdout}`);
+    }
+    pastikan(!fs.existsSync(installedBin), '[uninstall] Biner harus terhapus setelah uninstall');
     const bashrcAfter = fs.readFileSync(bashrcPath, 'utf-8');
-    pastikan(bashrcAfter.includes('export EDITOR=nano'), 'Konfigurasi pribadi .bashrc TIDAK boleh hilang');
-    pastikan(!bashrcAfter.includes('NUSANTARA NUSA_DEMO PATH'), 'Blok PATH Nusantara harus dibersihkan');
+    pastikan(bashrcAfter.includes('export EDITOR=nano'), '[uninstall] Konfigurasi pribadi .bashrc TIDAK boleh hilang');
+    pastikan(!bashrcAfter.includes('NUSANTARA NUSA_DEMO PATH'), '[uninstall] Blok PATH Nusantara harus dibersihkan');
+    stages.uninstall = 'PASS';
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
 });
 
-uji('5.3 Eksekusi nyata install.ps1 -> upgrade -> tamper reject -> uninstall.ps1 via PowerShell sandbox (Windows / pwsh)', () => {
+uji('5.3 Siklus hidup PowerShell installer untuk paket script-launcher Windows (nusa_demo_win.cmd)', () => {
   const psProbe = DesktopInstallerGenerator.detectWindowsPowerShell();
+  const stages: Record<string, string> = {
+    powerShellAvailable: psProbe.available ? 'PASS' : 'NOT_VERIFIED',
+    packageArtifacts: 'NOT_VERIFIED',
+    installerExecution: 'NOT_VERIFIED',
+    upgrade: 'NOT_VERIFIED',
+    tamperRejection: 'NOT_VERIFIED',
+    uninstall: 'NOT_VERIFIED',
+  };
+
   if (!psProbe.available) {
+    if (process.platform === 'win32') {
+      stages.powerShellAvailable = 'FAIL';
+      throw new Error('[Tahap powerShellAvailable GAGAL] Host Windows wajib memiliki powershell.exe atau pwsh.');
+    }
     console.log(
-      `     [CATATAN JUJUR] PowerShell (powershell.exe/pwsh) tidak terpasang pada host ${process.platform}; eksekusi installer Windows berstatus BELUM DIVERIFIKASI.`
+      `     [CATATAN JUJUR] PowerShell tidak tersedia pada host ${process.platform}; lifecycle Windows script-launcher berstatus BELUM DIVERIFIKASI (${JSON.stringify(stages)}).`
     );
     return 'UNVERIFIED';
   }
 
-  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-win-installer-sandbox-'));
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-win-cmd-sandbox-'));
   try {
     const prefixDir = path.join(tmpRoot, 'prefix');
     const pkgOut1 = path.join(tmpRoot, 'pkg_win_v1');
     const pkgOut2 = path.join(tmpRoot, 'pkg_win_v2');
+    const pkgOutMissing = path.join(tmpRoot, 'pkg_win_missing');
 
     const pkg1 = DesktopDistributionPackager.packageTarget({
       appName: 'nusa_demo_win',
@@ -720,10 +772,17 @@ uji('5.3 Eksekusi nyata install.ps1 -> upgrade -> tamper reject -> uninstall.ps1
       includeInstallers: true,
     });
 
-    pastikan(fs.existsSync(path.join(pkg1.stagingDirectory, 'install.ps1')), 'install.ps1 wajib ada di disk');
-    pastikan(fs.existsSync(path.join(pkg1.stagingDirectory, 'uninstall.ps1')), 'uninstall.ps1 wajib ada di disk');
-    pastikan(fs.existsSync(path.join(pkg1.stagingDirectory, 'install.bat')), 'install.bat wajib ada di disk');
-    pastikan(fs.existsSync(path.join(pkg1.stagingDirectory, 'uninstall.bat')), 'uninstall.bat wajib ada di disk');
+    pastikan(fs.existsSync(path.join(pkg1.stagingDirectory, 'install.ps1')), '[packageArtifacts] install.ps1 wajib ada di disk');
+    pastikan(fs.existsSync(path.join(pkg1.stagingDirectory, 'uninstall.ps1')), '[packageArtifacts] uninstall.ps1 wajib ada di disk');
+    pastikan(fs.existsSync(path.join(pkg1.stagingDirectory, 'install.bat')), '[packageArtifacts] install.bat wajib ada di disk');
+    pastikan(fs.existsSync(path.join(pkg1.stagingDirectory, 'uninstall.bat')), '[packageArtifacts] uninstall.bat wajib ada di disk');
+    pastikan(fs.existsSync(path.join(pkg1.stagingDirectory, 'bin', 'nusa_demo_win.cmd')), '[packageArtifacts] bin/nusa_demo_win.cmd wajib ada untuk script-launcher');
+    const shaCheck = ArchiveBuilder.verifySha256SumsFromDirectory(
+      fs.readFileSync(pkg1.sha256sumsPath, 'utf-8'),
+      pkg1.stagingDirectory
+    );
+    pastikan(shaCheck.valid, `[packageArtifacts] SHA256SUMS v1 harus valid: ${shaCheck.mismatches.join(', ')}`);
+    stages.packageArtifacts = 'PASS';
 
     // 1) Install v1 (memakai -NoPath dalam sandbox agar HKCU User PATH runner tidak tersentuh)
     const inst1 = DesktopInstallerGenerator.runWindowsScriptInSandbox({
@@ -732,13 +791,16 @@ uji('5.3 Eksekusi nyata install.ps1 -> upgrade -> tamper reject -> uninstall.ps1
       prefixDir,
       noPath: true,
     });
-    pastikan(inst1.success, `install.ps1 v1 gagal (${psProbe.command}): ${inst1.stderr || inst1.stdout}`);
-    const installedBin = path.join(prefixDir, 'bin', 'nusa_demo_win.exe');
-    pastikan(fs.existsSync(installedBin), 'Executable terpasang wajib ada di prefix/bin/nusa_demo_win.exe');
-    pastikan(
-      fs.existsSync(path.join(prefixDir, '.nusa_demo_win-install-manifest.json')),
-      'Receipt instalasi JSON wajib dibuat oleh install.ps1'
-    );
+    if (!inst1.success) {
+      stages.installerExecution = 'FAIL';
+      throw new Error(`[Tahap installerExecution GAGAL] (${psProbe.command}): ${inst1.stderr || inst1.stdout}`);
+    }
+    const installedCmd = path.join(prefixDir, 'bin', 'nusa_demo_win.cmd');
+    pastikan(fs.existsSync(installedCmd), '[installerExecution] Launcher terpasang wajib ada di prefix/bin/nusa_demo_win.cmd');
+    const receipt1 = JSON.parse(fs.readFileSync(path.join(prefixDir, '.nusa_demo_win-install-manifest.json'), 'utf-8'));
+    samaDengan(receipt1.appVersion, 'v0.23.0', '[installerExecution] Receipt v1');
+    samaDengan(receipt1.pathAdded, false, '[installerExecution] Sandbox -NoPath tidak boleh mengubah PATH');
+    stages.installerExecution = 'PASS';
 
     // 2) Upgrade ke v2
     const pkg2 = DesktopDistributionPackager.packageTarget({
@@ -755,13 +817,20 @@ uji('5.3 Eksekusi nyata install.ps1 -> upgrade -> tamper reject -> uninstall.ps1
       prefixDir,
       noPath: true,
     });
-    pastikan(inst2.success, `Upgrade install.ps1 v2 gagal: ${inst2.stderr || inst2.stdout}`);
+    if (!inst2.success) {
+      stages.upgrade = 'FAIL';
+      throw new Error(`[Tahap upgrade GAGAL] Upgrade install.ps1 v2 gagal: ${inst2.stderr || inst2.stdout}`);
+    }
     const pkgManifestAfterUpgrade = JSON.parse(
       fs.readFileSync(path.join(prefixDir, '.nusa_demo_win-package-manifest.json'), 'utf-8')
     );
-    samaDengan(pkgManifestAfterUpgrade.versi, 'v0.23.1');
+    const receipt2 = JSON.parse(fs.readFileSync(path.join(prefixDir, '.nusa_demo_win-install-manifest.json'), 'utf-8'));
+    samaDengan(pkgManifestAfterUpgrade.versi, 'v0.23.1', '[upgrade] Versi package manifest');
+    samaDengan(receipt2.appVersion, 'v0.23.1', '[upgrade] Versi install receipt');
+    const installedCmdHashV2 = crypto.createHash('sha256').update(fs.readFileSync(installedCmd)).digest('hex');
+    stages.upgrade = 'PASS';
 
-    // 3) Penolakan tamper checksum oleh install.ps1
+    // 3) Penolakan tamper checksum & berkas hilang tanpa merusak instalasi v2
     fs.appendFileSync(path.join(pkg2.stagingDirectory, 'manifest.json'), '\n// corrupted');
     const tamperRes = DesktopInstallerGenerator.runWindowsScriptInSandbox({
       packageDir: pkg2.stagingDirectory,
@@ -769,7 +838,38 @@ uji('5.3 Eksekusi nyata install.ps1 -> upgrade -> tamper reject -> uninstall.ps1
       prefixDir,
       noPath: true,
     });
-    samaDengan(tamperRes.success, false, 'install.ps1 wajib menolak paket dengan checksum SHA-256 rusak');
+    if (tamperRes.success) {
+      stages.tamperRejection = 'FAIL';
+      throw new Error('[Tahap tamperRejection GAGAL] install.ps1 wajib menolak paket dengan SHA-256 tidak cocok');
+    }
+
+    const pkgMissing = DesktopDistributionPackager.packageTarget({
+      appName: 'nusa_demo_win',
+      appVersion: 'v0.23.2',
+      target: 'windows-x86_64',
+      packageKind: 'script-launcher',
+      outputDirectory: pkgOutMissing,
+      includeInstallers: true,
+    });
+    fs.rmSync(path.join(pkgMissing.stagingDirectory, 'BACA-SAYA.txt'));
+    const missingRes = DesktopInstallerGenerator.runWindowsScriptInSandbox({
+      packageDir: pkgMissing.stagingDirectory,
+      scriptName: 'install.ps1',
+      prefixDir,
+      noPath: true,
+    });
+    if (missingRes.success) {
+      stages.tamperRejection = 'FAIL';
+      throw new Error('[Tahap tamperRejection GAGAL] install.ps1 wajib menolak paket jika berkas pada SHA256SUMS hilang');
+    }
+
+    const manifestAfterTamper = JSON.parse(
+      fs.readFileSync(path.join(prefixDir, '.nusa_demo_win-package-manifest.json'), 'utf-8')
+    );
+    samaDengan(manifestAfterTamper.versi, 'v0.23.1', '[tamperRejection] Versi v2 terpasang wajib tetap utuh');
+    const installedCmdHashAfterTamper = crypto.createHash('sha256').update(fs.readFileSync(installedCmd)).digest('hex');
+    samaDengan(installedCmdHashAfterTamper, installedCmdHashV2, '[tamperRejection] Berkas terpasang v2 wajib tidak korup');
+    stages.tamperRejection = 'PASS';
 
     // 4) Uninstall bersih
     const uninst = DesktopInstallerGenerator.runWindowsScriptInSandbox({
@@ -777,10 +877,204 @@ uji('5.3 Eksekusi nyata install.ps1 -> upgrade -> tamper reject -> uninstall.ps1
       scriptName: 'uninstall.ps1',
       prefixDir,
     });
-    pastikan(uninst.success, `uninstall.ps1 gagal: ${uninst.stderr || uninst.stdout}`);
-    pastikan(!fs.existsSync(installedBin), 'Executable wajib terhapus setelah uninstall.ps1');
-    pastikan(!fs.existsSync(path.join(prefixDir, '.nusa_demo_win-install-manifest.json')), 'Receipt instalasi wajib terhapus');
-    pastikan(!fs.existsSync(path.join(prefixDir, '.nusa_demo_win-package-manifest.json')), 'Package manifest wajib terhapus');
+    if (!uninst.success) {
+      stages.uninstall = 'FAIL';
+      throw new Error(`[Tahap uninstall GAGAL] uninstall.ps1 gagal: ${uninst.stderr || uninst.stdout}`);
+    }
+    pastikan(!fs.existsSync(installedCmd), '[uninstall] Launcher nusa_demo_win.cmd wajib terhapus setelah uninstall.ps1');
+    pastikan(!fs.existsSync(path.join(prefixDir, '.nusa_demo_win-install-manifest.json')), '[uninstall] Receipt instalasi wajib terhapus');
+    pastikan(!fs.existsSync(path.join(prefixDir, '.nusa_demo_win-package-manifest.json')), '[uninstall] Package manifest wajib terhapus');
+    stages.uninstall = 'PASS';
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+uji('5.4 Siklus hidup PowerShell installer untuk executable native PE32+ x86_64 nyata (nusa_demo_win.exe)', () => {
+  const psProbe = DesktopInstallerGenerator.detectWindowsPowerShell();
+  const winCap = TargetMatrixManager.inspectTargetCapability('windows-x86_64');
+  const stages: Record<string, string> = {
+    powerShellAvailable: psProbe.available ? 'PASS' : 'NOT_VERIFIED',
+    peExecutableValid: 'NOT_VERIFIED',
+    installerExecution: 'NOT_VERIFIED',
+    upgrade: 'NOT_VERIFIED',
+    tamperRejection: 'NOT_VERIFIED',
+    uninstall: 'NOT_VERIFIED',
+  };
+
+  if (!psProbe.available || !winCap.canBuildNative) {
+    if (process.platform === 'win32' && process.env.NUSANTARA_REQUIRE_CLANG === '1') {
+      if (!psProbe.available) stages.powerShellAvailable = 'FAIL';
+      if (!winCap.canBuildNative) stages.peExecutableValid = 'FAIL';
+      throw new Error(
+        `[Tahap peExecutableValid GAGAL] Toolchain/PowerShell windows-x86_64 wajib aktif saat NUSANTARA_REQUIRE_CLANG=1 (ps=${psProbe.available}, canBuildNative=${winCap.canBuildNative}, missing=${winCap.missingRequirements.join('; ')})`
+      );
+    }
+    console.log(
+      `     [CATATAN JUJUR] PowerShell atau kompilator PE32+ windows-x86_64 tidak tersedia di host ${process.platform}; lifecycle executable native PE32+ berstatus BELUM DIVERIFIKASI (${JSON.stringify(stages)}).`
+    );
+    return 'UNVERIFIED';
+  }
+
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-win-pe-sandbox-'));
+  try {
+    const srcDir = path.join(tmpRoot, 'src');
+    const buildOut1 = path.join(tmpRoot, 'build_v1');
+    const buildOut2 = path.join(tmpRoot, 'build_v2');
+    const pkgOut1 = path.join(tmpRoot, 'pkg_pe_v1');
+    const pkgOut2 = path.join(tmpRoot, 'pkg_pe_v2');
+    const prefixDir = path.join(tmpRoot, 'prefix');
+    fs.mkdirSync(srcDir, { recursive: true });
+
+    const srcV1 = path.join(srcDir, 'demo_win_v1.nusantara');
+    const srcV2 = path.join(srcDir, 'demo_win_v2.nusantara');
+    fs.writeFileSync(
+      srcV1,
+      'program DemoWinNativeV1\nmulai\n  tampilkan("NUSA_WIN_PE_V1")\nselesai\n',
+      'utf-8'
+    );
+    fs.writeFileSync(
+      srcV2,
+      'program DemoWinNativeV2\nmulai\n  tampilkan("NUSA_WIN_PE_V2")\nselesai\n',
+      'utf-8'
+    );
+
+    const build1 = NativeBuildPipeline.build({
+      sourceFilePath: srcV1,
+      appName: 'nusa_demo_win',
+      target: 'windows-x86_64',
+      outputDirectory: buildOut1,
+      linkingMode: 'dynamic',
+      verifyExecution: process.platform === 'win32',
+    });
+    const build2 = NativeBuildPipeline.build({
+      sourceFilePath: srcV2,
+      appName: 'nusa_demo_win',
+      target: 'windows-x86_64',
+      outputDirectory: buildOut2,
+      linkingMode: 'dynamic',
+      verifyExecution: process.platform === 'win32',
+    });
+
+    if (!build1.success || !build1.executablePath || !build2.success || !build2.executablePath) {
+      stages.peExecutableValid = 'FAIL';
+      throw new Error(
+        `[Tahap peExecutableValid GAGAL] Kompilasi native windows-x86_64 gagal: v1=[${build1.statusCode}] ${build1.diagnostics.join(' | ')}; v2=[${build2.statusCode}] ${build2.diagnostics.join(' | ')}`
+      );
+    }
+
+    const meta1 = BinaryInspector.inspectStrict(build1.executablePath);
+    const meta2 = BinaryInspector.inspectStrict(build2.executablePath);
+    if (
+      !meta1.isValidExecutable ||
+      meta1.format !== 'COFF' ||
+      meta1.architecture !== 'x86_64' ||
+      meta1.binaryType !== 'EXECUTABLE' ||
+      !meta2.isValidExecutable ||
+      meta2.format !== 'COFF' ||
+      meta2.architecture !== 'x86_64' ||
+      meta2.binaryType !== 'EXECUTABLE'
+    ) {
+      stages.peExecutableValid = 'FAIL';
+      throw new Error(
+        `[Tahap peExecutableValid GAGAL] Header PE32+ x86_64 tidak valid: v1=${JSON.stringify(meta1.validationErrors)}, v2=${JSON.stringify(meta2.validationErrors)}`
+      );
+    }
+    stages.peExecutableValid = 'PASS';
+
+    // 1) Paketkan & pasang PE32+ v1
+    const pkg1 = DesktopDistributionPackager.packageTarget({
+      appName: 'nusa_demo_win',
+      appVersion: 'v0.23.0',
+      target: 'windows-x86_64',
+      packageKind: 'native',
+      nativeBuildResult: build1,
+      executablePath: build1.executablePath,
+      outputDirectory: pkgOut1,
+      includeInstallers: true,
+    });
+    const inst1 = DesktopInstallerGenerator.runWindowsScriptInSandbox({
+      packageDir: pkg1.stagingDirectory,
+      scriptName: 'install.ps1',
+      prefixDir,
+      noPath: true,
+    });
+    if (!inst1.success) {
+      stages.installerExecution = 'FAIL';
+      throw new Error(`[Tahap installerExecution GAGAL] install.ps1 native v1 gagal: ${inst1.stderr || inst1.stdout}`);
+    }
+    const installedExe = path.join(prefixDir, 'bin', 'nusa_demo_win.exe');
+    pastikan(fs.existsSync(installedExe), '[installerExecution] Executable PE32+ wajib terpasang di prefix/bin/nusa_demo_win.exe');
+    const installedMeta1 = BinaryInspector.inspectStrict(installedExe);
+    pastikan(
+      Boolean(installedMeta1.isValidExecutable) &&
+        installedMeta1.format === 'COFF' &&
+        installedMeta1.architecture === 'x86_64',
+      '[installerExecution] Executable terpasang wajib berformat PE32+ x86_64 sah'
+    );
+    pastikan(Boolean(build1.executableSha256), '[installerExecution] Hash SHA-256 build v1 wajib tersedia');
+    const hashExeV1 = crypto.createHash('sha256').update(fs.readFileSync(installedExe)).digest('hex');
+    samaDengan(hashExeV1, build1.executableSha256!, '[installerExecution] SHA-256 .exe terpasang harus cocok dengan hasil kompilasi v1');
+    stages.installerExecution = 'PASS';
+
+    // 2) Upgrade PE32+ ke v2
+    const pkg2 = DesktopDistributionPackager.packageTarget({
+      appName: 'nusa_demo_win',
+      appVersion: 'v0.23.1',
+      target: 'windows-x86_64',
+      packageKind: 'native',
+      nativeBuildResult: build2,
+      executablePath: build2.executablePath,
+      outputDirectory: pkgOut2,
+      includeInstallers: true,
+    });
+    const inst2 = DesktopInstallerGenerator.runWindowsScriptInSandbox({
+      packageDir: pkg2.stagingDirectory,
+      scriptName: 'install.ps1',
+      prefixDir,
+      noPath: true,
+    });
+    if (!inst2.success) {
+      stages.upgrade = 'FAIL';
+      throw new Error(`[Tahap upgrade GAGAL] Upgrade install.ps1 PE32+ v2 gagal: ${inst2.stderr || inst2.stdout}`);
+    }
+    const manifestV2 = JSON.parse(fs.readFileSync(path.join(prefixDir, '.nusa_demo_win-package-manifest.json'), 'utf-8'));
+    samaDengan(manifestV2.versi, 'v0.23.1', '[upgrade] Manifest PE32+ v2');
+    pastikan(Boolean(build2.executableSha256), '[upgrade] Hash SHA-256 build v2 wajib tersedia');
+    const hashExeV2 = crypto.createHash('sha256').update(fs.readFileSync(installedExe)).digest('hex');
+    samaDengan(hashExeV2, build2.executableSha256!, '[upgrade] SHA-256 .exe terpasang harus cocok dengan hasil kompilasi v2');
+    stages.upgrade = 'PASS';
+
+    // 3) Tamper biner .exe dalam paket -> wajib ditolak dan v2 terpasang tetap utuh
+    fs.appendFileSync(path.join(pkg2.stagingDirectory, 'bin', 'nusa_demo_win.exe'), Buffer.from([0x00, 0xff]));
+    const tamperRes = DesktopInstallerGenerator.runWindowsScriptInSandbox({
+      packageDir: pkg2.stagingDirectory,
+      scriptName: 'install.ps1',
+      prefixDir,
+      noPath: true,
+    });
+    if (tamperRes.success) {
+      stages.tamperRejection = 'FAIL';
+      throw new Error('[Tahap tamperRejection GAGAL] install.ps1 wajib menolak executable PE32+ yang dimodifikasi terhadap SHA256SUMS');
+    }
+    const hashAfterTamper = crypto.createHash('sha256').update(fs.readFileSync(installedExe)).digest('hex');
+    samaDengan(hashAfterTamper, build2.executableSha256!, '[tamperRejection] Executable PE32+ v2 terpasang tidak boleh tertimpa berkas korup');
+    stages.tamperRejection = 'PASS';
+
+    // 4) Uninstall bersih
+    const uninst = DesktopInstallerGenerator.runWindowsScriptInSandbox({
+      packageDir: pkg1.stagingDirectory,
+      scriptName: 'uninstall.ps1',
+      prefixDir,
+    });
+    if (!uninst.success) {
+      stages.uninstall = 'FAIL';
+      throw new Error(`[Tahap uninstall GAGAL] uninstall.ps1 native gagal: ${uninst.stderr || uninst.stdout}`);
+    }
+    pastikan(!fs.existsSync(installedExe), '[uninstall] Executable nusa_demo_win.exe wajib terhapus setelah uninstall.ps1');
+    pastikan(!fs.existsSync(path.join(prefixDir, '.nusa_demo_win-install-manifest.json')), '[uninstall] Receipt instalasi wajib terhapus');
+    pastikan(!fs.existsSync(path.join(prefixDir, '.nusa_demo_win-package-manifest.json')), '[uninstall] Package manifest wajib terhapus');
+    stages.uninstall = 'PASS';
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
