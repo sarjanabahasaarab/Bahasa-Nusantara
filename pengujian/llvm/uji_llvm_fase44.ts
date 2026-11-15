@@ -95,30 +95,139 @@ uji('1.2 Kustomisasi jalur toolchain LLVM melalui setCustomPath', () => {
 // -----------------------------------------------------------------------------
 console.log('\n[KELOMPOK 2] Target Triple & Data Layout');
 
-uji('2.1 Resolusi target triple default untuk host', () => {
+uji('2.1 Resolusi target triple default untuk host (Linux, Windows, macOS x64 & Apple Silicon arm64)', () => {
   const host = TargetTripleManager.getHostTriple();
-  pastikan(host.includes('x86_64') || host.includes('aarch64'), 'Host triple harus mengenali arsitektur');
+  const validHostTriples = new Set([
+    'x86_64-unknown-linux-gnu',
+    'aarch64-unknown-linux-gnu',
+    'x86_64-pc-windows-msvc',
+    'aarch64-pc-windows-msvc',
+    'x86_64-apple-darwin',
+    'arm64-apple-darwin',
+  ]);
+  pastikan(
+    validHostTriples.has(host),
+    `Host triple '${host}' harus termasuk salah satu triple resmi desktop (x86_64/aarch64/arm64-apple-darwin)`
+  );
+
+  const expectedHost =
+    process.platform === 'win32'
+      ? `${process.arch === 'arm64' ? 'aarch64' : 'x86_64'}-pc-windows-msvc`
+      : process.platform === 'darwin'
+        ? `${process.arch === 'arm64' ? 'arm64' : 'x86_64'}-apple-darwin`
+        : `${process.arch === 'arm64' ? 'aarch64' : 'x86_64'}-unknown-linux-gnu`;
+  samaDengan(host, expectedHost, 'Host triple harus sesuai OS dan arsitektur host aktual');
 
   const resolved = TargetTripleManager.resolve();
   samaDengan(resolved.triple, host);
+  samaDengan(resolved.isSupported, true);
+  samaDengan(resolved.arch, process.arch === 'arm64' ? 'aarch64' : 'x86_64');
   pastikan(!resolved.isCross, 'Resolusi default bukan cross-compilation');
   pastikan(resolved.dataLayout.length > 0, 'Data layout harus terdefinisi');
+
+  const strict = TargetTripleManager.resolveStrict(host);
+  samaDengan(strict.supported, true, `resolveStrict('${host}') wajib didukung`);
 });
 
-uji('2.2 Resolusi cross-compilation triple spesifik (Linux, macOS, Windows)', () => {
-  const linux = TargetTripleManager.resolve('x86_64-unknown-linux-gnu');
-  samaDengan(linux.os, 'linux');
-  samaDengan(linux.objectFormat, 'ELF');
-  samaDengan(linux.executableExtension, '');
+uji('2.2 Resolusi keenam target triple desktop resmi dan data layout LLVM', () => {
+  const matrix: Array<{
+    triple: string;
+    targetId: string;
+    os: 'linux' | 'darwin' | 'windows';
+    arch: 'x86_64' | 'aarch64';
+    format: 'ELF' | 'Mach-O' | 'COFF';
+    exeExt: string;
+    objExt: string;
+    dataLayout: string;
+  }> = [
+    {
+      triple: 'x86_64-unknown-linux-gnu',
+      targetId: 'linux-x86_64',
+      os: 'linux',
+      arch: 'x86_64',
+      format: 'ELF',
+      exeExt: '',
+      objExt: '.o',
+      dataLayout: TargetTripleManager.LAYOUT_X86_64_LINUX,
+    },
+    {
+      triple: 'aarch64-unknown-linux-gnu',
+      targetId: 'linux-arm64',
+      os: 'linux',
+      arch: 'aarch64',
+      format: 'ELF',
+      exeExt: '',
+      objExt: '.o',
+      dataLayout: TargetTripleManager.LAYOUT_AARCH64_LINUX,
+    },
+    {
+      triple: 'x86_64-apple-darwin',
+      targetId: 'macos-x86_64',
+      os: 'darwin',
+      arch: 'x86_64',
+      format: 'Mach-O',
+      exeExt: '',
+      objExt: '.o',
+      dataLayout: TargetTripleManager.LAYOUT_X86_64_DARWIN,
+    },
+    {
+      triple: 'arm64-apple-darwin',
+      targetId: 'macos-arm64',
+      os: 'darwin',
+      arch: 'aarch64',
+      format: 'Mach-O',
+      exeExt: '',
+      objExt: '.o',
+      dataLayout: TargetTripleManager.LAYOUT_AARCH64_DARWIN,
+    },
+    {
+      triple: 'x86_64-pc-windows-msvc',
+      targetId: 'windows-x86_64',
+      os: 'windows',
+      arch: 'x86_64',
+      format: 'COFF',
+      exeExt: '.exe',
+      objExt: '.obj',
+      dataLayout: TargetTripleManager.LAYOUT_X86_64_WINDOWS,
+    },
+    {
+      triple: 'aarch64-pc-windows-msvc',
+      targetId: 'windows-arm64',
+      os: 'windows',
+      arch: 'aarch64',
+      format: 'COFF',
+      exeExt: '.exe',
+      objExt: '.obj',
+      dataLayout: TargetTripleManager.LAYOUT_AARCH64_WINDOWS,
+    },
+  ];
 
-  const darwin = TargetTripleManager.resolve('arm64-apple-darwin');
-  samaDengan(darwin.os, 'darwin');
-  samaDengan(darwin.objectFormat, 'Mach-O');
+  for (const spec of matrix) {
+    const res = TargetTripleManager.resolveStrict(spec.triple);
+    pastikan(res.supported, `Triple '${spec.triple}' wajib didukung`);
+    samaDengan(res.info.triple, spec.triple);
+    samaDengan(res.info.targetId, spec.targetId);
+    samaDengan(res.info.os, spec.os);
+    samaDengan(res.info.arch, spec.arch);
+    samaDengan(res.info.objectFormat, spec.format);
+    samaDengan(res.info.executableExtension, spec.exeExt);
+    samaDengan(res.info.objectExtension, spec.objExt);
+    samaDengan(res.info.dataLayout, spec.dataLayout);
 
-  const windows = TargetTripleManager.resolve('x86_64-pc-windows-msvc');
-  samaDengan(windows.os, 'windows');
-  samaDengan(windows.objectFormat, 'COFF');
-  samaDengan(windows.executableExtension, '.exe');
+    // Pastikan alias target kanonik juga memetakan ke triple dan arsitektur yang sama
+    const byAlias = TargetTripleManager.resolveStrict(spec.targetId);
+    pastikan(byAlias.supported, `Target '${spec.targetId}' wajib didukung`);
+    samaDengan(byAlias.info.triple, spec.triple);
+  }
+
+  // Ekuivalensi arm64-apple-darwin dan aarch64-apple-darwin
+  const aarchDarwin = TargetTripleManager.resolve('aarch64-apple-darwin');
+  samaDengan(aarchDarwin.os, 'darwin');
+  samaDengan(aarchDarwin.arch, 'aarch64');
+  samaDengan(aarchDarwin.dataLayout, TargetTripleManager.LAYOUT_AARCH64_DARWIN);
+  if (process.platform === 'darwin' && process.arch === 'arm64') {
+    samaDengan(aarchDarwin.isCross, false, 'aarch64-apple-darwin tidak dianggap cross pada host Apple Silicon');
+  }
 });
 
 // -----------------------------------------------------------------------------

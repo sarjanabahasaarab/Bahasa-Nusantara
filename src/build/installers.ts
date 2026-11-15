@@ -322,7 +322,7 @@ echo "[SUKSES] ${appName} berhasil dicopot dengan bersih."
   ): string {
     return `#Requires -Version 5.1
 param(
-  [string]$Prefix = "$env:LOCALAPPDATA\\Nusantara",
+  [string]$Prefix = $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA "Nusantara" } else { Join-Path $HOME ".nusantara" }),
   [switch]$DryRun,
   [switch]$NoPath
 )
@@ -342,7 +342,8 @@ Get-Content $SumsPath | ForEach-Object {
   $parts = $line -split '\\s+', 2
   $expected = $parts[0].ToLowerInvariant()
   $rel = $parts[1].Trim()
-  $targetFile = Join-Path $ScriptDir $rel
+  $relNorm = $rel -replace '/', [IO.Path]::DirectorySeparatorChar
+  $targetFile = Join-Path $ScriptDir $relNorm
   if (-not (Test-Path $targetFile)) {
     throw "Berkas hilang saat verifikasi checksum: $rel"
   }
@@ -352,7 +353,7 @@ Get-Content $SumsPath | ForEach-Object {
   }
 }
 
-$SourceBin = Join-Path $ScriptDir "bin\\${binBase}"
+$SourceBin = Join-Path (Join-Path $ScriptDir "bin") "${binBase}"
 if (-not (Test-Path $SourceBin)) {
   throw "Executable sumber tidak ditemukan: $SourceBin"
 }
@@ -380,8 +381,13 @@ try {
   Move-Item -Path $TempBin -Destination $DestBin -Force
 
   $SourceLib = Join-Path $ScriptDir "lib"
-  if (Test-Path $SourceLib) {
-    Copy-Item -Path (Join-Path $SourceLib "*") -Destination $LibDir -Recurse -Force -ErrorAction SilentlyContinue
+  if ((Test-Path $SourceLib) -and ((Get-ChildItem -Path $SourceLib -Force | Measure-Object).Count -gt 0)) {
+    Copy-Item -Path (Join-Path $SourceLib "*") -Destination $LibDir -Recurse -Force
+  }
+
+  $SourceManifest = Join-Path $ScriptDir "manifest.json"
+  if (Test-Path $SourceManifest) {
+    Copy-Item -Path $SourceManifest -Destination (Join-Path $Prefix ".${appName}-package-manifest.json") -Force
   }
 
   $PathUpdated = $false
@@ -425,18 +431,23 @@ try {
   private static generateWindowsUninstallPs1(appName: string, binBase: string): string {
     return `#Requires -Version 5.1
 param(
-  [string]$Prefix = "$env:LOCALAPPDATA\\Nusantara"
+  [string]$Prefix = $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA "Nusantara" } else { Join-Path $HOME ".nusantara" })
 )
 
 $ErrorActionPreference = "Stop"
 $ReceiptPath = Join-Path $Prefix ".${appName}-install-manifest.json"
+$PkgManifestPath = Join-Path $Prefix ".${appName}-package-manifest.json"
 $BinDir = Join-Path $Prefix "bin"
 $DestBin = Join-Path $BinDir "${binBase}"
+$ShouldCleanPath = $true
 
 if (Test-Path $ReceiptPath) {
   $Receipt = Get-Content $ReceiptPath -Raw | ConvertFrom-Json
   if ($Receipt.binFile) { $DestBin = $Receipt.binFile }
   if ($Receipt.binDir) { $BinDir = $Receipt.binDir }
+  if ($null -ne $Receipt.PSObject.Properties['pathAdded'] -and (-not $Receipt.pathAdded)) {
+    $ShouldCleanPath = $false
+  }
 }
 
 if (Test-Path $DestBin) {
@@ -444,14 +455,23 @@ if (Test-Path $DestBin) {
   Write-Host "[INFO] Menghapus executable: $DestBin"
 }
 
+if (Test-Path $PkgManifestPath) {
+  Remove-Item -Path $PkgManifestPath -Force
+}
+
 if (Test-Path $ReceiptPath) {
   Remove-Item -Path $ReceiptPath -Force
 }
 
-$CurrentUserPath = [Environment]::GetEnvironmentVariable("Path", "User")
-if ($CurrentUserPath) {
-  $Filtered = ($CurrentUserPath -split ';') | Where-Object { $_.Trim() -ne "" -and $_.Trim() -ne $BinDir }
-  [Environment]::SetEnvironmentVariable("Path", ($Filtered -join ';'), "User")
+if ($ShouldCleanPath) {
+  $CurrentUserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+  if ($CurrentUserPath) {
+    $Segments = ($CurrentUserPath -split ';') | Where-Object { $_.Trim() -ne "" }
+    if ($Segments -contains $BinDir) {
+      $Filtered = $Segments | Where-Object { $_.Trim() -ne $BinDir }
+      [Environment]::SetEnvironmentVariable("Path", ($Filtered -join ';'), "User")
+    }
+  }
 }
 
 foreach ($Dir in @($BinDir, (Join-Path $Prefix "lib"), $Prefix)) {
@@ -462,6 +482,28 @@ foreach ($Dir in @($BinDir, (Join-Path $Prefix "lib"), $Prefix)) {
 
 Write-Host "[SUKSES] ${appName} berhasil dicopot dengan bersih."
 `;
+  }
+
+  public static detectWindowsPowerShell(): { available: boolean; command: string | null } {
+    const candidates =
+      typeof process !== 'undefined' && process.platform === 'win32'
+        ? ['powershell.exe', 'pwsh']
+        : ['pwsh'];
+    for (const cmd of candidates) {
+      const probe = safeCP.spawnSync(
+        cmd,
+        ['-NoProfile', '-NonInteractive', '-Command', '$PSVersionTable.PSVersion.ToString()'],
+        {
+          encoding: 'utf-8',
+          timeout: 8000,
+          shell: false,
+        }
+      );
+      if (!probe.error && probe.status === 0) {
+        return { available: true, command: cmd };
+      }
+    }
+    return { available: false, command: null };
   }
 
   /**
@@ -505,6 +547,79 @@ Write-Host "[SUKSES] ${appName} berhasil dicopot dengan bersih."
       stdout: res.stdout || '',
       stderr: res.stderr || '',
       prefixDir: options.prefixDir,
+    };
+  }
+
+  /**
+   * Mengeksekusi install.ps1 / uninstall.ps1 secara nyata di direktori prefix sandbox terisolasi
+   * (menggunakan -NoPath secara default agar PATH registry pengguna tidak tersentuh).
+   */
+  public static runWindowsScriptInSandbox(options: {
+    packageDir: string;
+    scriptName: 'install.ps1' | 'uninstall.ps1';
+    prefixDir: string;
+    noPath?: boolean;
+    dryRun?: boolean;
+    extraArgs?: string[];
+  }): InstallerSandboxResult & { shellNotAvailable?: boolean; shellCommand?: string } {
+    const scriptPath = safePath.join(options.packageDir, options.scriptName);
+    if (!safeFS.existsSync(scriptPath)) {
+      return {
+        success: false,
+        exitCode: 1,
+        stdout: '',
+        stderr: `Skrip pemasang Windows tidak ditemukan: ${scriptPath}`,
+        prefixDir: options.prefixDir,
+      };
+    }
+
+    const shellInfo = this.detectWindowsPowerShell();
+    if (!shellInfo.available || !shellInfo.command) {
+      return {
+        success: false,
+        exitCode: null,
+        stdout: '',
+        stderr: 'PowerShell (powershell.exe / pwsh) tidak tersedia di lingkungan host saat ini.',
+        prefixDir: options.prefixDir,
+        shellNotAvailable: true,
+      };
+    }
+
+    const args = [
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      scriptPath,
+      '-Prefix',
+      options.prefixDir,
+    ];
+    if (options.scriptName === 'install.ps1') {
+      if (options.noPath !== false) {
+        args.push('-NoPath');
+      }
+      if (options.dryRun) {
+        args.push('-DryRun');
+      }
+    }
+    if (options.extraArgs?.length) {
+      args.push(...options.extraArgs);
+    }
+
+    const res = safeCP.spawnSync(shellInfo.command, args, {
+      encoding: 'utf-8',
+      timeout: 20000,
+      shell: false,
+    });
+
+    return {
+      success: res.status === 0,
+      exitCode: res.status,
+      stdout: res.stdout || '',
+      stderr: res.stderr || '',
+      prefixDir: options.prefixDir,
+      shellCommand: shellInfo.command,
     };
   }
 }

@@ -201,3 +201,19 @@ Pada **Phase 23.2**, seluruh alur verifikasi enam target di `.github/workflows/c
 4. **Cakupan Uji Phase 23.2 (Grup 7 `uji_build_distribusi_fase23.ts`):**
    - 8 skenario audit agregasi lulus 100% (7.1–7.8: target hilang, JSON rusak, target `NOT_VERIFIED` -> `PARTIAL`, target `FAIL`, ketidakcocokan SHA-256 di disk, salah arsitektur executable, eksekusi gagal/sentinel hilang, dan 6/6 target `PASS` -> `CERTIFIED`). Sehingga total `test:build-v23` menjadi **24 lulus, 0 gagal, 1 `BELUM DIVERIFIKASI`** secara lokal tanpa `clang`.
 
+---
+
+## 10. Pembaruan Phase 23.3 — Perbaikan Regresi CI Lintas Platform (Windows & macOS ARM64)
+
+Pada **Phase 23.3** (basis commit `705abef72df387e0681c3009bb306d8066a15ff0`), dua kegagalan regresi GitHub Actions dianalisis dan diperbaiki secara mendasar tanpa melemahkan validasi:
+
+1. **Regresi Windows (`test:build-v23` Test `6.2`):**
+   - **Penyebab:** `StandalonePackager.package` meneruskan `cap.os` (`'windows'` pada `windows-latest`), sehingga `DesktopInstallerGenerator` menghasilkan `install.ps1`, `uninstall.ps1`, `install.bat`, `uninstall.bat` yang sah, namun Test `6.2` mengasumsikan `install.sh` selalu dibuat.
+   - **Perbaikan:** Test `6.2` diperbarui untuk memvalidasi installer sesuai OS host (`install.ps1`/`uninstall.ps1`/`install.bat`/`uninstall.bat` di Windows, `install.sh`/`uninstall.sh` di Linux & macOS) sekaligus menguji ketiganya (`windows-x86_64`, `linux-x86_64`, `macos-arm64`) secara eksplisit dengan verifikasi `SHA256SUMS` & `.tar.gz`.
+2. **Regresi macOS Apple Silicon (`test:llvm-v44` Test `2.1`):**
+   - **Penyebab:** `TargetTripleManager.getHostTriple()` mengembalikan `'arm64-apple-darwin'` pada runner macOS ARM64, sedangkan Test `2.1` hanya memeriksa substring `'x86_64' || 'aarch64'`.
+   - **Perbaikan:** Test `2.1` dan `2.2` diperbarui untuk menerima `'arm64-apple-darwin'` serta memvalidasi keenam triple & data layout resmi (`x86_64/aarch64-unknown-linux-gnu`, `x86_64/arm64-apple-darwin`, `x86_64/aarch64-pc-windows-msvc`).
+3. **Sandbox Installer PowerShell Windows (`src/build/installers.ts`, Test `5.3`):**
+   - Memperkuat `install.ps1`/`uninstall.ps1` (guard `lib/` kosong, penyalinan manifest paket upgrade, penghormatan `-NoPath`) dan menambahkan `DesktopInstallerGenerator.runWindowsScriptInSandbox` (`powershell.exe` / `pwsh`) pada Test `5.3`. Di host Linux lokal tanpa `pwsh`, Test `5.3` dilaporkan jujur sebagai `BELUM DIVERIFIKASI`.
+4. **Status Phase 23:** Tetap **`🟠 SELESAI SEBAGIAN`** hingga GitHub Actions menjalankan seluruh runner (`ubuntu-latest`, `windows-latest`, `macos-latest`) dan gerbang sertifikasi menghasilkan laporan `CERTIFIED`.
+

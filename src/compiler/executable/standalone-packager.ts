@@ -36,6 +36,8 @@ export interface StandalonePackageResult {
   manifestPath: string;
   sha256sumsPath?: string;
   archiveSha256?: string;
+  targetOS?: 'windows' | 'linux' | 'darwin';
+  installerFiles?: string[];
   filesPackaged: string[];
   diagnostics: string[];
 }
@@ -54,6 +56,19 @@ export class StandalonePackager {
     if (options.appName.includes('..') || options.appName.includes('/') || options.appName.includes('\\')) {
       throw new Error(`Nama aplikasi tidak aman: '${options.appName}' mengandung karakter traversal.`);
     }
+
+    const cap = TargetMatrixManager.inspectTargetCapability(options.targetPlatform);
+    const osType: 'windows' | 'linux' | 'darwin' =
+      cap.os === 'unknown'
+        ? typeof process !== 'undefined' && process.platform === 'win32'
+          ? 'windows'
+          : typeof process !== 'undefined' && process.platform === 'darwin'
+            ? 'darwin'
+            : 'linux'
+        : cap.os;
+    const targetId =
+      cap.canonicalTarget ||
+      (osType === 'windows' ? 'windows-x86_64' : osType === 'darwin' ? 'macos-arm64' : 'linux-x86_64');
 
     const baseDirName = `nusantara-standalone-${options.appName}-${options.appVersion}`;
     const targetDir = safePath.join(options.outputDirectory, baseDirName);
@@ -90,6 +105,7 @@ export class StandalonePackager {
             success: false,
             standaloneDirectory: targetDir,
             manifestPath: safePath.join(targetDir, 'manifest.json'),
+            targetOS: osType,
             filesPackaged,
             diagnostics: diag,
           };
@@ -109,12 +125,16 @@ export class StandalonePackager {
         success: false,
         standaloneDirectory: targetDir,
         manifestPath: safePath.join(targetDir, 'manifest.json'),
+        targetOS: osType,
         filesPackaged,
         diagnostics: diag,
       };
     } else {
       // Fallback launcher untuk pengujian kompatibilitas Phase 45 ketika clang tidak terpasang
-      const launcher = `#!/bin/sh\necho "Menjalankan ${options.appName} v${options.appVersion}"\n`;
+      const launcher =
+        osType === 'windows'
+          ? `@echo off\r\necho Menjalankan ${options.appName} v${options.appVersion}\r\n`
+          : `#!/bin/sh\necho "Menjalankan ${options.appName} v${options.appVersion}"\n`;
       safeFS.writeFileSync(destExePath, launcher);
       if (typeof process !== 'undefined' && process.platform !== 'win32') {
         safeFS.chmodSync(destExePath, 0o755);
@@ -168,17 +188,16 @@ export class StandalonePackager {
     recordPackagedFile('LISENSI.txt', licensePath, licenseContent, 0o644);
 
     const readmePath = safePath.join(targetDir, 'BACA-SAYA.txt');
+    const runHint = osType === 'windows' ? `bin\\${exeFileName}` : `./bin/${exeFileName}`;
     const readmeContent =
       options.readmeText ||
-      `Aplikasi Mandiri: ${options.appName}\nVersi: ${options.appVersion}\nCara Menjalankan:\n  ./bin/${exeFileName}\n`;
+      `Aplikasi Mandiri: ${options.appName}\nVersi: ${options.appVersion}\nTarget OS: ${osType}\nCara Menjalankan:\n  ${runHint}\n`;
     safeFS.writeFileSync(readmePath, readmeContent, 'utf-8');
     recordPackagedFile('BACA-SAYA.txt', readmePath, readmeContent, 0o644);
 
-    // 6b. Opsional: Tambahkan skrip installer/uninstaller resmi
+    // 6b. Opsional: Tambahkan skrip installer/uninstaller resmi sesuai OS target
+    const installerFiles: string[] = [];
     if (options.includeInstallers) {
-      const cap = TargetMatrixManager.inspectTargetCapability(options.targetPlatform);
-      const osType = cap.os === 'unknown' ? 'linux' : cap.os;
-      const targetId = cap.canonicalTarget || 'linux-x86_64';
       const bundle = DesktopInstallerGenerator.generate({
         appName: options.appName,
         appVersion: options.appVersion,
@@ -192,6 +211,7 @@ export class StandalonePackager {
         if (typeof process !== 'undefined' && process.platform !== 'win32') {
           safeFS.chmodSync(destInst, f.mode ?? 0o644);
         }
+        installerFiles.push(f.name);
         recordPackagedFile(f.name, destInst, f.content, f.mode ?? 0o644);
       }
     }
@@ -201,10 +221,12 @@ export class StandalonePackager {
     const manifestData = {
       appName: options.appName,
       appVersion: options.appVersion,
-      platform: options.targetPlatform || 'all',
-      architecture: options.targetArch || 'x86_64',
+      platform: options.targetPlatform || cap.canonicalTarget || 'all',
+      operatingSystem: osType,
+      architecture: options.targetArch || (cap.arch !== 'unknown' ? cap.arch : 'x86_64'),
       binaryFormat,
       executable: `bin/${exeFileName}`,
+      installerFiles,
       packagedAt: new Date().toISOString(),
       filesCount: filesPackaged.length + 2,
     };
@@ -244,6 +266,8 @@ export class StandalonePackager {
       manifestPath,
       sha256sumsPath,
       archiveSha256,
+      targetOS: osType,
+      installerFiles,
       filesPackaged,
       diagnostics: diag,
     };

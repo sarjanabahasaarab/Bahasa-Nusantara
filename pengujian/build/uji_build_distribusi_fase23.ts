@@ -602,8 +602,9 @@ uji('5.1 Skrip installer Windows (.ps1 & .bat) berisi cek SHA-256, backup upgrad
   pastikan(psUninstall.includes('SetEnvironmentVariable'), 'Harus membersihkan User PATH dengan aman');
 });
 
-uji('5.2 Eksekusi nyata install.sh -> upgrade -> uninstall.sh dalam sandbox HOME terisolasi', () => {
+uji('5.2 Eksekusi nyata install.sh -> upgrade -> uninstall.sh dalam sandbox HOME terisolasi (POSIX Linux/macOS)', () => {
   if (process.platform === 'win32') {
+    console.log('     [CATATAN JUJUR] Host adalah Windows (win32); sandbox POSIX install.sh/uninstall.sh berstatus BELUM DIVERIFIKASI.');
     return 'UNVERIFIED';
   }
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-installer-sandbox-'));
@@ -617,10 +618,19 @@ uji('5.2 Eksekusi nyata install.sh -> upgrade -> uninstall.sh dalam sandbox HOME
     const bashrcPath = path.join(fakeHome, '.bashrc');
     fs.writeFileSync(bashrcPath, '# Konfigurasi pribadi pengguna\nexport EDITOR=nano\n', 'utf-8');
 
+    const posixTarget: CanonicalDesktopTarget =
+      process.platform === 'darwin'
+        ? process.arch === 'arm64'
+          ? 'macos-arm64'
+          : 'macos-x86_64'
+        : process.arch === 'arm64'
+          ? 'linux-arm64'
+          : 'linux-x86_64';
+
     const pkg1 = DesktopDistributionPackager.packageTarget({
       appName: 'nusa_demo',
       appVersion: 'v0.23.0',
-      target: 'linux-x86_64',
+      target: posixTarget,
       packageKind: 'script-launcher',
       outputDirectory: pkgOut1,
       includeInstallers: true,
@@ -642,7 +652,7 @@ uji('5.2 Eksekusi nyata install.sh -> upgrade -> uninstall.sh dalam sandbox HOME
     const pkg2 = DesktopDistributionPackager.packageTarget({
       appName: 'nusa_demo',
       appVersion: 'v0.23.1',
-      target: 'linux-x86_64',
+      target: posixTarget,
       packageKind: 'script-launcher',
       outputDirectory: pkgOut2,
       includeInstallers: true,
@@ -686,6 +696,96 @@ uji('5.2 Eksekusi nyata install.sh -> upgrade -> uninstall.sh dalam sandbox HOME
   }
 });
 
+uji('5.3 Eksekusi nyata install.ps1 -> upgrade -> tamper reject -> uninstall.ps1 via PowerShell sandbox (Windows / pwsh)', () => {
+  const psProbe = DesktopInstallerGenerator.detectWindowsPowerShell();
+  if (!psProbe.available) {
+    console.log(
+      `     [CATATAN JUJUR] PowerShell (powershell.exe/pwsh) tidak terpasang pada host ${process.platform}; eksekusi installer Windows berstatus BELUM DIVERIFIKASI.`
+    );
+    return 'UNVERIFIED';
+  }
+
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-win-installer-sandbox-'));
+  try {
+    const prefixDir = path.join(tmpRoot, 'prefix');
+    const pkgOut1 = path.join(tmpRoot, 'pkg_win_v1');
+    const pkgOut2 = path.join(tmpRoot, 'pkg_win_v2');
+
+    const pkg1 = DesktopDistributionPackager.packageTarget({
+      appName: 'nusa_demo_win',
+      appVersion: 'v0.23.0',
+      target: 'windows-x86_64',
+      packageKind: 'script-launcher',
+      outputDirectory: pkgOut1,
+      includeInstallers: true,
+    });
+
+    pastikan(fs.existsSync(path.join(pkg1.stagingDirectory, 'install.ps1')), 'install.ps1 wajib ada di disk');
+    pastikan(fs.existsSync(path.join(pkg1.stagingDirectory, 'uninstall.ps1')), 'uninstall.ps1 wajib ada di disk');
+    pastikan(fs.existsSync(path.join(pkg1.stagingDirectory, 'install.bat')), 'install.bat wajib ada di disk');
+    pastikan(fs.existsSync(path.join(pkg1.stagingDirectory, 'uninstall.bat')), 'uninstall.bat wajib ada di disk');
+
+    // 1) Install v1 (memakai -NoPath dalam sandbox agar HKCU User PATH runner tidak tersentuh)
+    const inst1 = DesktopInstallerGenerator.runWindowsScriptInSandbox({
+      packageDir: pkg1.stagingDirectory,
+      scriptName: 'install.ps1',
+      prefixDir,
+      noPath: true,
+    });
+    pastikan(inst1.success, `install.ps1 v1 gagal (${psProbe.command}): ${inst1.stderr || inst1.stdout}`);
+    const installedBin = path.join(prefixDir, 'bin', 'nusa_demo_win.exe');
+    pastikan(fs.existsSync(installedBin), 'Executable terpasang wajib ada di prefix/bin/nusa_demo_win.exe');
+    pastikan(
+      fs.existsSync(path.join(prefixDir, '.nusa_demo_win-install-manifest.json')),
+      'Receipt instalasi JSON wajib dibuat oleh install.ps1'
+    );
+
+    // 2) Upgrade ke v2
+    const pkg2 = DesktopDistributionPackager.packageTarget({
+      appName: 'nusa_demo_win',
+      appVersion: 'v0.23.1',
+      target: 'windows-x86_64',
+      packageKind: 'script-launcher',
+      outputDirectory: pkgOut2,
+      includeInstallers: true,
+    });
+    const inst2 = DesktopInstallerGenerator.runWindowsScriptInSandbox({
+      packageDir: pkg2.stagingDirectory,
+      scriptName: 'install.ps1',
+      prefixDir,
+      noPath: true,
+    });
+    pastikan(inst2.success, `Upgrade install.ps1 v2 gagal: ${inst2.stderr || inst2.stdout}`);
+    const pkgManifestAfterUpgrade = JSON.parse(
+      fs.readFileSync(path.join(prefixDir, '.nusa_demo_win-package-manifest.json'), 'utf-8')
+    );
+    samaDengan(pkgManifestAfterUpgrade.versi, 'v0.23.1');
+
+    // 3) Penolakan tamper checksum oleh install.ps1
+    fs.appendFileSync(path.join(pkg2.stagingDirectory, 'manifest.json'), '\n// corrupted');
+    const tamperRes = DesktopInstallerGenerator.runWindowsScriptInSandbox({
+      packageDir: pkg2.stagingDirectory,
+      scriptName: 'install.ps1',
+      prefixDir,
+      noPath: true,
+    });
+    samaDengan(tamperRes.success, false, 'install.ps1 wajib menolak paket dengan checksum SHA-256 rusak');
+
+    // 4) Uninstall bersih
+    const uninst = DesktopInstallerGenerator.runWindowsScriptInSandbox({
+      packageDir: pkg1.stagingDirectory,
+      scriptName: 'uninstall.ps1',
+      prefixDir,
+    });
+    pastikan(uninst.success, `uninstall.ps1 gagal: ${uninst.stderr || uninst.stdout}`);
+    pastikan(!fs.existsSync(installedBin), 'Executable wajib terhapus setelah uninstall.ps1');
+    pastikan(!fs.existsSync(path.join(prefixDir, '.nusa_demo_win-install-manifest.json')), 'Receipt instalasi wajib terhapus');
+    pastikan(!fs.existsSync(path.join(prefixDir, '.nusa_demo_win-package-manifest.json')), 'Package manifest wajib terhapus');
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
 // -----------------------------------------------------------------------------
 // GRUP 6: INTEGRASI CLI & REGRESI PHASE 1–22
 // -----------------------------------------------------------------------------
@@ -702,21 +802,92 @@ uji('6.1 CLI info melaporkan ke-6 target desktop resmi', () => {
   }
 });
 
-uji('6.2 StandalonePackager sekarang menulis arsip .tar.gz nyata ke disk beserta SHA256SUMS', () => {
+uji('6.2 StandalonePackager menulis arsip .tar.gz, SHA256SUMS, dan installer sesuai OS (Windows, Linux, macOS)', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-standalone-tgz-'));
   try {
-    const exePath = path.join(tmpDir, 'halo_cli');
-    fs.writeFileSync(exePath, '#!/bin/sh\necho "Halo"\n');
-    const res = StandalonePackager.package({
+    // 1) Host default (menghasilkan .ps1+.bat di Windows, install.sh+uninstall.sh di Linux/macOS)
+    const hostExe = path.join(tmpDir, process.platform === 'win32' ? 'halo_cli.exe' : 'halo_cli');
+    fs.writeFileSync(hostExe, process.platform === 'win32' ? '@echo off\r\necho Halo\r\n' : '#!/bin/sh\necho "Halo"\n');
+    const hostRes = StandalonePackager.package({
       appName: 'halo_cli',
       appVersion: '1.0.0',
-      executablePath: exePath,
-      outputDirectory: tmpDir,
+      executablePath: hostExe,
+      outputDirectory: path.join(tmpDir, 'host'),
       includeInstallers: true,
     });
-    pastikan(res.success && Boolean(res.archivePath && fs.existsSync(res.archivePath)), 'Arsip .tar.gz wajib ada di disk');
-    pastikan(Boolean(res.sha256sumsPath && fs.existsSync(res.sha256sumsPath)), 'SHA256SUMS wajib ada');
-    pastikan(fs.existsSync(path.join(res.standaloneDirectory, 'install.sh')), 'Installer wajib disertakan saat diminta');
+    pastikan(hostRes.success && Boolean(hostRes.archivePath && fs.existsSync(hostRes.archivePath)), 'Arsip .tar.gz host wajib ada di disk');
+    pastikan(Boolean(hostRes.sha256sumsPath && fs.existsSync(hostRes.sha256sumsPath)), 'SHA256SUMS host wajib ada di disk');
+    if (process.platform === 'win32') {
+      pastikan(fs.existsSync(path.join(hostRes.standaloneDirectory, 'install.ps1')), 'Windows wajib menyertakan install.ps1');
+      pastikan(fs.existsSync(path.join(hostRes.standaloneDirectory, 'uninstall.ps1')), 'Windows wajib menyertakan uninstall.ps1');
+      pastikan(fs.existsSync(path.join(hostRes.standaloneDirectory, 'install.bat')), 'Windows wajib menyertakan install.bat');
+      pastikan(fs.existsSync(path.join(hostRes.standaloneDirectory, 'uninstall.bat')), 'Windows wajib menyertakan uninstall.bat');
+      pastikan(!fs.existsSync(path.join(hostRes.standaloneDirectory, 'install.sh')), 'Paket Windows tidak boleh mengharuskan install.sh');
+    } else {
+      pastikan(fs.existsSync(path.join(hostRes.standaloneDirectory, 'install.sh')), 'POSIX host wajib menyertakan install.sh');
+      pastikan(fs.existsSync(path.join(hostRes.standaloneDirectory, 'uninstall.sh')), 'POSIX host wajib menyertakan uninstall.sh');
+      pastikan(!fs.existsSync(path.join(hostRes.standaloneDirectory, 'install.ps1')), 'Paket POSIX tidak boleh menyertakan install.ps1');
+    }
+
+    // 2) Validasi eksplisit seluruh 3 OS target (Windows, Linux, macOS)
+    const matrix: Array<{
+      targetPlatform: CanonicalDesktopTarget;
+      exeName: string;
+      expectedInstallers: string[];
+      forbiddenInstallers: string[];
+    }> = [
+      {
+        targetPlatform: 'windows-x86_64',
+        exeName: 'halo_win.exe',
+        expectedInstallers: ['install.ps1', 'uninstall.ps1', 'install.bat', 'uninstall.bat'],
+        forbiddenInstallers: ['install.sh', 'uninstall.sh'],
+      },
+      {
+        targetPlatform: 'linux-x86_64',
+        exeName: 'halo_linux',
+        expectedInstallers: ['install.sh', 'uninstall.sh'],
+        forbiddenInstallers: ['install.ps1', 'install.bat'],
+      },
+      {
+        targetPlatform: 'macos-arm64',
+        exeName: 'halo_macos',
+        expectedInstallers: ['install.sh', 'uninstall.sh'],
+        forbiddenInstallers: ['install.ps1', 'install.bat'],
+      },
+    ];
+
+    for (const spec of matrix) {
+      const subDir = path.join(tmpDir, spec.targetPlatform);
+      fs.mkdirSync(subDir, { recursive: true });
+      const binDummy = path.join(subDir, spec.exeName);
+      fs.writeFileSync(binDummy, 'launcher-stub');
+      const res = StandalonePackager.package({
+        appName: `halo_${spec.targetPlatform}`,
+        appVersion: '1.0.0',
+        executablePath: binDummy,
+        outputDirectory: path.join(subDir, 'out'),
+        targetPlatform: spec.targetPlatform,
+        includeInstallers: true,
+      });
+
+      pastikan(res.success && Boolean(res.archivePath && fs.existsSync(res.archivePath)), `${spec.targetPlatform}: arsip .tar.gz wajib ada di disk`);
+      pastikan(Boolean(res.sha256sumsPath && fs.existsSync(res.sha256sumsPath)), `${spec.targetPlatform}: SHA256SUMS wajib ada di disk`);
+      const shaText = fs.readFileSync(res.sha256sumsPath!, 'utf-8');
+      const shaCheck = ArchiveBuilder.verifySha256SumsFromDirectory(shaText, res.standaloneDirectory);
+      pastikan(shaCheck.valid, `${spec.targetPlatform}: SHA256SUMS internal wajib valid 100%`);
+
+      for (const reqFile of spec.expectedInstallers) {
+        const full = path.join(res.standaloneDirectory, reqFile);
+        pastikan(fs.existsSync(full), `${spec.targetPlatform}: installer '${reqFile}' wajib tersedia di disk`);
+        pastikan(shaText.includes(reqFile), `${spec.targetPlatform}: installer '${reqFile}' wajib tercatat di SHA256SUMS`);
+      }
+      for (const forb of spec.forbiddenInstallers) {
+        pastikan(
+          !fs.existsSync(path.join(res.standaloneDirectory, forb)),
+          `${spec.targetPlatform}: installer OS berbeda '${forb}' tidak boleh ada`
+        );
+      }
+    }
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }

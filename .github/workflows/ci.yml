@@ -73,6 +73,7 @@ jobs:
         run: npm ci
 
       - name: Uji Khusus Phase 29 SQLite Native & Browser Fallback Lintas Platform
+        shell: bash
         run: |
           npm run test:database-v29
           npm run test:database-browser-v29
@@ -207,6 +208,7 @@ jobs:
           clang --version
 
       - name: Uji LLVM Backend (Phase 44) & Build System (Phase 23) dengan Clang Aktif
+        shell: bash
         env:
           NUSANTARA_REQUIRE_CLANG: ${{ matrix.require_clang }}
           NUSANTARA_BUILD_REPORT_DIR: dist-native/reports

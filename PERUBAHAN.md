@@ -4,6 +4,26 @@ Seluruh perubahan penting pada proyek bahasa pemrograman NUSANTARA dicatat dalam
 
 Format penomoran versi mengacu pada **Semantic Versioning** (`vMAJOR.MINOR.PATCH`). Pada masa pengembangan awal, versi minor mencerminkan tahapan fase roadmap (misal `v0.1.0` untuk Phase 1, `v0.2.0` untuk Phase 2, `v0.3.0` untuk Phase 3, `v0.4.0` untuk Phase 4, `v0.5.0` untuk Phase 5, `v0.6.0` untuk Phase 6, `v0.7.0` untuk Phase 7, `v0.8.0` untuk Phase 8, `v0.9.0` untuk Phase 9, `v0.10.0` untuk Phase 10).
 
+## [v0.23.3 — Perbaikan Regresi CI Lintas Platform (Windows & macOS ARM64)] — 2026-11-15
+### Phase 23.3: Cross-Platform CI Regression Repair (`SELESAI SEBAGIAN` — Menunggu Runner GitHub Actions & Sertifikasi 6/6 Target `CERTIFIED`)
+
+Memperbaiki regresi GitHub Actions pasca Phase 23.2 pada runner `windows-latest` (`test:build-v23` Test `6.2`) dan `macos-latest` Apple Silicon (`test:llvm-v44` Test `2.1`) serta melengkapi validasi sandbox installer PowerShell Windows secara nyata:
+
+#### Diperbaiki & Ditambahkan:
+- **Validasi Installer OS-Spesifik di `StandalonePackager` (`src/compiler/executable/standalone-packager.ts`, `pengujian/build/uji_build_distribusi_fase23.ts` Test `6.2`):**
+  - `StandalonePackager.package` menyelesaikan OS & arsitektur target secara konsisten untuk `windows-x86_64`/`windows-arm64`, `linux-x86_64`/`linux-arm64`, serta `macos-x86_64`/`macos-arm64` (termasuk fallback launcher, petunjuk `BACA-SAYA.txt`, `manifest.json`, `targetOS`, dan `installerFiles`).
+  - Memperbaiki Test `6.2` agar tidak lagi memaksakan `install.sh` di host Windows: Windows memvalidasi `install.ps1`, `uninstall.ps1`, `install.bat`, `uninstall.bat`; Linux & macOS memvalidasi `install.sh`, `uninstall.sh`; dan menguji ketiganya secara eksplisit di disk beserta `SHA256SUMS` & `.tar.gz`.
+- **Kompatibilitas Host Triple `arm64-apple-darwin` (`pengujian/llvm/uji_llvm_fase44.ts` Test `2.1` & `2.2`):**
+  - Memperbaiki Test `2.1` agar menerima `arm64-apple-darwin` pada macOS Apple Silicon (selain `x86_64-apple-darwin`, `x86_64/aarch64-unknown-linux-gnu`, dan `x86_64/aarch64-pc-windows-msvc`) tanpa mengubah perilaku sah `TargetTripleManager.getHostTriple()`.
+  - Memperluas Test `2.2` memvalidasi seluruh 6 triple & data layout resmi LLVM plus ekuivalensi `arm64-apple-darwin`/`aarch64-apple-darwin`.
+- **Sandbox PowerShell Windows Nyata & Kejujuran Pelaporan (`src/build/installers.ts`, `uji_build_distribusi_fase23.ts` Test `5.2` & `5.3`):**
+  - Memperkuat `install.ps1` (normalisasi pemisah jalur checksum `SHA256SUMS`, penjagaan salinan `lib/` kosong terhadap `$ErrorActionPreference = "Stop"`, penyalinan `.<app>-package-manifest.json` untuk verifikasi upgrade, serta default `$Prefix` lintas PS 5.1/7) dan `uninstall.ps1` (pembersihan manifest paket & penghormatan mode `-NoPath`).
+  - Menambahkan `DesktopInstallerGenerator.detectWindowsPowerShell()` dan `DesktopInstallerGenerator.runWindowsScriptInSandbox()` untuk menguji siklus `install.ps1` -> upgrade -> penolakan tamper `SHA256SUMS` -> `uninstall.ps1` di `Test 5.3` (lulus di Windows / `pwsh`, dan berstatus jujur `BELUM DIVERIFIKASI` di host Linux tanpa `pwsh`).
+- **Fail-Fast Workflow CI (`.github/workflows/ci.yml`):**
+  - Menambahkan `shell: bash` pada langkah multi-perintah uji Windows/Linux/macOS (`test-suite` Phase 29 & `build-matrix-validation` `test:llvm-v44` + `test:build-v23`) agar kegagalan langkah pertama langsung menghentikan eksekusi dengan kode keluar non-nol.
+
+---
+
 ## [v0.23.2 — Hardening Evidence CI & Gerbang Sertifikasi 6 Target Desktop] — 2026-11-14
 ### Phase 23.2: CI Evidence Hardening & Six-Target Desktop Certification (`SELESAI SEBAGIAN` — Menunggu Sertifikasi 6/6 Target CI `CERTIFIED`)
 
