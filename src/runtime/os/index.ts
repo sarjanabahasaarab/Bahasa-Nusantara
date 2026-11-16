@@ -16,6 +16,7 @@ export * from './filesystem/index.js';
 export * from './tools/project-generator.js';
 export * from './tools/toolchain-detector.js';
 export * from './tools/qemu-runner.js';
+export * from './tools/qemu-sentinel-validator.js';
 export * from './security/index.js';
 export * from './ipc/index.js';
 export * from '../../compiler/targets/kernel/index.js';

@@ -470,29 +470,38 @@ export class X86BootstrapEncoder {
     a.emitAbs32Patch('entry64');
     a.emit16(0x0008);
 
-    // Helper 32-bit Serial Print: ESI -> 0-terminated string (with COM1 LSR THRE wait)
+    // Helper 32-bit Serial Print: ESI -> 0-terminated string (with bounded COM1 LSR THRE wait)
     a.label('print_serial32');
+    a.emit(0x51); // push ecx
+    a.label('print_serial32_next');
     a.emit(0xac); // lodsb
     a.emit(0x84, 0xc0); // test al, al
     a.je('print_serial32_done');
     a.emit(0x88, 0xc4); // mov ah, al
+    a.movRegImm32(Reg64.RCX, 0x0010_0000); // bounded LSR retry counter
     a.label('print_serial32_wait');
     a.emit(0x66, 0xba, 0xfd, 0x03); // mov dx, 0x3FD (LSR)
     a.emit(0xec); // in al, dx
     a.emit(0xa8, 0x20); // test al, 0x20 (THRE)
-    a.je('print_serial32_wait');
+    a.jne('print_serial32_send');
+    a.emit(0xff, 0xc9); // dec ecx
+    a.jne('print_serial32_wait');
+    a.label('print_serial32_send');
     a.emit(0x88, 0xe0); // mov al, ah
     a.emit(0x66, 0xba, 0xf8, 0x03); // mov dx, 0x3F8
     a.emit(0xee); // out dx, al
-    a.jmp('print_serial32');
+    a.jmp('print_serial32_next');
     a.label('print_serial32_done');
+    a.emit(0x59); // pop ecx
     a.emit(0xc3); // ret
 
     a.label('panic32_cpu');
     a.printLabel32('msg_panic_cpu', 'print_serial32');
     a.label('panic32');
-    // Tulis 0x01 ke ISA Debug Exit Port 0xF4 (exit_code = 3)
-    a.emit(0x66, 0xba, 0xf4, 0x00, 0xb0, 0x01, 0xee);
+    // Tulis 0x01 (32-bit) ke ISA Debug Exit Port 0xF4 (exit_code = 3)
+    a.emit(0x66, 0xba, 0xf4, 0x00); // mov dx, 0xF4
+    a.movRegImm32(Reg64.RAX, 1);    // mov eax, 1
+    a.emit(0xef);                   // out dx, eax
     a.emit(0xfa, 0xf4, 0xeb, 0xfd); // cli; hlt; jmp $-1
 
     // =========================================================================
@@ -500,13 +509,15 @@ export class X86BootstrapEncoder {
     // Catatan: EBX masih menyimpan mbi_ptr, EBP menyimpan mb2_magic
     // =========================================================================
     a.label('entry64');
+    a.emit(0xfa, 0xfc); // cli; cld
     // Set data segments = 0x10 (64-bit Kernel Data), FS=GS=0
     a.emit(0x66, 0xb8, 0x10, 0x00, 0x8e, 0xd8, 0x8e, 0xc0, 0x8e, 0xd0);
     a.emit(0x31, 0xc0, 0x8e, 0xe0, 0x8e, 0xe8); // xor eax, eax; mov fs, ax; mov gs, ax
     a.movRegImm64(Reg64.RSP, BigInt(this.KERNEL_STACK_TOP));
 
-    // Mask semua IRQ legacy 8259 PIC (Port 0x21 & 0xA1 = 0xFF) agar PIT/IRQ tidak menabrak #DF vector 8
+    // Mask semua IRQ legacy 8259 PIC (Port 0x21 & 0xA1 = 0xFF) dan bersihkan EOI tertunda
     a.emit(0xb0, 0xff, 0xe6, 0x21, 0xe6, 0xa1);
+    a.emit(0xb0, 0x20, 0xe6, 0xa0, 0xe6, 0x20);
 
     // Nolkan STATE_BASE, TSS64, IDT64, IDTR64 (0x00218000..0x0021BFFF = 16 KiB = 0x1000 dwords)
     // Simpan sementara EBX (MBI) & EBP (magic) ke R12 & R13 sebelum stosd
@@ -549,10 +560,10 @@ export class X86BootstrapEncoder {
     a.emit(0x48, 0x81, 0xf9, 0x00, 0x01, 0x00, 0x00); // cmp rcx, 256
     a.jb('idt_fill_loop');
 
-    // Vector 6 (#UD - menangkap gagal CPL==3 di user-test!)
+    // Vector 6 (#UD - menangkap gagal CPL==3 di user-test, dengan IST 1)
     a.movRegImm32(Reg64.RAX, 6);
     a.movRegLabel64(Reg64.RBX, 'isr_ud');
-    a.emit(0x31, 0xd2); // IST 0
+    a.movRegImm32(Reg64.RDX, 1); // IST 1
     a.call('set_idt_gate');
 
     // Vector 8 (#DF - Double Fault menggunakan IST 1)
@@ -561,16 +572,16 @@ export class X86BootstrapEncoder {
     a.movRegImm32(Reg64.RDX, 1); // IST 1
     a.call('set_idt_gate');
 
-    // Vector 13 (#GP - General Protection Fault)
+    // Vector 13 (#GP - General Protection Fault menggunakan IST 1)
     a.movRegImm32(Reg64.RAX, 13);
     a.movRegLabel64(Reg64.RBX, 'isr_gp');
-    a.emit(0x31, 0xd2);
+    a.movRegImm32(Reg64.RDX, 1); // IST 1
     a.call('set_idt_gate');
 
-    // Vector 14 (#PF - Hardware Page Fault Isolator!)
+    // Vector 14 (#PF - Hardware Page Fault Isolator, RSP0 TSS saat Ring 3 -> Ring 0)
     a.movRegImm32(Reg64.RAX, 14);
     a.movRegLabel64(Reg64.RBX, 'isr_pf');
-    a.emit(0x31, 0xd2);
+    a.emit(0x31, 0xd2); // IST 0
     a.call('set_idt_gate');
 
     // Isi IDTR64 di 0x0021B000: dw 4095, dq 0x0021A000
@@ -700,12 +711,12 @@ export class X86BootstrapEncoder {
     a.movRegLabel64(Reg64.RBX, 'after_proc_a');
     a.storeMem64Abs(this.STATE_RESUME_RIP, Reg64.RBX);
 
-    // Masuki Ring 3 lewat IRETQ pada Proses A (CR3 = PML4_A, CS = 0x23, SS = 0x1B)
+    // Masuki Ring 3 lewat IRETQ pada Proses A (CR3 = PML4_A, CS = 0x23, SS = 0x1B, IF = 0)
     a.movRegImm64(Reg64.RCX, BigInt(this.PML4_A_ADDR));
     a.emit(0x0f, 0x22, 0xd9); // mov cr3, rcx
     a.emit(0x68); a.emit32(0x1b);                      // push USER_DATA (0x1B)
     a.emit(0x68); a.emit32(this.USER_STACK_VIRT_RSP);  // push USER_RSP
-    a.emit(0x68); a.emit32(0x202);                     // push RFLAGS (IF=1)
+    a.emit(0x68); a.emit32(0x002);                     // push RFLAGS (IF=0 agar IRQ legacy tidak mengganggu bare-metal test)
     a.emit(0x68); a.emit32(0x23);                      // push USER_CODE (0x23)
     a.emit(0x50);                                      // push rax (e_entry)
     // Bersihkan register GP sebelum masuk Ring 3
@@ -716,6 +727,7 @@ export class X86BootstrapEncoder {
     // Kembali ke Ring 0 setelah Process A memanggil syscall SYS_PROCESS_EXIT(0)
     // -------------------------------------------------------------------------
     a.label('after_proc_a');
+    a.emit(0xfc); // cld
     // Verifikasi bahwa user-test.elf benar-benar mengeksekusi SYS_PROCESS_ID (1) & SYS_CONSOLE_WRITE (2)
     a.loadMem64Abs(Reg64.RAX, this.STATE_SYSCALL_FLAGS);
     a.emit(0x48, 0x83, 0xf8, 0x03); // cmp rax, 3
@@ -741,12 +753,12 @@ export class X86BootstrapEncoder {
     a.movRegLabel64(Reg64.RBX, 'after_proc_b');
     a.storeMem64Abs(this.STATE_RESUME_RIP, Reg64.RBX);
 
-    // Switch CR3 ke PML4_B dan jalankan user-fault-test.elf di Ring 3 via IRETQ!
+    // Switch CR3 ke PML4_B dan jalankan user-fault-test.elf di Ring 3 via IRETQ (IF=0)!
     a.movRegImm64(Reg64.RCX, BigInt(this.PML4_B_ADDR));
     a.emit(0x0f, 0x22, 0xd9); // mov cr3, rcx
     a.emit(0x68); a.emit32(0x1b);                      // push USER_DATA
     a.emit(0x68); a.emit32(this.USER_STACK_VIRT_RSP);  // push USER_RSP
-    a.emit(0x68); a.emit32(0x202);                     // push RFLAGS
+    a.emit(0x68); a.emit32(0x002);                     // push RFLAGS (IF=0)
     a.emit(0x68); a.emit32(0x23);                      // push USER_CODE
     a.emit(0x50);                                      // push rax
     a.emit(0x31, 0xc0, 0x31, 0xdb, 0x31, 0xc9, 0x31, 0xd2, 0x31, 0xf6, 0x31, 0xff);
@@ -756,6 +768,7 @@ export class X86BootstrapEncoder {
     // Kembali ke Ring 0 setelah #PF Handler mengisolasi pelanggaran Ring 3 Proses B
     // -------------------------------------------------------------------------
     a.label('after_proc_b');
+    a.emit(0xfc); // cld
     a.loadMem64Abs(Reg64.RAX, this.STATE_FAULT_COUNT);
     a.emit(0x48, 0x83, 0xf8, 0x01); // cmp rax, 1
     a.jne('panic64_fault');
@@ -773,10 +786,12 @@ export class X86BootstrapEncoder {
       a.emit(0x48, 0x83, 0xc7, 0x02);
     }
 
-    // ISA Debug Exit port 0xF4 dengan nilai 0x00 (exit code QEMU = 1)
-    a.emit(0x66, 0xba, 0xf4, 0x00, 0xb0, 0x00, 0xee);
+    // ISA Debug Exit port 0xF4 (32-bit iosize=0x04) dengan nilai 0x00 (exit code QEMU = 1)
+    a.emit(0x66, 0xba, 0xf4, 0x00); // mov dx, 0xF4
+    a.emit(0x31, 0xc0);             // xor eax, eax
+    a.emit(0xef);                   // out dx, eax
     // Safe Kernel Halt Loop
-    a.emit(0xf4, 0xeb, 0xfd);
+    a.emit(0xfa, 0xf4, 0xeb, 0xfd); // cli; hlt; jmp $-1
 
     // =========================================================================
     // BAGIAN 7: SUBROUTINES & EXCEPTION / SYSCALL HANDLERS (64-BIT)
@@ -787,8 +802,13 @@ export class X86BootstrapEncoder {
     // Input: RAX=num, RDI=arg1, RSI=arg2, RCX=user_rip, R11=user_rflags
     // -------------------------------------------------------------------------
     a.label('syscall_entry');
+    a.emit(0xfc); // cld
     a.storeMem64Abs(this.STATE_SYSCALL_USER_RSP, Reg64.RSP);
     a.movRegImm64(Reg64.RSP, BigInt(this.KERNEL_SYSCALL_STACK_TOP));
+    a.emit(0x50); // push rax (syscall num)
+    // Reload kernel DS=ES=0x10 karena IRETQ ke Ring 3 menolkan DS/ES
+    a.emit(0x66, 0xb8, 0x10, 0x00, 0x8e, 0xd8, 0x8e, 0xc0);
+    a.emit(0x58); // pop rax
     a.emit(0x51);             // push rcx (User RIP)
     a.emit(0x41, 0x53);       // push r11 (User RFLAGS)
     a.emit(0x53);             // push rbx
@@ -837,11 +857,17 @@ export class X86BootstrapEncoder {
     a.label('sys_write_loop');
     a.emit(0x8a, 0x03); // mov al, [rbx]
     a.emit(0x88, 0xc4); // mov ah, al
+    a.emit(0x51);       // push rcx (simpan sisa panjang byte)
+    a.movRegImm32(Reg64.RCX, 0x0010_0000);
     a.label('sys_write_wait_tx');
     a.emit(0x66, 0xba, 0xfd, 0x03); // mov dx, 0x3FD (LSR)
     a.emit(0xec); // in al, dx
     a.emit(0xa8, 0x20); // test al, 0x20 (THRE)
-    a.je('sys_write_wait_tx');
+    a.jne('sys_write_send_tx');
+    a.emit(0xff, 0xc9); // dec ecx
+    a.jne('sys_write_wait_tx');
+    a.label('sys_write_send_tx');
+    a.emit(0x59);       // pop rcx
     a.emit(0x88, 0xe0); // mov al, ah
     a.emit(0x66, 0xba, 0xf8, 0x03); // mov dx, 0x3F8
     a.emit(0xee); // out dx, al
@@ -879,6 +905,7 @@ export class X86BootstrapEncoder {
     // [RSP+0]=ErrorCode, [RSP+8]=RIP, [RSP+16]=CS, [RSP+24]=RFLAGS, [RSP+32]=UserRSP, [RSP+40]=UserSS
     // -------------------------------------------------------------------------
     a.label('isr_pf');
+    a.emit(0xfc); // cld
     // Cek Error Code bit 2 (User fault)
     a.emit(0x48, 0x8b, 0x04, 0x24);       // mov rax, [rsp] (ErrorCode)
     a.emit(0xa8, 0x04);                   // test al, 4 (U/S bit)
@@ -889,7 +916,8 @@ export class X86BootstrapEncoder {
     a.emit(0x48, 0x83, 0xfb, 0x03);       // cmp rbx, 3
     a.jne('panic64_pf_ring0');
 
-    // Pulihkan Page Table Kernel (CR3 = PML4_A) sebelum mengakses/mencetak lebih lanjut
+    // Pulihkan DS=ES=SS=0x10 & Page Table Kernel (CR3 = PML4_A) sebelum mengakses/mencetak lebih lanjut
+    a.emit(0x66, 0xb8, 0x10, 0x00, 0x8e, 0xd8, 0x8e, 0xc0, 0x8e, 0xd0);
     a.movRegImm64(Reg64.RAX, BigInt(this.PML4_A_ADDR));
     a.emit(0x0f, 0x22, 0xd8); // mov cr3, rax
 
@@ -905,35 +933,71 @@ export class X86BootstrapEncoder {
     a.loadMem64Abs(Reg64.RAX, this.STATE_RESUME_RIP);
     a.emit(0xff, 0xe0); // jmp rax
 
-    // Panic Handlers (Menulis 0x01 ke port 0xF4 -> QEMU raw exit = 3)
+    // Exception Diagnostic & Panic Handlers (Mencetak VEC, ERR, RIP, CR2, CS, RSP, GPR lalu keluar 0xF4=0x01)
     a.label('isr_ud');
-    a.movRegImm64(Reg64.RAX, BigInt(this.PML4_A_ADDR));
-    a.emit(0x0f, 0x22, 0xd8);
-    a.printLabel64('msg_panic_ud', 'print_serial64');
-    a.jmp('panic64_halt');
+    a.emit(0x6a, 0x00); // push 0 (no HW error code)
+    a.emit(0x6a, 0x06); // push 6 (#UD)
+    a.jmp('exception_common_panic');
 
     a.label('isr_df');
-    a.movRegImm64(Reg64.RAX, BigInt(this.PML4_A_ADDR));
-    a.emit(0x0f, 0x22, 0xd8);
-    a.printLabel64('msg_panic_df', 'print_serial64');
-    a.jmp('panic64_halt');
+    a.emit(0x6a, 0x08); // push 8 (#DF, HW pushed error code 0)
+    a.jmp('exception_common_panic');
 
     a.label('isr_gp');
-    a.movRegImm64(Reg64.RAX, BigInt(this.PML4_A_ADDR));
-    a.emit(0x0f, 0x22, 0xd8);
-    a.printLabel64('msg_panic_gp', 'print_serial64');
-    a.jmp('panic64_halt');
+    a.emit(0x6a, 0x0d); // push 13 (#GP, HW pushed error code)
+    a.jmp('exception_common_panic');
 
     a.label('isr_unhandled');
-    a.movRegImm64(Reg64.RAX, BigInt(this.PML4_A_ADDR));
-    a.emit(0x0f, 0x22, 0xd8);
-    a.printLabel64('msg_panic_unhandled', 'print_serial64');
-    a.jmp('panic64_halt');
+    a.emit(0x6a, 0x00); // push 0
+    a.emit(0x68); a.emit32(0xff); // push 0xFF (unhandled vector)
+    a.jmp('exception_common_panic');
 
     a.label('panic64_pf_ring0');
+    a.emit(0x6a, 0x0e); // push 14 (#PF Ring0/non-user)
+
+    a.label('exception_common_panic');
+    a.emit(0xfa, 0xfc);       // cli; cld
+    a.emit(0x50, 0x53, 0x51, 0x52); // push rax; push rbx; push rcx; push rdx
+    // Stack offsets: +0x00=RDX, +0x08=RCX, +0x10=RBX, +0x18=RAX, +0x20=VEC, +0x28=ERR, +0x30=RIP, +0x38=CS, +0x40=RFLAGS, +0x48=RSP
+    a.emit(0x66, 0xb8, 0x10, 0x00, 0x8e, 0xd8, 0x8e, 0xc0, 0x8e, 0xd0); // DS=ES=SS=0x10
     a.movRegImm64(Reg64.RAX, BigInt(this.PML4_A_ADDR));
-    a.emit(0x0f, 0x22, 0xd8);
-    a.printLabel64('msg_panic_pf', 'print_serial64');
+    a.emit(0x0f, 0x22, 0xd8); // mov cr3, rax (kernel page tables)
+
+    // Cetak pesan panic spesifik vektor
+    a.emit(0x48, 0x8b, 0x44, 0x24, 0x20); // mov rax, [rsp + 0x20] (VEC)
+    a.emit(0x48, 0x83, 0xf8, 0x06); a.je('exc_msg_ud');
+    a.emit(0x48, 0x83, 0xf8, 0x08); a.je('exc_msg_df');
+    a.emit(0x48, 0x83, 0xf8, 0x0d); a.je('exc_msg_gp');
+    a.emit(0x48, 0x83, 0xf8, 0x0e); a.je('exc_msg_pf');
+    a.printLabel64('msg_panic_unhandled', 'print_serial64');
+    a.jmp('exc_print_regs');
+    a.label('exc_msg_ud'); a.printLabel64('msg_panic_ud', 'print_serial64'); a.jmp('exc_print_regs');
+    a.label('exc_msg_df'); a.printLabel64('msg_panic_df', 'print_serial64'); a.jmp('exc_print_regs');
+    a.label('exc_msg_gp'); a.printLabel64('msg_panic_gp', 'print_serial64'); a.jmp('exc_print_regs');
+    a.label('exc_msg_pf'); a.printLabel64('msg_panic_pf', 'print_serial64');
+
+    a.label('exc_print_regs');
+    a.printLabel64('msg_diag_vec', 'print_serial64');
+    a.emit(0x48, 0x8b, 0x7c, 0x24, 0x20); a.call('print_hex64'); // VEC
+    a.printLabel64('msg_diag_err', 'print_serial64');
+    a.emit(0x48, 0x8b, 0x7c, 0x24, 0x28); a.call('print_hex64'); // ERR
+    a.printLabel64('msg_diag_rip', 'print_serial64');
+    a.emit(0x48, 0x8b, 0x7c, 0x24, 0x30); a.call('print_hex64'); // RIP
+    a.printLabel64('msg_diag_cr2', 'print_serial64');
+    a.emit(0x0f, 0x20, 0xd7);             a.call('print_hex64'); // CR2
+    a.printLabel64('msg_diag_cs', 'print_serial64');
+    a.emit(0x48, 0x8b, 0x7c, 0x24, 0x38); a.call('print_hex64'); // CS
+    a.printLabel64('msg_diag_rsp', 'print_serial64');
+    a.emit(0x48, 0x8b, 0x7c, 0x24, 0x48); a.call('print_hex64'); // RSP
+    a.printLabel64('msg_diag_rax', 'print_serial64');
+    a.emit(0x48, 0x8b, 0x7c, 0x24, 0x18); a.call('print_hex64'); // RAX
+    a.printLabel64('msg_diag_rbx', 'print_serial64');
+    a.emit(0x48, 0x8b, 0x7c, 0x24, 0x10); a.call('print_hex64'); // RBX
+    a.printLabel64('msg_diag_rcx', 'print_serial64');
+    a.emit(0x48, 0x8b, 0x7c, 0x24, 0x08); a.call('print_hex64'); // RCX
+    a.printLabel64('msg_diag_rdx', 'print_serial64');
+    a.emit(0x48, 0x8b, 0x7c, 0x24, 0x00); a.call('print_hex64'); // RDX
+    a.printLabel64('msg_diag_nl', 'print_serial64');
     a.jmp('panic64_halt');
 
     a.label('panic64_proc');
@@ -944,7 +1008,9 @@ export class X86BootstrapEncoder {
     a.printLabel64('msg_panic_kernel', 'print_serial64');
 
     a.label('panic64_halt');
-    a.emit(0x66, 0xba, 0xf4, 0x00, 0xb0, 0x01, 0xee); // outb(0xF4, 0x01)
+    a.emit(0x66, 0xba, 0xf4, 0x00); // mov dx, 0xF4
+    a.movRegImm32(Reg64.RAX, 1);    // mov eax, 1 (32-bit iosize=0x04 -> QEMU exit code 3)
+    a.emit(0xef);                   // out dx, eax
     a.emit(0xfa, 0xf4, 0xeb, 0xfd); // cli; hlt; jmp $-1
 
     // -------------------------------------------------------------------------
@@ -965,23 +1031,66 @@ export class X86BootstrapEncoder {
     a.emit(0xc3); // ret
 
     // -------------------------------------------------------------------------
-    // Helper: print_serial64(RSI = null-terminated string)
+    // Helper: print_serial64(RSI = null-terminated string) (bounded LSR polling)
     // -------------------------------------------------------------------------
     a.label('print_serial64');
+    a.emit(0xfc);             // cld
+    a.emit(0x51);             // push rcx
+    a.label('print_serial64_next');
     a.emit(0xac);             // lodsb
     a.emit(0x84, 0xc0);       // test al, al
     a.je('print_serial64_done');
     a.emit(0x88, 0xc4);       // mov ah, al
+    a.movRegImm32(Reg64.RCX, 0x0010_0000);
     a.label('print_serial64_wait');
     a.emit(0x66, 0xba, 0xfd, 0x03); // mov dx, 0x3FD (LSR)
     a.emit(0xec);             // in al, dx
     a.emit(0xa8, 0x20);       // test al, 0x20 (THRE)
-    a.je('print_serial64_wait');
+    a.jne('print_serial64_send');
+    a.emit(0xff, 0xc9);       // dec ecx
+    a.jne('print_serial64_wait');
+    a.label('print_serial64_send');
     a.emit(0x88, 0xe0);       // mov al, ah
     a.emit(0x66, 0xba, 0xf8, 0x03); // mov dx, 0x3F8
     a.emit(0xee);             // out dx, al
-    a.jmp('print_serial64');
+    a.jmp('print_serial64_next');
     a.label('print_serial64_done');
+    a.emit(0x59);             // pop rcx
+    a.emit(0xc3);
+
+    // -------------------------------------------------------------------------
+    // Helper: print_hex64(RDI = 64-bit value)
+    // -------------------------------------------------------------------------
+    a.label('print_hex64');
+    a.emit(0x50, 0x51, 0x52, 0x57); // push rax; push rcx; push rdx; push rdi
+    a.movRegImm32(Reg64.RCX, 16);   // 16 hex digits
+    a.label('print_hex64_loop');
+    a.emit(0x48, 0xc1, 0xc7, 0x04); // rol rdi, 4
+    a.emit(0x48, 0x89, 0xf8);       // mov rax, rdi
+    a.emit(0x24, 0x0f);             // and al, 0x0f
+    a.emit(0x3c, 0x0a);             // cmp al, 10
+    a.emit(0x72, 0x04);             // jb +4
+    a.emit(0x04, 0x37);             // add al, 'A' - 10
+    a.emit(0xeb, 0x02);             // jmp +2
+    a.emit(0x04, 0x30);             // add al, '0'
+    a.emit(0x88, 0xc4);             // mov ah, al
+    a.emit(0x51);                   // push rcx
+    a.movRegImm32(Reg64.RCX, 0x0010_0000);
+    a.label('print_hex64_wait');
+    a.emit(0x66, 0xba, 0xfd, 0x03);
+    a.emit(0xec);
+    a.emit(0xa8, 0x20);
+    a.jne('print_hex64_send');
+    a.emit(0xff, 0xc9);
+    a.jne('print_hex64_wait');
+    a.label('print_hex64_send');
+    a.emit(0x59);                   // pop rcx
+    a.emit(0x88, 0xe0);
+    a.emit(0x66, 0xba, 0xf8, 0x03);
+    a.emit(0xee);
+    a.emit(0xff, 0xc9);             // dec ecx
+    a.jne('print_hex64_loop');
+    a.emit(0x5f, 0x5a, 0x59, 0x58); // pop rdi; pop rdx; pop rcx; pop rax
     a.emit(0xc3);
 
     // -------------------------------------------------------------------------
@@ -990,6 +1099,7 @@ export class X86BootstrapEncoder {
     // Output: RAX = e_entry virtual address
     // -------------------------------------------------------------------------
     a.label('load_elf64_user');
+    a.emit(0xfc);             // cld
     a.emit(0x53);             // push rbx
     a.emit(0x52);             // push rdx (stack frame)
     a.emit(0x57);             // push rdi (code frame)
@@ -1066,6 +1176,17 @@ export class X86BootstrapEncoder {
     a.label('msg_panic_pf');             a.emitCString('NUSANTARA_KERNEL_PANIC: RING0_PAGE_FAULT\r\n');
     a.label('msg_panic_unhandled');      a.emitCString('NUSANTARA_KERNEL_PANIC: UNHANDLED_EXCEPTION\r\n');
     a.label('msg_panic_kernel');         a.emitCString('NUSANTARA_KERNEL_PANIC: VERIFICATION_FAILED\r\n');
+    a.label('msg_diag_vec');             a.emitCString('NUSANTARA_EXCEPTION_DIAG VEC=0x');
+    a.label('msg_diag_err');             a.emitCString(' ERR=0x');
+    a.label('msg_diag_rip');             a.emitCString(' RIP=0x');
+    a.label('msg_diag_cr2');             a.emitCString(' CR2=0x');
+    a.label('msg_diag_cs');              a.emitCString(' CS=0x');
+    a.label('msg_diag_rsp');             a.emitCString(' RSP=0x');
+    a.label('msg_diag_rax');             a.emitCString(' RAX=0x');
+    a.label('msg_diag_rbx');             a.emitCString(' RBX=0x');
+    a.label('msg_diag_rcx');             a.emitCString(' RCX=0x');
+    a.label('msg_diag_rdx');             a.emitCString(' RDX=0x');
+    a.label('msg_diag_nl');              a.emitCString('\r\n');
 
     // Sematkan payload ELF64 user-test.elf & user-fault-test.elf asli (bukan string cetak dari Ring 0!)
     // HELLO FROM NUSANTARA USER MODE hanya keluar saat Ring 3 benar-benar menjalankan user-test.elf!

@@ -9,6 +9,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import * as zlib from 'zlib';
 import { AOTCompiler } from '../../src/compiler/aot/aot-compiler';
 import { BinaryInspector } from '../../src/compiler/executable/binary-inspector';
 import { StandalonePackager } from '../../src/compiler/executable/standalone-packager';
@@ -1732,6 +1733,204 @@ uji('7.21 Siklus upgrade v2 korup pada sandbox POSIX gagal tanpa merusak biner t
     const upgRes = DesktopInstallerGenerator.runPosixScriptInSandbox(pkgV2.packageDirectory, 'install.sh', prefixDir, fakeHome);
     pastikan(!upgRes.success, 'Upgrade v2 korup wajib ditolak oleh install.sh');
     samaDengan(ArchiveBuilder.computeSha256(fs.readFileSync(installedBin)), shaV1, 'Biner v1 terpasang tidak boleh rusak saat upgrade korup ditolak');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+uji('7.22 Keamanan arsip menolak entri symlink pada ZIP dan TAR.GZ', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-symlink-sec-'));
+  try {
+    // 1. Uji penolakan symlink ZIP (unixMode 0o120777)
+    const zipBytes = Buffer.from(
+      ArchiveBuilder.createZip([{ name: 'evil-link', content: '/etc/passwd', mode: 0o644 }])
+    );
+    // Ubah external file attributes di Central Directory menjadi S_IFLNK (0o120777 << 16)
+    const cdSig = zipBytes.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+    pastikan(cdSig >= 0, 'Central Directory ZIP harus ditemukan');
+    zipBytes.writeUInt32LE(((0o120777 & 0xffff) << 16) >>> 0, cdSig + 38);
+
+    let zipSymlinkRejected = false;
+    try {
+      ArchiveBuilder.extractZip(zipBytes, path.join(tmp, 'out-zip'));
+    } catch (err: any) {
+      zipSymlinkRejected = String(err?.message || err).toLowerCase().includes('symlink');
+    }
+    pastikan(zipSymlinkRejected, 'ArchiveBuilder.extractZip wajib menolak entri symlink');
+
+    // 2. Uji penolakan symlink TAR.GZ (typeFlag '2')
+    const validTgz = ArchiveBuilder.createTarGz([{ name: 'evil-tar-link', content: 'target', mode: 0o644 }]);
+    const tarBuf = Buffer.from(zlib.gunzipSync(Buffer.from(validTgz)));
+    tarBuf[156] = '2'.charCodeAt(0); // symlink typeFlag
+    tarBuf.fill(0x20, 148, 156);
+    let sum = 0;
+    for (let i = 0; i < 512; i++) sum += tarBuf[i];
+    tarBuf.write(sum.toString(8).padStart(6, '0') + '\0 ', 148, 8, 'ascii');
+    const maliciousTgz = zlib.gzipSync(tarBuf);
+
+    let tarSymlinkRejected = false;
+    try {
+      ArchiveBuilder.extractTarGz(maliciousTgz, path.join(tmp, 'out-tar'));
+    } catch (err: any) {
+      tarSymlinkRejected = String(err?.message || err).toLowerCase().includes('symlink');
+    }
+    pastikan(tarSymlinkRejected, 'ArchiveBuilder.extractTarGz wajib menolak entri symlink');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+uji('7.23 Perlindungan archive bomb menolak payload dekompresi berlebih pada ZIP & TAR.GZ', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-bomb-sec-'));
+  try {
+    // Buat data sangat repetitif 256 KB yang terkompresi menjadi < 1 KB (rasio > 250x)
+    const repetitive = Buffer.alloc(256 * 1024, 0x41);
+    const bombZip = ArchiveBuilder.createZip([{ name: 'bomb.bin', content: repetitive, mode: 0o644 }]);
+    const bombTgz = ArchiveBuilder.createTarGz([{ name: 'bomb.bin', content: repetitive, mode: 0o644 }]);
+
+    let zipBombBlocked = false;
+    try {
+      ArchiveBuilder.extractZip(bombZip, path.join(tmp, 'zip-bomb'), {
+        maxEntryBytes: 64 * 1024,
+        maxTotalBytes: 64 * 1024,
+      });
+    } catch (err: any) {
+      zipBombBlocked = String(err?.message || err).toLowerCase().includes('archive bomb');
+    }
+    pastikan(zipBombBlocked, 'ArchiveBuilder.extractZip wajib memblokir archive bomb melebihi batas');
+
+    let tarBombBlocked = false;
+    try {
+      ArchiveBuilder.extractTarGz(bombTgz, path.join(tmp, 'tar-bomb'), {
+        maxEntryBytes: 64 * 1024,
+        maxTotalBytes: 64 * 1024,
+      });
+    } catch (err: any) {
+      tarBombBlocked = String(err?.message || err).toLowerCase().includes('archive bomb');
+    }
+    pastikan(tarBombBlocked, 'ArchiveBuilder.extractTarGz wajib memblokir archive bomb melebihi batas');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+uji('7.24 Ekstraksi arsip mempertahankan izin file executable POSIX (0o755)', () => {
+  if (process.platform === 'win32') {
+    return 'BELUM_DIVERIFIKASI';
+  }
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-perm-sec-'));
+  try {
+    const entries = [{ name: 'bin/nusa_exec', content: '#!/bin/sh\necho OK\n', mode: 0o755 }];
+    const zipBytes = ArchiveBuilder.createZip(entries);
+    const tgzBytes = ArchiveBuilder.createTarGz(entries);
+
+    const zipOut = path.join(tmp, 'zip-out');
+    const tgzOut = path.join(tmp, 'tgz-out');
+    ArchiveBuilder.extractZip(zipBytes, zipOut);
+    ArchiveBuilder.extractTarGz(tgzBytes, tgzOut);
+
+    const zipMode = fs.statSync(path.join(zipOut, 'bin/nusa_exec')).mode & 0o777;
+    const tgzMode = fs.statSync(path.join(tgzOut, 'bin/nusa_exec')).mode & 0o777;
+    pastikan((zipMode & 0o111) !== 0, `ZIP harus mempertahankan bit eksekusi (got 0o${zipMode.toString(8)})`);
+    pastikan((tgzMode & 0o111) !== 0, `TAR.GZ harus mempertahankan bit eksekusi (got 0o${tgzMode.toString(8)})`);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+uji('7.25 Rollback atomik saat instalasi/upgrade gagal memulihkan biner dan manifest v1 tanpa sisa file sementara', () => {
+  if (process.platform === 'win32') {
+    return 'BELUM_DIVERIFIKASI';
+  }
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-rollback-atomic-'));
+  try {
+    const prefixDir = path.join(tmp, 'prefix');
+    const fakeHome = path.join(tmp, 'home');
+    fs.mkdirSync(fakeHome, { recursive: true });
+    const target = process.platform === 'darwin' ? 'macos-arm64' : 'linux-x86_64';
+
+    const pkgV1 = DesktopDistributionPackager.packageTarget({
+      appName: 'nusa_rb_app',
+      appVersion: '0.23.9',
+      target,
+      mode: 'release',
+      packageKind: 'script-launcher',
+      outputDirectory: path.join(tmp, 'd1'),
+    });
+    const inst1 = DesktopInstallerGenerator.runPosixScriptInSandbox(pkgV1.packageDirectory, 'install.sh', prefixDir, fakeHome);
+    pastikan(inst1.success, `Install v1 wajib sukses: ${inst1.stderr}`);
+
+    const installedBin = path.join(prefixDir, 'bin/nusa_rb_app');
+    const installedManifest = path.join(prefixDir, 'share/nusa_rb_app/manifest.json');
+    const v1BinSha = ArchiveBuilder.computeSha256(fs.readFileSync(installedBin));
+    const v1MfSha = ArchiveBuilder.computeSha256(fs.readFileSync(installedManifest));
+
+    // Simulasikan gangguan tengah-jalan saat upgrade v2: uninstall.sh hilang tapi masuk SHA256SUMS, atau manifest dir-konflik
+    const pkgV2 = DesktopDistributionPackager.packageTarget({
+      appName: 'nusa_rb_app',
+      appVersion: '0.23.10',
+      target,
+      mode: 'release',
+      packageKind: 'script-launcher',
+      outputDirectory: path.join(tmp, 'd2'),
+    });
+    // Ganti share/nusa_rb_app/uninstall.sh dengan direktori baca-saja agar `cp -f` gagal SETELAH memindahkan biner!
+    const destUninstall = path.join(prefixDir, 'share/nusa_rb_app/uninstall.sh');
+    fs.unlinkSync(destUninstall);
+    fs.mkdirSync(destUninstall, { recursive: true });
+
+    const failUpg = DesktopInstallerGenerator.runPosixScriptInSandbox(pkgV2.packageDirectory, 'install.sh', prefixDir, fakeHome);
+    pastikan(!failUpg.success, 'Upgrade v2 yang gagal di tengah langkah wajib mengembalikan exit non-zero dan memicu rollback');
+    samaDengan(ArchiveBuilder.computeSha256(fs.readFileSync(installedBin)), v1BinSha, 'Rollback atomik wajib memulihkan biner v1 secara utuh');
+    samaDengan(ArchiveBuilder.computeSha256(fs.readFileSync(installedManifest)), v1MfSha, 'Rollback atomik wajib memulihkan manifest v1 secara utuh');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+uji('7.26 Uninstall bersih hanya menghapus berkas paket dan menjaga berkas pengguna lain tetap utuh', () => {
+  if (process.platform === 'win32') {
+    return 'BELUM_DIVERIFIKASI';
+  }
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-uninst-preserve-'));
+  try {
+    const prefixDir = path.join(tmp, 'prefix');
+    const fakeHome = path.join(tmp, 'home');
+    fs.mkdirSync(path.join(prefixDir, 'bin'), { recursive: true });
+    fs.mkdirSync(path.join(prefixDir, 'share', 'custom_user_app'), { recursive: true });
+    fs.mkdirSync(fakeHome, { recursive: true });
+
+    const userBin = path.join(prefixDir, 'bin', 'other_user_tool');
+    const userShare = path.join(prefixDir, 'share', 'custom_user_app', 'config.txt');
+    const userProfile = path.join(fakeHome, '.profile');
+    fs.writeFileSync(userBin, '#!/bin/sh\necho USER_TOOL\n', { mode: 0o755 });
+    fs.writeFileSync(userShare, 'KEEP_ME=1\n');
+    fs.writeFileSync(userProfile, 'export USER_CUSTOM_ENV=preserved\n');
+
+    const target = process.platform === 'darwin' ? 'macos-arm64' : 'linux-x86_64';
+    const pkg = DesktopDistributionPackager.packageTarget({
+      appName: 'nusa_clean_uninst',
+      appVersion: '0.23.10',
+      target,
+      mode: 'release',
+      packageKind: 'script-launcher',
+      outputDirectory: path.join(tmp, 'dist'),
+    });
+
+    const instRes = DesktopInstallerGenerator.runPosixScriptInSandbox(pkg.packageDirectory, 'install.sh', prefixDir, fakeHome);
+    pastikan(instRes.success, `Install gagal: ${instRes.stderr}`);
+    pastikan(fs.readFileSync(userProfile, 'utf-8').includes('NUSANTARA nusa_clean_uninst PATH'), '.profile harus memuat blok PATH saat terpasang');
+
+    const uninstRes = DesktopInstallerGenerator.runPosixScriptInSandbox(pkg.packageDirectory, 'uninstall.sh', prefixDir, fakeHome);
+    pastikan(uninstRes.success, `Uninstall gagal: ${uninstRes.stderr}`);
+
+    pastikan(!fs.existsSync(path.join(prefixDir, 'bin', 'nusa_clean_uninst')), 'Biner paket harus terhapus');
+    pastikan(!fs.existsSync(path.join(prefixDir, 'share', 'nusa_clean_uninst')), 'Direktori share paket harus terhapus');
+    pastikan(fs.existsSync(userBin), 'Biner milik pengguna di prefix/bin tidak boleh terhapus');
+    samaDengan(fs.readFileSync(userShare, 'utf-8'), 'KEEP_ME=1\n', 'Data aplikasi pengguna di prefix/share tidak boleh terhapus');
+    const postProfile = fs.readFileSync(userProfile, 'utf-8');
+    pastikan(!postProfile.includes('NUSANTARA nusa_clean_uninst PATH'), 'Blok PATH paket harus bersih dari .profile');
+    pastikan(postProfile.includes('export USER_CUSTOM_ENV=preserved'), 'Konfigurasi .profile milik pengguna harus tetap utuh');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

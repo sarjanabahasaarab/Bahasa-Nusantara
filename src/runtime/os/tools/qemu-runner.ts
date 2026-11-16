@@ -12,6 +12,7 @@
 
 import { safeFS, safePath, safeCP } from '../../../compiler/llvm/node-compat';
 import { ToolchainDetector } from './toolchain-detector';
+import { QEMUSentinelValidator, SentinelValidationReport } from './qemu-sentinel-validator';
 
 function hitungHashSederhana(str: string): string {
   let hash1 = 0x811c9dc5;
@@ -63,11 +64,13 @@ export interface QEMUBootResult {
   command: string;
   qemuVersion?: string;
   serialLog: string;
+  debugLog?: string;
   sentinelFound: boolean;
   stagesCompleted?: string[];
   exitCode?: number;
   durationMs: number;
   kernelSha256?: string;
+  validationReport?: SentinelValidationReport;
   error?: string;
 }
 
@@ -139,10 +142,13 @@ export class QEMURunner {
 
     const cwd = typeof process !== 'undefined' && process.cwd ? process.cwd() : '.';
     const logFile = safePath.join(cwd, 'qemu-serial.log');
-    if (safeFS.existsSync(logFile)) {
-      try {
-        safeFS.rmSync(logFile);
-      } catch {}
+    const debugLogFile = safePath.join(cwd, 'qemu-debug.log');
+    for (const stale of [logFile, debugLogFile]) {
+      if (safeFS.existsSync(stale)) {
+        try {
+          safeFS.rmSync(stale);
+        } catch {}
+      }
     }
 
     let bootMedia = options.isoPath || options.kernelPath;
@@ -178,12 +184,17 @@ export class QEMURunner {
       }
     }
 
-    const qemuArgs: string[] = [];
+    const qemuArgs: string[] = [
+      '-machine',
+      'pc',
+      '-cpu',
+      'qemu64,+nx',
+      '-m',
+      `${memoryMb}M`,
+    ];
 
     if (isCDROM) {
       qemuArgs.push(
-        '-m',
-        `${memoryMb}M`,
         '-cdrom',
         bootMedia,
         '-boot',
@@ -194,21 +205,25 @@ export class QEMURunner {
         '-serial',
         `file:${logFile}`,
         '-no-reboot',
-        '-no-shutdown'
+        '-d',
+        'cpu_reset,guest_errors',
+        '-D',
+        debugLogFile
       );
     } else {
       qemuArgs.push(
         '-kernel',
         options.kernelPath,
-        '-m',
-        `${memoryMb}M`,
         '-display',
         'none',
         '-nographic',
         '-serial',
         `file:${logFile}`,
         '-no-reboot',
-        '-no-shutdown'
+        '-d',
+        'cpu_reset,guest_errors',
+        '-D',
+        debugLogFile
       );
     }
 
@@ -239,14 +254,26 @@ export class QEMURunner {
           } catch {}
         }
 
+        let debugContent = '';
+        if (safeFS.existsSync(debugLogFile)) {
+          try {
+            debugContent = safeFS.readFileSync(debugLogFile, 'utf-8');
+          } catch {}
+        }
+
+        const expectedExitCodes = options.useISADebugExit === false ? [0] : [1];
+        const validationReport = QEMUSentinelValidator.validate({
+          serialLog: serialContent,
+          debugLog: debugContent,
+          exitCode,
+          expectedExitCodes,
+        });
+
         const sentinelFound = serialContent.includes(QEMURunner.REQUIRED_SENTINEL);
-        const hasPanic = serialContent.includes('NUSANTARA_KERNEL_PANIC');
-        const stagesCompleted = QEMURunner.STAGES.filter(s => serialContent.includes(s.trim()));
-        // Jika memakai isa-debug-exit, exit code 1 adalah sukses deterministik ((0 << 1) | 1 = 1)
-        const isPass =
-          sentinelFound &&
-          !hasPanic &&
-          (options.useISADebugExit === false ? exitCode === 0 : exitCode === 1 || exitCode === 0);
+        const stagesCompleted = validationReport.stages
+          .filter(s => s.matchedInOrder)
+          .map(s => s.sentinel);
+        const isPass = validationReport.overallStatus === 'PASS';
 
         resolve({
           status: isPass ? 'QEMU_BOOT_PASS' : 'QEMU_BOOT_FAIL',
@@ -254,12 +281,18 @@ export class QEMURunner {
           command: fullCommand,
           qemuVersion: toolchain.qemuVersion,
           serialLog: serialContent,
+          debugLog: debugContent,
           sentinelFound,
           stagesCompleted,
           exitCode,
           durationMs: Date.now() - awal,
           kernelSha256,
-          error: errorMsg,
+          validationReport,
+          error:
+            errorMsg ||
+            (!isPass && validationReport.violations.length > 0
+              ? validationReport.violations.join(' | ')
+              : undefined),
         });
       };
 

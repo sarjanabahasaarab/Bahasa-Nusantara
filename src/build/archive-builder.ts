@@ -26,6 +26,20 @@ const CRC32_TABLE = (() => {
 
 const REPRODUCIBLE_DATE = new Date('1970-01-01T00:00:00.000Z');
 
+export interface ArchiveExtractLimits {
+  maxEntries?: number;
+  maxEntryBytes?: number;
+  maxTotalBytes?: number;
+  maxCompressionRatio?: number;
+}
+
+const DEFAULT_ARCHIVE_LIMITS: Required<ArchiveExtractLimits> = {
+  maxEntries: 10_000,
+  maxEntryBytes: 256 * 1024 * 1024,
+  maxTotalBytes: 512 * 1024 * 1024,
+  maxCompressionRatio: 500,
+};
+
 export class ArchiveBuilder {
   public static computeSha256(data: string | Uint8Array): string {
     return crypto.createHash('sha256').update(data).digest('hex');
@@ -166,7 +180,12 @@ export class ArchiveBuilder {
     return new Uint8Array(Buffer.concat([...localChunks, centralDirBuf, eocd]));
   }
 
-  public static extractZip(zipBytes: Uint8Array, destDir: string): string[] {
+  public static extractZip(
+    zipBytes: Uint8Array,
+    destDir: string,
+    limits: ArchiveExtractLimits = {}
+  ): string[] {
+    const cfg = { ...DEFAULT_ARCHIVE_LIMITS, ...limits };
     const buf = Buffer.from(zipBytes);
     const absDest = safePath.resolve(destDir);
     safeFS.mkdirSync(absDest, { recursive: true });
@@ -185,8 +204,14 @@ export class ArchiveBuilder {
     }
 
     const totalEntries = buf.readUInt16LE(eocdOff + 10);
+    if (totalEntries > cfg.maxEntries) {
+      throw new Error(
+        `Archive bomb ZIP terdeteksi: jumlah entri (${totalEntries}) melebihi batas aman (${cfg.maxEntries}).`
+      );
+    }
     const cdOffset = buf.readUInt32LE(eocdOff + 16);
     const extracted: string[] = [];
+    let totalUncompressed = 0;
 
     let cursor = cdOffset;
     for (let i = 0; i < totalEntries; i++) {
@@ -212,6 +237,17 @@ export class ArchiveBuilder {
         throw new Error(`Entri symlink tidak diizinkan dalam arsip ZIP: '${entryName}'.`);
       }
 
+      if (uncompSize > cfg.maxEntryBytes) {
+        throw new Error(
+          `Archive bomb ZIP terdeteksi pada '${entryName}': ukuran (${uncompSize} B) melebihi batas entri (${cfg.maxEntryBytes} B).`
+        );
+      }
+      if (totalUncompressed + uncompSize > cfg.maxTotalBytes) {
+        throw new Error(
+          `Archive bomb ZIP terdeteksi: total dekompresi melebihi batas aman (${cfg.maxTotalBytes} B).`
+        );
+      }
+
       if (entryName.endsWith('/')) {
         const dirPath = this.resolveSafeSubpath(absDest, entryName);
         safeFS.mkdirSync(dirPath, { recursive: true });
@@ -224,15 +260,50 @@ export class ArchiveBuilder {
       const lNameLen = buf.readUInt16LE(localHdrOff + 26);
       const lExtraLen = buf.readUInt16LE(localHdrOff + 28);
       const dataStart = localHdrOff + 30 + lNameLen + lExtraLen;
+      if (dataStart + compSize > buf.length) {
+        throw new Error(`Data payload ZIP terpotong untuk '${entryName}'.`);
+      }
       const compSlice = buf.subarray(dataStart, dataStart + compSize);
+
+      if (
+        method === 8 &&
+        compSize > 0 &&
+        uncompSize > 65536 &&
+        uncompSize / compSize > cfg.maxCompressionRatio
+      ) {
+        throw new Error(
+          `Archive bomb ZIP terdeteksi pada '${entryName}': rasio kompresi (${(uncompSize / compSize).toFixed(1)}x) melebihi batas (${cfg.maxCompressionRatio}x).`
+        );
+      }
 
       let outBuf: Buffer;
       if (method === 0) {
         outBuf = Buffer.from(compSlice);
       } else if (method === 8) {
-        outBuf = zlib.inflateRawSync(compSlice);
+        try {
+          outBuf = zlib.inflateRawSync(compSlice, {
+            maxOutputLength: Math.min(cfg.maxEntryBytes, cfg.maxTotalBytes - totalUncompressed),
+          });
+        } catch (err: any) {
+          throw new Error(
+            `Archive bomb / kegagalan dekompresi ZIP untuk '${entryName}': ${err?.message || err}`
+          );
+        }
       } else {
         throw new Error(`Metode kompresi ZIP tidak didukung (${method}) untuk '${entryName}'.`);
+      }
+
+      if (
+        outBuf.length > cfg.maxEntryBytes ||
+        totalUncompressed + outBuf.length > cfg.maxTotalBytes ||
+        (method === 8 &&
+          compSize > 0 &&
+          outBuf.length > 65536 &&
+          outBuf.length / compSize > cfg.maxCompressionRatio)
+      ) {
+        throw new Error(
+          `Archive bomb ZIP terdeteksi pasca-inflasi pada '${entryName}' (${outBuf.length} B).`
+        );
       }
 
       if (outBuf.length !== uncompSize) {
@@ -242,6 +313,8 @@ export class ArchiveBuilder {
       if (actualCrc !== expectedCrc) {
         throw new Error(`CRC-32 ZIP tidak cocok untuk '${entryName}'.`);
       }
+
+      totalUncompressed += outBuf.length;
 
       const outPath = this.resolveSafeSubpath(absDest, entryName);
       safeFS.mkdirSync(safePath.dirname(outPath), { recursive: true });
@@ -307,19 +380,50 @@ export class ArchiveBuilder {
     return new Uint8Array(gz);
   }
 
-  public static extractTarGz(tarGzBytes: Uint8Array, destDir: string): string[] {
-    const tarBuf = zlib.gunzipSync(Buffer.from(tarGzBytes));
+  public static extractTarGz(
+    tarGzBytes: Uint8Array,
+    destDir: string,
+    limits: ArchiveExtractLimits = {}
+  ): string[] {
+    const cfg = { ...DEFAULT_ARCHIVE_LIMITS, ...limits };
+    const maxTarBuf = Math.min(cfg.maxTotalBytes + Math.min(cfg.maxEntries, 4096) * 1024 + 8192, 512 * 1024 * 1024);
+    let tarBuf: Buffer;
+    try {
+      tarBuf = zlib.gunzipSync(Buffer.from(tarGzBytes), { maxOutputLength: maxTarBuf });
+    } catch (err: any) {
+      throw new Error(`Archive bomb / kegagalan dekompresi TAR.GZ: ${err?.message || err}`);
+    }
+
+    if (
+      tarGzBytes.length > 0 &&
+      tarBuf.length > 65536 &&
+      tarBuf.length / tarGzBytes.length > cfg.maxCompressionRatio
+    ) {
+      throw new Error(
+        `Archive bomb TAR.GZ terdeteksi: rasio kompresi (${(tarBuf.length / tarGzBytes.length).toFixed(1)}x) melebihi batas (${cfg.maxCompressionRatio}x).`
+      );
+    }
+
     const absDest = safePath.resolve(destDir);
     safeFS.mkdirSync(absDest, { recursive: true });
     const extracted: string[] = [];
 
     let cursor = 0;
+    let entryCount = 0;
+    let totalPayloadBytes = 0;
     while (cursor + 512 <= tarBuf.length) {
       const hdr = tarBuf.subarray(cursor, cursor + 512);
       cursor += 512;
 
       if (hdr.every((b) => b === 0)) {
         break;
+      }
+
+      entryCount++;
+      if (entryCount > cfg.maxEntries) {
+        throw new Error(
+          `Archive bomb TAR.GZ terdeteksi: jumlah entri melebihi batas aman (${cfg.maxEntries}).`
+        );
       }
 
       const storedSum = this.readOctal(hdr.subarray(148, 156));
@@ -342,15 +446,30 @@ export class ArchiveBuilder {
         throw new Error(`Hardlink/symlink TAR tidak diizinkan demi keamanan: '${fullName}'.`);
       }
 
+      if (size > cfg.maxEntryBytes) {
+        throw new Error(
+          `Archive bomb TAR.GZ terdeteksi pada '${fullName}': ukuran (${size} B) melebihi batas entri (${cfg.maxEntryBytes} B).`
+        );
+      }
+      if (totalPayloadBytes + size > cfg.maxTotalBytes) {
+        throw new Error(
+          `Archive bomb TAR.GZ terdeteksi: total ekstraksi melebihi batas aman (${cfg.maxTotalBytes} B).`
+        );
+      }
+
       if (typeFlag === '5' || fullName.endsWith('/')) {
         const dirPath = this.resolveSafeSubpath(absDest, fullName);
         safeFS.mkdirSync(dirPath, { recursive: true });
         continue;
       }
 
+      if (cursor + size > tarBuf.length) {
+        throw new Error(`Payload TAR.GZ terpotong untuk '${fullName}'.`);
+      }
       const payload = tarBuf.subarray(cursor, cursor + size);
       const padded = size === 0 ? 0 : Math.ceil(size / 512) * 512;
       cursor += padded;
+      totalPayloadBytes += size;
 
       const outPath = this.resolveSafeSubpath(absDest, fullName);
       safeFS.mkdirSync(safePath.dirname(outPath), { recursive: true });

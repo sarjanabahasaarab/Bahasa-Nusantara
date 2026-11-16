@@ -167,10 +167,14 @@ INSTALLED_BIN="$PREFIX/bin/$BIN_NAME"
 INSTALLED_MANIFEST="$PREFIX/share/$APP_NAME/manifest.json"
 RECEIPT_FILE="$PREFIX/.nusantara-install-$APP_NAME.manifest"
 
+TMP_BIN=""
 cleanup_on_fail() {
   rc="$?"
   if [ "$rc" -ne 0 ]; then
     echo "[PERINGATAN] Instalasi gagal, melakukan rollback atomik..." >&2
+    if [ -n "$TMP_BIN" ]; then
+      rm -f "$TMP_BIN" 2>/dev/null || true
+    fi
     if [ -f "$BACKUP_DIR/prev_bin" ]; then
       cp -f "$BACKUP_DIR/prev_bin" "$INSTALLED_BIN" 2>/dev/null || true
     else
@@ -178,6 +182,8 @@ cleanup_on_fail() {
     fi
     if [ -f "$BACKUP_DIR/prev_manifest" ]; then
       cp -f "$BACKUP_DIR/prev_manifest" "$INSTALLED_MANIFEST" 2>/dev/null || true
+    else
+      rm -f "$INSTALLED_MANIFEST" 2>/dev/null || true
     fi
   fi
   rm -rf "$BACKUP_DIR"
@@ -197,6 +203,7 @@ TMP_BIN="$PREFIX/bin/.$BIN_NAME.tmp.$$"
 cp -f "$SCRIPT_DIR/$BIN_REL" "$TMP_BIN"
 chmod 755 "$TMP_BIN"
 mv -f "$TMP_BIN" "$INSTALLED_BIN"
+TMP_BIN=""
 
 if [ -d "$SCRIPT_DIR/lib" ]; then
   for f in "$SCRIPT_DIR/lib/"*; do
@@ -206,12 +213,21 @@ if [ -d "$SCRIPT_DIR/lib" ]; then
 fi
 
 if [ -f "$SCRIPT_DIR/manifest.json" ]; then
+  if [ -d "$INSTALLED_MANIFEST" ]; then
+    echo "[GALAT] Jalur tujuan manifest.json adalah direktori: $INSTALLED_MANIFEST" >&2
+    exit 1
+  fi
   cp -f "$SCRIPT_DIR/manifest.json" "$INSTALLED_MANIFEST"
 fi
 
 if [ -f "$SCRIPT_DIR/uninstall.sh" ]; then
-  cp -f "$SCRIPT_DIR/uninstall.sh" "$PREFIX/share/$APP_NAME/uninstall.sh"
-  chmod 755 "$PREFIX/share/$APP_NAME/uninstall.sh"
+  DEST_UNINSTALL="$PREFIX/share/$APP_NAME/uninstall.sh"
+  if [ -d "$DEST_UNINSTALL" ]; then
+    echo "[GALAT] Jalur tujuan uninstall.sh adalah direktori: $DEST_UNINSTALL" >&2
+    exit 1
+  fi
+  cp -f "$SCRIPT_DIR/uninstall.sh" "$DEST_UNINSTALL"
+  chmod 755 "$DEST_UNINSTALL"
 fi
 
 RC_UPDATED=""

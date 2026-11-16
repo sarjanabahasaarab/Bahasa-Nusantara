@@ -304,6 +304,8 @@ jobs:
             boot.log \
             qemu.log \
             serial.log \
+            qemu-debug.log \
+            qemu-sentinel-report.json \
             qemu-exit-code.txt \
             elf-validation.txt \
             isolation-test-report.txt \
@@ -313,7 +315,7 @@ jobs:
             FINAL-CERTIFICATION.md; do
             test -f "$f" || { echo "[GALAT] Artefak wajib hilang: $f"; exit 1; }
           done
-          sha256sum kernel.elf user.elf user-test.elf user-fault-test.elf nusantara-os.iso nusantara-phase50.iso boot.log qemu.log serial.log qemu-exit-code.txt elf-validation.txt isolation-test-report.txt toolchain-versions.txt test-report.txt test-results.txt FINAL-CERTIFICATION.md > SHA256SUMS
+          sha256sum kernel.elf user.elf user-test.elf user-fault-test.elf nusantara-os.iso nusantara-phase50.iso boot.log qemu.log serial.log qemu-debug.log qemu-sentinel-report.json qemu-exit-code.txt elf-validation.txt isolation-test-report.txt toolchain-versions.txt test-report.txt test-results.txt FINAL-CERTIFICATION.md > SHA256SUMS
           sha256sum -c SHA256SUMS
 
       - name: "Unggah Seluruh Artefak Terverifikasi & Hasil Sertifikasi CI"
@@ -332,6 +334,7 @@ jobs:
             artifacts/phase50/qemu.log
             artifacts/phase50/serial.log
             artifacts/phase50/qemu-debug.log
+            artifacts/phase50/qemu-sentinel-report.json
             artifacts/phase50/qemu-exit-code.txt
             artifacts/phase50/elf-validation.txt
             artifacts/phase50/isolation-test-report.txt

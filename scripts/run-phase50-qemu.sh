@@ -6,6 +6,7 @@ LOG_FILE="${ARTIFACTS_DIR}/serial.log"
 QEMU_LOG_FILE="${ARTIFACTS_DIR}/qemu.log"
 BOOT_LOG_FILE="${ARTIFACTS_DIR}/boot.log"
 DEBUG_LOG_FILE="${ARTIFACTS_DIR}/qemu-debug.log"
+SENTINEL_REPORT_FILE="${ARTIFACTS_DIR}/qemu-sentinel-report.json"
 ISO_FILE="${ARTIFACTS_DIR}/nusantara-phase50.iso"
 EXIT_CODE_FILE="${ARTIFACTS_DIR}/qemu-exit-code.txt"
 TIMEOUT_SEC=15
@@ -54,22 +55,28 @@ fi
 
 # 5. Eksekusi QEMU Headless
 echo "[5/7] Menjalankan QEMU headless dengan monitor serial (Timeout: ${TIMEOUT_SEC}s)..."
-rm -f "$LOG_FILE" "$QEMU_LOG_FILE" "$BOOT_LOG_FILE" "$DEBUG_LOG_FILE"
+rm -f "$LOG_FILE" "$QEMU_LOG_FILE" "$BOOT_LOG_FILE" "$DEBUG_LOG_FILE" "$SENTINEL_REPORT_FILE"
 
 QEMU_EXIT=0
 timeout --kill-after=2s "${TIMEOUT_SEC}s" qemu-system-x86_64 \
+    -machine pc \
+    -cpu qemu64,+nx \
     -cdrom "$ISO_FILE" \
     -boot d \
     -m 512M \
     -serial file:"$LOG_FILE" \
     -display none \
+    -nographic \
     -no-reboot \
-    -no-shutdown \
     -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
-    -d cpu_reset \
+    -d cpu_reset,guest_errors \
     -D "$DEBUG_LOG_FILE" || QEMU_EXIT=$?
 
 echo "Kode Keluar QEMU mentah: $QEMU_EXIT"
+
+if [ ! -f "$DEBUG_LOG_FILE" ]; then
+    : > "$DEBUG_LOG_FILE"
+fi
 
 # Salin log serial aktual jika ada SEBELUM mengevaluasi kegagalan agar debugging tetap lengkap
 if [ -f "$LOG_FILE" ]; then
@@ -105,76 +112,30 @@ echo "Hasil Analisis: $STATUS_ANALYSIS"
 echo "QEMU_RAW_EXIT_CODE: $QEMU_EXIT" > "$EXIT_CODE_FILE"
 echo "ANALYSIS: $STATUS_ANALYSIS" >> "$EXIT_CODE_FILE"
 
-if [ "$QEMU_EXIT" -ne 1 ]; then
-    if [ -s "$DEBUG_LOG_FILE" ]; then
-        echo "--- CUPLIKAN QEMU DEBUG LOG ($DEBUG_LOG_FILE) ---"
-        tail -n 60 "$DEBUG_LOG_FILE"
-    fi
-    echo "[GAGAL] QEMU berhenti dengan kode keluar $QEMU_EXIT ($STATUS_ANALYSIS)"
-    exit 1
+if [ -s "$DEBUG_LOG_FILE" ]; then
+    echo "--- CUPLIKAN QEMU DEBUG LOG ($DEBUG_LOG_FILE) ---"
+    tail -n 80 "$DEBUG_LOG_FILE"
 fi
 
-if [ ! -s "$LOG_FILE" ]; then
-    echo "[GAGAL] Serial log kosong meskipun QEMU keluar dengan kode 1!"
-    exit 1
-fi
+# 7. Validasi Strict 18 Sentinel, Anti-Duplikasi, Urutan, Panic, & SHA-256 Artefak
+echo "[7/7] Menjalankan Strict 18-Sentinel Validator ($SENTINEL_REPORT_FILE)..."
+VALIDATOR_EXIT=0
+npx tsx scripts/validate-qemu-sentinels.ts \
+    --serial "$LOG_FILE" \
+    --debug-log "$DEBUG_LOG_FILE" \
+    --artifacts-dir "$ARTIFACTS_DIR" \
+    --json-out "$SENTINEL_REPORT_FILE" \
+    --exit-code "$QEMU_EXIT" || VALIDATOR_EXIT=$?
 
-if grep -q "NUSANTARA_KERNEL_PANIC" "$LOG_FILE"; then
-    echo "[GAGAL] Kernel Panic terdeteksi di dalam log serial QEMU!"
-    exit 1
-fi
-
-# 7. Verifikasi Keberadaan Seluruh 18 Sentinel Serial Secara Berurutan
-echo "[7/7] Memverifikasi seluruh 18 sentinel diagnostik secara berurutan..."
-SENTINELS=(
-    "NUSANTARA_BOOT_START"
-    "NUSANTARA_MULTIBOOT2_OK"
-    "NUSANTARA_CPU_LONG_MODE_OK"
-    "NUSANTARA_PAGING_OK"
-    "NUSANTARA_GDT64_OK"
-    "NUSANTARA_LONG_MODE_ENTERED"
-    "NUSANTARA_IDT_OK"
-    "NUSANTARA_MEMORY_MANAGER_OK"
-    "NUSANTARA_KERNEL_MAIN_ENTERED"
-    "NUSANTARA_KERNEL_BOOT_OK"
-    "NUSANTARA_USERMODE_ENTERED"
-    "HELLO FROM NUSANTARA USER MODE"
-    "NUSANTARA_SYSCALL_OK"
-    "NUSANTARA_PROCESS_EXIT_OK"
-    "NUSANTARA_PROCESS_ISOLATION_OK"
-    "NUSANTARA_USER_FAULT_ISOLATED"
-    "NUSANTARA_KERNEL_SURVIVED_USER_FAULT"
-    "NUSANTARA_USERMODE_TEST_PASS"
-)
-
-TOTAL_SENTINELS=${#SENTINELS[@]}
-FOUND_COUNT=0
-LAST_LINE=0
-ORDER_OK=true
-
-for s in "${SENTINELS[@]}"; do
-    MATCH_LINE=$(awk -v last="$LAST_LINE" -v pattern="$s" 'NR > last && index($0, pattern) { print NR; exit }' "$LOG_FILE")
-    if [ -n "$MATCH_LINE" ]; then
-        ((FOUND_COUNT++)) || true
-        LAST_LINE=$MATCH_LINE
-        echo "  [✓] Sentinel #$FOUND_COUNT (Baris $MATCH_LINE): $s"
-    else
-        echo "  [✗] Sentinel TIDAK DITEMUKAN SECARA BERURUTAN (setelah baris $LAST_LINE): $s"
-        ORDER_OK=false
-    fi
-done
-
-echo "----------------------------------------------------------------------"
-echo "Sentinel Ditemukan Berurutan: $FOUND_COUNT / $TOTAL_SENTINELS"
-
-if [ "$FOUND_COUNT" -eq "$TOTAL_SENTINELS" ] && [ "$ORDER_OK" = true ]; then
-    echo "======================================================================"
-    echo "     [QEMU_CERTIFICATION_PASS] SELURUH TAHAPAN KERNEL & USER MODE OK! "
-    echo "======================================================================"
-    exit 0
-else
+if [ "$QEMU_EXIT" -ne 1 ] || [ "$VALIDATOR_EXIT" -ne 0 ]; then
     echo "======================================================================"
     echo "     [QEMU_CERTIFICATION_FAIL] Pengujian belum memenuhi seluruh syarat."
+    echo "     QEMU_EXIT=$QEMU_EXIT | VALIDATOR_EXIT=$VALIDATOR_EXIT"
     echo "======================================================================"
     exit 1
 fi
+
+echo "======================================================================"
+echo "     [QEMU_CERTIFICATION_PASS] SELURUH TAHAPAN KERNEL & USER MODE OK! "
+echo "======================================================================"
+exit 0

@@ -11,8 +11,8 @@ ELF64 Format Valid      : YA (LULUS)
 ELF64 Class / Endian    : 64-bit / Little-Endian (AMD64)
 Entry Point Kernel      : 0x100020
 Program Headers (PT_LOAD): 2 segmen
-  [0] off=0x1000 vaddr=0x100000 paddr=0x100000 filesz=12062 memsz=12062 flags=RX
-  [1] off=0x4000 vaddr=0xffffffff80103000 paddr=0x103000 filesz=52 memsz=8192 flags=RW
+  [0] off=0x1000 vaddr=0x100000 paddr=0x100000 filesz=12606 memsz=12606 flags=RX
+  [1] off=0x5000 vaddr=0xffffffff80104000 paddr=0x104000 filesz=52 memsz=8192 flags=RW
 
 --- 2. BINER APLIKASI USER MODE (user-test.elf) ---
 ELF64 Format Valid      : YA (LULUS)

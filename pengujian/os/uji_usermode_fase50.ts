@@ -43,6 +43,7 @@ import {
   FaultType,
   X86BootstrapEncoder,
   QEMURunner,
+  QEMUSentinelValidator,
 } from '../../src/runtime/os';
 import { VERSI_NUSANTARA } from '../../src/konstanta/versi';
 
@@ -541,6 +542,99 @@ async function main(): Promise<void> {
     const as = new AddressSpace();
     const loadRes = ELF64UserLoader.load(faultElf, as);
     pastikan(loadRes.success, 'Pemuatan fault test ELF ke AddressSpace harus berhasil');
+  });
+
+  await uji('11.5 X86BootstrapEncoder menyematkan diagnostik exception RIP/CR2/GPR dan exit port 0xF4 32-bit', () => {
+    const bootBin = X86BootstrapEncoder.generateBootstrapBinary();
+    const bytes = bootBin.codeBytes;
+    const text = new TextDecoder('latin1').decode(bytes);
+
+    for (const marker of [
+      'NUSANTARA_EXCEPTION_DIAG VEC=0x',
+      'ERR=0x',
+      'RIP=0x',
+      'CR2=0x',
+      'CS=0x',
+      'RSP=0x',
+      'RAX=0x',
+      'RBX=0x',
+      'RCX=0x',
+      'RDX=0x',
+    ]) {
+      pastikan(text.includes(marker), `Bootstrap binary wajib memuat label diagnostik '${marker}'`);
+    }
+
+    // Pastikan pembuka Multiboot2 Phase 49 dan safe halt loop tetap terjaga
+    pastikan(bytes[0] === 0xfa && bytes[1] === 0xfc && bytes[2] === 0x3d, 'Header 32-bit pembuka wajib terjaga');
+    let foundOutDxEaxF4 = false;
+    for (let i = 0; i < bytes.length - 6; i++) {
+      // mov dx, 0x00F4 (66 ba f4 00) ... out dx, eax (ef)
+      if (bytes[i] === 0x66 && bytes[i + 1] === 0xba && bytes[i + 2] === 0xf4 && bytes[i + 3] === 0x00) {
+        if (bytes[i + 6] === 0xef || bytes[i + 9] === 0xef) {
+          foundOutDxEaxF4 = true;
+          break;
+        }
+      }
+    }
+    pastikan(foundOutDxEaxF4, 'Port 0xF4 wajib menggunakan 32-bit OUT DX, EAX (0xEF) selaras iosize=0x04');
+  });
+
+  await uji('11.6 QEMUSentinelValidator meluluskan log 18/18 berurutan dengan exit code 1', () => {
+    const validLog = QEMUSentinelValidator.OFFICIAL_SENTINELS.join('\r\n') + '\r\n';
+    const report = QEMUSentinelValidator.validate({
+      serialLog: validLog,
+      debugLog: '',
+      exitCode: 1,
+      expectedExitCodes: [1],
+    });
+
+    pastikan(report.overallStatus === 'PASS', `Harus PASS, aktual: ${report.overallStatus} (${report.violations.join('; ')})`);
+    pastikan(report.sequentialMatchedCount === 18, 'Semua 18 sentinel wajib cocok berurutan');
+    pastikan(report.bootStatus === 'PASS', 'bootStatus harus PASS');
+    pastikan(report.ring3Status === 'PASS', 'ring3Status harus PASS');
+    pastikan(report.processIsolationStatus === 'PASS', 'processIsolationStatus harus PASS');
+    pastikan(report.faultHandlingStatus === 'PASS', 'faultHandlingStatus harus PASS');
+    pastikan(report.kernelFinalStatus === 'PASS', 'kernelFinalStatus harus PASS');
+  });
+
+  await uji('11.7 QEMUSentinelValidator menolak log duplikat, out-of-order, early-exit, panic, timeout, dan log palsu', () => {
+    const all = QEMUSentinelValidator.OFFICIAL_SENTINELS;
+
+    // 1. Duplikasi sentinel
+    const dupLog = [...all, 'NUSANTARA_USERMODE_TEST_PASS'].join('\n');
+    const dupRes = QEMUSentinelValidator.validate({ serialLog: dupLog, exitCode: 1 });
+    pastikan(dupRes.overallStatus === 'FAIL' && dupRes.duplicateSentinels.includes('NUSANTARA_USERMODE_TEST_PASS'), 'Duplikasi wajib FAIL');
+
+    // 2. Urutan terbalik (out-of-order)
+    const swapped = [...all];
+    [swapped[10], swapped[14]] = [swapped[14], swapped[10]];
+    const orderRes = QEMUSentinelValidator.validate({ serialLog: swapped.join('\n'), exitCode: 1 });
+    pastikan(orderRes.overallStatus === 'FAIL' && orderRes.outOfOrderSentinels.length > 0, 'Urutan salah wajib FAIL');
+
+    // 3. Early exit di tahap 14 (NUSANTARA_PROCESS_EXIT_OK)
+    const earlyRes = QEMUSentinelValidator.validate({
+      serialLog: all.slice(0, 14).join('\n'),
+      exitCode: 124,
+    });
+    pastikan(earlyRes.overallStatus === 'FAIL' && earlyRes.earlyExitDetected && earlyRes.timedOut, 'Early exit + timeout 124 wajib FAIL');
+
+    // 4. Kernel Panic
+    const panicRes = QEMUSentinelValidator.validate({
+      serialLog: all.slice(0, 10).join('\n') + '\nNUSANTARA_KERNEL_PANIC: GENERAL_PROTECTION_FAULT\nNUSANTARA_EXCEPTION_DIAG VEC=0x000000000000000D\n',
+      exitCode: 3,
+    });
+    pastikan(panicRes.overallStatus === 'FAIL' && panicRes.hasPanic, 'Kernel Panic wajib FAIL');
+
+    // 5. Log palsu (hanya final sentinel tanpa boot stages atau exit code invalid)
+    const fakeRes = QEMUSentinelValidator.validate({
+      serialLog: 'NUSANTARA_USERMODE_TEST_PASS\n',
+      exitCode: 0,
+    });
+    pastikan(fakeRes.overallStatus === 'FAIL' && !fakeRes.exitCodeValid, 'Log palsu tanpa boot stages dan exit code non-1 wajib FAIL');
+
+    // 6. Log kosong
+    const emptyRes = QEMUSentinelValidator.validate({ serialLog: '', exitCode: 1 });
+    pastikan(emptyRes.overallStatus === 'FAIL', 'Log kosong wajib FAIL');
   });
 
   console.log('\n======================================================================');

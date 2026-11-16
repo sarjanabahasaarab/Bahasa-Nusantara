@@ -1,7 +1,7 @@
 ======================================================================
             RANGKUMAN HASIL BUILD ARTIFAK PHASE 50 NUSANTARA OS       
 ======================================================================
-1. Kernel ELF64 (17248 B)   : VALID (Multiboot2 + ELF64 x86_64)
+1. Kernel ELF64 (21344 B)   : VALID (Multiboot2 + ELF64 x86_64)
 2. User Test ELF (4256 B) : VALID
 3. User Fault ELF (4160 B): VALID
 4. GRUB2 ISO Status               : NOT_BUILT (grub-mkrescue / xorriso tidak terpasang)
