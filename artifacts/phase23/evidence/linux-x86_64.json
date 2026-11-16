@@ -1,7 +1,7 @@
 {
   "schemaVersion": "2.0",
   "phase": "Phase 23",
-  "generatedAt": "2026-11-16T22:45:25.560Z",
+  "generatedAt": "2026-11-16T23:03:37.262Z",
   "target": "linux-x86_64",
   "targetTriple": "x86_64-unknown-linux-gnu",
   "triple": "x86_64-unknown-linux-gnu",
@@ -24,17 +24,17 @@
     "name": "none",
     "lldAvailable": false
   },
-  "sysroot": "/usr/lib/x86_64-linux-gnu",
   "emulator": {
     "used": false
   },
   "sdk": {
-    "name": "Host GNU/glibc",
-    "sysroot": "/usr/lib/x86_64-linux-gnu",
+    "name": "GNU/glibc x86_64 (libc6-dev)",
     "available": false,
     "linkerProbeVerified": false,
     "missingRequirements": [
-      "clang (driver compiler + linker C runtime) tidak ditemukan di PATH."
+      "clang (driver compiler + linker C runtime) tidak ditemukan di PATH.",
+      "Header standar C 'stdio.h' tidak ditemukan (pasang build-essential & libc6-dev).",
+      "C runtime startup/libc (x86_64-linux-gnu: crt1.o/libc.so) tidak ditemukan (pasang libc6-dev)."
     ]
   },
   "llvmIR": {
@@ -73,9 +73,9 @@
   "verificationStatus": "NOT_VERIFIED",
   "status": "NOT_VERIFIED",
   "statusCode": "TOOLCHAIN_TIDAK_TERSEDIA",
-  "reason": "Target 'linux-x86_64' belum dapat diverifikasi pada host ini: clang (driver compiler + linker C runtime) tidak ditemukan di PATH.",
+  "reason": "Target 'linux-x86_64' belum dapat diverifikasi pada host ini: clang (driver compiler + linker C runtime) tidak ditemukan di PATH.; Header standar C 'stdio.h' tidak ditemukan (pasang build-essential & libc6-dev).; C runtime startup/libc (x86_64-linux-gnu: crt1.o/libc.so) tidak ditemukan (pasang libc6-dev).",
   "diagnostics": [
-    "[TIDAK TERSEDIA: TOOLCHAIN_TIDAK_TERSEDIA] Target host 'linux-x86_64' belum siap: clang (driver compiler + linker C runtime) tidak ditemukan di PATH.",
-    "Persyaratan hilang: clang (driver compiler + linker C runtime) tidak ditemukan di PATH."
+    "[TIDAK TERSEDIA: TOOLCHAIN_TIDAK_TERSEDIA] Target host 'linux-x86_64' belum siap: clang (driver compiler + linker C runtime) tidak ditemukan di PATH. Header standar C 'stdio.h' tidak ditemukan (pasang build-essential & libc6-dev). C runtime startup/libc (x86_64-linux-gnu: crt1.o/libc.so) tidak ditemukan (pasang libc6-dev).",
+    "Persyaratan hilang: clang (driver compiler + linker C runtime) tidak ditemukan di PATH.; Header standar C 'stdio.h' tidak ditemukan (pasang build-essential & libc6-dev).; C runtime startup/libc (x86_64-linux-gnu: crt1.o/libc.so) tidak ditemukan (pasang libc6-dev)."
   ]
 }

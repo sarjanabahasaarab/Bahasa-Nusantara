@@ -202,6 +202,25 @@ uji('5.4 ci.yml memisahkan runner ARM64 native, dry-run QEMU aman, & isolasi art
   );
 });
 
+uji('5.5 ci.yml memasang C runtime Ubuntu pada test-suite, verifikasi stdio.h/lld, & menjaga needs + diagnostik skipped', () => {
+  const kontenCI = pembacaReal.baca('.github/workflows/ci.yml');
+  const parsed = validator.validasiBerkas('.github/workflows/ci.yml');
+  pastikan(kontenCI.includes("runner.os == 'Linux'"), 'Instalasi apt Ubuntu wajib bersyarat hanya pada runner Linux');
+  for (const pkg of ['build-essential', 'libc6-dev', 'clang', 'lld', 'llvm', 'binutils']) {
+    pastikan(kontenCI.includes(pkg), `ci.yml wajib menyertakan paket native '${pkg}'`);
+  }
+  pastikan(kontenCI.includes('ld.lld --version'), 'ci.yml wajib memverifikasi linker ld.lld');
+  pastikan(kontenCI.includes('#include <stdio.h>'), 'ci.yml wajib menguji kompilasi & linking nyata header stdio.h');
+  pastikan(kontenCI.includes('Diagnostik Prasyarat yang Dilewati (Skipped)'), 'ci.yml wajib menjelaskan prasyarat job yang skipped');
+
+  const qg = parsed.daftarJob.find((j) => j.id === 'quality-gate');
+  const bm = parsed.daftarJob.find((j) => j.id === 'build-matrix-validation');
+  const gate = parsed.daftarJob.find((j) => j.id === 'phase23-certification-gate');
+  pastikan(Boolean(qg && qg.needs.includes('test-suite')), 'quality-gate wajib bergantung pada test-suite');
+  pastikan(Boolean(bm && bm.needs.includes('quality-gate')), 'build-matrix-validation wajib bergantung pada quality-gate');
+  pastikan(Boolean(gate && gate.needs.includes('build-matrix-validation')), 'phase23-certification-gate wajib bergantung pada build-matrix-validation');
+});
+
 // -----------------------------------------------------------------------------
 // GRUP 6: Mesin Eksekusi CI Lokal & Step Summary
 // -----------------------------------------------------------------------------

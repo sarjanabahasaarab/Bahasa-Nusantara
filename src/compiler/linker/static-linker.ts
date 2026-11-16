@@ -120,6 +120,56 @@ export class StaticLinker {
       };
     }
 
+    const requestedSysroot = options.sysroot?.trim();
+    if (requestedSysroot && this.targetInfo.os === 'linux') {
+      if (!safeFS.existsSync(requestedSysroot)) {
+        this.diag.galat(
+          'SYSROOT_TIDAK_DITEMUKAN',
+          `Direktori sysroot target '${this.targetInfo.triple}' tidak ditemukan: ${requestedSysroot}`
+        );
+        return {
+          success: false,
+          targetTriple: this.targetInfo.triple,
+          diagnostics: this.diag.dapatkanPesanFormatted(),
+        };
+      }
+      const isRootFsSysroot = requestedSysroot === '/';
+      const hasStdioInSysroot = isRootFsSysroot
+        ? safeFS.existsSync('/usr/include/stdio.h') || safeFS.existsSync('/usr/local/include/stdio.h')
+        : safeFS.existsSync(safePath.join(requestedSysroot, 'usr/include/stdio.h')) ||
+          safeFS.existsSync(safePath.join(requestedSysroot, 'include/stdio.h'));
+      if (!hasStdioInSysroot && options.explicitSysrootOverride) {
+        this.diag.galat(
+          'SYSROOT_TIDAK_VALID',
+          `Sysroot '${requestedSysroot}' tidak memiliki header standar C (stdio.h) untuk target '${this.targetInfo.triple}'.`
+        );
+        return {
+          success: false,
+          targetTriple: this.targetInfo.triple,
+          diagnostics: this.diag.dapatkanPesanFormatted(),
+        };
+      }
+    }
+
+    if (options.libraryPaths && this.targetInfo.os === 'linux') {
+      const forbiddenArchMarker =
+        this.targetInfo.arch === 'aarch64' ? 'x86_64-linux-gnu' : this.targetInfo.arch === 'x86_64' ? 'aarch64-linux-gnu' : null;
+      if (forbiddenArchMarker) {
+        const wrongLibPath = options.libraryPaths.find((lp) => lp.includes(forbiddenArchMarker));
+        if (wrongLibPath) {
+          this.diag.galat(
+            'LIBRARY_TARGET_SALAH',
+            `Jalur library '${wrongLibPath}' milik arsitektur yang salah untuk target '${this.targetInfo.triple}'.`
+          );
+          return {
+            success: false,
+            targetTriple: this.targetInfo.triple,
+            diagnostics: this.diag.dapatkanPesanFormatted(),
+          };
+        }
+      }
+    }
+
     const tmpDir = safeFS.mkdtempSync(safePath.join(safeOS.tmpdir(), 'nusantara-static-link-'));
     const runtimeCPath = safePath.join(tmpDir, 'runtime.c');
 
@@ -142,8 +192,16 @@ export class StaticLinker {
       }
       args.push('-static'); // Flag static linking
 
-      if (options.sysroot && (!useCrossGcc || options.explicitSysrootOverride)) {
-        args.push(`--sysroot=${options.sysroot}`);
+      if (requestedSysroot && this.targetInfo.os === 'linux' && (!useCrossGcc || options.explicitSysrootOverride)) {
+        const validLinuxSysroot =
+          requestedSysroot === '/' ||
+          safeFS.existsSync(safePath.join(requestedSysroot, 'usr/include/stdio.h')) ||
+          safeFS.existsSync(safePath.join(requestedSysroot, 'include/stdio.h'));
+        if (validLinuxSysroot && requestedSysroot !== '/') {
+          args.push(`--sysroot=${requestedSysroot}`);
+        } else if (validLinuxSysroot && requestedSysroot === '/' && options.explicitSysrootOverride) {
+          args.push('--sysroot=/');
+        }
       }
 
       args.push(...options.objectFiles, runtimeCPath, '-o', options.outputExecutable);

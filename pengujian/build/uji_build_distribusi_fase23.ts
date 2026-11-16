@@ -12,7 +12,8 @@ import * as path from 'path';
 import { AOTCompiler } from '../../src/compiler/aot/aot-compiler';
 import { BinaryInspector } from '../../src/compiler/executable/binary-inspector';
 import { StandalonePackager } from '../../src/compiler/executable/standalone-packager';
-import { LLVMToolchainManager } from '../../src/compiler/llvm/toolchain-manager';
+import { DynamicLinker } from '../../src/compiler/linker/dynamic-linker';
+import { LLVMToolchainManager, LLVMToolchainStatus } from '../../src/compiler/llvm/toolchain-manager';
 import { LLVMValidator } from '../../src/compiler/llvm/llvm-validator';
 import { TargetTripleManager } from '../../src/compiler/llvm/target-triple';
 import { safeCP } from '../../src/compiler/llvm/node-compat';
@@ -365,9 +366,9 @@ uji('3.2 Kompilasi & eksekusi native end-to-end host saat ini (NUSANTARA_REQUIRE
   const cap = TargetMatrixManager.inspectTargetCapability(hostTarget);
 
   if (!cap.canBuildNative) {
-    if (requireClang) {
+    if (requireClang || cap.clangAvailable) {
       throw new Error(
-        `NUSANTARA_REQUIRE_CLANG=1 aktif, tetapi target host '${hostTarget}' tidak siap build native: ${cap.missingRequirements.join('; ')}`
+        `Toolchain host (${hostTarget}) gagal verifikasi build native (clangAvailable=${cap.clangAvailable}, requireClang=${requireClang}): ${cap.missingRequirements.join('; ')}`
       );
     }
     return 'BELUM_DIVERIFIKASI';
@@ -401,6 +402,77 @@ selesai
     pastikan(
       Boolean(res.executionStdout && res.executionStdout.includes('NUSANTARA_NATIVE_CI_OK') && res.executionStdout.includes('42')),
       `Stdout native tidak sesuai harapan: '${res.executionStdout}'`
+    );
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+uji('3.3 NativeBuildPipeline & DynamicLinker menolak sysroot tanpa stdio.h, tidak memakai /usr/lib/* sebagai sysroot, & menolak library arsitektur salah', () => {
+  const capLinux = TargetMatrixManager.inspectTargetCapability('linux-x86_64');
+  pastikan(
+    !capLinux.sysroot || (!capLinux.sysroot.includes('/usr/lib/') && !capLinux.sysroot.includes('/lib/')),
+    `sysroot Linux tidak boleh menunjuk subdirektori library (${capLinux.sysroot})`
+  );
+
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-sysroot-check-'));
+  try {
+    const fakeLibOnlySysroot = path.join(tmp, 'lib_only_sysroot');
+    fs.mkdirSync(fakeLibOnlySysroot, { recursive: true });
+
+    const invalidSysrootRes = NativeBuildPipeline.build({
+      sourceCode: 'program S\nmulai\ntampilkan("OK")\nselesai\n',
+      appName: 'uji_bad_sysroot',
+      target: 'linux-x86_64',
+      outputDirectory: path.join(tmp, 'out1'),
+      sysroot: fakeLibOnlySysroot,
+    });
+    pastikan(!invalidSysrootRes.success, 'Sysroot tanpa stdio.h wajib gagal secara eksplisit');
+    pastikan(
+      invalidSysrootRes.statusCode === 'GALAT_LINKER' || invalidSysrootRes.statusCode === 'CROSS_SDK_TIDAK_TERSEDIA',
+      `Status gagal harus eksplisit (aktual: ${invalidSysrootRes.statusCode})`
+    );
+    pastikan(!invalidSysrootRes.executablePath, 'Dilarang menghasilkan skrip shell fallback saat sysroot/runtime tidak valid');
+
+    const objFake = path.join(tmp, 'dummy.o');
+    fs.writeFileSync(objFake, Buffer.from([0x7f, 0x45, 0x4c, 0x46]));
+    const clangStub: LLVMToolchainStatus = {
+      available: true,
+      useOpaquePointers: true,
+      diagnostics: [],
+      binaries: {
+        clang: { name: 'clang', command: 'clang', found: true },
+        llc: { name: 'llc', command: 'llc', found: false },
+        opt: { name: 'opt', command: 'opt', found: false },
+        llvmAs: { name: 'llvm-as', command: 'llvm-as', found: false },
+        llvmDis: { name: 'llvm-dis', command: 'llvm-dis', found: false },
+        llvmObjdump: { name: 'llvm-objdump', command: 'llvm-objdump', found: false },
+        lld: { name: 'lld', command: 'ld.lld', found: true },
+      },
+    };
+    const dynArm = new DynamicLinker(clangStub, TargetTripleManager.resolve('aarch64-unknown-linux-gnu'));
+    const crossLibErr = dynArm.linkDynamic({
+      objectFiles: [objFake],
+      outputExecutable: path.join(tmp, 'out_arm64'),
+      libraryPaths: ['/usr/lib/x86_64-linux-gnu'],
+    });
+    pastikan(!crossLibErr.success, 'DynamicLinker wajib gagal jika diberi jalur library x86_64 untuk target aarch64');
+    pastikan(
+      crossLibErr.diagnostics.some((d) => d.includes('LIBRARY_TARGET_SALAH')),
+      `Wajib melaporkan kode LIBRARY_TARGET_SALAH (aktual: ${crossLibErr.diagnostics.join(' | ')})`
+    );
+
+    const dynBadSysroot = new DynamicLinker(clangStub, TargetTripleManager.resolve('x86_64-unknown-linux-gnu'));
+    const sysrootErr = dynBadSysroot.linkDynamic({
+      objectFiles: [objFake],
+      outputExecutable: path.join(tmp, 'out_x64'),
+      sysroot: fakeLibOnlySysroot,
+      explicitSysrootOverride: true,
+    });
+    pastikan(!sysrootErr.success, 'DynamicLinker wajib gagal jika explicit sysroot tidak memiliki stdio.h');
+    pastikan(
+      sysrootErr.diagnostics.some((d) => d.includes('SYSROOT_TIDAK_VALID')),
+      `Wajib melaporkan kode SYSROOT_TIDAK_VALID (aktual: ${sysrootErr.diagnostics.join(' | ')})`
     );
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });

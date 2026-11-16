@@ -96,6 +96,58 @@ export class DynamicLinker {
       };
     }
 
+    const requestedSysroot = options.sysroot?.trim();
+    if (requestedSysroot && this.targetInfo.os === 'linux') {
+      if (!safeFS.existsSync(requestedSysroot)) {
+        this.diag.galat(
+          'SYSROOT_TIDAK_DITEMUKAN',
+          `Direktori sysroot target '${this.targetInfo.triple}' tidak ditemukan: ${requestedSysroot}`
+        );
+        return {
+          success: false,
+          targetTriple: this.targetInfo.triple,
+          diagnostics: this.diag.dapatkanPesanFormatted(),
+        };
+      }
+
+      const isRootFsSysroot = requestedSysroot === '/';
+      const hasStdioInSysroot = isRootFsSysroot
+        ? safeFS.existsSync('/usr/include/stdio.h') || safeFS.existsSync('/usr/local/include/stdio.h')
+        : safeFS.existsSync(safePath.join(requestedSysroot, 'usr/include/stdio.h')) ||
+          safeFS.existsSync(safePath.join(requestedSysroot, 'include/stdio.h'));
+
+      if (!hasStdioInSysroot && options.explicitSysrootOverride) {
+        this.diag.galat(
+          'SYSROOT_TIDAK_VALID',
+          `Sysroot '${requestedSysroot}' tidak memiliki header standar C (usr/include/stdio.h atau include/stdio.h) untuk target '${this.targetInfo.triple}'. Pastikan Anda menunjuk root sysroot (misalnya '/' atau '/usr/aarch64-linux-gnu'), bukan subdirektori '/usr/lib/...'.`
+        );
+        return {
+          success: false,
+          targetTriple: this.targetInfo.triple,
+          diagnostics: this.diag.dapatkanPesanFormatted(),
+        };
+      }
+    }
+
+    if (options.libraryPaths && this.targetInfo.os === 'linux') {
+      const forbiddenArchMarker =
+        this.targetInfo.arch === 'aarch64' ? 'x86_64-linux-gnu' : this.targetInfo.arch === 'x86_64' ? 'aarch64-linux-gnu' : null;
+      if (forbiddenArchMarker) {
+        const wrongLibPath = options.libraryPaths.find((lp) => lp.includes(forbiddenArchMarker));
+        if (wrongLibPath) {
+          this.diag.galat(
+            'LIBRARY_TARGET_SALAH',
+            `Jalur library '${wrongLibPath}' milik arsitektur yang salah untuk target '${this.targetInfo.triple}'.`
+          );
+          return {
+            success: false,
+            targetTriple: this.targetInfo.triple,
+            diagnostics: this.diag.dapatkanPesanFormatted(),
+          };
+        }
+      }
+    }
+
     const tmpDir = safeFS.mkdtempSync(safePath.join(safeOS.tmpdir(), 'nusantara-dynamic-link-'));
     const runtimeCPath = safePath.join(tmpDir, 'runtime.c');
 
@@ -116,11 +168,19 @@ export class DynamicLinker {
       }
       args.push(...options.objectFiles);
 
-      if (options.sysroot && (!useCrossGcc || options.explicitSysrootOverride)) {
+      if (requestedSysroot && (!useCrossGcc || options.explicitSysrootOverride)) {
         if (this.targetInfo.os === 'darwin') {
-          args.push('-isysroot', options.sysroot);
-        } else {
-          args.push(`--sysroot=${options.sysroot}`);
+          args.push('-isysroot', requestedSysroot);
+        } else if (this.targetInfo.os === 'linux') {
+          const validLinuxSysroot =
+            requestedSysroot === '/' ||
+            safeFS.existsSync(safePath.join(requestedSysroot, 'usr/include/stdio.h')) ||
+            safeFS.existsSync(safePath.join(requestedSysroot, 'include/stdio.h'));
+          if (validLinuxSysroot && requestedSysroot !== '/') {
+            args.push(`--sysroot=${requestedSysroot}`);
+          } else if (validLinuxSysroot && requestedSysroot === '/' && options.explicitSysrootOverride) {
+            args.push('--sysroot=/');
+          }
         }
       }
 
@@ -196,9 +256,19 @@ export class DynamicLinker {
         };
       } else {
         const errMsg = stderrText || stdoutText || `exit code=${res.status}`;
+        let hint = '';
+        if (/stdio\.h.*not found/i.test(errMsg) || /stdlib\.h.*not found/i.test(errMsg)) {
+          hint =
+            " [Saran: Header C standar ('stdio.h') tidak ditemukan. Pada Ubuntu/Debian pasang 'build-essential libc6-dev', dan pastikan --sysroot tidak menunjuk direktori /usr/lib/*]";
+        } else if (/crt1\.o|Scrt1\.o|cannot find -lc/i.test(errMsg)) {
+          hint =
+            " [Saran: C runtime/libc target belum terpasang atau sysroot salah. Pasang 'libc6-dev' (host) atau 'libc6-dev-arm64-cross' (ARM64)]";
+        } else if (/skipping incompatible|incompatible target/i.test(errMsg)) {
+          hint = ` [Saran: Library yang ditautkan berasal dari arsitektur yang tidak cocok dengan '${this.targetInfo.triple}']`;
+        }
         this.diag.galat(
           'DYNAMIC_LINK_GAGAL',
-          `Dynamic linking gagal untuk target '${this.targetInfo.triple}' (exit=${res.status}): ${errMsg}`
+          `Dynamic linking gagal untuk target '${this.targetInfo.triple}' (exit=${res.status}): ${errMsg}${hint}`
         );
         return {
           success: false,

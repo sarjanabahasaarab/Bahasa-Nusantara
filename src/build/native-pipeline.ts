@@ -157,12 +157,62 @@ export class NativeBuildPipeline {
       };
     }
 
-    // Tahap 3: Cek ketersediaan toolchain & SDK untuk target ini
-    if (!capability.canBuildNative) {
+    // Tahap 3: Cek validitas sysroot kustom (jika diberikan) serta ketersediaan toolchain & C runtime target
+    if (options.sysroot) {
+      if (!safeFS.existsSync(options.sysroot)) {
+        diagnostics.push(`Sysroot kustom tidak ditemukan: ${options.sysroot}`);
+        return {
+          success: false,
+          statusCode: 'CROSS_SDK_TIDAK_TERSEDIA',
+          target: canonicalTarget,
+          canonicalTarget,
+          triple: targetInfo.triple,
+          isCross: targetInfo.isCross,
+          linkingMode,
+          actualStaticLink: false,
+          llvmIRPath: llPath,
+          llvmIRSha256,
+          llvmValidationTool: irRes.llvmValidationTool,
+          executedOnHost: false,
+          executionMode: 'not-executed',
+          diagnostics,
+        };
+      }
+      if (targetInfo.os === 'linux') {
+        const hasSysrootStdio =
+          options.sysroot === '/'
+            ? safeFS.existsSync('/usr/include/stdio.h') || safeFS.existsSync('/usr/local/include/stdio.h')
+            : safeFS.existsSync(safePath.join(options.sysroot, 'usr/include/stdio.h')) ||
+              safeFS.existsSync(safePath.join(options.sysroot, 'include/stdio.h'));
+        if (!hasSysrootStdio) {
+          diagnostics.push(
+            `Sysroot Linux '${options.sysroot}' tidak memuat header standar C (stdio.h) untuk target '${targetInfo.triple}'.`
+          );
+          return {
+            success: false,
+            statusCode: 'GALAT_LINKER',
+            target: canonicalTarget,
+            canonicalTarget,
+            triple: targetInfo.triple,
+            isCross: targetInfo.isCross,
+            linkingMode,
+            actualStaticLink: false,
+            llvmIRPath: llPath,
+            llvmIRSha256,
+            llvmValidationTool: irRes.llvmValidationTool,
+            executedOnHost: false,
+            executionMode: 'not-executed',
+            diagnostics,
+          };
+        }
+      }
+    }
+
+    if (!capability.canBuildNative && !options.sysroot) {
       const statusCode =
         !toolchain.available || (!capability.clangAvailable && !capability.llcAvailable)
           ? 'TOOLCHAIN_TIDAK_TERSEDIA'
-          : targetInfo.isCross
+          : targetInfo.isCross || capability.sdkAvailable === false
           ? 'CROSS_SDK_TIDAK_TERSEDIA'
           : 'TOOLCHAIN_TIDAK_TERSEDIA';
 

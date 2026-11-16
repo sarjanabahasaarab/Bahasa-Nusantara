@@ -79,6 +79,37 @@ jobs:
           npm ci
           node -e "import { createRequire } from 'module'; const r = createRequire(import.meta.url); const map = { 'win32-x64': '@rolldown/binding-win32-x64-msvc', 'win32-arm64': '@rolldown/binding-win32-arm64-msvc', 'darwin-arm64': '@rolldown/binding-darwin-arm64', 'darwin-x64': '@rolldown/binding-darwin-x64', 'linux-arm64': '@rolldown/binding-linux-arm64-gnu', 'linux-x64': '@rolldown/binding-linux-x64-gnu' }; const k = process.platform + '-' + process.arch; const pkg = map[k]; if (pkg) { console.log('[OK] Binding native terpasang:', pkg, '->', r.resolve(pkg + '/package.json')); } console.log('[OK] Rolldown entry:', r.resolve('rolldown/package.json'));"
 
+      - name: Pasang Dependensi C Runtime & Toolchain Native (Ubuntu)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends build-essential libc6-dev clang lld llvm binutils
+
+      - name: Verifikasi Header stdio.h, Clang, Linker LLD & Kompilasi C Sederhana (Ubuntu)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          clang --version
+          ld.lld --version
+          ls -la /usr/include/stdio.h
+          TMP_C_DIR=$(mktemp -d)
+          cat <<'EOF' > "$TMP_C_DIR/probe.c"
+          #include <stdio.h>
+          int main(void) {
+            puts("NUSANTARA_UBUNTU_C_RUNTIME_OK");
+            return 0;
+          }
+          EOF
+          clang "$TMP_C_DIR/probe.c" -o "$TMP_C_DIR/probe_clang"
+          OUT_CLANG=$("$TMP_C_DIR/probe_clang")
+          echo "$OUT_CLANG" | grep -Fx "NUSANTARA_UBUNTU_C_RUNTIME_OK"
+          clang -fuse-ld=lld "$TMP_C_DIR/probe.c" -o "$TMP_C_DIR/probe_lld"
+          OUT_LLD=$("$TMP_C_DIR/probe_lld")
+          echo "$OUT_LLD" | grep -Fx "NUSANTARA_UBUNTU_C_RUNTIME_OK"
+          rm -rf "$TMP_C_DIR"
+          echo "[OK] Header stdio.h, glibc, clang, dan ld.lld terverifikasi end-to-end."
+
       - name: Uji Khusus Phase 29 SQLite Native & Browser Fallback Lintas Platform
         shell: bash
         run: |
@@ -191,11 +222,13 @@ jobs:
             sudo apt-get update -y
             if [ "${{ matrix.target }}" = "linux-arm64" ]; then
               if [ "$HOST_ARCH" = "aarch64" ] || [ "$HOST_ARCH" = "arm64" ]; then
-                echo "[INFO] Host berjalan native ARM64 ($HOST_ARCH); memasang toolchain Linux ARM64 native tanpa QEMU."
-                sudo apt-get install -y clang lld llvm binutils
+                echo "[INFO] Host berjalan native ARM64 ($HOST_ARCH); memasang toolchain C runtime & LLVM Linux ARM64 native."
+                sudo apt-get install -y --no-install-recommends build-essential libc6-dev clang lld llvm binutils
+                ld.lld --version
+                test -f /usr/include/stdio.h
               else
                 echo "[INFO] Host $HOST_ARCH melakukan cross-build linux-arm64; memisahkan compiler cross-build dari emulator user-mode."
-                sudo apt-get install -y clang lld llvm gcc-aarch64-linux-gnu libc6-dev-arm64-cross binutils
+                sudo apt-get install -y --no-install-recommends build-essential libc6-dev clang lld llvm gcc-aarch64-linux-gnu libc6-dev-arm64-cross binutils
                 QEMU_INSTALLED=0
                 for pkg in qemu-user qemu-user-static; do
                   CAND=$(apt-cache policy "$pkg" 2>/dev/null | awk '/Candidate:/ {print $2}')
@@ -219,10 +252,18 @@ jobs:
                 echo "[OK] Emulator QEMU ARM64 terdeteksi: $QEMU_BIN"
                 "$QEMU_BIN" --version
                 aarch64-linux-gnu-gcc --version
+                ld.lld --version
               fi
             else
-              sudo apt-get install -y clang lld llvm binutils
+              sudo apt-get install -y --no-install-recommends build-essential libc6-dev clang lld llvm binutils
+              ld.lld --version
+              test -f /usr/include/stdio.h
             fi
+            TMP_M_DIR=$(mktemp -d)
+            printf '#include <stdio.h>\nint main(void){puts("NUSANTARA_MATRIX_C_OK");return 0;}\n' > "$TMP_M_DIR/probe.c"
+            clang -fuse-ld=lld "$TMP_M_DIR/probe.c" -o "$TMP_M_DIR/probe_host"
+            "$TMP_M_DIR/probe_host" | grep -Fx "NUSANTARA_MATRIX_C_OK"
+            rm -rf "$TMP_M_DIR"
           elif [ "${{ runner.os }}" = "Windows" ]; then
             if ! command -v clang >/dev/null 2>&1; then
               for cand_dir in \
@@ -371,6 +412,11 @@ jobs:
       - name: Agregasi, Validasi Integritas SHA-256/Biner & Gerbang Sertifikasi Phase 23.2
         id: certify
         run: |
+          if [ "${{ needs.build-matrix-validation.result }}" = "skipped" ]; then
+            echo "[DIAGNOSTIK CI] Job 'build-matrix-validation' berstatus SKIPPED karena prasyarat hulu (static-checks / test-suite / quality-gate) gagal."
+            echo "### Diagnostik Prasyarat CI" >> "$GITHUB_STEP_SUMMARY"
+            echo "Job \`build-matrix-validation\` dilewati karena job prasyarat sebelumnya gagal, sehingga evidence 6 target belum tersedia untuk sertifikasi." >> "$GITHUB_STEP_SUMMARY"
+          fi
           mkdir -p artifacts/phase23
           set +e
           npx tsx scripts/phase23-certify.ts aggregate \
@@ -405,15 +451,23 @@ jobs:
     steps:
       - name: Buat Laporan Ringkasan CI Resmi
         run: |
-          echo "## 🇮🇩 NUSANTARA CI SUMMARY (v0.24.0 + Phase 23.2)" >> $GITHUB_STEP_SUMMARY
+          echo "## 🇮🇩 NUSANTARA CI SUMMARY (v0.24.0 + Phase 23.8)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Tahapan Alur Kerja | Status | Runner Host | Keterangan |" >> $GITHUB_STEP_SUMMARY
           echo "| :--- | :---: | :--- | :--- |" >> $GITHUB_STEP_SUMMARY
-          echo "| Pemeriksaan Statis (Lint/TSC) | ${{ needs.static-checks.result == 'success' && 'PASS' || 'FAIL' }} | ubuntu-latest | Validasi sintaks dan tipe TypeScript |" >> $GITHUB_STEP_SUMMARY
-          echo "| Rangkaian Uji Otomatis | ${{ needs.test-suite.result == 'success' && 'PASS' || 'FAIL' }} | Ubuntu, Windows, macOS | Seluruh unit, integrasi, dan stdlib |" >> $GITHUB_STEP_SUMMARY
-          echo "| Gerbang Kualitas (Quality Gate) | ${{ needs.quality-gate.result == 'success' && 'PASS' || 'FAIL' }} | ubuntu-latest | Ambang batas kualitas dan regresi |" >> $GITHUB_STEP_SUMMARY
-          echo "| Matriks Build 6 Target Desktop | ${{ needs.build-matrix-validation.result == 'success' && 'SELESAI' || 'GAGAL/TIDAK LENGKAP' }} | Multi-OS Matrix | Eksekusi per-target menghasilkan JSON evidence terpisah |" >> $GITHUB_STEP_SUMMARY
+          echo "| Pemeriksaan Statis (Lint/TSC) | ${{ needs.static-checks.result }} | ubuntu-latest | Validasi sintaks dan tipe TypeScript |" >> $GITHUB_STEP_SUMMARY
+          echo "| Rangkaian Uji Otomatis | ${{ needs.test-suite.result }} | Ubuntu, Windows, macOS | Seluruh unit, integrasi, stdlib & C runtime |" >> $GITHUB_STEP_SUMMARY
+          echo "| Gerbang Kualitas (Quality Gate) | ${{ needs.quality-gate.result }} | ubuntu-latest | Ambang batas kualitas dan regresi |" >> $GITHUB_STEP_SUMMARY
+          echo "| Matriks Build 6 Target Desktop | ${{ needs.build-matrix-validation.result }} | Multi-OS Matrix | Eksekusi per-target menghasilkan JSON evidence terpisah |" >> $GITHUB_STEP_SUMMARY
           echo "| Gerbang Sertifikasi 6 Target (Phase 23.2) | ${{ needs.phase23-certification-gate.result == 'success' && 'CERTIFIED (6/6 PASS)' || 'PARTIAL / FAILED (Belum CERTIFIED)' }} | ubuntu-latest | Wajib 6/6 target PASS + SHA-256 & header biner sah |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.quality-gate.result }}" = "skipped" ] || [ "${{ needs.build-matrix-validation.result }}" = "skipped" ]; then
+            echo "### Diagnostik Prasyarat yang Dilewati (Skipped)" >> $GITHUB_STEP_SUMMARY
+            echo "- \`static-checks\`: \`${{ needs.static-checks.result }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`test-suite\`: \`${{ needs.test-suite.result }}\` (membutuhkan \`static-checks\` berhasil)" >> $GITHUB_STEP_SUMMARY
+            echo "- \`quality-gate\`: \`${{ needs.quality-gate.result }}\` (membutuhkan \`static-checks\` & \`test-suite\` berhasil)" >> $GITHUB_STEP_SUMMARY
+            echo "- \`build-matrix-validation\`: \`${{ needs.build-matrix-validation.result }}\` (membutuhkan \`quality-gate\` berhasil)" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "**Status Release**: \`NOT PUBLISHED\` (CI Pipeline tidak mempublikasikan rilis publik)." >> $GITHUB_STEP_SUMMARY
 

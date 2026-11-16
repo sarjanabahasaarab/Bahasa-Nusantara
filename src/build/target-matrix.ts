@@ -154,12 +154,17 @@ export class TargetMatrixManager {
             : `Target host '${canonical}' belum siap: ${missing.join(' ')}`,
         };
       } else {
-        const linuxCandidates =
-          info.arch === 'aarch64'
-            ? ['/usr/lib/aarch64-linux-gnu', '/lib/aarch64-linux-gnu', '/']
-            : ['/usr/lib/x86_64-linux-gnu', '/lib/x86_64-linux-gnu', '/'];
-        nativeSysroot = linuxCandidates.find((p) => safeFS.existsSync(p));
-        nativeSdkAvailable = Boolean(nativeSysroot) && clangAvailable;
+        const sdkCheck = this.detectLinuxHostSdk(
+          info.arch === 'aarch64' ? 'aarch64' : 'x86_64',
+          clangAvailable ? toolchain.binaries.clang.command : undefined,
+          info.triple
+        );
+        nativeSysroot = sdkCheck.sysroot;
+        nativeSdkName = sdkCheck.sdkName;
+        nativeSdkAvailable = sdkCheck.ok;
+        if (!sdkCheck.ok) {
+          missing.push(...sdkCheck.missing);
+        }
       }
 
       const canBuild = missing.length === 0;
@@ -199,11 +204,13 @@ export class TargetMatrixManager {
 
     if (info.os === 'linux' && info.arch === 'x86_64' && hostPlatform === 'linux' && hostArch === 'aarch64') {
       const hasX64Gcc = this.binaryExists('x86_64-linux-gnu-gcc');
-      const hasSysroot = safeFS.existsSync('/usr/x86_64-linux-gnu');
+      const hasSysroot =
+        safeFS.existsSync('/usr/x86_64-linux-gnu/include/stdio.h') ||
+        safeFS.existsSync('/usr/x86_64-linux-gnu/usr/include/stdio.h');
       const hasQemu = this.binaryExists('qemu-x86_64-static') || this.binaryExists('qemu-x86_64');
       const missing: string[] = [];
       if (!clangAvailable && !hasX64Gcc) missing.push('clang / x86_64-linux-gnu-gcc');
-      if (!hasSysroot) missing.push('libc6-dev-amd64-cross');
+      if (!hasSysroot) missing.push('libc6-dev-amd64-cross (/usr/x86_64-linux-gnu dengan include/stdio.h)');
       const canBuild = missing.length === 0 && (llcAvailable || clangAvailable);
       return {
         input: rawTarget || canonical,
@@ -352,8 +359,17 @@ export class TargetMatrixManager {
     const lldAvailable = toolchain.binaries.lld.found;
 
     const hasAarch64Gcc = this.binaryExists('aarch64-linux-gnu-gcc');
-    const sysrootCandidates = ['/usr/aarch64-linux-gnu', '/usr/lib/aarch64-linux-gnu'];
-    const foundSysroot = sysrootCandidates.find((p) => safeFS.existsSync(p));
+    const sysrootCandidates = ['/usr/aarch64-linux-gnu'];
+    const foundSysroot = sysrootCandidates.find(
+      (p) => safeFS.existsSync(`${p}/include/stdio.h`) || safeFS.existsSync(`${p}/usr/include/stdio.h`)
+    );
+    const hasCrossCrt = Boolean(
+      foundSysroot &&
+        (safeFS.existsSync(`${foundSysroot}/lib/crt1.o`) ||
+          safeFS.existsSync(`${foundSysroot}/lib/Scrt1.o`) ||
+          safeFS.existsSync(`${foundSysroot}/usr/lib/crt1.o`) ||
+          safeFS.existsSync('/usr/aarch64-linux-gnu/lib/libc.so'))
+    );
     const hasQemu = this.binaryExists('qemu-aarch64-static') || this.binaryExists('qemu-aarch64');
     const emulatorCmd = this.binaryExists('qemu-aarch64-static')
       ? 'qemu-aarch64-static'
@@ -368,8 +384,8 @@ export class TargetMatrixManager {
     if (!hasAarch64Gcc && !(clangAvailable && lldAvailable && foundSysroot)) {
       missing.push('gcc-aarch64-linux-gnu atau clang+lld+sysroot ARM64 tidak ditemukan.');
     }
-    if (!foundSysroot) {
-      missing.push('libc6-dev-arm64-cross (/usr/aarch64-linux-gnu) tidak ditemukan.');
+    if (!foundSysroot || !hasCrossCrt) {
+      missing.push('libc6-dev-arm64-cross (/usr/aarch64-linux-gnu/include/stdio.h & CRT) tidak ditemukan.');
     }
 
     const canBuild = missing.length === 0;
@@ -406,6 +422,120 @@ export class TargetMatrixManager {
         ? `Cross-build '${canonical}' siap (${hasQemu ? `eksekusi via ${emulatorCmd}` : 'tanpa emulator qemu-user'}).`
         : `Cross-build '${canonical}' belum siap: ${missing.join(' ')}`,
     };
+  }
+
+  private static detectLinuxHostSdk(
+    linuxArch: 'x86_64' | 'aarch64',
+    clangCmd?: string,
+    triple?: string
+  ): { ok: boolean; sysroot?: string; sdkName: string; missing: string[] } {
+    const gnuTriple = linuxArch === 'aarch64' ? 'aarch64-linux-gnu' : 'x86_64-linux-gnu';
+    const sdkName = `GNU/glibc ${linuxArch} (libc6-dev)`;
+    if (process.platform !== 'linux') {
+      return { ok: false, sdkName, missing: ['Bukan host Linux.'] };
+    }
+
+    const headerCandidates = [
+      '/usr/include/stdio.h',
+      `/usr/include/${gnuTriple}/stdio.h`,
+      '/usr/local/include/stdio.h',
+    ];
+    const foundHeader = headerCandidates.find((p) => safeFS.existsSync(p));
+
+    const libDirCandidates = [
+      `/usr/lib/${gnuTriple}`,
+      `/lib/${gnuTriple}`,
+      '/usr/lib64',
+      '/lib64',
+      '/usr/lib',
+    ];
+    const foundCrtDir = libDirCandidates.find(
+      (dir) =>
+        safeFS.existsSync(`${dir}/crt1.o`) ||
+        safeFS.existsSync(`${dir}/Scrt1.o`) ||
+        safeFS.existsSync(`${dir}/libc.so`) ||
+        safeFS.existsSync(`${dir}/libc.a`)
+    );
+
+    const missing: string[] = [];
+    if (!foundHeader) {
+      missing.push("Header standar C 'stdio.h' tidak ditemukan (pasang build-essential & libc6-dev).");
+    }
+    if (!foundCrtDir) {
+      missing.push(`C runtime startup/libc (${gnuTriple}: crt1.o/libc.so) tidak ditemukan (pasang libc6-dev).`);
+    }
+    if (missing.length > 0) {
+      return {
+        ok: false,
+        sysroot: safeFS.existsSync('/usr/include/stdio.h') ? '/' : undefined,
+        sdkName,
+        missing,
+      };
+    }
+
+    if (clangCmd && triple) {
+      const probe = this.probeLinuxCompileLink(clangCmd, triple, linuxArch);
+      if (!probe.ok) {
+        return {
+          ok: false,
+          sysroot: '/',
+          sdkName,
+          missing: [`Probe compile/link C runtime Linux (${triple}) gagal: ${probe.reason}`],
+        };
+      }
+    }
+
+    return {
+      ok: true,
+      sysroot: '/',
+      sdkName,
+      missing: [],
+    };
+  }
+
+  private static probeLinuxCompileLink(
+    clangCmd: string,
+    triple: string,
+    expectedArch: 'x86_64' | 'aarch64'
+  ): { ok: boolean; reason?: string } {
+    const tmpDir = safeFS.mkdtempSync(safePath.join(os.tmpdir(), 'nusa-linux-probe-'));
+    try {
+      const cFile = safePath.join(tmpDir, 'probe.c');
+      const exeFile = safePath.join(tmpDir, 'probe_bin');
+      safeFS.writeFileSync(
+        cFile,
+        '#include <stdio.h>\nint main(void){puts("NUSANTARA_C_PROBE_OK");return 0;}\n',
+        'utf-8'
+      );
+      const args = ['-target', triple, cFile, '-o', exeFile];
+      const res = safeCP.spawnSync(clangCmd, args, { encoding: 'utf-8', timeout: 20000, shell: false });
+      if (res.status !== 0 || !safeFS.existsSync(exeFile)) {
+        return { ok: false, reason: (res.stderr || res.stdout || `exit=${res.status}`).trim() };
+      }
+      const meta = BinaryInspector.inspectStrict(exeFile);
+      if (!meta.isValidExecutable || meta.format !== 'ELF' || meta.architecture !== expectedArch) {
+        return {
+          ok: false,
+          reason: `Output probe bukan ELF ${expectedArch} valid (format=${meta.format}, arch=${meta.architecture}).`,
+        };
+      }
+      const execRes = safeCP.spawnSync(exeFile, [], { encoding: 'utf-8', timeout: 10000, shell: false });
+      if (execRes.status !== 0 || !(execRes.stdout || '').includes('NUSANTARA_C_PROBE_OK')) {
+        return {
+          ok: false,
+          reason: `Eksekusi binary probe C gagal (exit=${execRes.status}): ${(execRes.stderr || execRes.stdout || '').trim()}`,
+        };
+      }
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, reason: err?.message || String(err) };
+    } finally {
+      try {
+        safeFS.rmSync(tmpDir, { recursive: true, force: true });
+      } catch {
+        // abaikan
+      }
+    }
   }
 
   private static detectWindowsHostSdk(

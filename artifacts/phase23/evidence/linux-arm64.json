@@ -1,7 +1,7 @@
 {
   "schemaVersion": "2.0",
   "phase": "Phase 23",
-  "generatedAt": "2026-11-16T22:45:25.722Z",
+  "generatedAt": "2026-11-16T23:03:37.423Z",
   "target": "linux-arm64",
   "targetTriple": "aarch64-unknown-linux-gnu",
   "triple": "aarch64-unknown-linux-gnu",
@@ -34,7 +34,7 @@
     "linkerProbeVerified": false,
     "missingRequirements": [
       "llvm / clang (objek generator) tidak tersedia.",
-      "libc6-dev-arm64-cross (/usr/aarch64-linux-gnu) tidak ditemukan."
+      "libc6-dev-arm64-cross (/usr/aarch64-linux-gnu/include/stdio.h & CRT) tidak ditemukan."
     ]
   },
   "llvmIR": {
@@ -73,9 +73,9 @@
   "verificationStatus": "NOT_VERIFIED",
   "status": "NOT_VERIFIED",
   "statusCode": "TOOLCHAIN_TIDAK_TERSEDIA",
-  "reason": "Target 'linux-arm64' belum dapat diverifikasi pada host ini: llvm / clang (objek generator) tidak tersedia.; libc6-dev-arm64-cross (/usr/aarch64-linux-gnu) tidak ditemukan.",
+  "reason": "Target 'linux-arm64' belum dapat diverifikasi pada host ini: llvm / clang (objek generator) tidak tersedia.; libc6-dev-arm64-cross (/usr/aarch64-linux-gnu/include/stdio.h & CRT) tidak ditemukan.",
   "diagnostics": [
-    "[TIDAK TERSEDIA: TOOLCHAIN_TIDAK_TERSEDIA] Cross-build 'linux-arm64' belum siap: llvm / clang (objek generator) tidak tersedia. libc6-dev-arm64-cross (/usr/aarch64-linux-gnu) tidak ditemukan.",
-    "Persyaratan hilang: llvm / clang (objek generator) tidak tersedia.; libc6-dev-arm64-cross (/usr/aarch64-linux-gnu) tidak ditemukan."
+    "[TIDAK TERSEDIA: TOOLCHAIN_TIDAK_TERSEDIA] Cross-build 'linux-arm64' belum siap: llvm / clang (objek generator) tidak tersedia. libc6-dev-arm64-cross (/usr/aarch64-linux-gnu/include/stdio.h & CRT) tidak ditemukan.",
+    "Persyaratan hilang: llvm / clang (objek generator) tidak tersedia.; libc6-dev-arm64-cross (/usr/aarch64-linux-gnu/include/stdio.h & CRT) tidak ditemukan."
   ]
 }
