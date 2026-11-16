@@ -851,9 +851,9 @@ uji('6.3 Perintah CLI "nusantara info --json" memuat 6 target kanonik resmi', ()
 });
 
 // -----------------------------------------------------------------------------
-// GRUP 7: PHASE 23.2 SIX-TARGET CERTIFICATION AGGREGATION GATE
+// GRUP 7: PHASE 23.7 SIX-TARGET CERTIFICATION AGGREGATION & DISTRIBUTION GATE
 // -----------------------------------------------------------------------------
-console.log('\n[GRUP 7] Gerbang Sertifikasi 6 Target Desktop (Phase 23.2)');
+console.log('\n[GRUP 7] Gerbang Sertifikasi 6 Target Desktop & Audit Distribusi (Phase 23.7)');
 
 function createValidEvidenceFixture(
   bundleDir: string,
@@ -863,40 +863,93 @@ function createValidEvidenceFixture(
   const artDir = path.join(bundleDir, 'artifacts', target);
   fs.mkdirSync(artDir, { recursive: true });
 
+  const triple = TargetTripleManager.resolve(target).triple;
   const llFile = path.join(artDir, 'app.ll');
   const objFile = path.join(artDir, target.startsWith('windows') ? 'app.obj' : 'app.o');
   const exeFile = path.join(artDir, target.startsWith('windows') ? 'app.exe' : 'app');
+  const arcFile = path.join(artDir, target.startsWith('windows') ? `app-${target}.zip` : `app-${target}.tar.gz`);
 
-  fs.writeFileSync(llFile, '; valid ir\n', 'utf-8');
-  fs.writeFileSync(objFile, Buffer.from([1, 2, 3, 4]));
+  fs.writeFileSync(llFile, `; valid ir for ${target} (${triple})\ntarget triple = "${triple}"\n`, 'utf-8');
+  const objBytes = Buffer.concat([Buffer.from([0x7f, 0x4f, 0x42, 0x4a]), Buffer.from(target, 'utf-8')]);
+  fs.writeFileSync(objFile, objBytes);
 
   const arch = target.endsWith('arm64') ? 'aarch64' : 'x86_64';
   const format = target.startsWith('windows') ? 'COFF' : target.startsWith('macos') ? 'Mach-O' : 'ELF';
-  const binBytes =
+  const rawBin =
     format === 'COFF'
       ? buildMinimalPe32Plus(arch)
       : format === 'Mach-O'
       ? buildMinimalMachO64(arch)
       : buildMinimalElf64(arch);
+  // Sisipkan penanda unik per target pada tail biner agar hash SHA-256 setiap target berbeda
+  const binBytes = Buffer.concat([rawBin, Buffer.from(`NUSA_FIXTURE_${target}_${triple}`, 'utf-8')]);
   fs.writeFileSync(exeFile, binBytes);
 
+  const arcBytes = target.startsWith('windows')
+    ? ArchiveBuilder.createZip([{ name: `app-${target}/bin/app.exe`, content: binBytes, mode: 0o755 }], { reproducible: true })
+    : ArchiveBuilder.createTarGz([{ name: `app-${target}/bin/app`, content: binBytes, mode: 0o755 }], { reproducible: true });
+  fs.writeFileSync(arcFile, arcBytes);
+
+  const llSha = ArchiveBuilder.computeSha256(fs.readFileSync(llFile));
+  const objSha = ArchiveBuilder.computeSha256(objBytes);
+  const binSha = ArchiveBuilder.computeSha256(binBytes);
+  const arcSha = ArchiveBuilder.computeSha256(arcBytes);
+
+  const llRel = `artifacts/${target}/app.ll`;
+  const objRel = `artifacts/${target}/${path.basename(objFile)}`;
+  const exeRel = `artifacts/${target}/${path.basename(exeFile)}`;
+  const arcRel = `artifacts/${target}/${path.basename(arcFile)}`;
+
+  const isRosetta = target === 'macos-x86_64';
+  const hostOS = target.startsWith('windows') ? 'windows' : target.startsWith('macos') ? 'darwin' : 'linux';
+  const hostArchitecture = isRosetta ? 'aarch64' : arch;
+  const executionMode = isRosetta ? 'rosetta2' : 'native';
+  const status: 'PASS' | 'NOT_VERIFIED' | 'FAIL' = overrideStatus || 'PASS';
+
   return {
-    schemaVersion: '1.0',
-    generatedAt: '2026-11-15T00:00:00.000Z',
+    schemaVersion: '2.0',
+    phase: 'Phase 23',
+    generatedAt: '2026-11-16T00:00:00.000Z',
     target,
-    triple: TargetTripleManager.resolve(target).triple,
-    hostOs: 'linux',
-    hostArch: 'x64',
-    recommendedRunner: 'runner',
-    isCross: false,
-    compiler: { name: 'clang', available: true, version: 'clang 18.0' },
-    linker: { name: 'clang', lldAvailable: true },
+    targetTriple: triple,
+    triple,
+    hostOS,
+    hostOs: hostOS === 'windows' ? 'win32' : hostOS,
+    hostArchitecture,
+    hostArch: hostArchitecture === 'aarch64' ? 'arm64' : 'x64',
+    recommendedRunner:
+      target === 'windows-x86_64'
+        ? 'windows-latest'
+        : target === 'windows-arm64'
+        ? 'windows-11-arm'
+        : target === 'linux-x86_64'
+        ? 'ubuntu-latest'
+        : target === 'linux-arm64'
+        ? 'ubuntu-24.04-arm'
+        : 'macos-latest',
+    isCross: isRosetta,
+    compiler: 'clang',
+    compilerVersion: 'clang version 18.1.8',
+    compilerDetails: { name: 'clang', available: true, version: 'clang version 18.1.8' },
+    linker: format === 'COFF' ? 'lld-link' : format === 'Mach-O' ? 'ld' : 'lld',
+    linkerVersion: 'LLD 18.1.8',
+    linkerDetails: { name: format === 'COFF' ? 'lld-link' : 'lld', lldAvailable: true, version: 'LLD 18.1.8' },
+    sysroot: hostOS === 'darwin' ? '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk' : '/usr/lib',
+    emulator: isRosetta
+      ? { used: true, command: 'arch -x86_64', version: 'Rosetta 2' }
+      : { used: false },
     sdk: { name: 'SDK', available: true, linkerProbeVerified: true, missingRequirements: [] },
-    llvmIR: { path: `artifacts/${target}/app.ll`, sha256: ArchiveBuilder.computeSha256(fs.readFileSync(llFile)) },
-    objectFile: { path: `artifacts/${target}/${path.basename(objFile)}`, sha256: ArchiveBuilder.computeSha256(fs.readFileSync(objFile)) },
+    llvmIR: { path: llRel, sha256: llSha },
+    objectFile: { path: objRel, sha256: objSha },
+    objectFiles: [objRel],
+    objectHashes: { [objRel]: objSha },
+    binaryPath: exeRel,
+    binaryFormat: format,
+    binaryArchitecture: arch,
+    binarySha256: binSha,
     executable: {
-      path: `artifacts/${target}/${path.basename(exeFile)}`,
-      sha256: ArchiveBuilder.computeSha256(binBytes),
+      path: exeRel,
+      sha256: binSha,
       sizeBytes: binBytes.length,
     },
     binaryMetadata: {
@@ -905,16 +958,55 @@ function createValidEvidenceFixture(
       binaryType: 'EXECUTABLE',
       isValidExecutable: true,
     },
+    buildExitCode: 0,
+    executionMode,
+    executionExitCode: 0,
+    executionSentinel: PHASE23_CERTIFICATION_SENTINEL,
     execution: {
       required: true,
       executed: true,
-      mode: 'native',
+      mode: executionMode,
       exitCode: 0,
       stdout: `${PHASE23_CERTIFICATION_SENTINEL}\n42\n`,
       sentinelExpected: PHASE23_CERTIFICATION_SENTINEL,
       sentinelMatched: true,
     },
-    status: overrideStatus || 'PASS',
+    distributionManifest: {
+      appName: `nusa_cert_${target}`,
+      appVersion: '0.23.7',
+      target,
+      legacyTarget: target,
+      triple,
+      operatingSystem: hostOS,
+      architecture: arch,
+      mode: 'release',
+      packageKind: 'native',
+      binaryFormat: format,
+      linkingMode: 'auto',
+      actualStaticLink: false,
+      executable: `bin/${path.basename(exeFile)}`,
+      executableSha256: binSha,
+      installers: hostOS === 'windows' ? ['install.ps1', 'uninstall.ps1'] : ['install.sh', 'uninstall.sh'],
+      dependencies: [],
+      builtAt: '2026-11-16T00:00:00.000Z',
+    },
+    distributionArchivePath: arcRel,
+    archiveSha256: arcSha,
+    installResult: {
+      status: 'PASS',
+      exitCode: 0,
+      installedBinaryPath: `/sandbox/${target}/bin/${path.basename(exeFile)}`,
+      installedExecutionSentinel: PHASE23_CERTIFICATION_SENTINEL,
+      upgradeVerified: true,
+      tamperRejected: true,
+    },
+    uninstallResult: {
+      status: 'PASS',
+      exitCode: 0,
+      leftoversDetected: false,
+    },
+    verificationStatus: status,
+    status,
     statusCode: 'BERHASIL',
     diagnostics: [],
   };
@@ -969,6 +1061,7 @@ uji('7.3 Target NOT_VERIFIED menghasilkan PARTIAL & exitCode 1 (tidak boleh lulu
     const evDir = writeAll6Fixtures(tmp, (t, ev) => {
       if (t === 'windows-arm64') {
         ev.status = 'NOT_VERIFIED';
+        ev.verificationStatus = 'NOT_VERIFIED';
         ev.reason = 'MSVC ARM64 libs belum terpasang';
       }
     });
@@ -987,6 +1080,7 @@ uji('7.4 Target FAIL menghasilkan FAILED & exitCode 1', () => {
     const evDir = writeAll6Fixtures(tmp, (t, ev) => {
       if (t === 'macos-x86_64') {
         ev.status = 'FAIL';
+        ev.verificationStatus = 'FAIL';
         ev.reason = 'Linker error';
       }
     });
@@ -1003,6 +1097,7 @@ uji('7.5 Ketidakcocokan SHA-256 artefak di disk terdeteksi (SHA256_TIDAK_COCOK)'
   try {
     const evDir = writeAll6Fixtures(tmp, (t, ev) => {
       if (t === 'linux-x86_64') {
+        ev.binarySha256 = '0'.repeat(64);
         ev.executable.sha256 = '0'.repeat(64);
       }
     });
@@ -1020,10 +1115,15 @@ uji('7.6 Salah arsitektur biner executable terdeteksi (ARSITEKTUR_BINER_SALAH)',
     const evDir = writeAll6Fixtures(tmp, (t, ev) => {
       if (t === 'linux-arm64') {
         // Tulis ELF x86_64 padahal targetnya linux-arm64, dengan hash yang valid untuk byte itu
-        const wrongBin = buildMinimalElf64('x86_64');
-        const diskPath = path.join(tmp, ev.executable.path!);
+        const wrongBin = Buffer.concat([buildMinimalElf64('x86_64'), Buffer.from('WRONG_ARCH_PAYLOAD')]);
+        const diskPath = path.join(tmp, ev.binaryPath);
         fs.writeFileSync(diskPath, wrongBin);
-        ev.executable.sha256 = ArchiveBuilder.computeSha256(wrongBin);
+        const wrongSha = ArchiveBuilder.computeSha256(wrongBin);
+        ev.binarySha256 = wrongSha;
+        ev.executable.sha256 = wrongSha;
+        if (ev.distributionManifest) {
+          (ev.distributionManifest as any).executableSha256 = wrongSha;
+        }
       }
     });
     const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
@@ -1034,13 +1134,14 @@ uji('7.6 Salah arsitektur biner executable terdeteksi (ARSITEKTUR_BINER_SALAH)',
   }
 });
 
-uji('7.7 Bukti eksekusi gagal atau sentinel hilang terdeteksi (EKSEKUSI_GAGAL)', () => {
+uji('7.7 Bukti eksekusi gagal atau sentinel hilang/palsu terdeteksi (EKSEKUSI_GAGAL)', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cert-77-'));
   try {
     const evDir = writeAll6Fixtures(tmp, (t, ev) => {
       if (t === 'macos-arm64') {
         ev.execution.sentinelMatched = false;
         ev.execution.stdout = 'wrong output';
+        ev.executionSentinel = '';
       }
     });
     const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
@@ -1051,12 +1152,12 @@ uji('7.7 Bukti eksekusi gagal atau sentinel hilang terdeteksi (EKSEKUSI_GAGAL)',
   }
 });
 
-uji('7.8 Enam target PASS dengan SHA-256, biner, dan sentinel valid menghasilkan CERTIFIED (exitCode 0)', () => {
+uji('7.8 Enam target PASS lintas OS (Windows, macOS + Rosetta 2, Linux + ARM64) di agregator Linux -> CERTIFIED', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cert-78-'));
   try {
     const evDir = writeAll6Fixtures(tmp);
     const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
-    samaDengan(agg.overallStatus, 'CERTIFIED');
+    samaDengan(agg.overallStatus, 'CERTIFIED', `Temuan: ${JSON.stringify(agg.findings)}`);
     samaDengan(agg.exitCode, 0);
     samaDengan(agg.counts.pass, 6);
     pastikan(agg.markdownReport.includes('CERTIFIED'), 'Laporan Markdown wajib mencantumkan CERTIFIED');
@@ -1070,9 +1171,12 @@ uji('7.9 Gerbang menolak klaim eksekusi native tidak jujur pada target cross ata
   try {
     const evDir = writeAll6Fixtures(tmp, (t, ev) => {
       if (t === 'macos-x86_64') {
+        ev.hostOS = 'darwin';
         ev.hostOs = 'darwin';
+        ev.hostArchitecture = 'aarch64';
         ev.hostArch = 'arm64';
         ev.isCross = true;
+        ev.executionMode = 'native';
         ev.execution.mode = 'native';
       }
     });
@@ -1120,7 +1224,7 @@ uji('7.11 Siklus end-to-end arsip distribusi: package -> verify SHA256SUMS -> ex
     const extractDir = path.join(tmp, 'extract');
     const pkg = DesktopDistributionPackager.packageTarget({
       appName: 'nusa_e2e_dist',
-      appVersion: '0.23.6',
+      appVersion: '0.23.7',
       target: 'linux-x86_64',
       mode: 'release',
       packageKind: 'script-launcher',
@@ -1135,6 +1239,225 @@ uji('7.11 Siklus end-to-end arsip distribusi: package -> verify SHA256SUMS -> ex
     const sums = fs.readFileSync(path.join(extractedPkgDir, 'SHA256SUMS'), 'utf-8');
     const shaCheck = ArchiveBuilder.verifySha256SumsFromDirectory(extractedPkgDir, sums);
     pastikan(shaCheck.valid && shaCheck.checkedCount > 0, 'Berkas hasil ekstraksi arsip wajib lulus SHA256SUMS');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+uji('7.12 Linux ARM64 via QEMU user-mode pada host x86_64 diterima hanya jika metadata emulator lengkap -> CERTIFIED', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cert-712-'));
+  try {
+    const evDir = writeAll6Fixtures(tmp, (t, ev) => {
+      if (t === 'linux-arm64') {
+        ev.hostOS = 'linux';
+        ev.hostOs = 'linux';
+        ev.hostArchitecture = 'x86_64';
+        ev.hostArch = 'x64';
+        ev.isCross = true;
+        ev.executionMode = 'qemu-user';
+        ev.execution.mode = 'qemu-user';
+        ev.emulator = { used: true, command: 'qemu-aarch64', version: 'qemu-aarch64 version 8.2.2' };
+      }
+    });
+    const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
+    samaDengan(agg.overallStatus, 'CERTIFIED', `Temuan: ${JSON.stringify(agg.findings)}`);
+    samaDengan(agg.exitCode, 0);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+uji('7.13 Gerbang menolak triple target salah (JSON_RUSAK)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cert-713-'));
+  try {
+    const evDir = writeAll6Fixtures(tmp, (t, ev) => {
+      if (t === 'windows-arm64') {
+        ev.targetTriple = 'x86_64-unknown-linux-gnu';
+        ev.triple = 'x86_64-unknown-linux-gnu';
+      }
+    });
+    const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
+    samaDengan(agg.overallStatus, 'FAILED');
+    samaDengan(agg.exitCode, 1);
+    pastikan(agg.findings.some((f) => f.code === 'JSON_RUSAK' && f.target === 'windows-arm64'), 'Triple salah wajib ditolak');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+uji('7.14 Gerbang menolak evidence duplikat lintas target (DUPLIKAT_EVIDENCE)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cert-714-'));
+  try {
+    const evDir = writeAll6Fixtures(tmp);
+    const winX64 = JSON.parse(fs.readFileSync(path.join(evDir, 'windows-x86_64.json'), 'utf-8')) as Phase23TargetEvidence;
+    const linuxX64 = JSON.parse(fs.readFileSync(path.join(evDir, 'linux-x86_64.json'), 'utf-8')) as Phase23TargetEvidence;
+    // Tiru jalur biner & sha256 yang sama persis lintas target
+    linuxX64.binarySha256 = winX64.binarySha256;
+    linuxX64.executable.sha256 = winX64.binarySha256;
+    linuxX64.binaryPath = winX64.binaryPath;
+    linuxX64.executable.path = winX64.binaryPath;
+    fs.writeFileSync(path.join(evDir, 'linux-x86_64.json'), JSON.stringify(linuxX64, null, 2), 'utf-8');
+
+    const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
+    samaDengan(agg.overallStatus, 'FAILED');
+    samaDengan(agg.exitCode, 1);
+    pastikan(agg.findings.some((f) => f.code === 'DUPLIKAT_EVIDENCE'), 'Wajib mendeteksi duplikasi evidence lintas target');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+uji('7.15 Gerbang menolak metadata compiler atau linker kosong (METADATA_TOOLCHAIN_KOSONG)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cert-715-'));
+  try {
+    const evDir = writeAll6Fixtures(tmp, (t, ev) => {
+      if (t === 'linux-x86_64') {
+        ev.compilerVersion = '';
+        ev.linker = 'none';
+      }
+    });
+    const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
+    samaDengan(agg.overallStatus, 'FAILED');
+    pastikan(agg.findings.some((f) => f.code === 'METADATA_TOOLCHAIN_KOSONG'), 'Wajib menolak metadata toolchain kosong');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+uji('7.16 Gerbang menolak sentinel palsu saat stdout eksekusi tidak memuat sentinel (EKSEKUSI_GAGAL)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cert-716-'));
+  try {
+    const evDir = writeAll6Fixtures(tmp, (t, ev) => {
+      if (t === 'windows-x86_64') {
+        ev.execution.sentinelMatched = true;
+        ev.executionSentinel = PHASE23_CERTIFICATION_SENTINEL;
+        ev.execution.stdout = 'hello without sentinel\n';
+      }
+    });
+    const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
+    samaDengan(agg.overallStatus, 'FAILED');
+    pastikan(agg.findings.some((f) => f.code === 'EKSEKUSI_GAGAL' && f.target === 'windows-x86_64'), 'Wajib menolak sentinel palsu');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+uji('7.17 Gerbang menolak eksekusi qemu-user tanpa metadata emulator command/version (EKSEKUSI_GAGAL)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cert-717-'));
+  try {
+    const evDir = writeAll6Fixtures(tmp, (t, ev) => {
+      if (t === 'linux-arm64') {
+        ev.hostArchitecture = 'x86_64';
+        ev.isCross = true;
+        ev.executionMode = 'qemu-user';
+        ev.execution.mode = 'qemu-user';
+        ev.emulator = { used: true };
+      }
+    });
+    const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
+    samaDengan(agg.overallStatus, 'FAILED');
+    pastikan(agg.findings.some((f) => f.code === 'EKSEKUSI_GAGAL' && f.target === 'linux-arm64'), 'Wajib menolak qemu-user tanpa versi emulator');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+uji('7.18 Gerbang menolak paket distribusi korup / archiveSha256 mismatch (SHA256_TIDAK_COCOK / DISTRIBUSI_GAGAL)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cert-718-'));
+  try {
+    const evDir = writeAll6Fixtures(tmp, (t, ev) => {
+      if (t === 'linux-x86_64' && ev.distributionArchivePath) {
+        fs.writeFileSync(path.join(tmp, ev.distributionArchivePath), Buffer.from('CORRUPT_ARCHIVE_BYTES'));
+      }
+    });
+    const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
+    samaDengan(agg.overallStatus, 'FAILED');
+    pastikan(
+      agg.findings.some((f) => f.target === 'linux-x86_64' && (f.code === 'SHA256_TIDAK_COCOK' || f.code === 'DISTRIBUSI_GAGAL')),
+      'Arsip distribusi korup wajib digagalkan'
+    );
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+uji('7.19 Gerbang menolak install FAIL atau uninstall meninggalkan sisa berkas (DISTRIBUSI_GAGAL)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cert-719-'));
+  try {
+    const evDir = writeAll6Fixtures(tmp, (t, ev) => {
+      if (t === 'windows-x86_64') {
+        ev.installResult.status = 'FAIL';
+      }
+      if (t === 'macos-arm64') {
+        ev.uninstallResult.leftoversDetected = true;
+      }
+    });
+    const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
+    samaDengan(agg.overallStatus, 'FAILED');
+    pastikan(agg.findings.some((f) => f.code === 'DISTRIBUSI_GAGAL' && f.target === 'windows-x86_64'), 'Install FAIL wajib ditolak');
+    pastikan(agg.findings.some((f) => f.code === 'DISTRIBUSI_GAGAL' && f.target === 'macos-arm64'), 'Uninstall dengan leftovers wajib ditolak');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+uji('7.20 Gerbang menolak paket upgrade tidak valid atau gagal menolak tamper (DISTRIBUSI_GAGAL)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cert-720-'));
+  try {
+    const evDir = writeAll6Fixtures(tmp, (t, ev) => {
+      if (t === 'linux-arm64') {
+        ev.installResult.upgradeVerified = false;
+      }
+      if (t === 'macos-x86_64') {
+        ev.installResult.tamperRejected = false;
+      }
+    });
+    const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
+    samaDengan(agg.overallStatus, 'FAILED');
+    pastikan(agg.findings.some((f) => f.code === 'DISTRIBUSI_GAGAL' && f.target === 'linux-arm64'), 'Upgrade belum terverifikasi wajib ditolak');
+    pastikan(agg.findings.some((f) => f.code === 'DISTRIBUSI_GAGAL' && f.target === 'macos-x86_64'), 'Tamper tidak ditolak wajib ditolak');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+uji('7.21 Siklus upgrade v2 korup pada sandbox POSIX gagal tanpa merusak biner terpasang v1', () => {
+  if (process.platform === 'win32') {
+    return 'BELUM_DIVERIFIKASI';
+  }
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-upgrade-tamper-'));
+  try {
+    const prefixDir = path.join(tmp, 'prefix');
+    const fakeHome = path.join(tmp, 'home');
+    fs.mkdirSync(fakeHome, { recursive: true });
+
+    const target = process.platform === 'darwin' ? 'macos-arm64' : 'linux-x86_64';
+    const pkgV1 = DesktopDistributionPackager.packageTarget({
+      appName: 'nusa_upg_guard',
+      appVersion: '0.23.7',
+      target,
+      mode: 'release',
+      packageKind: 'script-launcher',
+      outputDirectory: path.join(tmp, 'd1'),
+    });
+    const inst1 = DesktopInstallerGenerator.runPosixScriptInSandbox(pkgV1.packageDirectory, 'install.sh', prefixDir, fakeHome);
+    pastikan(inst1.success, `Install v1 gagal: ${inst1.stderr}`);
+    const installedBin = path.join(prefixDir, 'bin/nusa_upg_guard');
+    const shaV1 = ArchiveBuilder.computeSha256(fs.readFileSync(installedBin));
+
+    // Paket upgrade v2 dirusak checksum binernya sebelum diinstal
+    const pkgV2 = DesktopDistributionPackager.packageTarget({
+      appName: 'nusa_upg_guard',
+      appVersion: '0.23.8',
+      target,
+      mode: 'release',
+      packageKind: 'script-launcher',
+      outputDirectory: path.join(tmp, 'd2'),
+    });
+    fs.writeFileSync(path.join(pkgV2.packageDirectory, 'bin/nusa_upg_guard'), '#!/bin/sh\necho CORRUPT_UPGRADE\n');
+    const upgRes = DesktopInstallerGenerator.runPosixScriptInSandbox(pkgV2.packageDirectory, 'install.sh', prefixDir, fakeHome);
+    pastikan(!upgRes.success, 'Upgrade v2 korup wajib ditolak oleh install.sh');
+    samaDengan(ArchiveBuilder.computeSha256(fs.readFileSync(installedBin)), shaV1, 'Biner v1 terpasang tidak boleh rusak saat upgrade korup ditolak');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

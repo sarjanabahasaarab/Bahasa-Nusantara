@@ -133,8 +133,8 @@ jobs:
           - target: windows-arm64
             legacy_target: windows-arm64
             triple: aarch64-pc-windows-msvc
-            os: windows-latest
-            is_native: 'false'
+            os: windows-11-arm
+            is_native: 'true'
             require_clang: '1'
           - target: linux-x86_64
             legacy_target: linux-x64
@@ -145,8 +145,8 @@ jobs:
           - target: linux-arm64
             legacy_target: linux-arm64
             triple: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            is_native: 'false'
+            os: ubuntu-24.04-arm
+            is_native: 'true'
             require_clang: '1'
           - target: macos-x86_64
             legacy_target: macos-x64
@@ -191,35 +191,52 @@ jobs:
             sudo apt-get update -y
             if [ "${{ matrix.target }}" = "linux-arm64" ]; then
               if [ "$HOST_ARCH" = "aarch64" ] || [ "$HOST_ARCH" = "arm64" ]; then
-                echo "[INFO] Host sudah berjalan native ARM64 ($HOST_ARCH); tidak membutuhkan QEMU."
+                echo "[INFO] Host berjalan native ARM64 ($HOST_ARCH); memasang toolchain Linux ARM64 native tanpa QEMU."
                 sudo apt-get install -y clang lld llvm binutils
               else
+                echo "[INFO] Host $HOST_ARCH melakukan cross-build linux-arm64; memisahkan compiler cross-build dari emulator user-mode."
                 sudo apt-get install -y clang lld llvm gcc-aarch64-linux-gnu libc6-dev-arm64-cross binutils
-                QEMU_CANDIDATES=""
-                for pkg in qemu-user qemu-user-static qemu-user-binfmt qemu-user-binfmt-hwe; do
+                QEMU_INSTALLED=0
+                for pkg in qemu-user qemu-user-static; do
                   CAND=$(apt-cache policy "$pkg" 2>/dev/null | awk '/Candidate:/ {print $2}')
-                  if [ -n "$CAND" ] && [ "$CAND" != "(none)" ] && apt-cache show "$pkg" >/dev/null 2>&1; then
-                    echo "[INFO] Paket QEMU tersedia di apt: $pkg ($CAND)"
-                    QEMU_CANDIDATES="$QEMU_CANDIDATES $pkg"
+                  if [ -n "$CAND" ] && [ "$CAND" != "(none)" ]; then
+                    if apt-get install -s --no-install-recommends "$pkg" >/dev/null 2>&1; then
+                      echo "[INFO] Memasang paket QEMU kompatibel: $pkg ($CAND)"
+                      if sudo apt-get install -y --no-install-recommends "$pkg"; then
+                        QEMU_INSTALLED=1
+                        break
+                      fi
+                    else
+                      echo "[INFO] Paket $pkg ($CAND) dilewati karena konflik dependensi pada apt."
+                    fi
                   fi
                 done
-                if [ -n "$QEMU_CANDIDATES" ]; then
-                  sudo apt-get install -y $QEMU_CANDIDATES
-                fi
-                QEMU_BIN=$(command -v qemu-aarch64-static || command -v qemu-aarch64 || true)
-                if [ -z "$QEMU_BIN" ]; then
-                  echo "[GALAT] Emulator user-mode QEMU ARM64 (qemu-aarch64 / qemu-aarch64-static) tidak tersedia pada host x86_64."
+                QEMU_BIN=$(command -v qemu-aarch64 || command -v qemu-aarch64-static || true)
+                if [ "$QEMU_INSTALLED" -eq 0 ] || [ -z "$QEMU_BIN" ]; then
+                  echo "[GALAT] Tidak ada paket emulator user-mode QEMU ARM64 kompatibel yang terpasang."
                   exit 1
                 fi
                 echo "[OK] Emulator QEMU ARM64 terdeteksi: $QEMU_BIN"
                 "$QEMU_BIN" --version
                 aarch64-linux-gnu-gcc --version
-                ls -la /proc/sys/fs/binfmt_misc/ 2>/dev/null | grep -iE 'qemu|aarch64' || echo "[INFO] Eksekusi cross ARM64 memakai $QEMU_BIN langsung."
               fi
             else
               sudo apt-get install -y clang lld llvm binutils
             fi
           elif [ "${{ runner.os }}" = "Windows" ]; then
+            if ! command -v clang >/dev/null 2>&1; then
+              for cand_dir in \
+                "/c/Program Files/LLVM/bin" \
+                "/c/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/Llvm/ARM64/bin" \
+                "/c/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/Llvm/x64/bin" \
+                "/c/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/Llvm/bin"; do
+                if [ -x "$cand_dir/clang.exe" ]; then
+                  echo "$cand_dir" >> "$GITHUB_PATH"
+                  export PATH="$cand_dir:$PATH"
+                  break
+                fi
+              done
+            fi
             if ! command -v clang >/dev/null 2>&1; then
               choco install -y llvm
               echo "C:/Program Files/LLVM/bin" >> "$GITHUB_PATH"
@@ -232,13 +249,15 @@ jobs:
                 echo "VCToolsInstallDir=$VC_TOOLS_DIR" >> "$GITHUB_ENV"
                 echo "[OK] MSVC ARM64 libraries ditemukan: $ARM64_VC_LIB"
               else
-                echo "[INFO] MSVC ARM64 libraries (VC/Tools/MSVC/*/lib/arm64) tidak terpasang di runner windows-latest ini."
+                echo "[GALAT] MSVC ARM64 libraries (VC/Tools/MSVC/*/lib/arm64) tidak terpasang."
+                exit 1
               fi
               WIN_SDK_ARM64=$(find "/c/Program Files (x86)/Windows Kits/10/Lib" -type d -path "*/um/arm64" 2>/dev/null | head -n 1 || true)
               if [ -n "$WIN_SDK_ARM64" ]; then
                 echo "[OK] Windows SDK ARM64 library ditemukan: $WIN_SDK_ARM64"
               else
-                echo "[INFO] Windows SDK ARM64 library (Lib/*/um/arm64) tidak terpasang di runner windows-latest ini."
+                echo "[GALAT] Windows SDK ARM64 library (Lib/*/um/arm64) tidak terpasang."
+                exit 1
               fi
             fi
             lld-link --version || true
@@ -249,7 +268,8 @@ jobs:
               if arch -x86_64 /usr/bin/true 2>/dev/null; then
                 echo "[OK] Rosetta 2 aktif untuk eksekusi macos-x86_64 pada Apple Silicon."
               else
-                echo "[INFO] Rosetta 2 tidak aktif; cross-compile Mach-O x86_64 tetap dijalankan tanpa klaim eksekusi native."
+                echo "[GALAT] Rosetta 2 tidak aktif pada runner Apple Silicon."
+                exit 1
               fi
             fi
           fi
@@ -268,6 +288,7 @@ jobs:
       - name: Kompilasi, Validasi, Eksekusi & Buat Evidence JSON (${{ matrix.target }})
         shell: bash
         run: |
+          rm -rf artifacts/phase23
           mkdir -p artifacts/phase23/evidence dist-native/reports
           npx tsx scripts/phase23-certify.ts generate \
             --target "${{ matrix.target }}" \
@@ -293,7 +314,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: phase23-evidence-${{ matrix.target }}
-          path: artifacts/phase23
+          path: |
+            artifacts/phase23/evidence/${{ matrix.target }}.json
+            artifacts/phase23/artifacts/${{ matrix.target }}
           retention-days: 14
           if-no-files-found: warn
 
@@ -325,6 +348,9 @@ jobs:
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
+
+      - name: Bersihkan Sisa Evidence Lokal Sebelum Mengunduh Artefak CI
+        run: rm -rf artifacts/phase23
 
       - name: Pasang Lingkungan Node.js
         uses: actions/setup-node@v4

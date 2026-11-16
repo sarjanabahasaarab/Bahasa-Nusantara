@@ -1,23 +1,36 @@
 {
-  "schemaVersion": "1.0",
-  "generatedAt": "2026-11-16T00:47:29.638Z",
+  "schemaVersion": "2.0",
+  "phase": "Phase 23",
+  "generatedAt": "2026-11-16T22:45:25.560Z",
   "target": "linux-x86_64",
+  "targetTriple": "x86_64-unknown-linux-gnu",
   "triple": "x86_64-unknown-linux-gnu",
+  "hostOS": "linux",
   "hostOs": "linux",
+  "hostArchitecture": "x86_64",
   "hostArch": "x64",
   "recommendedRunner": "ubuntu-latest",
   "isCross": false,
-  "compiler": {
+  "compiler": "none",
+  "compilerVersion": "",
+  "compilerDetails": {
     "name": "none",
     "available": false,
     "command": "llc"
   },
-  "linker": {
+  "linker": "none",
+  "linkerVersion": "",
+  "linkerDetails": {
     "name": "none",
     "lldAvailable": false
   },
+  "sysroot": "/usr/lib/x86_64-linux-gnu",
+  "emulator": {
+    "used": false
+  },
   "sdk": {
     "name": "Host GNU/glibc",
+    "sysroot": "/usr/lib/x86_64-linux-gnu",
     "available": false,
     "linkerProbeVerified": false,
     "missingRequirements": [
@@ -29,7 +42,17 @@
     "sha256": "87f313f4bc56cf788a9d4125cc4353b9b9e2256f63d185c9e44874d1561a3e0c"
   },
   "objectFile": {},
+  "objectFiles": [],
+  "objectHashes": {},
+  "binaryPath": "",
+  "binaryFormat": "UNKNOWN",
+  "binaryArchitecture": "UNKNOWN",
+  "binarySha256": "",
   "executable": {},
+  "buildExitCode": 1,
+  "executionMode": "not-executed",
+  "executionExitCode": null,
+  "executionSentinel": "",
   "execution": {
     "required": true,
     "executed": false,
@@ -37,6 +60,17 @@
     "sentinelExpected": "NUSANTARA_NATIVE_CI_OK",
     "sentinelMatched": false
   },
+  "distributionManifest": null,
+  "archiveSha256": "",
+  "installResult": {
+    "status": "NOT_RUN",
+    "exitCode": null
+  },
+  "uninstallResult": {
+    "status": "NOT_RUN",
+    "exitCode": null
+  },
+  "verificationStatus": "NOT_VERIFIED",
   "status": "NOT_VERIFIED",
   "statusCode": "TOOLCHAIN_TIDAK_TERSEDIA",
   "reason": "Target 'linux-x86_64' belum dapat diverifikasi pada host ini: clang (driver compiler + linker C runtime) tidak ditemukan di PATH.",

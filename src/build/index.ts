@@ -11,4 +11,5 @@ export * from './target-matrix';
 export * from './native-pipeline';
 export * from './installers';
 export * from './distribution-packager';
+export * from './distribution-verifier';
 export * from './certification';

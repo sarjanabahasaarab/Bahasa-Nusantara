@@ -229,6 +229,7 @@ export class DependencyInspector {
         (lower.includes('kernel') ||
           lower.includes('user32') ||
           lower.includes('ucrtbase') ||
+          lower.includes('api-ms-win-crt') ||
           lower.includes('vcruntime') ||
           lower.includes('msvcrt') ||
           lower.includes('advapi32'))

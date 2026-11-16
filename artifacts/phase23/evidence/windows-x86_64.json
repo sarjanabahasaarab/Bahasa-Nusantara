@@ -1,20 +1,31 @@
 {
-  "schemaVersion": "1.0",
-  "generatedAt": "2026-11-16T00:47:29.407Z",
+  "schemaVersion": "2.0",
+  "phase": "Phase 23",
+  "generatedAt": "2026-11-16T22:45:25.298Z",
   "target": "windows-x86_64",
+  "targetTriple": "x86_64-pc-windows-msvc",
   "triple": "x86_64-pc-windows-msvc",
+  "hostOS": "linux",
   "hostOs": "linux",
+  "hostArchitecture": "x86_64",
   "hostArch": "x64",
   "recommendedRunner": "windows-latest",
   "isCross": true,
-  "compiler": {
+  "compiler": "none",
+  "compilerVersion": "",
+  "compilerDetails": {
     "name": "none",
     "available": false,
     "command": "llc"
   },
-  "linker": {
+  "linker": "none",
+  "linkerVersion": "",
+  "linkerDetails": {
     "name": "none",
     "lldAvailable": false
+  },
+  "emulator": {
+    "used": false
   },
   "sdk": {
     "name": "MSVC ARM64 + Windows SDK",
@@ -29,7 +40,17 @@
     "sha256": "d2cebf4714a20d82fcee6a608347b9862d56ccf49eae81550f4fba1ffab69358"
   },
   "objectFile": {},
+  "objectFiles": [],
+  "objectHashes": {},
+  "binaryPath": "",
+  "binaryFormat": "UNKNOWN",
+  "binaryArchitecture": "UNKNOWN",
+  "binarySha256": "",
   "executable": {},
+  "buildExitCode": 1,
+  "executionMode": "not-executed",
+  "executionExitCode": null,
+  "executionSentinel": "",
   "execution": {
     "required": true,
     "executed": false,
@@ -37,6 +58,17 @@
     "sentinelExpected": "NUSANTARA_NATIVE_CI_OK",
     "sentinelMatched": false
   },
+  "distributionManifest": null,
+  "archiveSha256": "",
+  "installResult": {
+    "status": "NOT_RUN",
+    "exitCode": null
+  },
+  "uninstallResult": {
+    "status": "NOT_RUN",
+    "exitCode": null
+  },
+  "verificationStatus": "NOT_VERIFIED",
   "status": "NOT_VERIFIED",
   "statusCode": "TOOLCHAIN_TIDAK_TERSEDIA",
   "reason": "Target 'windows-x86_64' belum dapat diverifikasi pada host ini: MSVC CRT (libcmt.lib/msvcrt.lib) & Windows SDK (kernel32.lib/ucrt.lib) tidak tersedia di host non-Windows.",

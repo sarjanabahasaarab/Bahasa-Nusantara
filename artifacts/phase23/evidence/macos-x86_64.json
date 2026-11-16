@@ -1,20 +1,31 @@
 {
-  "schemaVersion": "1.0",
-  "generatedAt": "2026-11-16T00:47:29.917Z",
+  "schemaVersion": "2.0",
+  "phase": "Phase 23",
+  "generatedAt": "2026-11-16T22:45:25.839Z",
   "target": "macos-x86_64",
+  "targetTriple": "x86_64-apple-darwin",
   "triple": "x86_64-apple-darwin",
+  "hostOS": "linux",
   "hostOs": "linux",
+  "hostArchitecture": "x86_64",
   "hostArch": "x64",
   "recommendedRunner": "macos-latest / macos-13 (Apple Clang + MacOSX.sdk)",
   "isCross": true,
-  "compiler": {
+  "compiler": "none",
+  "compilerVersion": "",
+  "compilerDetails": {
     "name": "none",
     "available": false,
     "command": "llc"
   },
-  "linker": {
+  "linker": "none",
+  "linkerVersion": "",
+  "linkerDetails": {
     "name": "none",
     "lldAvailable": false
+  },
+  "emulator": {
+    "used": false
   },
   "sdk": {
     "name": "MacOSX.sdk (tidak tersedia di host non-Apple)",
@@ -30,7 +41,17 @@
     "sha256": "81562d304bdacf8d4f5faf430d19fcc1fda7c8997c2c29a755f07c2dc463121a"
   },
   "objectFile": {},
+  "objectFiles": [],
+  "objectHashes": {},
+  "binaryPath": "",
+  "binaryFormat": "UNKNOWN",
+  "binaryArchitecture": "UNKNOWN",
+  "binarySha256": "",
   "executable": {},
+  "buildExitCode": 1,
+  "executionMode": "not-executed",
+  "executionExitCode": null,
+  "executionSentinel": "",
   "execution": {
     "required": true,
     "executed": false,
@@ -38,6 +59,17 @@
     "sentinelExpected": "NUSANTARA_NATIVE_CI_OK",
     "sentinelMatched": false
   },
+  "distributionManifest": null,
+  "archiveSha256": "",
+  "installResult": {
+    "status": "NOT_RUN",
+    "exitCode": null
+  },
+  "uninstallResult": {
+    "status": "NOT_RUN",
+    "exitCode": null
+  },
+  "verificationStatus": "NOT_VERIFIED",
   "status": "NOT_VERIFIED",
   "statusCode": "TOOLCHAIN_TIDAK_TERSEDIA",
   "reason": "Target 'macos-x86_64' belum dapat diverifikasi pada host ini: clang tidak tersedia; Apple MacOSX.sdk / OSXCross sysroot (wajib runner macos-latest/macos-13)",

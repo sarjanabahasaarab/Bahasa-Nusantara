@@ -187,6 +187,21 @@ uji('5.3 ci.yml mendeteksi provider QEMU apt secara dinamis & memverifikasi bind
   pastikan(kontenCI.includes('phase23-certify.ts verify-dist'), 'ci.yml wajib menjalankan verify-dist end-to-end per target');
 });
 
+uji('5.4 ci.yml memisahkan runner ARM64 native, dry-run QEMU aman, & isolasi artefak evidence 6 target', () => {
+  const kontenCI = pembacaReal.baca('.github/workflows/ci.yml');
+  pastikan(kontenCI.includes('windows-11-arm'), 'ci.yml wajib memakai runner Windows ARM64 native (windows-11-arm)');
+  pastikan(kontenCI.includes('ubuntu-24.04-arm'), 'ci.yml wajib memakai runner Linux ARM64 native (ubuntu-24.04-arm)');
+  pastikan(kontenCI.includes('apt-get install -s --no-install-recommends'), 'ci.yml wajib memeriksa konflik QEMU via dry-run apt-get');
+  pastikan(
+    kontenCI.includes('artifacts/phase23/evidence/${{ matrix.target }}.json'),
+    'ci.yml wajib mengunggah hanya JSON evidence milik matrix.target terkait'
+  );
+  pastikan(
+    kontenCI.includes('rm -rf artifacts/phase23'),
+    'ci.yml wajib membersihkan sisa evidence lokal sebelum generate & download-artifact'
+  );
+});
+
 // -----------------------------------------------------------------------------
 // GRUP 6: Mesin Eksekusi CI Lokal & Step Summary
 // -----------------------------------------------------------------------------

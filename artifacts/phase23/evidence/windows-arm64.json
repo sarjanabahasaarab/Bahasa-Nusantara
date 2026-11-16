@@ -1,20 +1,31 @@
 {
-  "schemaVersion": "1.0",
-  "generatedAt": "2026-11-16T00:47:29.535Z",
+  "schemaVersion": "2.0",
+  "phase": "Phase 23",
+  "generatedAt": "2026-11-16T22:45:25.413Z",
   "target": "windows-arm64",
+  "targetTriple": "aarch64-pc-windows-msvc",
   "triple": "aarch64-pc-windows-msvc",
+  "hostOS": "linux",
   "hostOs": "linux",
+  "hostArchitecture": "x86_64",
   "hostArch": "x64",
-  "recommendedRunner": "windows-latest (MSVC ARM64 + WinSDK ARM64) / windows-11-arm",
+  "recommendedRunner": "windows-11-arm / windows-latest (MSVC ARM64 + WinSDK ARM64)",
   "isCross": true,
-  "compiler": {
+  "compiler": "none",
+  "compilerVersion": "",
+  "compilerDetails": {
     "name": "none",
     "available": false,
     "command": "llc"
   },
-  "linker": {
+  "linker": "none",
+  "linkerVersion": "",
+  "linkerDetails": {
     "name": "none",
     "lldAvailable": false
+  },
+  "emulator": {
+    "used": false
   },
   "sdk": {
     "name": "MSVC ARM64 + Windows SDK",
@@ -29,7 +40,17 @@
     "sha256": "37a3037c841b31852f4462320f2d370b7b253efaf8786fc46844d74ae7f9d2e7"
   },
   "objectFile": {},
+  "objectFiles": [],
+  "objectHashes": {},
+  "binaryPath": "",
+  "binaryFormat": "UNKNOWN",
+  "binaryArchitecture": "UNKNOWN",
+  "binarySha256": "",
   "executable": {},
+  "buildExitCode": 1,
+  "executionMode": "not-executed",
+  "executionExitCode": null,
+  "executionSentinel": "",
   "execution": {
     "required": true,
     "executed": false,
@@ -37,6 +58,17 @@
     "sentinelExpected": "NUSANTARA_NATIVE_CI_OK",
     "sentinelMatched": false
   },
+  "distributionManifest": null,
+  "archiveSha256": "",
+  "installResult": {
+    "status": "NOT_RUN",
+    "exitCode": null
+  },
+  "uninstallResult": {
+    "status": "NOT_RUN",
+    "exitCode": null
+  },
+  "verificationStatus": "NOT_VERIFIED",
   "status": "NOT_VERIFIED",
   "statusCode": "TOOLCHAIN_TIDAK_TERSEDIA",
   "reason": "Target 'windows-arm64' belum dapat diverifikasi pada host ini: MSVC CRT (libcmt.lib/msvcrt.lib) & Windows SDK (kernel32.lib/ucrt.lib) tidak tersedia di host non-Windows.",

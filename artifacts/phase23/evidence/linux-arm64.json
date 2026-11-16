@@ -1,20 +1,32 @@
 {
-  "schemaVersion": "1.0",
-  "generatedAt": "2026-11-16T00:47:29.787Z",
+  "schemaVersion": "2.0",
+  "phase": "Phase 23",
+  "generatedAt": "2026-11-16T22:45:25.722Z",
   "target": "linux-arm64",
+  "targetTriple": "aarch64-unknown-linux-gnu",
   "triple": "aarch64-unknown-linux-gnu",
+  "hostOS": "linux",
   "hostOs": "linux",
+  "hostArchitecture": "x86_64",
   "hostArch": "x64",
-  "recommendedRunner": "ubuntu-latest (cross + qemu-aarch64-static / qemu-aarch64) / ubuntu-24.04-arm",
+  "recommendedRunner": "ubuntu-24.04-arm / ubuntu-latest (cross + qemu-aarch64)",
   "isCross": true,
-  "compiler": {
+  "compiler": "none",
+  "compilerVersion": "",
+  "compilerDetails": {
     "name": "none",
     "available": false,
     "command": "llc"
   },
-  "linker": {
+  "linker": "aarch64-linux-gnu-gcc",
+  "linkerVersion": "",
+  "linkerDetails": {
     "name": "aarch64-linux-gnu-gcc",
     "lldAvailable": false
+  },
+  "emulator": {
+    "used": false,
+    "command": "qemu-aarch64-static"
   },
   "sdk": {
     "name": "libc6-dev-arm64-cross + GNU aarch64",
@@ -30,7 +42,17 @@
     "sha256": "db0b4c740cefe5e8eada6bc3ad663669a93f711d3cfc62cd403efb81fa853845"
   },
   "objectFile": {},
+  "objectFiles": [],
+  "objectHashes": {},
+  "binaryPath": "",
+  "binaryFormat": "UNKNOWN",
+  "binaryArchitecture": "UNKNOWN",
+  "binarySha256": "",
   "executable": {},
+  "buildExitCode": 1,
+  "executionMode": "not-executed",
+  "executionExitCode": null,
+  "executionSentinel": "",
   "execution": {
     "required": true,
     "executed": false,
@@ -38,6 +60,17 @@
     "sentinelExpected": "NUSANTARA_NATIVE_CI_OK",
     "sentinelMatched": false
   },
+  "distributionManifest": null,
+  "archiveSha256": "",
+  "installResult": {
+    "status": "NOT_RUN",
+    "exitCode": null
+  },
+  "uninstallResult": {
+    "status": "NOT_RUN",
+    "exitCode": null
+  },
+  "verificationStatus": "NOT_VERIFIED",
   "status": "NOT_VERIFIED",
   "statusCode": "TOOLCHAIN_TIDAK_TERSEDIA",
   "reason": "Target 'linux-arm64' belum dapat diverifikasi pada host ini: llvm / clang (objek generator) tidak tersedia.; libc6-dev-arm64-cross (/usr/aarch64-linux-gnu) tidak ditemukan.",

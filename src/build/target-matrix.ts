@@ -33,9 +33,9 @@ export const DESKTOP_LEGACY_ALIAS_MAP: Record<CanonicalDesktopTarget, string> = 
 
 export const RUNNER_RECOMMENDATION_MAP: Record<CanonicalDesktopTarget, string> = {
   'windows-x86_64': 'windows-latest',
-  'windows-arm64': 'windows-latest (MSVC ARM64 + WinSDK ARM64) / windows-11-arm',
+  'windows-arm64': 'windows-11-arm / windows-latest (MSVC ARM64 + WinSDK ARM64)',
   'linux-x86_64': 'ubuntu-latest',
-  'linux-arm64': 'ubuntu-latest (cross + qemu-aarch64-static / qemu-aarch64) / ubuntu-24.04-arm',
+  'linux-arm64': 'ubuntu-24.04-arm / ubuntu-latest (cross + qemu-aarch64)',
   'macos-x86_64': 'macos-latest / macos-13 (Apple Clang + MacOSX.sdk)',
   'macos-arm64': 'macos-latest',
 };
@@ -103,8 +103,20 @@ export class TargetMatrixManager {
         missing.push('clang (driver compiler + linker C runtime) tidak ditemukan di PATH.');
       }
 
+      let nativeSysroot: string | undefined;
+      let nativeSdkName = info.os === 'windows' ? 'Windows MSVC CRT + Windows SDK' : 'Host GNU/glibc';
+      let nativeSdkAvailable = false;
+
       if (info.os === 'windows') {
-        const sdkCheck = this.detectWindowsHostSdk();
+        const winArch = info.arch === 'aarch64' ? 'arm64' : 'x64';
+        const sdkCheck = this.detectWindowsHostSdk(
+          winArch,
+          clangAvailable ? toolchain.binaries.clang.command : undefined,
+          info.triple
+        );
+        nativeSysroot = sdkCheck.sysroot;
+        nativeSdkName = sdkCheck.sdkName;
+        nativeSdkAvailable = sdkCheck.ok;
         if (!sdkCheck.ok) {
           missing.push(...sdkCheck.missing);
         }
@@ -141,6 +153,13 @@ export class TargetMatrixManager {
             ? `Target host '${canonical}' siap untuk kompilasi dan eksekusi native penuh.`
             : `Target host '${canonical}' belum siap: ${missing.join(' ')}`,
         };
+      } else {
+        const linuxCandidates =
+          info.arch === 'aarch64'
+            ? ['/usr/lib/aarch64-linux-gnu', '/lib/aarch64-linux-gnu', '/']
+            : ['/usr/lib/x86_64-linux-gnu', '/lib/x86_64-linux-gnu', '/'];
+        nativeSysroot = linuxCandidates.find((p) => safeFS.existsSync(p));
+        nativeSdkAvailable = Boolean(nativeSysroot) && clangAvailable;
       }
 
       const canBuild = missing.length === 0;
@@ -161,8 +180,9 @@ export class TargetMatrixManager {
         clangAvailable,
         llcAvailable,
         lldAvailable,
-        sdkName: info.os === 'windows' ? 'Windows MSVC CRT + Windows SDK' : 'Host GNU/glibc',
-        sdkAvailable: canBuild,
+        sysroot: nativeSysroot,
+        sdkName: nativeSdkName,
+        sdkAvailable: canBuild && nativeSdkAvailable,
         linkerProbeVerified: canBuild,
         missingRequirements: missing,
         recommendedRunner,
@@ -388,19 +408,48 @@ export class TargetMatrixManager {
     };
   }
 
-  private static detectWindowsHostSdk(): { ok: boolean; missing: string[] } {
-    if (process.platform !== 'win32') return { ok: false, missing: ['Bukan host Windows.'] };
-    // Jika running di GitHub Actions Windows runner atau dev env dengan VS / Windows SDK / MinGW CRT
-    const hasVcEnv = Boolean(process.env.VCToolsInstallDir || process.env.VCINSTALLDIR || process.env.WindowsSdkDir);
-    const hasVsFolder =
-      safeFS.existsSync('C:\\Program Files\\Microsoft Visual Studio') ||
-      safeFS.existsSync('C:\\Program Files (x86)\\Microsoft Visual Studio') ||
-      safeFS.existsSync('C:\\Program Files (x86)\\Windows Kits\\10');
-    if (hasVcEnv || hasVsFolder) {
-      return { ok: true, missing: [] };
+  private static detectWindowsHostSdk(
+    winArch: 'x64' | 'arm64' = 'x64',
+    clangCmd?: string,
+    triple?: string
+  ): { ok: boolean; sysroot?: string; sdkName: string; missing: string[] } {
+    const sdkName = `MSVC ${winArch.toUpperCase()} CRT + Windows SDK`;
+    if (process.platform !== 'win32') {
+      return { ok: false, sdkName, missing: ['Bukan host Windows.'] };
     }
-    // Tetap kembalikan ok jika clang --version sukses dan mungkin menggunakan bundled mingw/clang env
-    return { ok: true, missing: [] };
+    const msvcLib = this.findMsvcArchLibDir(winArch);
+    const winSdkUm = this.findWindowsSdkLibDir('um', winArch);
+    const winSdkUcrt = this.findWindowsSdkLibDir('ucrt', winArch);
+    if (msvcLib && winSdkUm && winSdkUcrt) {
+      return { ok: true, sysroot: msvcLib, sdkName, missing: [] };
+    }
+    // Fallback probe nyata menggunakan clang jika MinGW/bundled SDK dipakai
+    if (clangCmd && triple) {
+      const probe = this.probeWindowsCrossLink(
+        clangCmd,
+        triple,
+        winArch === 'arm64' ? 'aarch64' : 'x86_64',
+        [msvcLib, winSdkUm, winSdkUcrt].filter((x): x is string => Boolean(x))
+      );
+      if (probe.ok) {
+        return {
+          ok: true,
+          sysroot: msvcLib || process.env.WindowsSdkDir || 'clang-default-sysroot',
+          sdkName: msvcLib ? sdkName : 'Clang Windows CRT/SDK',
+          missing: [],
+        };
+      }
+      return {
+        ok: false,
+        sdkName,
+        missing: [`MSVC/Windows SDK (${winArch}) tidak lengkap dan linker probe gagal: ${probe.reason}`],
+      };
+    }
+    const missing: string[] = [];
+    if (!msvcLib) missing.push(`MSVC CRT (${winArch}) tidak ditemukan.`);
+    if (!winSdkUm) missing.push(`Windows SDK UM (${winArch}) tidak ditemukan.`);
+    if (!winSdkUcrt) missing.push(`Windows SDK UCRT (${winArch}) tidak ditemukan.`);
+    return { ok: false, sdkName, missing };
   }
 
   private static detectDarwinSdk(clangCmd?: string): { ok: boolean; sysroot?: string; sdkName?: string; missing: string[] } {

@@ -199,26 +199,98 @@ export interface InstallerSandboxResult {
 
 export type TargetCertificationStatus = 'PASS' | 'NOT_VERIFIED' | 'FAIL';
 
-export interface Phase23TargetEvidence {
+export interface Phase23InstallResult {
+  status: 'PASS' | 'FAIL' | 'NOT_RUN' | 'SKIPPED_CROSS_OS';
+  exitCode: number | null;
+  installedBinaryPath?: string;
+  installedExecutionSentinel?: string;
+  upgradeVerified?: boolean;
+  tamperRejected?: boolean;
+  details?: string;
+}
+
+export interface Phase23UninstallResult {
+  status: 'PASS' | 'FAIL' | 'NOT_RUN' | 'SKIPPED_CROSS_OS';
+  exitCode: number | null;
+  leftoversDetected?: boolean;
+  details?: string;
+}
+
+export interface DistributionE2EReport {
   schemaVersion: string;
-  generatedAt: string;
-  target: CanonicalDesktopTarget;
+  checkedAt: string;
+  targetDiminta: string;
+  targetTerdeteksi: CanonicalDesktopTarget;
   triple: string;
   hostOs: string;
   hostArch: string;
+  isCross: boolean;
+  executionMode: ExecutionMode;
+  emulatorCommand: string | null;
+  pathOutput: string[];
+  hasilPemeriksaanExecutable: {
+    path: string;
+    sha256?: string;
+    format: string;
+    architecture: string;
+    binaryType: string;
+    isValidExecutable: boolean;
+  } | null;
+  hasilDependency: 'PASS' | 'FAIL' | 'NOT_RUN';
+  hasilSha256: 'PASS' | 'FAIL' | 'NOT_RUN';
+  hasilManifest: 'PASS' | 'FAIL' | 'NOT_RUN';
+  hasilEkstraksiArsip: 'PASS' | 'FAIL' | 'NOT_RUN';
+  hasilSandboxInstall: 'PASS' | 'FAIL' | 'NOT_RUN' | 'SKIPPED_CROSS_OS';
+  hasilEksekusiInstalled: string;
+  hasilUpgrade: 'PASS' | 'FAIL' | 'NOT_RUN' | 'SKIPPED_CROSS_OS';
+  hasilPenolakanTamper: 'PASS' | 'FAIL' | 'NOT_RUN' | 'SKIPPED_CROSS_OS';
+  hasilSandboxUninstall: 'PASS' | 'FAIL' | 'NOT_RUN' | 'SKIPPED_CROSS_OS';
+  hasilSisaUninstall: 'PASS' | 'FAIL' | 'NOT_RUN' | 'SKIPPED_CROSS_OS';
+  distributionManifest: DesktopPackageManifest | Record<string, any> | null;
+  archivePath?: string;
+  archiveSha256?: string;
+  installResult: Phase23InstallResult;
+  uninstallResult: Phase23UninstallResult;
+  statusAkhir: 'PASS' | 'NOT_VERIFIED' | 'FAIL';
+  reason?: string;
+  daftarError: string[];
+  exitCode: 0 | 1;
+}
+
+export interface Phase23TargetEvidence {
+  schemaVersion: string;
+  phase: string;
+  generatedAt: string;
+  target: CanonicalDesktopTarget;
+  targetTriple: string;
+  triple: string;
+  hostOS: string;
+  hostOs: string;
+  hostArchitecture: string;
+  hostArch: string;
   recommendedRunner: string;
   isCross: boolean;
-  compiler: {
+  compiler: string;
+  compilerVersion: string;
+  compilerDetails?: {
     name: string;
     available: boolean;
     version?: string;
     command?: string;
   };
-  linker: {
+  linker: string;
+  linkerVersion: string;
+  linkerDetails?: {
     name: string;
     lldAvailable: boolean;
     version?: string;
     command?: string;
+  };
+  sysroot?: string;
+  emulator?: {
+    used: boolean;
+    command?: string;
+    version?: string;
   };
   sdk: {
     name?: string;
@@ -236,6 +308,12 @@ export interface Phase23TargetEvidence {
     path?: string;
     sha256?: string;
   };
+  objectFiles: string[];
+  objectHashes: Record<string, string>;
+  binaryPath: string;
+  binaryFormat: string;
+  binaryArchitecture: string;
+  binarySha256: string;
   executable: {
     path?: string;
     sha256?: string;
@@ -254,6 +332,10 @@ export interface Phase23TargetEvidence {
     missingLibraries: string[];
     dependencies: string[];
   };
+  buildExitCode: number;
+  executionMode: ExecutionMode;
+  executionExitCode: number | null;
+  executionSentinel: string;
   execution: {
     required: boolean;
     executed: boolean;
@@ -263,6 +345,12 @@ export interface Phase23TargetEvidence {
     sentinelExpected: string;
     sentinelMatched: boolean;
   };
+  distributionManifest: DesktopPackageManifest | Record<string, any> | null;
+  distributionArchivePath?: string;
+  archiveSha256: string;
+  installResult: Phase23InstallResult;
+  uninstallResult: Phase23UninstallResult;
+  verificationStatus: TargetCertificationStatus;
   status: TargetCertificationStatus;
   statusCode: BuildStatusCode;
   reason?: string;
