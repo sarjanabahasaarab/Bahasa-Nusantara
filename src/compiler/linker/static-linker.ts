@@ -11,6 +11,7 @@ import { LLVMToolchainStatus } from '../llvm/toolchain-manager';
 import { TargetPlatformInfo } from '../llvm/target-triple';
 import { NativeRuntimeManager } from '../runtime/native-runtime';
 import { LinkerDiagnosticsManager } from './linker-diagnostics';
+import { SysrootValidator } from './sysroot-validator';
 
 export interface StaticLinkingOptions {
   objectFiles: string[];
@@ -122,26 +123,11 @@ export class StaticLinker {
 
     const requestedSysroot = options.sysroot?.trim();
     if (requestedSysroot && this.targetInfo.os === 'linux') {
-      if (!safeFS.existsSync(requestedSysroot)) {
+      const sysCheck = SysrootValidator.validateLinuxSysroot(requestedSysroot, this.targetInfo);
+      if (!sysCheck.valid) {
         this.diag.galat(
-          'SYSROOT_TIDAK_DITEMUKAN',
-          `Direktori sysroot target '${this.targetInfo.triple}' tidak ditemukan: ${requestedSysroot}`
-        );
-        return {
-          success: false,
-          targetTriple: this.targetInfo.triple,
-          diagnostics: this.diag.dapatkanPesanFormatted(),
-        };
-      }
-      const isRootFsSysroot = requestedSysroot === '/';
-      const hasStdioInSysroot = isRootFsSysroot
-        ? safeFS.existsSync('/usr/include/stdio.h') || safeFS.existsSync('/usr/local/include/stdio.h')
-        : safeFS.existsSync(safePath.join(requestedSysroot, 'usr/include/stdio.h')) ||
-          safeFS.existsSync(safePath.join(requestedSysroot, 'include/stdio.h'));
-      if (!hasStdioInSysroot && options.explicitSysrootOverride) {
-        this.diag.galat(
-          'SYSROOT_TIDAK_VALID',
-          `Sysroot '${requestedSysroot}' tidak memiliki header standar C (stdio.h) untuk target '${this.targetInfo.triple}'.`
+          sysCheck.code || 'SYSROOT_TIDAK_VALID',
+          sysCheck.message || `Sysroot tidak valid: ${requestedSysroot}`
         );
         return {
           success: false,
@@ -151,23 +137,17 @@ export class StaticLinker {
       }
     }
 
-    if (options.libraryPaths && this.targetInfo.os === 'linux') {
-      const forbiddenArchMarker =
-        this.targetInfo.arch === 'aarch64' ? 'x86_64-linux-gnu' : this.targetInfo.arch === 'x86_64' ? 'aarch64-linux-gnu' : null;
-      if (forbiddenArchMarker) {
-        const wrongLibPath = options.libraryPaths.find((lp) => lp.includes(forbiddenArchMarker));
-        if (wrongLibPath) {
-          this.diag.galat(
-            'LIBRARY_TARGET_SALAH',
-            `Jalur library '${wrongLibPath}' milik arsitektur yang salah untuk target '${this.targetInfo.triple}'.`
-          );
-          return {
-            success: false,
-            targetTriple: this.targetInfo.triple,
-            diagnostics: this.diag.dapatkanPesanFormatted(),
-          };
-        }
-      }
+    const libCheck = SysrootValidator.validateLibraryPaths(options.libraryPaths, this.targetInfo);
+    if (!libCheck.valid) {
+      this.diag.galat(
+        libCheck.code || 'LIBRARY_TARGET_SALAH',
+        libCheck.message || `Jalur library tidak valid untuk target '${this.targetInfo.triple}'.`
+      );
+      return {
+        success: false,
+        targetTriple: this.targetInfo.triple,
+        diagnostics: this.diag.dapatkanPesanFormatted(),
+      };
     }
 
     const tmpDir = safeFS.mkdtempSync(safePath.join(safeOS.tmpdir(), 'nusantara-static-link-'));

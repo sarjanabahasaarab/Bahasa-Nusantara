@@ -29,6 +29,7 @@ export interface AOTCompileOptions {
   debug?: boolean;
   emitLLVM?: boolean;
   emitObject?: boolean;
+  emitLLVMOnly?: boolean;
   outputPath?: string;
   customToolchainPath?: string;
 }
@@ -122,6 +123,19 @@ export class AOTCompiler {
         : `${options.outputPath}.ll`;
       safeFS.writeFileSync(llPath, finalIR, 'utf-8');
       diagReport.push(`LLVM IR berhasil ditulis ke: ${llPath}`);
+    }
+
+    // Berhenti setelah generasi/validasi/penulisan LLVM IR jika mode IR-only diminta
+    if (options.emitLLVMOnly || (options.emitLLVM && options.emitObject === false)) {
+      return {
+        success: true,
+        nirModule: nirMod,
+        llvmIR: rawLLVM,
+        optimizedIR: finalIR,
+        toolchain: toolchainStatus,
+        llvmValidationTool: valRes.toolUsed,
+        diagnostics: diagReport,
+      };
     }
 
     // 10. Jika toolchain LLVM tidak tersedia, laporkan bahwa AOT tidak dapat melanjutkan ke object/biner

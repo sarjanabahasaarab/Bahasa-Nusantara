@@ -89,6 +89,7 @@ export interface NativeBuildOptions {
   strip?: boolean;
   verifyExecution?: boolean;
   sysroot?: string;
+  libraryPaths?: string[];
   customToolchainPath?: string;
 }
 

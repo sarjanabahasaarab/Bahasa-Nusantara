@@ -10,22 +10,32 @@ import { AOTCompiler } from '../compiler/aot/aot-compiler';
 import { BinaryInspector } from '../compiler/executable/binary-inspector';
 import { DependencyInspector } from '../compiler/linker/dependency-inspector';
 import { LinkerManager } from '../compiler/linker/linker-manager';
+import { SysrootValidator } from '../compiler/linker/sysroot-validator';
 import { safeCP, safeFS, safePath } from '../compiler/llvm/node-compat';
 import { ObjectGenerator } from '../compiler/llvm/object-generator';
 import { TargetTripleManager } from '../compiler/llvm/target-triple';
-import { LLVMToolchainManager } from '../compiler/llvm/toolchain-manager';
+import { LLVMToolchainManager, LLVMToolchainStatus } from '../compiler/llvm/toolchain-manager';
 import { ArchiveBuilder } from './archive-builder';
 import { TargetMatrixManager } from './target-matrix';
-import { LinkingMode, NativeBuildOptions, NativeBuildResult } from './types';
+import { LinkingMode, NativeBuildOptions, NativeBuildResult, TargetCapability } from './types';
+
+export interface NativeBuildDependencies {
+  toolchain?: LLVMToolchainStatus;
+  capability?: TargetCapability;
+}
 
 export class NativeBuildPipeline {
-  public static build(options: NativeBuildOptions): NativeBuildResult {
+  public static build(
+    options: NativeBuildOptions,
+    deps?: NativeBuildDependencies
+  ): NativeBuildResult {
     const diagnostics: string[] = [];
     const requestedTarget = options.target;
     const strictTarget = TargetTripleManager.resolveStrict(requestedTarget);
     const targetInfo = strictTarget.info;
     const linkingMode: LinkingMode = options.linkingMode || 'auto';
 
+    // PREFLIGHT 1: Validasi target triple
     if (!strictTarget.supported || !targetInfo.targetId) {
       const msg = strictTarget.error || `Target build '${requestedTarget}' tidak didukung.`;
       diagnostics.push(msg);
@@ -44,10 +54,11 @@ export class NativeBuildPipeline {
     }
 
     const canonicalTarget = targetInfo.targetId;
-    const toolchain = new LLVMToolchainManager(options.customToolchainPath).detect();
-    const capability = TargetMatrixManager.inspectTargetCapability(canonicalTarget, toolchain);
+    const toolchain = deps?.toolchain || new LLVMToolchainManager(options.customToolchainPath).detect();
+    const capability =
+      deps?.capability || TargetMatrixManager.inspectTargetCapability(canonicalTarget, toolchain);
 
-    // Ambil kode sumber .nusantara
+    // PREFLIGHT 2: Validasi ketersediaan kode sumber .nusantara
     let sourceCode = options.sourceCode;
     if (!sourceCode && options.sourceFilePath) {
       if (!safeFS.existsSync(options.sourceFilePath)) {
@@ -86,6 +97,142 @@ export class NativeBuildPipeline {
       };
     }
 
+    // PREFLIGHT 3: Validasi sysroot kustom (SEBELUM kompilasi LLVM IR / object)
+    if (options.sysroot !== undefined) {
+      if (targetInfo.os === 'linux') {
+        const sysCheck = SysrootValidator.validateLinuxSysroot(options.sysroot, targetInfo);
+        if (!sysCheck.valid) {
+          diagnostics.push(
+            `[${sysCheck.code || 'SYSROOT_TIDAK_VALID'}] ${sysCheck.message || `Sysroot tidak valid: ${options.sysroot}`}`
+          );
+          return {
+            success: false,
+            statusCode: sysCheck.pipelineStatus || 'GALAT_LINKER',
+            target: canonicalTarget,
+            canonicalTarget,
+            triple: targetInfo.triple,
+            isCross: targetInfo.isCross,
+            linkingMode,
+            actualStaticLink: false,
+            executedOnHost: false,
+            executionMode: 'not-executed',
+            diagnostics,
+          };
+        }
+      } else if (!options.sysroot.trim() || !safeFS.existsSync(options.sysroot.trim())) {
+        diagnostics.push(`Sysroot kustom tidak ditemukan: ${options.sysroot}`);
+        return {
+          success: false,
+          statusCode: 'CROSS_SDK_TIDAK_TERSEDIA',
+          target: canonicalTarget,
+          canonicalTarget,
+          triple: targetInfo.triple,
+          isCross: targetInfo.isCross,
+          linkingMode,
+          actualStaticLink: false,
+          executedOnHost: false,
+          executionMode: 'not-executed',
+          diagnostics,
+        };
+      }
+    }
+
+    // PREFLIGHT 4: Validasi arsitektur libraryPaths (SEBELUM kompilasi LLVM IR)
+    const libPathCheck = SysrootValidator.validateLibraryPaths(options.libraryPaths, targetInfo);
+    if (!libPathCheck.valid) {
+      diagnostics.push(
+        `[${libPathCheck.code || 'LIBRARY_TARGET_SALAH'}] ${libPathCheck.message || 'Jalur library tidak cocok dengan arsitektur target.'}`
+      );
+      return {
+        success: false,
+        statusCode: libPathCheck.pipelineStatus || 'GALAT_LINKER',
+        target: canonicalTarget,
+        canonicalTarget,
+        triple: targetInfo.triple,
+        isCross: targetInfo.isCross,
+        linkingMode,
+        actualStaticLink: false,
+        executedOnHost: false,
+        executionMode: 'not-executed',
+        diagnostics,
+      };
+    }
+
+    // PREFLIGHT 5: Validasi ketersediaan compiler/linker & host/cross C runtime/SDK
+    const hasLinkerDriver = Boolean(capability.clangAvailable || capability.crossCompilerCommand);
+    if (!toolchain.available || !hasLinkerDriver) {
+      diagnostics.push(
+        `[TIDAK TERSEDIA: TOOLCHAIN_TIDAK_TERSEDIA] ${capability.diagnosticMessage}`
+      );
+      if (capability.missingRequirements.length > 0) {
+        diagnostics.push(`Persyaratan hilang: ${capability.missingRequirements.join('; ')}`);
+      }
+      return {
+        success: false,
+        statusCode: 'TOOLCHAIN_TIDAK_TERSEDIA',
+        target: canonicalTarget,
+        canonicalTarget,
+        triple: targetInfo.triple,
+        isCross: targetInfo.isCross,
+        linkingMode,
+        actualStaticLink: false,
+        sdkUsed: capability.sdkName,
+        executedOnHost: false,
+        executionMode: 'not-executed',
+        diagnostics,
+      };
+    }
+
+    if (!capability.canBuildNative && !options.sysroot) {
+      const statusCode =
+        targetInfo.isCross || capability.sdkAvailable === false
+          ? 'CROSS_SDK_TIDAK_TERSEDIA'
+          : 'TOOLCHAIN_TIDAK_TERSEDIA';
+
+      diagnostics.push(`[TIDAK TERSEDIA: ${statusCode}] ${capability.diagnosticMessage}`);
+      if (capability.missingRequirements.length > 0) {
+        diagnostics.push(`Persyaratan hilang: ${capability.missingRequirements.join('; ')}`);
+      }
+      return {
+        success: false,
+        statusCode,
+        target: canonicalTarget,
+        canonicalTarget,
+        triple: targetInfo.triple,
+        isCross: targetInfo.isCross,
+        linkingMode,
+        actualStaticLink: false,
+        sdkUsed: capability.sdkName,
+        executedOnHost: false,
+        executionMode: 'not-executed',
+        diagnostics,
+      };
+    }
+
+    // PREFLIGHT 6: Static linking dilarang di user-space Darwin
+    let wantStatic = false;
+    if (linkingMode === 'static') {
+      if (targetInfo.os === 'darwin') {
+        diagnostics.push(
+          'Mode static penuh (-static) tidak didukung pada user-space macOS/Darwin karena Apple melarang binary tanpa libSystem.B.dylib.'
+        );
+        return {
+          success: false,
+          statusCode: 'GALAT_LINKER',
+          target: canonicalTarget,
+          canonicalTarget,
+          triple: targetInfo.triple,
+          isCross: targetInfo.isCross,
+          linkingMode,
+          actualStaticLink: false,
+          executedOnHost: false,
+          executionMode: 'not-executed',
+          diagnostics,
+        };
+      }
+      wantStatic = true;
+    }
+
     const outDir = safePath.resolve(options.outputDirectory);
     safeFS.mkdirSync(outDir, { recursive: true });
     const appName =
@@ -94,7 +241,7 @@ export class NativeBuildPipeline {
         ? safePath.basename(options.sourceFilePath, safePath.extname(options.sourceFilePath))
         : 'program');
 
-    // Tahap 1 & 2: Parser -> NIR -> Verifier -> LLVM IR (termasuk validasi ketat @.str.*)
+    // Tahap 1 & 2: Parser -> NIR -> Verifier -> LLVM IR SAJA (tanpa link native prematur)
     const llPath = safePath.join(outDir, `${appName}.ll`);
     const aot = new AOTCompiler(options.customToolchainPath);
     const irRes = aot.compileSource(sourceCode, {
@@ -102,11 +249,11 @@ export class NativeBuildPipeline {
       optLevel: options.optLevel || 'O2',
       emitLLVM: true,
       emitObject: false,
+      emitLLVMOnly: true,
       outputPath: llPath,
       customToolchainPath: options.customToolchainPath,
     });
 
-    // Pastikan berkas .ll benar-benar tertulis meski toolchain LLVM tidak ada
     const finalIRText = irRes.optimizedIR || irRes.llvmIR;
     if (finalIRText && !safeFS.existsSync(llPath)) {
       safeFS.writeFileSync(llPath, finalIRText, 'utf-8');
@@ -138,7 +285,9 @@ export class NativeBuildPipeline {
 
     // Tolak eksplisit sisa simbol @.str._v* sebelum memanggil clang/llc
     if (/@\.str\._v\d+/.test(finalIRText)) {
-      diagnostics.push('Terdeteksi referensi string LLVM IR tidak valid (@.str._v*) sebelum generasi objek.');
+      diagnostics.push(
+        'Terdeteksi referensi string LLVM IR tidak valid (@.str._v*) sebelum generasi objek.'
+      );
       return {
         success: false,
         statusCode: 'GALAT_KOMPILASI',
@@ -157,91 +306,7 @@ export class NativeBuildPipeline {
       };
     }
 
-    // Tahap 3: Cek validitas sysroot kustom (jika diberikan) serta ketersediaan toolchain & C runtime target
-    if (options.sysroot) {
-      if (!safeFS.existsSync(options.sysroot)) {
-        diagnostics.push(`Sysroot kustom tidak ditemukan: ${options.sysroot}`);
-        return {
-          success: false,
-          statusCode: 'CROSS_SDK_TIDAK_TERSEDIA',
-          target: canonicalTarget,
-          canonicalTarget,
-          triple: targetInfo.triple,
-          isCross: targetInfo.isCross,
-          linkingMode,
-          actualStaticLink: false,
-          llvmIRPath: llPath,
-          llvmIRSha256,
-          llvmValidationTool: irRes.llvmValidationTool,
-          executedOnHost: false,
-          executionMode: 'not-executed',
-          diagnostics,
-        };
-      }
-      if (targetInfo.os === 'linux') {
-        const hasSysrootStdio =
-          options.sysroot === '/'
-            ? safeFS.existsSync('/usr/include/stdio.h') || safeFS.existsSync('/usr/local/include/stdio.h')
-            : safeFS.existsSync(safePath.join(options.sysroot, 'usr/include/stdio.h')) ||
-              safeFS.existsSync(safePath.join(options.sysroot, 'include/stdio.h'));
-        if (!hasSysrootStdio) {
-          diagnostics.push(
-            `Sysroot Linux '${options.sysroot}' tidak memuat header standar C (stdio.h) untuk target '${targetInfo.triple}'.`
-          );
-          return {
-            success: false,
-            statusCode: 'GALAT_LINKER',
-            target: canonicalTarget,
-            canonicalTarget,
-            triple: targetInfo.triple,
-            isCross: targetInfo.isCross,
-            linkingMode,
-            actualStaticLink: false,
-            llvmIRPath: llPath,
-            llvmIRSha256,
-            llvmValidationTool: irRes.llvmValidationTool,
-            executedOnHost: false,
-            executionMode: 'not-executed',
-            diagnostics,
-          };
-        }
-      }
-    }
-
-    if (!capability.canBuildNative && !options.sysroot) {
-      const statusCode =
-        !toolchain.available || (!capability.clangAvailable && !capability.llcAvailable)
-          ? 'TOOLCHAIN_TIDAK_TERSEDIA'
-          : targetInfo.isCross || capability.sdkAvailable === false
-          ? 'CROSS_SDK_TIDAK_TERSEDIA'
-          : 'TOOLCHAIN_TIDAK_TERSEDIA';
-
-      diagnostics.push(
-        `[TIDAK TERSEDIA: ${statusCode}] ${capability.diagnosticMessage}`
-      );
-      if (capability.missingRequirements.length > 0) {
-        diagnostics.push(`Persyaratan hilang: ${capability.missingRequirements.join('; ')}`);
-      }
-      return {
-        success: false,
-        statusCode,
-        target: canonicalTarget,
-        canonicalTarget,
-        triple: targetInfo.triple,
-        isCross: targetInfo.isCross,
-        linkingMode,
-        actualStaticLink: false,
-        sdkUsed: capability.sdkName,
-        llvmIRPath: llPath,
-        llvmIRSha256,
-        llvmValidationTool: irRes.llvmValidationTool,
-        executedOnHost: false,
-        executionMode: 'not-executed',
-        diagnostics,
-      };
-    }
-
-    // Tahap 4: Compile LLVM IR -> Object File (.o / .obj)
+    // Tahap 3: Compile LLVM IR -> Object File (.o / .obj)
     const objPath = safePath.join(outDir, `${appName}${targetInfo.objectExtension}`);
     const objGen = new ObjectGenerator(toolchain, targetInfo);
     const objRes = objGen.generateObject(finalIRText, objPath);
@@ -269,35 +334,7 @@ export class NativeBuildPipeline {
     }
     const objectSha256 = ArchiveBuilder.computeSha256(safeFS.readFileBufferSync(objPath));
 
-    // Tahap 5: Tentukan static vs dynamic linking nyata
-    let wantStatic = false;
-    if (linkingMode === 'static') {
-      if (targetInfo.os === 'darwin') {
-        diagnostics.push(
-          'Mode static penuh (-static) tidak didukung pada user-space macOS/Darwin karena Apple melarang binary tanpa libSystem.B.dylib.'
-        );
-        return {
-          success: false,
-          statusCode: 'GALAT_LINKER',
-          target: canonicalTarget,
-          canonicalTarget,
-          triple: targetInfo.triple,
-          isCross: targetInfo.isCross,
-          linkingMode,
-          actualStaticLink: false,
-          compilerToolUsed: objRes.toolUsed,
-          llvmIRPath: llPath,
-          llvmIRSha256,
-          objectPath: objPath,
-          objectSha256,
-          executedOnHost: false,
-          executionMode: 'not-executed',
-          diagnostics,
-        };
-      }
-      wantStatic = true;
-    }
-
+    // Tahap 4: Static vs Dynamic Linking nyata
     const exePath = safePath.join(outDir, `${appName}${targetInfo.executableExtension}`);
     const linkerMgr = new LinkerManager({
       targetTriple: targetInfo.triple,
@@ -311,6 +348,7 @@ export class NativeBuildPipeline {
       debug: options.debug,
       strip: options.strip,
       sysroot: options.sysroot || capability.sysroot,
+      libraryPaths: options.libraryPaths,
       targetTriple: targetInfo.triple,
       customToolchainPath: options.customToolchainPath,
       crossCompilerCommand: capability.crossCompilerCommand,
