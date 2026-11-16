@@ -36,15 +36,18 @@ jobs:
           node-version: 22
           cache: 'npm'
 
-      - name: Pasang Dependensi Proyek (Reproducible)
-        run: npm ci
+      - name: Verifikasi Versi Node.js, npm & Dependensi Reproducible
+        run: |
+          node -v
+          npm -v
+          npm ci
 
       - name: Validasi Konfigurasi & Tipe Data (Lint / Typecheck)
         run: |
           npm run lint
 
   # ============================================================================
-  # 2. AUTOMATED TEST SUITE (PHASE 1 - 24)
+  # 2. AUTOMATED TEST SUITE (PHASE 1 - 50)
   # ============================================================================
   test-suite:
     name: NUSANTARA / Pengujian Otomatis (${{ matrix.os }})
@@ -67,10 +70,14 @@ jobs:
       - name: Verifikasi Node.js 22 LTS & Native node:sqlite (DatabaseSync)
         run: |
           node -v
+          npm -v
           node -e "const s = process.getBuiltinModule('node:sqlite'); if (!s || typeof s.DatabaseSync !== 'function') { console.error('[GALAT] node:sqlite DatabaseSync tidak tersedia pada ' + process.version); process.exit(1); } console.log('[OK] node:sqlite DatabaseSync tersedia pada', process.platform, process.arch, process.version);"
 
-      - name: Pasang Dependensi
-        run: npm ci
+      - name: Pasang Dependensi & Verifikasi Native Binding Build Tools
+        shell: bash
+        run: |
+          npm ci
+          node -e "import { createRequire } from 'module'; const r = createRequire(import.meta.url); const map = { 'win32-x64': '@rolldown/binding-win32-x64-msvc', 'win32-arm64': '@rolldown/binding-win32-arm64-msvc', 'darwin-arm64': '@rolldown/binding-darwin-arm64', 'darwin-x64': '@rolldown/binding-darwin-x64', 'linux-arm64': '@rolldown/binding-linux-arm64-gnu', 'linux-x64': '@rolldown/binding-linux-x64-gnu' }; const k = process.platform + '-' + process.arch; const pkg = map[k]; if (pkg) { console.log('[OK] Binding native terpasang:', pkg, '->', r.resolve(pkg + '/package.json')); } console.log('[OK] Rolldown entry:', r.resolve('rolldown/package.json'));"
 
       - name: Uji Khusus Phase 29 SQLite Native & Browser Fallback Lintas Platform
         shell: bash
@@ -163,8 +170,13 @@ jobs:
           node-version: 22
           cache: 'npm'
 
-      - name: Pasang Dependensi
-        run: npm ci
+      - name: Pasang Dependensi & Audit Binding Native (${{ matrix.target }})
+        shell: bash
+        run: |
+          node -v
+          npm -v
+          npm ci
+          node -e "import { createRequire } from 'module'; const r = createRequire(import.meta.url); const rolldownMap = { 'win32-x64': '@rolldown/binding-win32-x64-msvc', 'win32-arm64': '@rolldown/binding-win32-arm64-msvc', 'darwin-arm64': '@rolldown/binding-darwin-arm64', 'darwin-x64': '@rolldown/binding-darwin-x64', 'linux-arm64': '@rolldown/binding-linux-arm64-gnu', 'linux-x64': '@rolldown/binding-linux-x64-gnu' }; const oxideMap = { 'win32-x64': '@tailwindcss/oxide-win32-x64-msvc', 'win32-arm64': '@tailwindcss/oxide-win32-arm64-msvc', 'darwin-arm64': '@tailwindcss/oxide-darwin-arm64', 'darwin-x64': '@tailwindcss/oxide-darwin-x64', 'linux-arm64': '@tailwindcss/oxide-linux-arm64-gnu', 'linux-x64': '@tailwindcss/oxide-linux-x64-gnu' }; const k = process.platform + '-' + process.arch; if (rolldownMap[k]) console.log('[OK] Rolldown:', r.resolve(rolldownMap[k] + '/package.json')); if (oxideMap[k]) console.log('[OK] Tailwind Oxide:', r.resolve(oxideMap[k] + '/package.json')); console.log('[OK] Vite:', r.resolve('vite/package.json'));"
 
       - name: Bangun Proyek Web & Kompilator
         run: |
@@ -173,12 +185,37 @@ jobs:
       - name: Pasang Toolchain LLVM/Clang & Cross-Tools (${{ matrix.target }})
         shell: bash
         run: |
+          HOST_ARCH=$(uname -m)
+          echo "[INFO] Runner OS=${{ runner.os }} HostArch=$HOST_ARCH Target=${{ matrix.target }} Triple=${{ matrix.triple }}"
           if [ "${{ runner.os }}" = "Linux" ]; then
             sudo apt-get update -y
             if [ "${{ matrix.target }}" = "linux-arm64" ]; then
-              sudo apt-get install -y clang lld llvm gcc-aarch64-linux-gnu libc6-dev-arm64-cross qemu-user-static binutils
-              aarch64-linux-gnu-gcc --version
-              qemu-aarch64-static --version
+              if [ "$HOST_ARCH" = "aarch64" ] || [ "$HOST_ARCH" = "arm64" ]; then
+                echo "[INFO] Host sudah berjalan native ARM64 ($HOST_ARCH); tidak membutuhkan QEMU."
+                sudo apt-get install -y clang lld llvm binutils
+              else
+                sudo apt-get install -y clang lld llvm gcc-aarch64-linux-gnu libc6-dev-arm64-cross binutils
+                QEMU_CANDIDATES=""
+                for pkg in qemu-user qemu-user-static qemu-user-binfmt qemu-user-binfmt-hwe; do
+                  CAND=$(apt-cache policy "$pkg" 2>/dev/null | awk '/Candidate:/ {print $2}')
+                  if [ -n "$CAND" ] && [ "$CAND" != "(none)" ] && apt-cache show "$pkg" >/dev/null 2>&1; then
+                    echo "[INFO] Paket QEMU tersedia di apt: $pkg ($CAND)"
+                    QEMU_CANDIDATES="$QEMU_CANDIDATES $pkg"
+                  fi
+                done
+                if [ -n "$QEMU_CANDIDATES" ]; then
+                  sudo apt-get install -y $QEMU_CANDIDATES
+                fi
+                QEMU_BIN=$(command -v qemu-aarch64-static || command -v qemu-aarch64 || true)
+                if [ -z "$QEMU_BIN" ]; then
+                  echo "[GALAT] Emulator user-mode QEMU ARM64 (qemu-aarch64 / qemu-aarch64-static) tidak tersedia pada host x86_64."
+                  exit 1
+                fi
+                echo "[OK] Emulator QEMU ARM64 terdeteksi: $QEMU_BIN"
+                "$QEMU_BIN" --version
+                aarch64-linux-gnu-gcc --version
+                ls -la /proc/sys/fs/binfmt_misc/ 2>/dev/null | grep -iE 'qemu|aarch64' || echo "[INFO] Eksekusi cross ARM64 memakai $QEMU_BIN langsung."
+              fi
             else
               sudo apt-get install -y clang lld llvm binutils
             fi
@@ -202,6 +239,17 @@ jobs:
                 echo "[OK] Windows SDK ARM64 library ditemukan: $WIN_SDK_ARM64"
               else
                 echo "[INFO] Windows SDK ARM64 library (Lib/*/um/arm64) tidak terpasang di runner windows-latest ini."
+              fi
+            fi
+            lld-link --version || true
+          elif [ "${{ runner.os }}" = "macOS" ]; then
+            xcrun --show-sdk-path || true
+            ld -v 2>&1 || true
+            if [ "${{ matrix.target }}" = "macos-x86_64" ] && [ "$HOST_ARCH" = "arm64" ]; then
+              if arch -x86_64 /usr/bin/true 2>/dev/null; then
+                echo "[OK] Rosetta 2 aktif untuk eksekusi macos-x86_64 pada Apple Silicon."
+              else
+                echo "[INFO] Rosetta 2 tidak aktif; cross-compile Mach-O x86_64 tetap dijalankan tanpa klaim eksekusi native."
               fi
             fi
           fi
@@ -231,7 +279,7 @@ jobs:
         shell: bash
         run: |
           EVIDENCE_FILE="artifacts/phase23/evidence/${{ matrix.target }}.json"
-          echo "### Evidence Phase 23.2: \`${{ matrix.target }}\` (\`${{ matrix.triple }}\`)" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Evidence Phase 23: \`${{ matrix.target }}\` (\`${{ matrix.triple }}\`)" >> "$GITHUB_STEP_SUMMARY"
           if [ -f "$EVIDENCE_FILE" ]; then
             echo '```json' >> "$GITHUB_STEP_SUMMARY"
             cat "$EVIDENCE_FILE" >> "$GITHUB_STEP_SUMMARY"
@@ -250,8 +298,10 @@ jobs:
           if-no-files-found: warn
 
       - name: Validasi Pembuatan Distribusi Target (${{ matrix.target }})
+        shell: bash
         run: |
-          npx tsx -e "import { MesinCI } from './src/cicd'; import { PembacaBerkasNode } from './src/modul/pembacaBerkas'; const ci = new MesinCI({ pembaca: new PembacaBerkasNode(), targetPlatforms: ['${{ matrix.legacy_target }}'] }); const r = ci.jalankan(); if (r.statusAkhir !== 'PASS') process.exit(1);"
+          npx tsx -e "import { MesinCI } from './src/cicd'; import { PembacaBerkasNode } from './src/modul/pembacaBerkas'; const ci = new MesinCI({ pembaca: new PembacaBerkasNode(), targetPlatforms: ['${{ matrix.target }}', '${{ matrix.legacy_target }}'] }); const r = ci.jalankan(); console.log(r.ringkasanTeks); if (r.statusAkhir !== 'PASS') { console.error('[GALAT] MesinCI GAGAL:', JSON.stringify({ statusAkhir: r.statusAkhir, daftarError: r.daftarError, diagnostikDistribusi: r.diagnostikDistribusi }, null, 2)); process.exit(1); }"
+          npx tsx scripts/phase23-certify.ts verify-dist --target "${{ matrix.target }}" --out-dir dist-native/dist-verify --fail-on-missing-clang
 
       - name: Unggah Artefak Build CI (Retention 7 Hari)
         if: always()

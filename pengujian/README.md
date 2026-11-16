@@ -16,8 +16,8 @@ Sesuai audit teknis resmi dan transparan, berikut rincian metrik pengujian repos
 | **Skrip Perintah Pengujian** | **46 Skrip (`npm test`)** | Terdiri dari 1 skrip audit fondasi (`skrip/periksa_fondasi.js`) dan 45 skrip suite TypeScript dalam `npm test`, ditambah 1 skrip terpisah untuk fallback peramban (`test:database-browser-v29`). |
 | **Suite Pengujian TypeScript** | **45 Suite (+1 Terpisah)** | 45 suite aktif dalam `npm test`; fallback peramban SQLite diuji terpisah di `pengujian/database/uji_browser_fallback_fase29.ts`. |
 | **Pemeriksaan Dokumen Fondasi** | **167 Berkas** | Pemeriksaan keberadaan, kelengkapan isi, format lisensi, dan tata kelola pada Phase 1–5 oleh `skrip/periksa_fondasi.js`. |
-| **Kasus Pengujian TypeScript (Test Cases)** | **1.308 Kasus** | Total skenario pada 45 suite `npm test` (**1.302 LULUS**, **0 GAGAL**, **3 SKIPPED** & **3 BELUM DIVERIFIKASI** secara transparan karena host Linux tanpa `clang`/`llc`/`lld`/`pwsh`), ditambah **3/3 kasus** fallback peramban terpisah. |
-| **Total Pemeriksaan Gabungan** | **1.475 Pemeriksaan** | **167 pemeriksaan dokumen fondasi + 1.308 kasus uji TypeScript dalam `npm test` = 1.475 pemeriksaan.** |
+| **Kasus Pengujian TypeScript (Test Cases)** | **1.313 Kasus** | Total skenario pada 45 suite `npm test` (**1.307 LULUS**, **0 GAGAL**, **3 SKIPPED** & **3 BELUM DIVERIFIKASI** secara transparan karena host Linux tanpa `clang`/`llc`/`lld`/`pwsh`), ditambah **3/3 kasus** fallback peramban terpisah. |
+| **Total Pemeriksaan Gabungan** | **1.480 Pemeriksaan** | **167 pemeriksaan dokumen fondasi + 1.313 kasus uji TypeScript dalam `npm test` = 1.480 pemeriksaan.** |
 
 ---
 
@@ -57,8 +57,8 @@ Setiap fitur dan subsistem diklasifikasikan secara jujur dan transparan berdasar
 | 16 | Phase 20 | Language Server Protocol (LSP JSON-RPC 2.0) | `npx tsx pengujian/lsp/uji_lsp.ts` | 32 uji | LULUS | INTEGRATION TEST PASSED |
 | 17 | Phase 21 | Testing Framework (`pastikan`) & Quality Gate | `npx tsx pengujian/testing/uji_testing.ts` | 29 uji | LULUS | UNIT TEST PASSED |
 | 18 | Phase 22 | Registri Paket Lokal & Penerbitan `.npk` | `npx tsx pengujian/paket/uji_ekosistem_registri.ts` | 24 uji | LULUS | INTEGRATION TEST PASSED |
-| 19 | Phase 23 | Build System, BOM-free Receipt, Installer & Certification Gate | `npx tsx pengujian/build/uji_build_distribusi_fase23.ts` | 25 lulus (+3 belum diverifikasi lokal) | PARTIAL_HOST_SAFE | INTEGRATION TEST PASSED |
-| 20 | Phase 23 & 24 | Build Rilis ZIP/`tar.gz`, CI/CD GitHub Actions & Security Gate | `npx tsx pengujian/cicd/uji_cicd_workflow.ts` | 21 uji | LULUS | INTEGRATION TEST PASSED |
+| 19 | Phase 23 | Build System, Lockfile Native, Installer & Certification Gate | `npx tsx pengujian/build/uji_build_distribusi_fase23.ts` | 28 lulus (+3 belum diverifikasi lokal) | PARTIAL_HOST_SAFE | INTEGRATION TEST PASSED |
+| 20 | Phase 23 & 24 | Build Rilis ZIP/`tar.gz`, CI/CD GitHub Actions & Security Gate | `npx tsx pengujian/cicd/uji_cicd_workflow.ts` | 23 uji | LULUS | INTEGRATION TEST PASSED |
 | 21 | Phase 25 | Debugger Interaktif & Profiler Memori | `npx tsx pengujian/debugger/uji_debugger_profiler.ts` | 40 uji | LULUS | INTEGRATION TEST PASSED |
 | 22 | Phase 26 | IDE Foundation, File Tree & Terminal | `npx tsx pengujian/ide/uji_ide_foundation.ts` | 46 uji | LULUS | INTEGRATION TEST PASSED |
 | 23 | Phase 27 | Dependency Graph & Isolated Package Cache | `npx tsx pengujian/paket/uji_ekosistem_dependensi.ts` | 25 uji | LULUS | INTEGRATION TEST PASSED |

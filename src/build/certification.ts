@@ -8,6 +8,7 @@
 
 import { BinaryInspector } from '../compiler/executable/binary-inspector';
 import { safeFS, safePath } from '../compiler/llvm/node-compat';
+import { TargetTripleManager } from '../compiler/llvm/target-triple';
 import { LLVMToolchainManager } from '../compiler/llvm/toolchain-manager';
 import { ArchiveBuilder } from './archive-builder';
 import { NativeBuildPipeline } from './native-pipeline';
@@ -278,6 +279,19 @@ export class Phase23CertificationEngine {
         continue;
       }
 
+      const expectedTriple = TargetTripleManager.resolve(target).triple;
+      if (ev.triple !== expectedTriple && !(target === 'macos-arm64' && ev.triple === 'aarch64-apple-darwin')) {
+        corruptCount++;
+        targetsMap[target] = null;
+        findings.push({
+          severity: 'error',
+          code: 'JSON_RUSAK',
+          target,
+          message: `Triple target tidak cocok untuk '${target}' (diharapkan ${expectedTriple}, aktual ${ev.triple}).`,
+        });
+        continue;
+      }
+
       targetsMap[target] = ev;
 
       if (ev.status === 'FAIL') {
@@ -302,8 +316,31 @@ export class Phase23CertificationEngine {
         continue;
       }
 
-      // Status PASS: audit mendalam bukti biner, SHA-256 di disk, arsitektur, dan eksekusi!
+      // Status PASS: audit mendalam bukti biner, SHA-256 di disk, arsitektur, kejujuran mode eksekusi, dan sentinel!
       let targetValid = true;
+      if (ev.sdk && ev.sdk.available === false) {
+        findings.push({
+          severity: 'error',
+          code: 'TARGET_GAGAL',
+          target,
+          message: `Target '${target}' mengklaim PASS padahal sdk.available=false.`,
+        });
+        targetValid = false;
+      }
+      if (
+        (ev.isCross && ev.execution?.mode === 'native') ||
+        (target === 'macos-x86_64' && ev.hostArch === 'arm64' && ev.execution?.mode === 'native') ||
+        (ev.execution?.mode === 'rosetta2' && target !== 'macos-x86_64')
+      ) {
+        findings.push({
+          severity: 'error',
+          code: 'EKSEKUSI_GAGAL',
+          target,
+          message: `Klaim mode eksekusi tidak jujur pada '${target}' (isCross=${ev.isCross}, hostArch=${ev.hostArch}, mode=${ev.execution?.mode}).`,
+        });
+        targetValid = false;
+      }
+
       const checkArtifactSha = (relOrAbs: string | undefined, expectedSha: string | undefined, label: string): string | null => {
         if (!relOrAbs || !expectedSha) {
           findings.push({

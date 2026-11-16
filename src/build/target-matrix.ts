@@ -35,7 +35,7 @@ export const RUNNER_RECOMMENDATION_MAP: Record<CanonicalDesktopTarget, string> =
   'windows-x86_64': 'windows-latest',
   'windows-arm64': 'windows-latest (MSVC ARM64 + WinSDK ARM64) / windows-11-arm',
   'linux-x86_64': 'ubuntu-latest',
-  'linux-arm64': 'ubuntu-latest (cross + qemu-aarch64-static) / ubuntu-24.04-arm',
+  'linux-arm64': 'ubuntu-latest (cross + qemu-aarch64-static / qemu-aarch64) / ubuntu-24.04-arm',
   'macos-x86_64': 'macos-latest / macos-13 (Apple Clang + MacOSX.sdk)',
   'macos-arm64': 'macos-latest',
 };

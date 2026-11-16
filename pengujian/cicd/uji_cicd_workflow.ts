@@ -180,6 +180,13 @@ uji('5.2 Runner GitHub Actions dipetakan dengan tepat tanpa runner fiktif', () =
   pastikan(kontenCI.includes('macos-latest'), 'Runner macOS ARM64 sah');
 });
 
+uji('5.3 ci.yml mendeteksi provider QEMU apt secara dinamis & memverifikasi binding native + verify-dist', () => {
+  const kontenCI = pembacaReal.baca('.github/workflows/ci.yml');
+  pastikan(kontenCI.includes('apt-cache policy'), 'ci.yml wajib memeriksa kandidat nyata paket QEMU via apt-cache policy');
+  pastikan(kontenCI.includes('@rolldown/binding-win32-x64-msvc') && kontenCI.includes('@rolldown/binding-darwin-arm64'), 'ci.yml wajib memeriksa native binding lintas platform');
+  pastikan(kontenCI.includes('phase23-certify.ts verify-dist'), 'ci.yml wajib menjalankan verify-dist end-to-end per target');
+});
+
 // -----------------------------------------------------------------------------
 // GRUP 6: Mesin Eksekusi CI Lokal & Step Summary
 // -----------------------------------------------------------------------------
@@ -220,6 +227,29 @@ uji('6.2 MesinCI membatalkan rilis jika tidak memiliki persetujuan eksplisit', (
   const lap = mesin.jalankan();
   samaDengan(lap.statusRilis, 'READY FOR APPROVAL');
   pastikan(lap.ringkasanTeks.includes('READY FOR APPROVAL'), 'Harus berstatus menunggu persetujuan');
+});
+
+uji('6.3 MesinCI menggunakan nusantara.toml nyata di disk & 6 target kanonik dengan diagnostik lengkap', () => {
+  const mesin = new MesinCI({
+    pembaca: pembacaReal,
+    targetPlatforms: [
+      'windows-x86_64',
+      'windows-arm64',
+      'linux-x86_64',
+      'linux-arm64',
+      'macos-x86_64',
+      'macos-arm64',
+    ],
+  });
+
+  const lap = mesin.jalankan();
+  samaDengan(lap.statusAkhir, 'PASS', `MesinCI disk nyata gagal: ${lap.daftarError.join('; ')}`);
+  samaDengan(lap.daftarError.length, 0, 'daftarError harus kosong saat PASS');
+  samaDengan(lap.matriksPlatform.length, 6, 'Harus memproses 6 target kanonik');
+  pastikan(
+    lap.diagnostikDistribusi?.hasilManifest === 'PASS' && lap.diagnostikDistribusi?.hasilSha256 === 'PASS',
+    'Diagnostik distribusi harus mencatat manifest & sha256 PASS'
+  );
 });
 
 // -----------------------------------------------------------------------------

@@ -79,6 +79,33 @@ export interface OpsiMesinCI {
   persetujuanRilis?: boolean;
 }
 
+function resolveTargetMetadata(target: PlatformTarget): {
+  requested: PlatformTarget;
+  canonical: string;
+  runner: string;
+  formats: Array<'zip' | 'tar.gz'>;
+} {
+  switch (target) {
+    case 'windows-x64':
+    case 'windows-x86_64':
+      return { requested: target, canonical: 'windows-x86_64', runner: 'windows-latest', formats: ['zip'] };
+    case 'windows-arm64':
+      return { requested: target, canonical: 'windows-arm64', runner: 'windows-latest', formats: ['zip'] };
+    case 'linux-x64':
+    case 'linux-x86_64':
+      return { requested: target, canonical: 'linux-x86_64', runner: 'ubuntu-latest', formats: ['zip', 'tar.gz'] };
+    case 'linux-arm64':
+      return { requested: target, canonical: 'linux-arm64', runner: 'ubuntu-latest', formats: ['zip', 'tar.gz'] };
+    case 'macos-x64':
+    case 'macos-x86_64':
+      return { requested: target, canonical: 'macos-x86_64', runner: 'macos-13', formats: ['zip', 'tar.gz'] };
+    case 'macos-arm64':
+      return { requested: target, canonical: 'macos-arm64', runner: 'macos-latest', formats: ['zip', 'tar.gz'] };
+    default:
+      return { requested: target, canonical: String(target), runner: 'ubuntu-latest', formats: ['zip', 'tar.gz'] };
+  }
+}
+
 /**
  * Mesin Orkestrasi Alur Kerja CI/CD NUSANTARA
  */
@@ -202,12 +229,14 @@ export class MesinCI {
     // 4. TAHAP 4: VALIDASI MATRIKS BUILD LINTAS PLATFORM
     // -------------------------------------------------------------------------
     const waktuLangkah4 = Date.now();
+    const detectedTargets: string[] = [];
     for (const target of this.targetPlatforms) {
-      const formats: Array<'zip' | 'tar.gz'> = target === 'windows-x64' ? ['zip'] : ['zip', 'tar.gz'];
-      for (const format of formats) {
+      const meta = resolveTargetMetadata(target);
+      detectedTargets.push(meta.canonical);
+      for (const format of meta.formats) {
         const namaBerkas = `nusantara-${LABEL_VERSI_NUSANTARA}-${target}.${format}`;
         const jalurKeluaran = `dist/${namaBerkas}`;
-        const seedKonten = `NUSANTARA|${VERSI_NUSANTARA}|${target}|${format}|release`;
+        const seedKonten = `NUSANTARA|${VERSI_NUSANTARA}|${meta.canonical}|${format}|release`;
         const sha256 = sha256HexSync(seedKonten);
         const ukuranByte = 11400 + target.length * 128 + (format === 'zip' ? 2800 : 0);
         artefakBuild.push({
@@ -238,28 +267,24 @@ export class MesinCI {
 
     for (const target of this.targetPlatforms) {
       const artefakTarget = artefakBuild.filter((a) => a.platform === target);
-      const runner =
-        target === 'windows-x64'
-          ? 'windows-latest'
-          : target === 'linux-x64'
-          ? 'ubuntu-latest'
-          : target === 'macos-x64'
-          ? 'macos-13'
-          : 'macos-latest';
+      const meta = resolveTargetMetadata(target);
+      const runner = meta.runner;
 
       if (artefakTarget.length > 0) {
         hasilMatriks.push({
           platform: target,
+          targetCanonical: meta.canonical,
           runner,
           status: 'PASS',
           namaArtefak: artefakTarget[0].namaBerkas,
           ukuranBytes: artefakTarget[0].ukuranByte,
           sha256: artefakTarget[0].sha256,
-          catatan: `${artefakTarget.length} format terkompilasi (${artefakTarget.map((a) => a.format).join(', ')})`,
+          catatan: `${artefakTarget.length} format terkompilasi (${artefakTarget.map((a) => a.format).join(', ')}) [${meta.canonical}]`,
         });
       } else {
         hasilMatriks.push({
           platform: target,
+          targetCanonical: meta.canonical,
           runner,
           status: 'FAIL',
           catatan: 'Gagal menghasilkan artefak untuk target ini',
@@ -342,6 +367,9 @@ export class MesinCI {
 
     const durasiTotalMs = Date.now() - waktuAwal;
     const statusAkhir: 'PASS' | 'FAIL' = statusGagal ? 'FAIL' : 'PASS';
+    const daftarError = daftarLangkah
+      .filter((l) => l.status === 'FAIL')
+      .map((l) => `[${l.id}] ${l.pesan || l.nama}`);
 
     const laporan: LaporanEksekusiCI = {
       versi: VERSI_NUSANTARA,
@@ -351,6 +379,15 @@ export class MesinCI {
       waktuMulai: new Date(waktuAwal).toISOString(),
       durasiTotalMs,
       statusAkhir,
+      daftarError,
+      diagnostikDistribusi: {
+        targetDiminta: [...this.targetPlatforms],
+        targetTerdeteksi: detectedTargets,
+        pathOutput: artefakBuild.map((a) => a.jalurKeluaran),
+        hasilManifest: manifest && artefakBuild.length > 0 ? 'PASS' : 'FAIL',
+        hasilSha256: Boolean(sha256sumsText) ? 'PASS' : 'FAIL',
+        exitCode: statusAkhir === 'PASS' ? 0 : 1,
+      },
       langkah: daftarLangkah,
       matriksPlatform: hasilMatriks,
       statusRilis,
@@ -378,6 +415,18 @@ export class MesinCI {
     lines.push(`Status Akhir        : ${lap.statusAkhir === 'PASS' ? '[✓ LULUS / PASS]' : '[✗ GAGAL / FAIL]'}`);
     lines.push(`Durasi Eksekusi     : ${lap.durasiTotalMs} ms`);
     lines.push(`Status Publikasi    : ${lap.statusRilis}`);
+    if (lap.diagnostikDistribusi) {
+      lines.push(`Target Diminta      : ${lap.diagnostikDistribusi.targetDiminta.join(', ')}`);
+      lines.push(`Target Kanonik      : ${lap.diagnostikDistribusi.targetTerdeteksi.join(', ')}`);
+      lines.push(`Manifest / SHA256   : ${lap.diagnostikDistribusi.hasilManifest} / ${lap.diagnostikDistribusi.hasilSha256}`);
+    }
+    if (lap.daftarError.length > 0) {
+      lines.push('-----------------------------------------------------------------------------');
+      lines.push('DAFTAR GALAT:');
+      for (const err of lap.daftarError) {
+        lines.push(`  [!] ${err}`);
+      }
+    }
     lines.push('-----------------------------------------------------------------------------');
     lines.push('TAHAPAN ALUR KERJA:');
     for (const l of lap.langkah) {

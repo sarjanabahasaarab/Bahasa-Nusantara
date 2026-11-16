@@ -1065,6 +1065,81 @@ uji('7.8 Enam target PASS dengan SHA-256, biner, dan sentinel valid menghasilkan
   }
 });
 
+uji('7.9 Gerbang menolak klaim eksekusi native tidak jujur pada target cross atau Rosetta', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cert-79-'));
+  try {
+    const evDir = writeAll6Fixtures(tmp, (t, ev) => {
+      if (t === 'macos-x86_64') {
+        ev.hostOs = 'darwin';
+        ev.hostArch = 'arm64';
+        ev.isCross = true;
+        ev.execution.mode = 'native';
+      }
+    });
+    const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
+    samaDengan(agg.overallStatus, 'FAILED');
+    samaDengan(agg.exitCode, 1);
+    pastikan(agg.findings.some((f) => f.code === 'EKSEKUSI_GAGAL' && f.target === 'macos-x86_64'), 'Wajib menolak klaim native pada target cross');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+uji('7.10 package-lock.json menyertakan binding native lintas platform (Rolldown, Tailwind Oxide, LightningCSS, TS7)', () => {
+  const lockPath = path.resolve('package-lock.json');
+  pastikan(fs.existsSync(lockPath), 'package-lock.json wajib ada');
+  const lock = JSON.parse(fs.readFileSync(lockPath, 'utf-8'));
+  const requiredBindings = [
+    'node_modules/@rolldown/binding-win32-x64-msvc',
+    'node_modules/@rolldown/binding-win32-arm64-msvc',
+    'node_modules/@rolldown/binding-darwin-arm64',
+    'node_modules/@rolldown/binding-darwin-x64',
+    'node_modules/@rolldown/binding-linux-arm64-gnu',
+    'node_modules/@rolldown/binding-linux-x64-gnu',
+    'node_modules/@tailwindcss/oxide-win32-x64-msvc',
+    'node_modules/@tailwindcss/oxide-darwin-arm64',
+    'node_modules/@tailwindcss/oxide-linux-x64-gnu',
+    'node_modules/lightningcss-win32-x64-msvc',
+    'node_modules/lightningcss-darwin-arm64',
+    'node_modules/@typescript/typescript-win32-x64',
+    'node_modules/@typescript/typescript-darwin-arm64',
+  ];
+  for (const pkgKey of requiredBindings) {
+    const ent = lock.packages?.[pkgKey];
+    pastikan(
+      Boolean(ent && ent.version && ent.resolved && ent.integrity),
+      `package-lock.json kehilangan entri/resolved/integrity untuk '${pkgKey}'`
+    );
+  }
+});
+
+uji('7.11 Siklus end-to-end arsip distribusi: package -> verify SHA256SUMS -> extract sandbox -> uninstall', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-dist-e2e-'));
+  try {
+    const distDir = path.join(tmp, 'dist');
+    const extractDir = path.join(tmp, 'extract');
+    const pkg = DesktopDistributionPackager.packageTarget({
+      appName: 'nusa_e2e_dist',
+      appVersion: '0.23.6',
+      target: 'linux-x86_64',
+      mode: 'release',
+      packageKind: 'script-launcher',
+      outputDirectory: distDir,
+      reproducible: true,
+      includeInstallers: true,
+    });
+    const tgz = pkg.artifacts.find((a) => a.format === 'tar.gz');
+    pastikan(Boolean(tgz && fs.existsSync(tgz.filePath)), 'Arsip .tar.gz harus terbentuk');
+    ArchiveBuilder.extractTarGz(fs.readFileSync(tgz!.filePath), extractDir);
+    const extractedPkgDir = path.join(extractDir, path.basename(pkg.packageDirectory));
+    const sums = fs.readFileSync(path.join(extractedPkgDir, 'SHA256SUMS'), 'utf-8');
+    const shaCheck = ArchiveBuilder.verifySha256SumsFromDirectory(extractedPkgDir, sums);
+    pastikan(shaCheck.valid && shaCheck.checkedCount > 0, 'Berkas hasil ekstraksi arsip wajib lulus SHA256SUMS');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 // -----------------------------------------------------------------------------
 // REKAPITULASI
 // -----------------------------------------------------------------------------

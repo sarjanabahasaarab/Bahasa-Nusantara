@@ -4,6 +4,27 @@ Seluruh perubahan penting pada proyek bahasa pemrograman NUSANTARA dicatat dalam
 
 Format penomoran versi mengacu pada **Semantic Versioning** (`vMAJOR.MINOR.PATCH`). Pada masa pengembangan awal, versi minor mencerminkan tahapan fase roadmap (misal `v0.1.0` untuk Phase 1, `v0.2.0` untuk Phase 2, `v0.3.0` untuk Phase 3, `v0.4.0` untuk Phase 4, `v0.5.0` untuk Phase 5, `v0.6.0` untuk Phase 6, `v0.7.0` untuk Phase 7, `v0.8.0` untuk Phase 8, `v0.9.0` untuk Phase 9, `v0.10.0` untuk Phase 10).
 
+## [v0.23.6 — Perbaikan Dependensi Native Lintas Platform, Toolchain QEMU & Validasi Distribusi CI] — 2026-11-15
+### Phase 23.6: Cross-Platform Native Dependencies, QEMU Toolchain & Distribution Validation Repair (`SELESAI SEBAGIAN` — Menunggu Runner GitHub Actions & Sertifikasi 6/6 Target `CERTIFIED`)
+
+Menyelesaikan kegagalan CI run `43676599077` pada pipeline Phase 23/24 tanpa memalsukan status PASS atau memakai fallback WASM palsu:
+
+#### Diperbaiki & Ditambahkan:
+- **Validasi Distribusi Linux & Keselarasan Versi `MesinCI` (`nusantara.toml`, `src/cicd/mesinCI.ts`, `src/cicd/types.ts`, `scripts/phase23-certify.ts`):**
+  - Menyelaraskan `nusantara.toml` (`versi = "0.50.0"`) dengan `VERSI_NUSANTARA` (`0.50.0`) yang sebelumnya menyebabkan `Validasi Pembuatan Distribusi Target` gagal (`exit code 1`).
+  - Memperluas `MesinCI` untuk mendukung target kanonik (`windows-x86_64`, `windows-arm64`, `linux-x86_64`, `linux-arm64`, `macos-x86_64`, `macos-arm64`) maupun alias warisan serta menyertakan `daftarError` dan `diagnostikDistribusi`.
+  - Menambahkan subperintah `verify-dist` pada `scripts/phase23-certify.ts` untuk memverifikasi siklus distribusi nyata end-to-end (kompilasi native AOT -> `BinaryInspector.inspectStrict` -> `DesktopDistributionPackager` -> `manifest.json` tanpa BOM -> `SHA256SUMS` -> ekstraksi arsip -> sandbox install -> eksekusi sentinel biner terpasang -> sandbox uninstall).
+- **Perbaikan `package-lock.json` Binding Native Lintas Platform (`package-lock.json`, `.github/workflows/ci.yml`):**
+  - Meregenerasi `package-lock.json` secara bersih (`npm ci` tervalidasi) agar menyertakan seluruh `optionalDependencies` platform (`@rolldown/binding-*`, `@tailwindcss/oxide-*`, `lightningcss-*`, `@typescript/typescript-*`) untuk Windows (`win32-x64-msvc`, `win32-arm64-msvc`), macOS (`darwin-arm64`, `darwin-x64`), dan Linux (`linux-arm64-gnu`, `linux-x64-gnu`) lengkap dengan URL `resolved` dan hash SRI `integrity`.
+  - Menambahkan verifikasi binding native di `.github/workflows/ci.yml` untuk Windows, macOS, dan Linux serta pencatatan versi `node`/`npm`.
+- **Perbaikan Instalasi QEMU ARM64 Ubuntu 26.04 (`/.github/workflows/ci.yml`, `src/build/target-matrix.ts`):**
+  - Mengganti instalasi mentah virtual package `qemu-user-static` pada `.github/workflows/ci.yml` dengan deteksi `uname -m` (native vs cross) dan probing kandidat paket nyata `apt-cache policy`/`apt-cache show` (`qemu-user`, `qemu-user-static`, `qemu-user-binfmt`, `qemu-user-binfmt-hwe`) serta pemeriksaan `qemu-aarch64-static`/`qemu-aarch64`.
+- **Penguatan Audit Sertifikasi & Kejujuran Eksekusi (`src/build/certification.ts`, `pengujian/`):**
+  - Memperketat `Phase23CertificationEngine.aggregateEvidence()` agar menolak mismatch `triple`, klaim `sdk.available=false` pada `PASS`, serta klaim `execution.mode='native'` tidak jujur pada target cross / Apple Silicon `macos-x86_64`.
+  - Menambahkan uji **5.3**, **6.3** (`pengujian/cicd/uji_cicd_workflow.ts`) dan **7.9**, **7.10**, **7.11** (`pengujian/build/uji_build_distribusi_fase23.ts`), serta laporan teknis `docs/distribusi/PHASE-23-6-CROSS-PLATFORM-CI-REPAIR.md`.
+
+---
+
 ## [v0.23.5 — Perbaikan Manifest UTF-8 Windows, Pengujian Linker Native & Reaktivasi Matriks CI] — 2026-11-15
 ### Phase 23.5: Windows UTF-8 Manifest Repair, Native Linker Test Fix & CI Matrix Reactivation (`SELESAI SEBAGIAN` — Menunggu Runner GitHub Actions & Sertifikasi 6/6 Target `CERTIFIED`)
 

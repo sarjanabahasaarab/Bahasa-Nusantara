@@ -134,12 +134,22 @@ export interface HasilLangkahCI {
 
 export interface HasilMatriksPlatform {
   platform: PlatformTarget;
+  targetCanonical?: string;
   runner: string;
   status: StatusPemeriksaanCI;
   namaArtefak?: string;
   ukuranBytes?: number;
   sha256?: string;
   catatan?: string;
+}
+
+export interface DiagnostikDistribusiCI {
+  targetDiminta: string[];
+  targetTerdeteksi: string[];
+  pathOutput: string[];
+  hasilManifest: 'PASS' | 'FAIL';
+  hasilSha256: 'PASS' | 'FAIL';
+  exitCode: number;
 }
 
 export interface LaporanEksekusiCI {
@@ -150,6 +160,8 @@ export interface LaporanEksekusiCI {
   waktuMulai: string;
   durasiTotalMs: number;
   statusAkhir: 'PASS' | 'FAIL';
+  daftarError: string[];
+  diagnostikDistribusi?: DiagnostikDistribusiCI;
   langkah: HasilLangkahCI[];
   matriksPlatform: HasilMatriksPlatform[];
   statusRilis: 'NOT PUBLISHED' | 'PUBLISHED' | 'READY FOR APPROVAL';
