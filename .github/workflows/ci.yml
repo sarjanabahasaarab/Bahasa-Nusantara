@@ -451,7 +451,7 @@ jobs:
     steps:
       - name: Buat Laporan Ringkasan CI Resmi
         run: |
-          echo "## 🇮🇩 NUSANTARA CI SUMMARY (v0.24.0 + Phase 23.8)" >> $GITHUB_STEP_SUMMARY
+          echo "## 🇮🇩 NUSANTARA CI SUMMARY (v0.50.0 + Phase 23.10)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Tahapan Alur Kerja | Status | Runner Host | Keterangan |" >> $GITHUB_STEP_SUMMARY
           echo "| :--- | :---: | :--- | :--- |" >> $GITHUB_STEP_SUMMARY

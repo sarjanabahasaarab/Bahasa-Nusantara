@@ -31,8 +31,10 @@ export abstract class NIRValue {
     public type: NIRType,
     name?: string
   ) {
-    if (name) {
-      if (kind === NIRValueKind.GLOBAL) {
+    if (name !== undefined) {
+      if (kind === NIRValueKind.CONSTANT) {
+        this.id = name;
+      } else if (kind === NIRValueKind.GLOBAL) {
         this.id = name.startsWith('@') ? name : `@${name}`;
       } else if (kind === NIRValueKind.BASIC_BLOCK) {
         this.id = name.startsWith('%bb.') ? name : (name.startsWith('%') ? name : `%bb.${name}`);

@@ -793,12 +793,37 @@ selesai
   pastikan(bufferLog.includes('TOTAL: 42'), 'Interpreter lama harus tetap menghasilkan output yang tepat');
 });
 
+uji('10.5 Teks NIR memancarkan konstanta literal (ret i32 0, string) tanpa register menggantung & round-trip JSON', () => {
+  const kode = `
+program UjiKonstantaNIR
+mulai
+    tampilkan("Halo NIR")
+selesai
+`;
+  const parser = new Parser(kode);
+  const ast = parser.parse();
+  const lowering = new ASTToNIRLowering('UjiKonstanta');
+  const nirMod = lowering.lower(ast);
+
+  const text = NIRFormatter.formatText(nirMod);
+  pastikan(text.includes('ret i32 0'), `Fungsi utama harus berakhir dengan 'ret i32 0', ditemukan:\n${text}`);
+  pastikan(text.includes('"Halo NIR"'), `Teks NIR harus memuat konstanta string "Halo NIR", ditemukan:\n${text}`);
+  pastikan(!/ret i32 %v\d+/.test(text), `Teks NIR tidak boleh menyisakan register konstanta menggantung:\n${text}`);
+
+  const jsonStr = NIRSerializer.toJSONString(nirMod);
+  const restored = NIRDeserializer.fromJSONString(jsonStr);
+  const restoredText = NIRFormatter.formatText(restored);
+  pastikan(restoredText.includes('ret i32 0'), 'Konstanta ret i32 0 harus bertahan setelah deserialisasi JSON');
+});
+
 // -----------------------------------------------------------------------------
 // REKAPITULASI HASIL
 // -----------------------------------------------------------------------------
 console.log('\n======================================================================');
 console.log(`HASIL PENGUJIAN PHASE 43: ${ujiBerhasil} LULUS, ${ujiGagal} GAGAL (Total: ${totalUji})`);
-console.log('Semua pengujian Fase 43 BERHASIL 100%!');
+if (ujiGagal === 0) {
+  console.log('Semua pengujian Fase 43 BERHASIL 100%!');
+}
 console.log('======================================================================');
 
 if (ujiGagal > 0) {

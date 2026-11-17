@@ -28,11 +28,18 @@ export const METADATA_RILIS_NUSANTARA: InfoRilisNUSANTARA = {
   label: LABEL_VERSI_NUSANTARA,
   fase: FASE_TERAKHIR,
   namaFase: NAMA_FASE_TERAKHIR,
-  tanggalRilis: '2026-11-09',
+  tanggalRilis: '2026-11-16',
   lisensi: 'Apache-2.0',
   situsWeb: 'https://nusantara-lang.org',
   repositori: 'https://github.com/sarjanabahasaarab/Bahasa-Nusantara',
-  platformDidukung: ['windows-x64', 'linux-x64', 'macos-x64', 'macos-arm64'],
+  platformDidukung: [
+    'windows-x86_64',
+    'windows-arm64',
+    'linux-x86_64',
+    'linux-arm64',
+    'macos-x86_64',
+    'macos-arm64',
+  ],
 };
 
 /**

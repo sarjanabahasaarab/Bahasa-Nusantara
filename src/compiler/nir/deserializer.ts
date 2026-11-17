@@ -124,10 +124,22 @@ export class NIRDeserializer {
               const g = mod.getGlobal(gName);
               if (g) return g;
             }
-            // Anggap sebagai konstanta jika berupa angka atau boolean
+            // Anggap sebagai konstanta jika berupa angka, boolean, atau string literal
             if (id === 'true' || id === 'false') return NIRConstants.bool(id === 'true');
-            if (/^-?\d+$/.test(id)) return NIRConstants.i64(BigInt(id));
+            if (/^-?\d+$/.test(id)) {
+              return NIRConstants.int(
+                BigInt(id),
+                typeHint && typeHint.isInteger() ? typeHint : NIRTypes.i64()
+              );
+            }
             if (/^-?\d+\.\d+$/.test(id)) return NIRConstants.float(parseFloat(id));
+            if (id.startsWith('"') && id.endsWith('"')) {
+              try {
+                return NIRConstants.string(JSON.parse(id));
+              } catch {
+                // fallback below
+              }
+            }
             return NIRConstants.null(typeHint);
           };
 
@@ -282,8 +294,9 @@ export class NIRDeserializer {
   ): any {
     switch (data.opcode) {
       case NIROpcode.RET: {
+        const retType = data.type ? NIRType.fromJSON(data.type) : undefined;
         const retVal = data.hasReturnValue && data.operands && data.operands[0]
-          ? resolveVal(data.operands[0])
+          ? resolveVal(data.operands[0], retType)
           : undefined;
         return new NIRReturnInst(retVal);
       }

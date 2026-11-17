@@ -46,14 +46,14 @@ NUSANTARA bukan sekadar terjemahan sintaksis atau praprosesor teks atas bahasa a
 - **Status Saat Ini:** **🟠 Phase 50: Nusantara OS: Process Isolation & User Mode — PARTIAL (CI_READY) (Milestone v0.50.0)**.
 - **Total Fase Diaudit:** 50 Fase (Phase 1 s/d Phase 50).
   - 🟢 **Selesai Penuh (40 Fase):** Phase 1–22, Phase 24–35, dan Phase 43–48 berstatus implementasi penuh dan lulus seluruh pengujian unit, integrasi, serta E2E (catatan: 3 skenario biner native LLVM/Linker/Actor pada Phase 44–46 ditandai *skipped* transparan di container tanpa `clang`/`llc`/`lld`).
-  - 🟠 **Selesai Sebagian / PARTIAL (10 Fase):** Phase 23 & 36–42 (implementasi inti & protokol nyata aktif dan teruji via loopback HTTP/WebSocket, kripto Ed25519/RS256/ES256, & PKZIP CRC-32; perangkat keras fisik, display server, Android SDK, Xcode, serta toko produksi memerlukan toolchain/kredensial eksternal) dan Phase 49–50 (90 pengujian OS kernel/usermode lulus 100% dan ISO `artifacts/phase50/` tervalidasi; eksekusi boot bare-metal QEMU siap di GitHub Actions karena container lokal tidak memiliki `qemu-system-x86_64`).
-- **Rangkaian Pengujian (`npm test`):** 46 perintah uji otomatis berjalan 100% tanpa kegagalan di Linux x86_64 (`Node.js v22.23.2`): 167 pemeriksaan dokumen fondasi + 1.313 skenario TypeScript di 45 suite (1.307 lulus, 0 gagal, 3 *skipped* transparan pada LLVM/Linker/Actor + 3 `BELUM DIVERIFIKASI` pada Phase 23 native host build tanpa `clang` & sandbox PowerShell tanpa `pwsh` = **1.480 pemeriksaan gabungan terverifikasi**), ditambah 3 uji terpisah untuk fallback peramban (`npm run test:database-browser-v29`).
+  - 🟠 **Selesai Sebagian / PARTIAL (10 Fase):** Phase 23 & 36–42 (implementasi inti & protokol nyata aktif dan teruji via loopback HTTP/WebSocket, kripto Ed25519/RS256/ES256, & PKZIP CRC-32; perangkat keras fisik, display server, Android SDK, Xcode, serta toko produksi memerlukan toolchain/kredensial eksternal) dan Phase 49–50 (93 pengujian OS kernel/usermode [42+23+28] lulus 100% dan artefak `artifacts/phase50/` tervalidasi; pembuatan ISO GRUB2 & eksekusi boot bare-metal QEMU siap di GitHub Actions karena container lokal tidak memiliki `qemu-system-x86_64`, `grub-mkrescue`, dan `xorriso`).
+- **Rangkaian Pengujian (`npm test`):** 46 perintah uji otomatis berjalan 100% tanpa kegagalan di Linux x86_64 (`Node.js v22.23.2`): 167 pemeriksaan dokumen fondasi + 1.335 skenario TypeScript di 45 suite (1.329 lulus, 0 gagal, 3 *skipped* transparan pada LLVM/Linker/Actor + 3 `BELUM DIVERIFIKASI` pada Phase 23 native host build tanpa `clang` & sandbox PowerShell tanpa `pwsh` = **1.502 pemeriksaan gabungan terverifikasi**), ditambah 3 uji terpisah untuk fallback peramban (`npm run test:database-browser-v29`, total **1.505 pemeriksaan**).
 - **Pemisahan Status Verifikasi Lingkungan:**
   - **SQLite Native (`node:sqlite`):** `26/26` lulus lokal pada Node.js 22 LTS Linux; tidak diam-diam fallback in-memory di Node.js.
-  - **Regresi Lintas Platform, Matriks 6 Target & Gerbang Sertifikasi (Phase 23.1–23.6):** Linux lulus lokal; perbaikan simbol string LLVM IR `@.str.*`, linker probe nyata Windows ARM64, validasi installer `StandalonePackager` per-OS, host triple macOS Apple Silicon `arm64-apple-darwin`, verifikasi SHA-256 `.NET` bebas `Get-FileHash` & receipt JSON bebas UTF-8 BOM (`install.ps1`), perbaikan `package-lock.json` binding native lintas platform (`@rolldown/binding-*`, `@tailwindcss/oxide-*`, `lightningcss-*`, `@typescript/typescript-*`), deteksi paket QEMU Ubuntu dinamis via `apt-cache policy`, penyelarasan `nusantara.toml` (`0.50.0`) & diagnostik `MesinCI`, validasi E2E distribusi `scripts/phase23-certify.ts verify-dist`, serta gerbang sertifikasi 6/6 `CERTIFIED` pada `.github/workflows/ci.yml` dengan **Node.js 22 LTS** & `NUSANTARA_REQUIRE_CLANG=1` (runner Windows & macOS menunggu eksekusi GitHub Actions).
+  - **Regresi Lintas Platform, Matriks 6 Target & Gerbang Sertifikasi (Phase 23.1–23.10):** Linux lulus lokal; perbaikan simbol string LLVM IR `@.str.*`, linker probe nyata Windows ARM64, validasi installer `StandalonePackager` per-OS, host triple macOS Apple Silicon `arm64-apple-darwin`, verifikasi SHA-256 `.NET` bebas `Get-FileHash` & receipt JSON bebas UTF-8 BOM (`install.ps1`), perbaikan `package-lock.json` binding native lintas platform, dependensi C runtime Ubuntu (`libc6-dev`/`build-essential`), preflight sysroot lintas OS pada `NativeBuildPipeline`, agregator sertifikasi 6 target + QEMU user-mode ARM64, keselarasan `nusantara.toml`/`release.yml`/`versi.ts` (`0.50.0` & 6 target kanonik), serta gerbang sertifikasi 6/6 `CERTIFIED` pada `.github/workflows/ci.yml` dengan **Node.js 22 LTS** & `NUSANTARA_REQUIRE_CLANG=1` (runner Windows, macOS, dan Linux ARM64 menunggu eksekusi GitHub Actions).
   - **Build ISO & Eksekusi QEMU:** Biner `kernel.elf`/`user-test.elf`/`user-fault-test.elf` tervalidasi ELF64/Multiboot2, namun ISO GRUB2 (`NOT_BUILT`) dan QEMU (`NOT EXECUTED`) menunggu runner Ubuntu di GitHub Actions.
-- **Audit Terakhir:** 15 November 2026.
-- **Dokumentasi Roadmap Lengkap:** Silakan baca [ROADMAP.md](ROADMAP.md) untuk tabel detail status, bukti implementasi, dan rencana pengembangan fase 1 hingga 50.
+- **Audit Terakhir:** 16 November 2026.
+- **Dokumentasi Roadmap Lengkap:** Silakan baca [ROADMAP.md](ROADMAP.md) untuk tabel detail status fase 1 hingga 50, catatan verifikasi faktual, dan garis besar Master Roadmap 150 Fase.
 
 ---
 
@@ -266,16 +266,18 @@ selesai
 ### 5.1 Menggunakan Paket Biner Rilis Resmi
 Unduh paket distribusi untuk sistem operasi Anda dari direktori `dist/` atau halaman rilis resmi:
 
-- **Windows (x64)**: `nusantara-v0.46.0-windows-x64.zip`
-- **Linux (x64)**: `nusantara-v0.46.0-linux-x64.tar.gz` atau `.zip`
-- **macOS (Intel x64)**: `nusantara-v0.46.0-macos-x64.tar.gz`
-- **macOS (Apple Silicon ARM64)**: `nusantara-v0.46.0-macos-arm64.tar.gz`
+- **Windows (x86_64)**: `nusantara-v0.50.0-windows-x86_64.zip`
+- **Windows (ARM64)**: `nusantara-v0.50.0-windows-arm64.zip`
+- **Linux (x86_64)**: `nusantara-v0.50.0-linux-x86_64.tar.gz`
+- **Linux (ARM64)**: `nusantara-v0.50.0-linux-arm64.tar.gz`
+- **macOS (Intel x86_64)**: `nusantara-v0.50.0-macos-x86_64.tar.gz`
+- **macOS (Apple Silicon ARM64)**: `nusantara-v0.50.0-macos-arm64.tar.gz`
 
 #### Langkah Pemasangan Cepat (Linux / macOS):
 ```bash
 # 1. Ekstrak arsip rilis
-tar -xzf nusantara-v0.46.0-linux-x64.tar.gz
-cd nusantara-v0.46.0-linux-x64
+tar -xzf nusantara-v0.50.0-linux-x86_64.tar.gz
+cd nusantara-v0.50.0-linux-x86_64
 
 # 2. Jalankan skrip instalasi otomatis ke PATH pengguna
 ./install.sh
@@ -285,8 +287,8 @@ nusantara --versi
 ```
 
 Pada Windows:
-1. Ekstrak berkas `nusantara-v0.46.0-windows-x64.zip`.
-2. Klik ganda berkas `install.bat` atau tambahkan direktori `bin` ke variabel lingkungan `PATH`.
+1. Ekstrak berkas `nusantara-v0.50.0-windows-x86_64.zip` (atau `windows-arm64`).
+2. Jalankan `install.ps1` atau `install.bat` untuk memasang biner ke profil pengguna dan `PATH`.
 3. Buka PowerShell / Command Prompt dan jalankan:
    ```powershell
    nusantara --versi

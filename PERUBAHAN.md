@@ -4,6 +4,27 @@ Seluruh perubahan penting pada proyek bahasa pemrograman NUSANTARA dicatat dalam
 
 Format penomoran versi mengacu pada **Semantic Versioning** (`vMAJOR.MINOR.PATCH`). Pada masa pengembangan awal, versi minor mencerminkan tahapan fase roadmap (misal `v0.1.0` untuk Phase 1, `v0.2.0` untuk Phase 2, `v0.3.0` untuk Phase 3, `v0.4.0` untuk Phase 4, `v0.5.0` untuk Phase 5, `v0.6.0` untuk Phase 6, `v0.7.0` untuk Phase 7, `v0.8.0` untuk Phase 8, `v0.9.0` untuk Phase 9, `v0.10.0` untuk Phase 10).
 
+## [v0.23.10 — Pemulihan Boot QEMU Bare-Metal, Perbaikan Konstanta NIR & Audit Pra-Phase-51] — 2026-11-16
+### Phase 23.7–23.10 & Perbaikan Audit Pra-Phase-51 (`SELESAI SEBAGIAN` — Menunggu Eksekusi Runner GitHub Actions 6 Target & QEMU Bare-Metal)
+
+Menyelesaikan rangkaian perbaikan toolchain CI Phase 23.7–23.10 serta temuan audit Phase 1–50 sebelum memasuki Master Roadmap Phase 51–150:
+
+#### Diperbaiki & Ditambahkan:
+- **Perbaikan Toolchain ARM64, C Runtime Ubuntu, & Preflight Sysroot Lintas OS (Phase 23.7–23.9):**
+  - Memperbaiki konflik paket QEMU user-mode ARM64 pada runner Ubuntu (`ci.yml`) dan menyelaraskan metadata emulator pada `TargetMatrixManager` / `Phase23CertificationEngine`.
+  - Menambahkan instalasi dependensi C runtime (`build-essential`, `libc6-dev`, `clang`, `lld`, `llvm`, `binutils`) pada `test-suite` Linux CI agar probe kompilasi-tautan nyata `<stdio.h>` Phase 23 Test 3.2 berhasil.
+  - Menambahkan tahap preflight sysroot sebelum emisi LLVM IR pada `NativeBuildPipeline.build()` (`src/build/native-pipeline.ts`) agar target lintas platform tanpa SDK melaporkan `CROSS_SDK_TIDAK_TERSEDIA` / `GALAT_LINKER` secara akurat.
+- **Pemulihan Eksekusi Bare-Metal QEMU & Validasi 18 Sentinel (Phase 23.10):**
+  - Memperbaiki bootstrap x86_64 Ring 3 + isolasi `#PF`, keselarasan segmen ELF64 `PT_LOAD`, port exit ISA debug QEMU `0xF4` 32-bit, serta `QEMUSentinelValidator` (`scripts/run-phase50-qemu.sh`, `pengujian/os/uji_usermode_fase50.ts` menjadi **28/28** lulus).
+- **Perbaikan Emisi Konstanta Literal NIR & Deserialisasi JSON (`src/compiler/nir/`, `pengujian/nir/uji_nir_fase43.ts`):**
+  - Memperbaiki konstruktor `NIRValue` dan subclass `NIRConstant*` (`value.ts`, `constant.ts`) agar konstanta menerima ID literal nyata (`0`, `true`, `"Halo NIR"`, `null`) dan tidak lagi memancarkan register SSA menggantung (`ret i32 %v4`) pada `nusantara nir`.
+  - Menambahkan parsing konstanta string JSON dan penghormatan `typeHint` integer pada `NIRDeserializer` (`deserializer.ts`) serta uji regresi `10.5` (`test:nir-v43` meningkat menjadi **30/30** lulus).
+- **Penyelarasan Metadata Rilis, Workflow & Dokumentasi (`src/konstanta/versi.ts`, `.github/workflows/release.yml`, `.github/workflows/ci.yml`, `README.md`, `ROADMAP.md`, `pengujian/README.md`):**
+  - Menyelaraskan `.github/workflows/release.yml` ke versi `0.50.0` dengan matriks 6 target kanonik (`windows-x86_64`, `windows-arm64`, `linux-x86_64`, `linux-arm64`, `macos-x86_64`, `macos-arm64`), judul ringkasan `ci.yml` ke `v0.50.0 + Phase 23.10`, serta `METADATA_RILIS_NUSANTARA` (`versi.ts`).
+  - Memverifikasi seluruh `npm run lint`, `npm run build`, `npm run quality-gate` (`29/29`), dan `npm test` (**1.502** pemeriksaan gabungan: `167` fondasi + `1.335` TS [**1.329** lulus, **0** gagal, **3** *skipped*, **3** `BELUM DIVERIFIKASI`] + `3/3` fallback peramban = **1.505** total).
+
+---
+
 ## [v0.23.6 — Perbaikan Dependensi Native Lintas Platform, Toolchain QEMU & Validasi Distribusi CI] — 2026-11-15
 ### Phase 23.6: Cross-Platform Native Dependencies, QEMU Toolchain & Distribution Validation Repair (`SELESAI SEBAGIAN` — Menunggu Runner GitHub Actions & Sertifikasi 6/6 Target `CERTIFIED`)
 

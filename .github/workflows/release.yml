@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Versi rilis target (contoh: 0.24.0)'
+        description: 'Versi rilis target (contoh: 0.50.0)'
         required: true
-        default: '0.24.0'
+        default: '0.50.0'
       confirm_release:
         description: 'Konfirmasi eksplisit: Setujui publikasi rilis resmi NUSANTARA (true/false)'
         type: boolean
@@ -120,13 +120,16 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        target: [windows-x64, linux-x64, macos-x64, macos-arm64]
         include:
-          - target: windows-x64
+          - target: windows-x86_64
             os: windows-latest
-          - target: linux-x64
+          - target: windows-arm64
+            os: windows-11-arm
+          - target: linux-x86_64
             os: ubuntu-latest
-          - target: macos-x64
+          - target: linux-arm64
+            os: ubuntu-24.04-arm
+          - target: macos-x86_64
             os: macos-13
           - target: macos-arm64
             os: macos-latest
@@ -256,20 +259,20 @@ jobs:
       - name: Siapkan Catatan Rilis Resmi
         id: notes
         run: |
-          cat << 'EOF' > dist/RELEASE_NOTES.md
-          # 🇮🇩 Bahasa Pemrograman NUSANTARA — Rilis v0.24.0
-          
-          Rilis resmi sistem CI/CD, alur kerja pengujian otomatis, dan distribusi aman Bahasa Pemrograman NUSANTARA.
-          
-          ### 🚀 Fitur Baru & Peningkatan:
-          - **GitHub Actions CI Pipeline**: Pemeriksaan statis, uji regresi multi-OS (Linux, Windows, macOS), dan verifikasi Quality Gate.
-          - **Alur Kerja Rilis Terotomasi**: Rilis dengan persetujuan eksplisit manual pengguna, verifikasi konsistensi versi, dan validasi artefak.
-          - **Matriks Build Lintas Platform**: Windows x64, Linux x64, macOS x64, dan macOS ARM64.
+          RELEASE_VER="${{ inputs.version || '0.50.0' }}"
+          cat << EOF > dist/RELEASE_NOTES.md
+          # 🇮🇩 Bahasa Pemrograman NUSANTARA — Rilis v${RELEASE_VER}
+
+          Rilis resmi ekosistem Bahasa Pemrograman & Sistem Operasi NUSANTARA.
+
+          ### 🚀 Cakupan Rilis:
+          - **GitHub Actions CI/CD & Quality Gate**: Pemeriksaan statis, uji regresi multi-OS (Linux, Windows, macOS), dan Quality Gate.
+          - **Matriks Build 6 Target Desktop**: Windows x86_64/ARM64, Linux x86_64/ARM64, dan macOS Intel/Apple Silicon.
           - **Integritas Kriptografis**: Checksum SHA-256 resmi (`SHA256SUMS`) dan manifest terstruktur (`release-manifest.json`).
-          - **Audit Keamanan & Least Privilege**: Kebijakan permission `contents: read` standar dan proteksi terhadap kebocoran rahasia.
-          
+          - **Audit Keamanan & Least Privilege**: Kebijakan permission `contents: read` standar, concurrency aman, dan release approval gate.
+
           ### 📦 Verifikasi Integritas Checksum:
-          Lihat berkas \`SHA256SUMS\` terlampir untuk memverifikasi keaslian bundel biner.
+          Lihat berkas `SHA256SUMS` terlampir untuk memverifikasi keaslian bundel biner.
           EOF
 
       - name: Publikasikan Rilis GitHub (Hanya Jika Bukan Dry Run)
@@ -281,7 +284,7 @@ jobs:
             dist/*.tar.gz
             dist/SHA256SUMS
             dist/release-manifest.json
-          name: 'NUSANTARA v0.24.0 — CI/CD & Automated Release'
+          name: 'NUSANTARA v${{ inputs.version || "0.50.0" }} — Release & Distribution'
           tag_name: ${{ github.ref_name }}
           body_path: dist/RELEASE_NOTES.md
           draft: ${{ inputs.release_type == 'draft' }}
@@ -292,7 +295,7 @@ jobs:
       - name: Buat Ringkasan Publikasi di Step Summary
         if: always()
         run: |
-          echo "## 🇮🇩 NUSANTARA RELEASE SUMMARY (v0.24.0)" >> $GITHUB_STEP_SUMMARY
+          echo "## 🇮🇩 NUSANTARA RELEASE SUMMARY (v${{ inputs.version || '0.50.0' }})" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Status Eksekusi Rilis**: ${{ job.status == 'success' && '✅ SUKSES' || '❌ GAGAL' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Tipe Rilis**: \`${{ inputs.release_type || 'release' }}\`" >> $GITHUB_STEP_SUMMARY

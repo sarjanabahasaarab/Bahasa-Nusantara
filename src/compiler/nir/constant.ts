@@ -10,8 +10,8 @@ import { NIRType, NIRTypes } from './type';
 import { NIRValue, NIRValueKind } from './value';
 
 export abstract class NIRConstant extends NIRValue {
-  constructor(type: NIRType, public readonly rawValue: any) {
-    super(NIRValueKind.CONSTANT, type, undefined);
+  constructor(type: NIRType, public readonly rawValue: any, literalId?: string) {
+    super(NIRValueKind.CONSTANT, type, literalId);
   }
 
   public abstract isZero(): boolean;
@@ -20,7 +20,7 @@ export abstract class NIRConstant extends NIRValue {
 
 export class NIRConstantInt extends NIRConstant {
   constructor(public readonly value: bigint | number, type: NIRType = NIRTypes.i64()) {
-    super(type, value);
+    super(type, value, value.toString());
   }
 
   public isZero(): boolean {
@@ -46,7 +46,7 @@ export class NIRConstantInt extends NIRConstant {
 
 export class NIRConstantFloat extends NIRConstant {
   constructor(public readonly value: number, type: NIRType = NIRTypes.f64()) {
-    super(type, value);
+    super(type, value, value.toString());
   }
 
   public isZero(): boolean {
@@ -72,7 +72,7 @@ export class NIRConstantFloat extends NIRConstant {
 
 export class NIRConstantBool extends NIRConstant {
   constructor(public readonly value: boolean) {
-    super(NIRTypes.i1(), value);
+    super(NIRTypes.i1(), value, value ? 'true' : 'false');
   }
 
   public isZero(): boolean {
@@ -98,7 +98,7 @@ export class NIRConstantBool extends NIRConstant {
 
 export class NIRConstantString extends NIRConstant {
   constructor(public readonly value: string) {
-    super(NIRTypes.string(), value);
+    super(NIRTypes.string(), value, JSON.stringify(value));
   }
 
   public isZero(): boolean {
@@ -124,7 +124,7 @@ export class NIRConstantString extends NIRConstant {
 
 export class NIRConstantNull extends NIRConstant {
   constructor(type: NIRType = NIRTypes.pointer(NIRTypes.any())) {
-    super(type, null);
+    super(type, null, 'null');
   }
 
   public isZero(): boolean {
@@ -149,7 +149,7 @@ export class NIRConstantNull extends NIRConstant {
 
 export class NIRConstantArray extends NIRConstant {
   constructor(public readonly elements: NIRConstant[], type: NIRType) {
-    super(type, elements);
+    super(type, elements, `[${elements.map((e) => e.id).join(', ')}]`);
   }
 
   public isZero(): boolean {
