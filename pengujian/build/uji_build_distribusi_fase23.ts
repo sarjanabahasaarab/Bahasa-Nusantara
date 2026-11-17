@@ -1936,6 +1936,55 @@ uji('7.26 Uninstall bersih hanya menghapus berkas paket dan menjaga berkas pengg
   }
 });
 
+uji('7.27 TargetTripleManager menyediakan metadata ABI, CPU default, dan flag CPU untuk seluruh 6 target', () => {
+  const checks: Array<{ target: CanonicalDesktopTarget; expectedAbi: string; expectedCpu: string }> = [
+    { target: 'linux-x86_64', expectedAbi: 'gnu', expectedCpu: 'x86-64' },
+    { target: 'linux-arm64', expectedAbi: 'gnu', expectedCpu: 'generic' },
+    { target: 'windows-x86_64', expectedAbi: 'msvc', expectedCpu: 'x86-64' },
+    { target: 'windows-arm64', expectedAbi: 'msvc', expectedCpu: 'generic' },
+    { target: 'macos-x86_64', expectedAbi: 'darwin-macho', expectedCpu: 'x86-64' },
+    { target: 'macos-arm64', expectedAbi: 'darwin-macho', expectedCpu: 'apple-m1' },
+  ];
+  for (const item of checks) {
+    const info = TargetTripleManager.resolve(item.target);
+    samaDengan(info.abi, item.expectedAbi, `ABI untuk ${item.target}`);
+    samaDengan(info.defaultCpu, item.expectedCpu, `defaultCpu untuk ${item.target}`);
+    pastikan(Array.isArray(info.cpuFlags) && info.cpuFlags.length > 0, `cpuFlags wajib terisi untuk ${item.target}`);
+  }
+});
+
+uji('7.28 BinaryInspector tidak memalsukan simbol/library pada stub minimal dan menolak ELF e_shoff korup', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-insp-honest-'));
+  try {
+    // 1. Minimal synthetic ELF64 tanpa section/import tidak boleh mengarang printf/libc.so.6 palsu
+    const minElf = path.join(tmp, 'min.elf');
+    fs.writeFileSync(minElf, buildMinimalElf64('x86_64'));
+    const metaMin = BinaryInspector.inspectStrict(minElf);
+    pastikan(Boolean(metaMin.isValidExecutable), 'ELF64 header minimal harus valid');
+    samaDengan(metaMin.importedSymbols.length, 0, 'Stub ELF tanpa symtab tidak boleh mengarang importedSymbols');
+    samaDengan(metaMin.dynamicLibraries.length, 0, 'Stub ELF tanpa dynamic section tidak boleh mengarang dynamicLibraries');
+
+    // 2. ELF64 dengan e_shoff/e_shnum di luar ukuran berkas wajib ditolak inspectStrict
+    const badShElf = path.join(tmp, 'bad_sh.elf');
+    const badBuf = buildMinimalElf64('x86_64');
+    badBuf.writeBigUInt64LE(4096n, 40); // e_shoff di luar ukuran 128 byte
+    badBuf.writeUInt16LE(64, 58); // e_shentsize
+    badBuf.writeUInt16LE(2, 60); // e_shnum
+    fs.writeFileSync(badShElf, badBuf);
+    const badMeta = BinaryInspector.inspectStrict(badShElf);
+    pastikan(!badMeta.isValidExecutable, 'ELF dengan section header table terpotong wajib ditolak inspectStrict');
+
+    // 3. Jika host Linux memiliki biner nyata di disk (process.execPath), inspeksi membaca seksi nyata
+    if (process.platform === 'linux' && fs.existsSync(process.execPath)) {
+      const hostMeta = BinaryInspector.inspectStrict(process.execPath);
+      pastikan(Boolean(hostMeta.isValidExecutable), 'Biner ELF host nyata wajib valid');
+      pastikan(hostMeta.sections.length > 0, 'Parser native/readelf wajib mengekstrak seksi ELF nyata dari biner host');
+    }
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 // -----------------------------------------------------------------------------
 // REKAPITULASI
 // -----------------------------------------------------------------------------

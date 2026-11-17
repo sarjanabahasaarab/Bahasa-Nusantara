@@ -73,10 +73,14 @@ export class RollbackManager {
   /**
    * Melakukan rollback resource non-eksekusi ke versi cadangan sebelumnya.
    */
-  public eksekusiRollback(platform: PlatformMobile = 'android'): {
+  public eksekusiRollback(
+    platform: PlatformMobile = 'android',
+    onPulihkan?: (versi: string, berkas: Map<string, string | Uint8Array>) => void
+  ): {
     sukses: boolean;
     versiDipulihkan?: string;
     totalBerkas: number;
+    berkasDipulihkan?: Map<string, string | Uint8Array>;
     pesan: string;
   } {
     if (!this.apakahCadanganTersedia()) {
@@ -88,6 +92,9 @@ export class RollbackManager {
     }
 
     const cadangan = this.cadanganSebelumnya!;
+    if (onPulihkan) {
+      onPulihkan(cadangan.versi, cadangan.berkas);
+    }
 
     // Catat ke riwayat
     UpdateHistoryManager.dapatkanInstance().catat({
@@ -106,6 +113,7 @@ export class RollbackManager {
       sukses: true,
       versiDipulihkan: cadangan.versi,
       totalBerkas: cadangan.berkas.size,
+      berkasDipulihkan: new Map(cadangan.berkas),
       pesan: `Resource berhasil di-rollback ke versi ${cadangan.versi} (${cadangan.berkas.size} berkas dipulihkan).`,
     };
   }

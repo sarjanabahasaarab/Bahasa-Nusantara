@@ -34,7 +34,16 @@ export class AppStoreConnectClient {
 
   constructor(konfig: KonfigurasiAppStoreConnect) {
     this.konfig = { ...konfig };
-    this.baseUrl = (konfig.endpointApi || 'https://api.appstoreconnect.apple.com/v1').replace(/\/+$/, '');
+    const rawUrl = (konfig.endpointApi || 'https://api.appstoreconnect.apple.com/v1').replace(/\/+$/, '');
+    const parsed = new URL(rawUrl);
+    if (parsed.username || parsed.password) {
+      throw new Error('URL endpoint App Store Connect API tidak boleh memuat kredensial tertanam.');
+    }
+    const isLoopback = ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname.toLowerCase());
+    if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLoopback)) {
+      throw new Error(`Endpoint App Store Connect API wajib menggunakan HTTPS (atau HTTP loopback pengujian), ditemukan: '${rawUrl}'`);
+    }
+    this.baseUrl = rawUrl;
   }
 
   /**
@@ -103,6 +112,44 @@ export class AppStoreConnectClient {
   /**
    * Menandatangani JWT ES256 (ECDSA P-256 SHA-256 format IEEE P1363 sesuai RFC 7515) secara kriptografis nyata.
    */
+  public static verifikasiJWTES256(
+    jwt: string,
+    kunciPublikPem: string,
+    expectedAudience: string = 'appstoreconnect-v1'
+  ): { valid: boolean; header?: any; payload?: any; galat?: string } {
+    const parts = String(jwt || '').split('.');
+    if (parts.length !== 3) {
+      return { valid: false, galat: 'Format JWT harus terdiri atas 3 bagian.' };
+    }
+    try {
+      const header = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf-8'));
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'));
+      if (header?.alg !== 'ES256') {
+        return { valid: false, galat: `Algoritma JWT ditolak: diharapkan 'ES256', ditemukan '${header?.alg}'.` };
+      }
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (typeof payload?.exp !== 'number' || payload.exp <= nowSec) {
+        return { valid: false, galat: 'Token JWT App Store Connect telah kedaluwarsa.' };
+      }
+      if (expectedAudience && payload?.aud !== expectedAudience) {
+        return { valid: false, galat: `Audience JWT tidak cocok: diharapkan '${expectedAudience}', ditemukan '${payload?.aud}'.` };
+      }
+      const cryptoMod = muatModulNode<any>('crypto');
+      if (!cryptoMod || typeof cryptoMod.verify !== 'function') {
+        return { valid: false, galat: 'Node.js crypto runtime tidak tersedia untuk verifikasi ES256.' };
+      }
+      const ok = cryptoMod.verify(
+        'sha256',
+        Buffer.from(`${parts[0]}.${parts[1]}`, 'utf-8'),
+        { key: kunciPublikPem, dsaEncoding: 'ieee-p1363' },
+        Buffer.from(parts[2], 'base64url')
+      );
+      return ok ? { valid: true, header, payload } : { valid: false, galat: 'Tanda tangan ECDSA ES256 tidak sah.' };
+    } catch (err: any) {
+      return { valid: false, galat: `Gagal memverifikasi JWT ES256: ${err.message}` };
+    }
+  }
+
   public buatDanTandaTanganiJWT(kunciPrivatPem?: string): string {
     if (this.tokenJwtAktif && Date.now() < this.kadaluwarsaJwtMs - 60000) {
       return this.tokenJwtAktif;

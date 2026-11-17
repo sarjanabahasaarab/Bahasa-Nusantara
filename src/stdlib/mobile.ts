@@ -50,6 +50,7 @@ import {
   DialogMobile,
   AlertMobile,
   SnackbarMobile,
+  PengelolaDeepLinkMobile,
   InfoPerangkatMobile,
   StatusJaringanMobile,
   StatusBateraiMobile,
@@ -276,6 +277,138 @@ export function bungkusKomponenMobile(komponen: KomponenMobile): NilaiPeta {
     });
   }
 
+  if (komponen instanceof IndikatorProgresMobile) {
+    anggota.set('setNilai', {
+      jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+      nama: 'setNilai',
+      eksekusi: (args: NilaiRuntime[]) => {
+        if (args.length > 0 && args[0].jenis === JenisNilaiRuntime.BILANGAN) {
+          komponen.setNilai(args[0].nilai);
+        }
+        return peta;
+      },
+    });
+  }
+
+  if (komponen instanceof KotakCentangMobile) {
+    anggota.set('setCentang', {
+      jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+      nama: 'setCentang',
+      eksekusi: (args: NilaiRuntime[]) => {
+        const val = args.length > 0 && args[0].jenis === JenisNilaiRuntime.LOGIKA ? args[0].nilai : true;
+        komponen.setCentang(val);
+        return peta;
+      },
+    });
+  }
+
+  if (komponen instanceof TombolRadioMobile) {
+    anggota.set('setTerpilih', {
+      jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+      nama: 'setTerpilih',
+      eksekusi: (args: NilaiRuntime[]) => {
+        const val = args.length > 0 && args[0].jenis === JenisNilaiRuntime.LOGIKA ? args[0].nilai : true;
+        komponen.setTerpilih(val);
+        return peta;
+      },
+    });
+  }
+
+  if (komponen instanceof DropdownMobile) {
+    anggota.set('setTerpilih', {
+      jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+      nama: 'setTerpilih',
+      eksekusi: (args: NilaiRuntime[]) => {
+        if (args.length > 0 && args[0].jenis === JenisNilaiRuntime.TEKS) {
+          komponen.setTerpilih(args[0].nilai);
+        }
+        return peta;
+      },
+    });
+  }
+
+  if (komponen instanceof NavigatorTumpukanMobile) {
+    anggota.set('daftarkanRute', {
+      jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+      nama: 'daftarkanRute',
+      eksekusi: (args: NilaiRuntime[]) => {
+        const nama = args.length > 0 && args[0].jenis === JenisNilaiRuntime.TEKS ? args[0].nilai : 'utama';
+        const halPeta = args.length > 1 && args[1].jenis === JenisNilaiRuntime.PETA ? (args[1] as NilaiPeta) : undefined;
+        const halKomp = halPeta ? petaKeKomponen.get(halPeta) : undefined;
+        komponen.daftarkanRute({
+          nama,
+          judul: nama,
+          transisi: 'geser',
+          tampilkanBilahJudul: true,
+          pembuatHalaman: () => halKomp || new TeksMobile({ teks: `Halaman ${nama}` }),
+        });
+        return peta;
+      },
+    });
+    anggota.set('dorong', {
+      jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+      nama: 'dorong',
+      eksekusi: (args: NilaiRuntime[]) => {
+        const nama = args.length > 0 && args[0].jenis === JenisNilaiRuntime.TEKS ? args[0].nilai : '';
+        const param = args.length > 1 && args[1].jenis === JenisNilaiRuntime.PETA ? konversiDariNilaiRuntime(args[1]) : {};
+        return buatLogika(komponen.dorong(nama, param));
+      },
+    });
+    anggota.set('kembali', {
+      jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+      nama: 'kembali',
+      eksekusi: () => buatLogika(komponen.kembali()),
+    });
+    anggota.set('dapatkanKedalaman', {
+      jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+      nama: 'dapatkanKedalaman',
+      eksekusi: () => buatBilangan(komponen.dapatkanKedalaman()),
+    });
+  }
+
+  if (komponen instanceof NavigatorTabMobile) {
+    anggota.set('pilihTab', {
+      jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+      nama: 'pilihTab',
+      eksekusi: (args: NilaiRuntime[]) => {
+        const k = args.length > 0 && args[0].jenis === JenisNilaiRuntime.TEKS ? args[0].nilai : '';
+        return buatLogika(komponen.pilihTab(k));
+      },
+    });
+  }
+
+  if (komponen instanceof NavigasiBawahMobile) {
+    anggota.set('pilih', {
+      jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+      nama: 'pilih',
+      eksekusi: (args: NilaiRuntime[]) => {
+        if (args.length > 0 && args[0].jenis === JenisNilaiRuntime.TEKS) {
+          komponen.pilih(args[0].nilai);
+        }
+        return peta;
+      },
+    });
+  }
+
+  if (komponen instanceof DialogMobile || komponen instanceof AlertMobile) {
+    anggota.set('buka', {
+      jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+      nama: 'buka',
+      eksekusi: () => {
+        komponen.buka();
+        return peta;
+      },
+    });
+    anggota.set('tutup', {
+      jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+      nama: 'tutup',
+      eksekusi: () => {
+        komponen.tutup();
+        return peta;
+      },
+    });
+  }
+
   // Method: toJson
   anggota.set('keJson', {
     jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
@@ -310,6 +443,30 @@ export function bungkusAplikasiMobile(app: AplikasiMobile): NilaiPeta {
         }
       }
       return peta;
+    },
+  });
+
+  anggota.set('setNavigator', {
+    jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+    nama: 'setNavigator',
+    eksekusi: (args: NilaiRuntime[]) => {
+      if (args.length > 0 && args[0].jenis === JenisNilaiRuntime.PETA) {
+        const nav = petaKeKomponen.get(args[0] as NilaiPeta);
+        if (nav) {
+          app.setNavigator(nav);
+        }
+      }
+      return peta;
+    },
+  });
+
+  anggota.set('keLatarBelakang', {
+    jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+    nama: 'keLatarBelakang',
+    eksekusi: () => {
+      app.keLatarBelakang();
+      anggota.set('status', buatTeks(app.dapatkanStatusLifecycle()));
+      return buatKosong();
     },
   });
 
@@ -471,6 +628,8 @@ export const simbolEksporMobile: Map<string, InfoSimbolModul> = new Map([
   ['aktifkanPembaruanResourceMobile', { nama: 'aktifkanPembaruanResourceMobile', kategori: 'fungsi', parameter: [], tipeKembalian: 'peta', minParameter: 0 }],
   ['rollbackPembaruanResourceMobile', { nama: 'rollbackPembaruanResourceMobile', kategori: 'fungsi', parameter: [{ nama: 'platform', tipe: 'teks' }], tipeKembalian: 'peta', minParameter: 0, variadik: true }],
   ['dapatkanStatusPembaruanMobile', { nama: 'dapatkanStatusPembaruanMobile', kategori: 'fungsi', parameter: [], tipeKembalian: 'peta', minParameter: 0 }],
+  ['aturNavigatorMobile', { nama: 'aturNavigatorMobile', kategori: 'fungsi', parameter: [{ nama: 'aplikasi', tipe: 'peta' }, { nama: 'navigator', tipe: 'peta' }], tipeKembalian: 'peta', minParameter: 2 }],
+  ['uraiDeepLinkMobile', { nama: 'uraiDeepLinkMobile', kategori: 'fungsi', parameter: [{ nama: 'url', tipe: 'teks' }], tipeKembalian: 'apapun', minParameter: 1 }],
 ]);
 
 export function buatEksporMobile(): Map<string, NilaiRuntime> {
@@ -534,6 +693,35 @@ export function buatEksporMobile(): Map<string, NilaiRuntime> {
         return wadahPeta;
       }
       return buatKosong();
+    },
+  });
+
+  // aturNavigatorMobile(aplikasi, navigator)
+  ekspor.set('aturNavigatorMobile', {
+    jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+    nama: 'aturNavigatorMobile',
+    eksekusi: (args: NilaiRuntime[]) => {
+      if (args.length >= 2 && args[0].jenis === JenisNilaiRuntime.PETA && args[1].jenis === JenisNilaiRuntime.PETA) {
+        const app = petaKeAplikasi.get(args[0] as NilaiPeta);
+        const nav = petaKeKomponen.get(args[1] as NilaiPeta);
+        if (app && nav) {
+          app.setNavigator(nav);
+        }
+        return args[0];
+      }
+      return buatKosong();
+    },
+  });
+
+  // uraiDeepLinkMobile(url)
+  ekspor.set('uraiDeepLinkMobile', {
+    jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+    nama: 'uraiDeepLinkMobile',
+    eksekusi: (args: NilaiRuntime[]) => {
+      const url = args.length > 0 && args[0].jenis === JenisNilaiRuntime.TEKS ? args[0].nilai : '';
+      const dl = new PengelolaDeepLinkMobile();
+      const hasil = dl.uraikanUrl(url);
+      return hasil ? konversiKeNilaiRuntime(hasil) : buatKosong();
     },
   });
 
@@ -1059,13 +1247,7 @@ export function buatEksporMobile(): Map<string, NilaiRuntime> {
   ekspor.set('tempelPapanKlip', {
     jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
     nama: 'tempelPapanKlip',
-    eksekusi: () => {
-      let hasilTeks = '';
-      PapanKlipMobile.tempel().then(t => {
-        hasilTeks = t;
-      });
-      return buatTeks(hasilTeks);
-    },
+    eksekusi: () => buatTeks(PapanKlipMobile.ambilTeksSinkron()),
   });
 
   // dapatkanLokasi()
@@ -1140,11 +1322,8 @@ export function buatEksporMobile(): Map<string, NilaiRuntime> {
       const izin = args.length > 0 && args[0].jenis === JenisNilaiRuntime.TEKS ? (args[0].nilai as JenisIzinMobile) : 'internet';
       const alasan = args.length > 1 && args[1].jenis === JenisNilaiRuntime.TEKS ? args[1].nilai : undefined;
       const konteks = KonteksAplikasiMobile.dapatkanKonteks();
-      let diberikan = false;
-      konteks.pengelolaIzin.mintaIzin(izin, alasan).then((res: any) => {
-        diberikan = res.diberikan;
-      });
-      return buatLogika(diberikan);
+      const res = konteks.pengelolaIzin.mintaIzinSinkron(izin, alasan);
+      return buatLogika(res.diberikan);
     },
   });
 
@@ -1224,6 +1403,11 @@ export function buatEksporMobile(): Map<string, NilaiRuntime> {
         const nama = args[0].nilai;
         const argumenData = args.length > 1 ? konversiDariNilaiRuntime(args[1]) : undefined;
         const registri = RegistriNativeAPI.dapatkanInstance();
+        const api = registri.dapatkan(nama);
+
+        if (api && typeof api.eksekusiSinkron === 'function') {
+          return konversiKeNilaiRuntime(registri.panggilSinkron(nama, argumenData));
+        }
 
         let hasil: any = { sukses: false, status: 'memproses', stempelWaktu: Date.now() };
         const p = registri.panggil(nama, argumenData);
@@ -1478,11 +1662,8 @@ export function buatEksporMobile(): Map<string, NilaiRuntime> {
     eksekusi: (args: NilaiRuntime[]) => {
       if (args.length >= 1 && args[0].jenis === JenisNilaiRuntime.TEKS) {
         const id = args[0].nilai;
-        return konversiKeNilaiRuntime({
-          sukses: true,
-          data: `Konten simulasi unduhan berkas ${id}`,
-          mimeType: 'text/plain',
-        });
+        const res = PengelolaTransferBerkasMobile.dapatkanInstance().unduhSinkron(id);
+        return konversiKeNilaiRuntime(res);
       }
       return buatKosong();
     },

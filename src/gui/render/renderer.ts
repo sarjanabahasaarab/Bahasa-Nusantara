@@ -24,6 +24,7 @@ import { TabelWidget } from '../widgets/table';
 import { IndikatorProgresWidget } from '../widgets/progress';
 import { SliderWidget } from '../widgets/slider';
 import { TabWidget } from '../widgets/tab';
+import { GambarWidget } from '../widgets/image';
 
 export interface OpsiRenderDesktop {
   skemaWarna?: SkemaWarnaGUI;
@@ -37,6 +38,17 @@ function escapeXML(teks: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function safeCssColor(c: string | undefined, fallback: string): string {
+  if (!c) return fallback;
+  return /^[#a-zA-Z0-9(),.\s%-]+$/.test(c) ? c : fallback;
+}
+
+function safeImageSrc(src: string): string {
+  const s = (src || '').trim();
+  if (/^\s*(javascript|vbscript|data:text\/html)/i.test(s)) return '';
+  return escapeXML(s);
 }
 
 export class PerenderDesktop {
@@ -281,6 +293,16 @@ export class PerenderDesktop {
     );
     bagian.push(`<rect x="0" y="0" width="${layout.lebar}" height="${layout.tinggi}" fill="${skema.latarBelakang}"/>`);
 
+    if (layout.kotakBilahMenu && jendela.bilahMenu) {
+      const m = layout.kotakBilahMenu;
+      bagian.push(`<rect x="${m.x}" y="${m.y}" width="${m.lebar}" height="${m.tinggi}" fill="${skema.latarKomponen}" stroke="${skema.border}"/>`);
+      let mx = m.x + 12;
+      for (const menu of jendela.bilahMenu.daftarMenu) {
+        bagian.push(`<text x="${mx}" y="${m.y + 18}" font-family="sans-serif" font-size="12" fill="${skema.teksUtama}">${escapeXML(menu.judul)}</text>`);
+        mx += menu.judul.length * 7 + 20;
+      }
+    }
+
     const kumpulSVG = (node: NodeTataLetak | null) => {
       if (!node || !node.widget.terlihat) return;
       const { x, y, lebar, tinggi } = node.kotak;
@@ -294,7 +316,7 @@ export class PerenderDesktop {
       } else if (w.jenis === 'label') {
         const lbl = w as LabelWidget;
         bagian.push(
-          `<text x="${x + 2}" y="${y + 18}" font-family="sans-serif" font-size="${w.gaya.ukuranFont ?? 14}" fill="${w.gaya.warnaTeks || skema.teksUtama}">${escapeXML(lbl.teks)}</text>`
+          `<text x="${x + 2}" y="${y + 18}" font-family="sans-serif" font-size="${w.gaya.ukuranFont ?? 14}" fill="${safeCssColor(w.gaya.warnaTeks, skema.teksUtama)}">${escapeXML(lbl.teks)}</text>`
         );
       } else if (w.jenis === 'input_teks') {
         const inp = w as InputTeksWidget;
@@ -302,10 +324,42 @@ export class PerenderDesktop {
         bagian.push(
           `<text x="${x + 10}" y="${y + 22}" font-family="sans-serif" font-size="13" fill="${inp.nilai ? skema.teksUtama : skema.teksMuted}">${escapeXML(inp.nilai || inp.placeholder)}</text>`
         );
+      } else if (w.jenis === 'area_teks') {
+        const area = w as AreaTeksWidget;
+        bagian.push(`<rect x="${x}" y="${y}" width="${lebar}" height="${tinggi}" rx="4" fill="${skema.latarKomponen}" stroke="${skema.border}"/>`);
+        const firstLine = (area.nilai || area.placeholder).split('\n')[0] || '';
+        bagian.push(`<text x="${x + 10}" y="${y + 22}" font-family="sans-serif" font-size="13" fill="${area.nilai ? skema.teksUtama : skema.teksMuted}">${escapeXML(firstLine)}</text>`);
+      } else if (w.jenis === 'kotak_centang') {
+        const cb = w as KotakCentangWidget;
+        bagian.push(`<rect x="${x}" y="${y + 6}" width="16" height="16" rx="3" fill="${cb.terpilih ? skema.primer : skema.latarKomponen}" stroke="${skema.border}"/>`);
+        bagian.push(`<text x="${x + 24}" y="${y + 19}" font-family="sans-serif" font-size="13" fill="${skema.teksUtama}">${escapeXML(cb.label)}</text>`);
+      } else if (w.jenis === 'tombol_radio') {
+        const rb = w as TombolRadioWidget;
+        bagian.push(`<circle cx="${x + 8}" cy="${y + 14}" r="7" fill="${skema.latarKomponen}" stroke="${skema.border}"/>`);
+        if (rb.terpilih) bagian.push(`<circle cx="${x + 8}" cy="${y + 14}" r="4" fill="${skema.primer}"/>`);
+        bagian.push(`<text x="${x + 24}" y="${y + 18}" font-family="sans-serif" font-size="13" fill="${skema.teksUtama}">${escapeXML(rb.label)}</text>`);
+      } else if (w.jenis === 'pilihan') {
+        const sel = w as PilihanDropdownWidget;
+        bagian.push(`<rect x="${x}" y="${y}" width="${lebar}" height="${tinggi}" rx="4" fill="${skema.latarKomponen}" stroke="${skema.border}"/>`);
+        bagian.push(`<text x="${x + 10}" y="${y + 22}" font-family="sans-serif" font-size="13" fill="${skema.teksUtama}">${escapeXML(sel.getTerpilih() || sel.placeholder)}</text>`);
+      } else if (w.jenis === 'tabel') {
+        const tbl = w as TabelWidget;
+        bagian.push(`<rect x="${x}" y="${y}" width="${lebar}" height="${tinggi}" rx="4" fill="${skema.latarKomponen}" stroke="${skema.border}"/>`);
+        const colW = Math.max(40, Math.floor(lebar / Math.max(1, tbl.kolom.length)));
+        tbl.kolom.forEach((col, ci) => {
+          bagian.push(`<text x="${x + ci * colW + 8}" y="${y + 19}" font-family="sans-serif" font-size="12" font-weight="bold" fill="${skema.teksUtama}">${escapeXML(col.judul)}</text>`);
+        });
       } else if (w.jenis === 'progres') {
         const p = w as IndikatorProgresWidget;
         bagian.push(`<rect x="${x}" y="${y}" width="${lebar}" height="${tinggi}" rx="4" fill="${skema.latarKomponenAktif}"/>`);
         bagian.push(`<rect x="${x}" y="${y}" width="${Math.round((lebar * p.persentase) / 100)}" height="${tinggi}" rx="4" fill="${skema.primer}"/>`);
+      } else if (w.jenis === 'slider') {
+        const s = w as SliderWidget;
+        const span = Math.max(1, s.nilaiMaks - s.nilaiMin);
+        const fillW = Math.round((lebar * (s.nilai - s.nilaiMin)) / span);
+        bagian.push(`<rect x="${x}" y="${y + Math.floor(tinggi / 2) - 3}" width="${lebar}" height="6" rx="3" fill="${skema.latarKomponenAktif}"/>`);
+        bagian.push(`<rect x="${x}" y="${y + Math.floor(tinggi / 2) - 3}" width="${fillW}" height="6" rx="3" fill="${skema.primer}"/>`);
+        bagian.push(`<circle cx="${x + fillW}" cy="${y + Math.floor(tinggi / 2)}" r="7" fill="${skema.primer}"/>`);
       }
       for (const a of node.anak) kumpulSVG(a);
     };
@@ -317,32 +371,98 @@ export class PerenderDesktop {
 
   public renderWidgetKeHTML(widget: Widget, skema: SkemaWarnaGUI): string {
     if (!widget.terlihat) return '';
+    const idAttr = escapeXML(widget.id);
     switch (widget.jenis) {
       case 'label': {
         const lbl = widget as LabelWidget;
-        return `<span data-widget-id="${escapeXML(widget.id)}" style="color:${lbl.gaya.warnaTeks || skema.teksUtama};font-size:${lbl.gaya.ukuranFont ?? 14}px;">${escapeXML(lbl.teks)}</span>`;
+        return `<span data-widget-id="${idAttr}" style="color:${safeCssColor(lbl.gaya.warnaTeks, skema.teksUtama)};font-size:${lbl.gaya.ukuranFont ?? 14}px;">${escapeXML(lbl.teks)}</span>`;
       }
       case 'tombol': {
         const btn = widget as TombolWidget;
-        return `<button data-widget-id="${escapeXML(widget.id)}" onclick="nusantaraKirim('klik',{idWidget:'${escapeXML(widget.id)}'})" style="padding:8px 16px;border-radius:6px;border:1px solid ${skema.border};background:${skema.primer};color:${skema.primerTeks};cursor:pointer;">${escapeXML(btn.teks)}</button>`;
+        return `<button data-widget-id="${idAttr}" onclick="nusantaraKirim('klik',{idWidget:'${idAttr}'})" style="padding:8px 16px;border-radius:6px;border:1px solid ${skema.border};background:${skema.primer};color:${skema.primerTeks};cursor:pointer;">${escapeXML(btn.teks)}</button>`;
       }
       case 'input_teks': {
         const inp = widget as InputTeksWidget;
-        return `<input data-widget-id="${escapeXML(widget.id)}" type="${inp.modePassword ? 'password' : 'text'}" value="${escapeXML(inp.nilai)}" placeholder="${escapeXML(inp.placeholder)}" oninput="nusantaraKirim('teks_berubah',{idWidget:'${escapeXML(widget.id)}',nilaiTeks:this.value})" style="padding:8px 10px;border-radius:6px;border:1px solid ${skema.border};background:${skema.latarKomponen};color:${skema.teksUtama};"/>`;
+        return `<input data-widget-id="${idAttr}" type="${inp.modePassword ? 'password' : 'text'}" value="${escapeXML(inp.nilai)}" placeholder="${escapeXML(inp.placeholder)}" oninput="nusantaraKirim('teks_berubah',{idWidget:'${idAttr}',nilaiTeks:this.value})" style="padding:8px 10px;border-radius:6px;border:1px solid ${skema.border};background:${skema.latarKomponen};color:${skema.teksUtama};"/>`;
+      }
+      case 'area_teks': {
+        const area = widget as AreaTeksWidget;
+        return `<textarea data-widget-id="${idAttr}" rows="${area.baris || 4}" placeholder="${escapeXML(area.placeholder)}" oninput="nusantaraKirim('teks_berubah',{idWidget:'${idAttr}',nilaiTeks:this.value})" style="padding:8px 10px;border-radius:6px;border:1px solid ${skema.border};background:${skema.latarKomponen};color:${skema.teksUtama};width:100%;">${escapeXML(area.nilai)}</textarea>`;
       }
       case 'kotak_centang': {
         const cb = widget as KotakCentangWidget;
-        return `<label data-widget-id="${escapeXML(widget.id)}" style="display:inline-flex;align-items:center;gap:8px;color:${skema.teksUtama};"><input type="checkbox" ${cb.terpilih ? 'checked' : ''} onchange="nusantaraKirim('klik',{idWidget:'${escapeXML(widget.id)}'})"/>${escapeXML(cb.label)}</label>`;
+        return `<label data-widget-id="${idAttr}" style="display:inline-flex;align-items:center;gap:8px;color:${skema.teksUtama};"><input type="checkbox" ${cb.terpilih ? 'checked' : ''} onchange="nusantaraKirim('klik',{idWidget:'${idAttr}'})"/>${escapeXML(cb.label)}</label>`;
+      }
+      case 'tombol_radio': {
+        const rb = widget as TombolRadioWidget;
+        return `<label data-widget-id="${idAttr}" style="display:inline-flex;align-items:center;gap:8px;color:${skema.teksUtama};"><input type="radio" name="${escapeXML(rb.grup?.nama || 'default')}" ${rb.terpilih ? 'checked' : ''} onchange="nusantaraKirim('klik',{idWidget:'${idAttr}'})"/>${escapeXML(rb.label)}</label>`;
+      }
+      case 'pilihan': {
+        const sel = widget as PilihanDropdownWidget;
+        const opts = sel.opsi
+          .map((o) => `<option value="${escapeXML(o.nilai)}" ${o.nilai === sel.nilaiTerpilih ? 'selected' : ''}>${escapeXML(o.label)}</option>`)
+          .join('');
+        return `<select data-widget-id="${idAttr}" onchange="nusantaraKirim('seleksi_berubah',{idWidget:'${idAttr}',nilaiTeks:this.value})" style="padding:8px 10px;border-radius:6px;border:1px solid ${skema.border};background:${skema.latarKomponen};color:${skema.teksUtama};">${opts}</select>`;
+      }
+      case 'daftar': {
+        const dft = widget as DaftarWidget;
+        const items = dft.item
+          .map((it, i) => `<li onclick="nusantaraKirim('seleksi_berubah',{idWidget:'${idAttr}',nilaiAngka:${i}})" style="padding:6px 10px;border-bottom:1px solid ${skema.border};cursor:pointer;">${escapeXML(String(it))}</li>`)
+          .join('');
+        return `<ul data-widget-id="${idAttr}" style="list-style:none;margin:0;padding:0;border:1px solid ${skema.border};border-radius:6px;background:${skema.latarKomponen};">${items}</ul>`;
+      }
+      case 'tabel': {
+        const tbl = widget as TabelWidget;
+        const ths = tbl.kolom.map((k) => `<th style="text-align:left;padding:8px;border-bottom:1px solid ${skema.border};">${escapeXML(k.judul)}</th>`).join('');
+        const trs = tbl.baris
+          .map((row, rIdx) => {
+            const tds = tbl.kolom.map((k) => `<td style="padding:8px;border-bottom:1px solid ${skema.border};">${escapeXML(String(row[k.id] ?? ''))}</td>`).join('');
+            return `<tr onclick="nusantaraKirim('seleksi_berubah',{idWidget:'${idAttr}',nilaiAngka:${rIdx}})">${tds}</tr>`;
+          })
+          .join('');
+        return `<table data-widget-id="${idAttr}" style="width:100%;border-collapse:collapse;border:1px solid ${skema.border};background:${skema.latarKomponen};"><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>`;
+      }
+      case 'gambar': {
+        const img = widget as GambarWidget;
+        const amanSrc = safeImageSrc(img.sumber);
+        return `<img data-widget-id="${idAttr}" src="${amanSrc}" alt="${escapeXML(img.teksAlternatif)}" ${img.lebar ? `width="${Math.round(img.lebar)}"` : ''} ${img.tinggi ? `height="${Math.round(img.tinggi)}"` : ''} style="max-width:100%;"/>`;
+      }
+      case 'progres': {
+        const prog = widget as IndikatorProgresWidget;
+        return `<progress data-widget-id="${idAttr}" value="${prog.persentase}" max="100" style="width:100%;height:14px;"></progress>`;
+      }
+      case 'slider': {
+        const sld = widget as SliderWidget;
+        return `<input data-widget-id="${idAttr}" type="range" min="${sld.nilaiMin}" max="${sld.nilaiMaks}" value="${sld.nilai}" oninput="nusantaraKirim('nilai_berubah',{idWidget:'${idAttr}',nilaiAngka:Number(this.value)})" style="width:100%;"/>`;
+      }
+      case 'tab': {
+        const tab = widget as TabWidget;
+        const header = tab.daftarTab
+          .map((t, idx) => `<button onclick="nusantaraKirim('seleksi_berubah',{idWidget:'${idAttr}',nilaiAngka:${idx}})" style="padding:6px 12px;border:none;border-bottom:${idx === tab.indeksAktif ? `2px solid ${skema.primer}` : '2px solid transparent'};background:transparent;color:${idx === tab.indeksAktif ? skema.primer : skema.teksSekunder};cursor:pointer;">${escapeXML(t.judul)}</button>`)
+          .join('');
+        const aktif = tab.dapatkanTabAktif();
+        const kontenHtml = aktif ? this.renderWidgetKeHTML(aktif.konten, skema) : '';
+        return `<div data-widget-id="${idAttr}" style="border:1px solid ${skema.border};border-radius:6px;"><div style="display:flex;gap:4px;border-bottom:1px solid ${skema.border};padding:4px 8px;">${header}</div><div style="padding:12px;">${kontenHtml}</div></div>`;
       }
       case 'baris':
       case 'kolom': {
         const dir = widget.jenis === 'baris' ? 'row' : 'column';
         const anakHtml = widget.anak.map((a) => this.renderWidgetKeHTML(a, skema)).join('');
-        return `<div data-widget-id="${escapeXML(widget.id)}" style="display:flex;flex-direction:${dir};gap:8px;">${anakHtml}</div>`;
+        return `<div data-widget-id="${idAttr}" style="display:flex;flex-direction:${dir};gap:8px;">${anakHtml}</div>`;
+      }
+      case 'grid': {
+        const grid = widget as any;
+        const cols = Math.max(1, Number(grid.jumlahKolom || 2));
+        const anakHtml = widget.anak.map((a) => this.renderWidgetKeHTML(a, skema)).join('');
+        return `<div data-widget-id="${idAttr}" style="display:grid;grid-template-columns:repeat(${cols},minmax(0,1fr));gap:8px;">${anakHtml}</div>`;
+      }
+      case 'gulir': {
+        const anakHtml = widget.anak.map((a) => this.renderWidgetKeHTML(a, skema)).join('');
+        return `<div data-widget-id="${idAttr}" style="overflow:auto;max-height:100%;">${anakHtml}</div>`;
       }
       default: {
         const anakHtml = widget.anak.map((a) => this.renderWidgetKeHTML(a, skema)).join('');
-        return `<div data-widget-id="${escapeXML(widget.id)}">${anakHtml}</div>`;
+        return `<div data-widget-id="${idAttr}">${anakHtml}</div>`;
       }
     }
   }
@@ -366,7 +486,7 @@ export class PerenderDesktop {
   ${menuHtml}
   <main id="nusantara-root" style="padding:16px;">${body}</main>
   <script>
-    const ws = ${wsUrl ? `new WebSocket('${wsUrl}')` : 'null'};
+    const ws = ${wsUrl ? `new WebSocket(${JSON.stringify(wsUrl)})` : 'null'};
     function nusantaraKirim(jenis, data) {
       if (ws && ws.readyState === 1) ws.send(JSON.stringify({ tipe: 'peristiwa', jenis, ...data }));
     }

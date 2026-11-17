@@ -119,6 +119,9 @@ jobs:
       - name: Jalankan Rangkaian Uji Lengkap (Phase 1–50)
         run: npm test
 
+      - name: Jalankan Uji Integrasi Lintas Platform Terpadu (Phase 23 & 36–42)
+        run: npm run test:demo-terpadu
+
   # ============================================================================
   # 3. QUALITY GATE NUSANTARA
   # ============================================================================
@@ -460,6 +463,7 @@ jobs:
           echo "| Gerbang Kualitas (Quality Gate) | ${{ needs.quality-gate.result }} | ubuntu-latest | Ambang batas kualitas dan regresi |" >> $GITHUB_STEP_SUMMARY
           echo "| Matriks Build 6 Target Desktop | ${{ needs.build-matrix-validation.result }} | Multi-OS Matrix | Eksekusi per-target menghasilkan JSON evidence terpisah |" >> $GITHUB_STEP_SUMMARY
           echo "| Gerbang Sertifikasi 6 Target (Phase 23.2) | ${{ needs.phase23-certification-gate.result == 'success' && 'CERTIFIED (6/6 PASS)' || 'PARTIAL / FAILED (Belum CERTIFIED)' }} | ubuntu-latest | Wajib 6/6 target PASS + SHA-256 & header biner sah |" >> $GITHUB_STEP_SUMMARY
+          echo "| Cakupan GUI, Mobile, Distribusi & OTA (Phase 36–42) | ${{ needs.test-suite.result }} | Multi-OS Matrix | \`test:gui-v36\`..\`test:pembaruan-v42\` + \`test:demo-terpadu\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ "${{ needs.quality-gate.result }}" = "skipped" ] || [ "${{ needs.build-matrix-validation.result }}" = "skipped" ]; then
             echo "### Diagnostik Prasyarat yang Dilewati (Skipped)" >> $GITHUB_STEP_SUMMARY

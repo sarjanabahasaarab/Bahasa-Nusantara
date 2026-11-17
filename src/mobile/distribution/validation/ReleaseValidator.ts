@@ -261,7 +261,7 @@ export class ReleaseValidator {
 
     // 3.2 Audit Hardcoded Secrets
     const jsonStr = JSON.stringify(konfig);
-    const adaPasswordPlain = /password["']?\s*:\s*["'][^"']+["']/i.test(jsonStr);
+    const adaPasswordPlain = /"(?:password|storePassword|keyPassword|privateKey|apiSecret|clientSecret)"\s*:\s*"[^"]+"/i.test(jsonStr);
     if (!adaPasswordPlain) {
       checklist.push({
         id: 'sec-no-hardcoded-pass',

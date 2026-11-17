@@ -19,6 +19,9 @@ export interface TargetPlatformInfo {
   dataLayout: string;
   os: 'windows' | 'linux' | 'darwin' | 'unknown';
   arch: 'x86_64' | 'aarch64' | 'unknown';
+  abi: 'gnu' | 'msvc' | 'darwin-macho' | 'unknown';
+  defaultCpu: string;
+  cpuFlags: string[];
   objectFormat: 'ELF' | 'Mach-O' | 'COFF';
   executableExtension: string;
   objectExtension: string;
@@ -79,6 +82,9 @@ export class TargetTripleManager {
 
     let os: TargetPlatformInfo['os'] = 'unknown';
     let arch: TargetPlatformInfo['arch'] = 'unknown';
+    let abi: TargetPlatformInfo['abi'] = 'unknown';
+    let defaultCpu = 'generic';
+    let cpuFlags: string[] = [];
     let objectFormat: TargetPlatformInfo['objectFormat'] = 'ELF';
     let executableExtension = '';
     let objectExtension = '.o';
@@ -88,24 +94,35 @@ export class TargetTripleManager {
 
     if (lower.includes('x86_64') || lower.includes('amd64') || lower.includes('-x64')) {
       arch = 'x86_64';
+      defaultCpu = 'x86-64';
+      cpuFlags = ['-march=x86-64'];
     } else if (lower.includes('aarch64') || lower.includes('arm64')) {
       arch = 'aarch64';
+      defaultCpu = 'generic';
+      cpuFlags = ['-mcpu=generic'];
     }
 
     if (lower.includes('linux')) {
       os = 'linux';
+      abi = 'gnu';
       objectFormat = 'ELF';
       executableExtension = '';
       objectExtension = '.o';
       dataLayout = arch === 'aarch64' ? this.LAYOUT_AARCH64_LINUX : this.LAYOUT_X86_64_LINUX;
     } else if (lower.includes('darwin') || lower.includes('apple') || lower.includes('macos')) {
       os = 'darwin';
+      abi = 'darwin-macho';
+      if (arch === 'aarch64') {
+        defaultCpu = 'apple-m1';
+        cpuFlags = ['-mcpu=apple-m1'];
+      }
       objectFormat = 'Mach-O';
       executableExtension = '';
       objectExtension = '.o';
       dataLayout = arch === 'aarch64' ? this.LAYOUT_AARCH64_DARWIN : this.LAYOUT_X86_64_DARWIN;
     } else if (lower.includes('windows') || lower.includes('win32')) {
       os = 'windows';
+      abi = 'msvc';
       objectFormat = 'COFF';
       executableExtension = '.exe';
       objectExtension = '.obj';
@@ -125,6 +142,9 @@ export class TargetTripleManager {
       dataLayout,
       os,
       arch,
+      abi,
+      defaultCpu,
+      cpuFlags,
       objectFormat,
       executableExtension,
       objectExtension,

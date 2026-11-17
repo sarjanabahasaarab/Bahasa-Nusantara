@@ -2,12 +2,18 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * NUSANTARA Programming Language - Phase 37
+ * NUSANTARA Programming Language - Phase 37/38
  * Abstraksi Penyimpanan Aman Mobile (Mobile Secure Storage / Keychain / Keystore)
- * Mendukung eksekusi isomorfis (Node.js runtime & Browser / Vite SPA).
+ * Mendukung eksekusi isomorfis (Node.js runtime & Browser / Vite SPA) dengan enkripsi terautentikasi.
  */
 
 import * as nodeCrypto from 'node:crypto';
+
+const KUNCI_TERLARANG = new Set(['__proto__', 'constructor', 'prototype']);
+
+function apakahKunciValid(kunci: unknown): kunci is string {
+  return typeof kunci === 'string' && kunci.length > 0 && !KUNCI_TERLARANG.has(kunci) && !kunci.includes('\0');
+}
 
 function apakahNode(): boolean {
   return (
@@ -107,6 +113,24 @@ function sha256Murni(bytes: Uint8Array): Uint8Array {
   return out;
 }
 
+function hmacSha256Murni(key: Uint8Array, message: Uint8Array): Uint8Array {
+  const blockSize = 64;
+  const k = key.length > blockSize ? sha256Murni(key) : key;
+  const paddedKey = new Uint8Array(blockSize);
+  paddedKey.set(k);
+
+  const oKeyPad = new Uint8Array(blockSize + 32);
+  const iKeyPad = new Uint8Array(blockSize + message.length);
+  for (let i = 0; i < blockSize; i++) {
+    oKeyPad[i] = paddedKey[i] ^ 0x5c;
+    iKeyPad[i] = paddedKey[i] ^ 0x36;
+  }
+  iKeyPad.set(message, blockSize);
+  const innerHash = sha256Murni(iKeyPad);
+  oKeyPad.set(innerHash, blockSize);
+  return sha256Murni(oKeyPad);
+}
+
 function bytesToHex(bytes: Uint8Array): string {
   let hex = '';
   for (let i = 0; i < bytes.length; i++) {
@@ -125,7 +149,19 @@ function hexToBytes(hex: string): Uint8Array {
   return bytes;
 }
 
+function constantTimeEqualHex(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
 function acakBytesIsomorfis(panjang: number): Uint8Array {
+  if (apakahNode() && typeof (nodeCrypto as any)?.randomBytes === 'function') {
+    return new Uint8Array((nodeCrypto as any).randomBytes(panjang));
+  }
   const gCrypto = typeof globalThis !== 'undefined' ? (globalThis.crypto as any) : null;
   if (gCrypto && typeof gCrypto.getRandomValues === 'function') {
     const arr = new Uint8Array(panjang);
@@ -154,30 +190,42 @@ export class PenyimpananAmanMobile {
   }
 
   public static simpan(kunci: string, nilai: string): boolean {
-    const cipherText = PenyimpananAmanMobile.defaultInstance.enkripsi(nilai);
+    if (!apakahKunciValid(kunci) || typeof nilai !== 'string') {
+      return false;
+    }
+    const cipherText = PenyimpananAmanMobile.defaultInstance.enkripsi(nilai, kunci);
     PenyimpananAmanMobile.defaultInstance.penyimpanan.set(kunci, cipherText);
     return true;
   }
 
   public static ambil(kunci: string): string | null {
+    if (!apakahKunciValid(kunci)) return null;
     const cipherText = PenyimpananAmanMobile.defaultInstance.penyimpanan.get(kunci);
     if (!cipherText) return null;
     try {
-      return PenyimpananAmanMobile.defaultInstance.dekripsi(cipherText);
+      return PenyimpananAmanMobile.defaultInstance.dekripsi(cipherText, kunci);
     } catch {
       return null;
     }
   }
 
   public static hapus(kunci: string): boolean {
+    if (!apakahKunciValid(kunci)) return false;
     return PenyimpananAmanMobile.defaultInstance.penyimpanan.delete(kunci);
   }
 
   public static memiliki(kunci: string): boolean {
+    if (!apakahKunciValid(kunci)) return false;
     return PenyimpananAmanMobile.defaultInstance.penyimpanan.has(kunci);
   }
 
-  constructor(frasaKunci: string = 'nusantara-mobile-keystore-salt') {
+  constructor(frasaKunci?: string) {
+    const rahasiaDasar =
+      frasaKunci ??
+      (typeof process !== 'undefined' && process.env?.NUSANTARA_MOBILE_KEYSTORE_SECRET
+        ? process.env.NUSANTARA_MOBILE_KEYSTORE_SECRET
+        : `nusantara-mobile-keystore-${typeof (nodeCrypto as any)?.randomBytes === 'function' ? 'runtime' : 'browser'}`);
+
     let bisaNode = false;
     try {
       if (apakahNode() && typeof (nodeCrypto as any)?.scryptSync === 'function') {
@@ -190,24 +238,30 @@ export class PenyimpananAmanMobile {
     this.modeNode = bisaNode;
 
     if (bisaNode) {
-      this.kunciEnkripsiNode = (nodeCrypto as any).scryptSync(frasaKunci, 'garam_keystore_nusantara', 32);
+      // Gunakan garam unik per instance jika menggunakan rahasia runtime, atau terikat frasaKunci
+      const garamUnik = frasaKunci ? 'garam_keystore_nusantara_v2' : (nodeCrypto as any).randomBytes(16);
+      this.kunciEnkripsiNode = (nodeCrypto as any).scryptSync(rahasiaDasar, garamUnik, 32);
       this.kunciEnkripsiBrowser = new Uint8Array(0);
     } else {
-      const garamBytes = new TextEncoder().encode('garam_keystore_nusantara:' + frasaKunci);
+      const garamBytes = new TextEncoder().encode('garam_keystore_nusantara_v2:' + rahasiaDasar);
       this.kunciEnkripsiBrowser = sha256Murni(garamBytes);
     }
   }
 
-  private enkripsi(teksPolos: string): string {
+  private enkripsi(teksPolos: string, konteksKunci: string = ''): string {
     if (this.modeNode && this.kunciEnkripsiNode) {
-      const iv = (nodeCrypto as any).randomBytes(16);
-      const cipher = (nodeCrypto as any).createCipheriv('aes-256-cbc', this.kunciEnkripsiNode, iv);
-      let terenkripsi = cipher.update(teksPolos, 'utf8', 'hex');
-      terenkripsi += cipher.final('hex');
-      return `${iv.toString('hex')}:${terenkripsi}`;
+      const iv = (nodeCrypto as any).randomBytes(12);
+      const cipher = (nodeCrypto as any).createCipheriv('aes-256-gcm', this.kunciEnkripsiNode, iv);
+      cipher.setAAD(Buffer.from(konteksKunci, 'utf8'));
+      const terenkripsi = Buffer.concat([
+        cipher.update(teksPolos, 'utf8'),
+        cipher.final(),
+      ]);
+      const authTag = cipher.getAuthTag();
+      return `v2:${iv.toString('hex')}:${authTag.toString('hex')}:${terenkripsi.toString('hex')}`;
     }
 
-    // Algoritma enkripsi simetris CTR mandiri untuk browser
+    // Algoritma enkripsi simetris CTR terautentikasi HMAC-SHA256 untuk browser
     const ivBytes = acakBytesIsomorfis(16);
     const ivHex = bytesToHex(ivBytes);
     const plainBytes = new TextEncoder().encode(teksPolos);
@@ -226,61 +280,101 @@ export class PenyimpananAmanMobile {
       }
     }
 
-    return `${ivHex}:${bytesToHex(cipherBytes)}`;
+    const cipherHex = bytesToHex(cipherBytes);
+    const macInput = new TextEncoder().encode(`${konteksKunci}:${ivHex}:${cipherHex}`);
+    const macHex = bytesToHex(hmacSha256Murni(this.kunciEnkripsiBrowser, macInput));
+    return `v2b:${ivHex}:${macHex}:${cipherHex}`;
   }
 
-  private dekripsi(dataTerenkripsi: string): string {
-    const [ivHex, kontenHex] = dataTerenkripsi.split(':');
-    if (!ivHex || !kontenHex) throw new Error('Data penyimpanan aman rusak');
-
-    if (this.modeNode && this.kunciEnkripsiNode && typeof Buffer !== 'undefined') {
-      const iv = Buffer.from(ivHex, 'hex');
-      const decipher = (nodeCrypto as any).createDecipheriv('aes-256-cbc', this.kunciEnkripsiNode, iv);
-      let didekripsi = decipher.update(kontenHex, 'hex', 'utf8');
-      didekripsi += decipher.final('utf8');
-      return didekripsi;
+  private dekripsi(dataTerenkripsi: string, konteksKunci: string = ''): string {
+    if (!dataTerenkripsi || typeof dataTerenkripsi !== 'string') {
+      throw new Error('Data penyimpanan aman rusak');
     }
 
-    // Dekripsi CTR mandiri untuk browser
-    const cipherBytes = hexToBytes(kontenHex);
-    const plainBytes = new Uint8Array(cipherBytes.length);
-
-    for (let i = 0; i < cipherBytes.length; i += 32) {
-      const blockIdx = Math.floor(i / 32);
-      const counterBuf = new TextEncoder().encode(`${ivHex}:${blockIdx}`);
-      const combined = new Uint8Array(this.kunciEnkripsiBrowser.length + counterBuf.length);
-      combined.set(this.kunciEnkripsiBrowser, 0);
-      combined.set(counterBuf, this.kunciEnkripsiBrowser.length);
-      const keyStream = sha256Murni(combined);
-
-      for (let j = 0; j < 32 && i + j < cipherBytes.length; j++) {
-        plainBytes[i + j] = cipherBytes[i + j] ^ keyStream[j];
+    if (dataTerenkripsi.startsWith('v2:')) {
+      const bagian = dataTerenkripsi.split(':');
+      if (bagian.length !== 4) throw new Error('Format ciphertext AES-GCM tidak valid');
+      const [, ivHex, tagHex, kontenHex] = bagian;
+      if (!this.modeNode || !this.kunciEnkripsiNode) {
+        throw new Error('Ciphertext Node AES-GCM tidak dapat didekripsi di browser');
       }
+      const iv = Buffer.from(ivHex, 'hex');
+      const tag = Buffer.from(tagHex, 'hex');
+      const kontenBuf = Buffer.from(kontenHex, 'hex');
+      const decipher = (nodeCrypto as any).createDecipheriv('aes-256-gcm', this.kunciEnkripsiNode, iv);
+      decipher.setAAD(Buffer.from(konteksKunci, 'utf8'));
+      decipher.setAuthTag(tag);
+      const didekripsi = Buffer.concat([decipher.update(kontenBuf), decipher.final()]);
+      return didekripsi.toString('utf8');
     }
 
-    return new TextDecoder().decode(plainBytes);
+    if (dataTerenkripsi.startsWith('v2b:')) {
+      const bagian = dataTerenkripsi.split(':');
+      if (bagian.length !== 4) throw new Error('Format ciphertext browser tidak valid');
+      const [, ivHex, macHex, cipherHex] = bagian;
+      const macInput = new TextEncoder().encode(`${konteksKunci}:${ivHex}:${cipherHex}`);
+      const macHarapan = bytesToHex(hmacSha256Murni(this.kunciEnkripsiBrowser, macInput));
+      if (!constantTimeEqualHex(macHex, macHarapan)) {
+        throw new Error('Verifikasi integritas HMAC gagal');
+      }
+      const cipherBytes = hexToBytes(cipherHex);
+      const plainBytes = new Uint8Array(cipherBytes.length);
+      for (let i = 0; i < cipherBytes.length; i += 32) {
+        const blockIdx = Math.floor(i / 32);
+        const counterBuf = new TextEncoder().encode(`${ivHex}:${blockIdx}`);
+        const combined = new Uint8Array(this.kunciEnkripsiBrowser.length + counterBuf.length);
+        combined.set(this.kunciEnkripsiBrowser, 0);
+        combined.set(counterBuf, this.kunciEnkripsiBrowser.length);
+        const keyStream = sha256Murni(combined);
+        for (let j = 0; j < 32 && i + j < cipherBytes.length; j++) {
+          plainBytes[i + j] = cipherBytes[i + j] ^ keyStream[j];
+        }
+      }
+      return new TextDecoder().decode(plainBytes);
+    }
+
+    throw new Error('Skema enkripsi tidak dikenali atau data termodifikasi');
+  }
+
+  public dapatkanCiphertextMentah(kunci: string): string | undefined {
+    if (!apakahKunciValid(kunci)) return undefined;
+    return this.penyimpanan.get(kunci);
+  }
+
+  public timpaCiphertextUntukUji(kunci: string, ciphertextRusak: string): void {
+    if (!apakahKunciValid(kunci)) return;
+    this.penyimpanan.set(kunci, ciphertextRusak);
   }
 
   public async simpan(kunci: string, nilai: string): Promise<void> {
-    const cipherText = this.enkripsi(nilai);
+    if (!apakahKunciValid(kunci)) {
+      throw new Error('Kunci penyimpanan aman tidak valid.');
+    }
+    if (typeof nilai !== 'string') {
+      throw new Error('Nilai penyimpanan aman harus berupa teks.');
+    }
+    const cipherText = this.enkripsi(nilai, kunci);
     this.penyimpanan.set(kunci, cipherText);
   }
 
   public async ambil(kunci: string): Promise<string | null> {
+    if (!apakahKunciValid(kunci)) return null;
     const cipherText = this.penyimpanan.get(kunci);
     if (!cipherText) return null;
     try {
-      return this.dekripsi(cipherText);
+      return this.dekripsi(cipherText, kunci);
     } catch {
       return null;
     }
   }
 
   public async hapus(kunci: string): Promise<boolean> {
+    if (!apakahKunciValid(kunci)) return false;
     return this.penyimpanan.delete(kunci);
   }
 
   public async apakahAda(kunci: string): Promise<boolean> {
+    if (!apakahKunciValid(kunci)) return false;
     return this.penyimpanan.has(kunci);
   }
 

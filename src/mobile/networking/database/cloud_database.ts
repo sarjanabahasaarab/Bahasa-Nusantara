@@ -26,6 +26,14 @@ export interface HasilKueriDatabaseMobile<T = any> {
   galat?: string;
 }
 
+function sanitasiSegmenPath(nilai: string | number, label: string): { ok: true; segmen: string } | { ok: false; galat: string } {
+  const s = String(nilai ?? '').trim();
+  if (!s || s === '.' || s === '..' || /[\\/?#\0]/.test(s) || s.includes('..')) {
+    return { ok: false, galat: `${label} mengandung karakter jalur ilegal atau path traversal.` };
+  }
+  return { ok: true, segmen: encodeURIComponent(s) };
+}
+
 export class KlienDatabaseCloudMobile {
   private apiClient: KlienAPIMobile;
   private readonly basisEndpoint: string;
@@ -36,6 +44,18 @@ export class KlienDatabaseCloudMobile {
   }
 
   public async ambilSemua<T = any>(tabel: string, opsi: OpsiKueriDatabaseMobile = {}): Promise<HasilKueriDatabaseMobile<T>> {
+    const cekTabel = sanitasiSegmenPath(tabel, 'Nama tabel');
+    if (!cekTabel.ok) {
+      return {
+        sukses: false,
+        data: [],
+        total: 0,
+        halaman: opsi.halaman || 1,
+        perHalaman: opsi.perHalaman || 20,
+        galat: cekTabel.galat,
+      };
+    }
+
     const query: Record<string, any> = {
       halaman: opsi.halaman || 1,
       perHalaman: opsi.perHalaman || 20,
@@ -50,7 +70,7 @@ export class KlienDatabaseCloudMobile {
       }
     }
 
-    const res = await this.apiClient.dapatkan(`${this.basisEndpoint}/${tabel}`, { query });
+    const res = await this.apiClient.dapatkan(`${this.basisEndpoint}/${cekTabel.segmen}`, { query });
     if (!res.sukses) {
       return {
         sukses: false,
@@ -75,7 +95,12 @@ export class KlienDatabaseCloudMobile {
   }
 
   public async ambilBerdasarkanId<T = any>(tabel: string, id: string | number): Promise<{ sukses: boolean; data?: T; galat?: string }> {
-    const res = await this.apiClient.dapatkan(`${this.basisEndpoint}/${tabel}/${id}`);
+    const cekTabel = sanitasiSegmenPath(tabel, 'Nama tabel');
+    if (!cekTabel.ok) return { sukses: false, galat: cekTabel.galat };
+    const cekId = sanitasiSegmenPath(id, 'ID rekaman');
+    if (!cekId.ok) return { sukses: false, galat: cekId.galat };
+
+    const res = await this.apiClient.dapatkan(`${this.basisEndpoint}/${cekTabel.segmen}/${cekId.segmen}`);
     if (!res.sukses) {
       return { sukses: false, galat: res.galat || 'Data tidak ditemukan.' };
     }
@@ -83,12 +108,15 @@ export class KlienDatabaseCloudMobile {
   }
 
   public async buat<T = any>(tabel: string, data: Record<string, any>): Promise<{ sukses: boolean; data?: T; galat?: string }> {
+    const cekTabel = sanitasiSegmenPath(tabel, 'Nama tabel');
+    if (!cekTabel.ok) return { sukses: false, galat: cekTabel.galat };
+
     const periksa = LapisanKeamananMobile.periksaKlaimKlien(data);
     if (!periksa.aman) {
       return { sukses: false, galat: periksa.peringatan };
     }
 
-    const res = await this.apiClient.kirim(`${this.basisEndpoint}/${tabel}`, data);
+    const res = await this.apiClient.kirim(`${this.basisEndpoint}/${cekTabel.segmen}`, data);
     return {
       sukses: res.sukses,
       data: res.data,
@@ -97,12 +125,17 @@ export class KlienDatabaseCloudMobile {
   }
 
   public async perbarui<T = any>(tabel: string, id: string | number, data: Record<string, any>): Promise<{ sukses: boolean; data?: T; galat?: string }> {
+    const cekTabel = sanitasiSegmenPath(tabel, 'Nama tabel');
+    if (!cekTabel.ok) return { sukses: false, galat: cekTabel.galat };
+    const cekId = sanitasiSegmenPath(id, 'ID rekaman');
+    if (!cekId.ok) return { sukses: false, galat: cekId.galat };
+
     const periksa = LapisanKeamananMobile.periksaKlaimKlien(data);
     if (!periksa.aman) {
       return { sukses: false, galat: periksa.peringatan };
     }
 
-    const res = await this.apiClient.perbarui(`${this.basisEndpoint}/${tabel}/${id}`, data);
+    const res = await this.apiClient.perbarui(`${this.basisEndpoint}/${cekTabel.segmen}/${cekId.segmen}`, data);
     return {
       sukses: res.sukses,
       data: res.data,
@@ -111,7 +144,12 @@ export class KlienDatabaseCloudMobile {
   }
 
   public async hapus(tabel: string, id: string | number): Promise<{ sukses: boolean; galat?: string }> {
-    const res = await this.apiClient.hapus(`${this.basisEndpoint}/${tabel}/${id}`);
+    const cekTabel = sanitasiSegmenPath(tabel, 'Nama tabel');
+    if (!cekTabel.ok) return { sukses: false, galat: cekTabel.galat };
+    const cekId = sanitasiSegmenPath(id, 'ID rekaman');
+    if (!cekId.ok) return { sukses: false, galat: cekId.galat };
+
+    const res = await this.apiClient.hapus(`${this.basisEndpoint}/${cekTabel.segmen}/${cekId.segmen}`);
     return {
       sukses: res.sukses,
       galat: res.galat,

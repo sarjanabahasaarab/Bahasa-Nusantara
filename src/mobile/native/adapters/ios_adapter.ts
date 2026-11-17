@@ -45,6 +45,7 @@ export class AdaptorIOSMobile extends AdaptorSimulatorMobile implements AdaptorP
   }
 
   public override async pilihMedia(opsi?: { tipe?: 'foto' | 'video' | 'semua'; maksPilihan?: number }): Promise<HasilOperasiNative<any>> {
+    const tc = DetektorToolchainMobile.deteksi();
     return buatHasilSukses({
       item: [
         {
@@ -55,11 +56,14 @@ export class AdaptorIOSMobile extends AdaptorSimulatorMobile implements AdaptorP
       ],
       jumlah: 1,
       frameworkIOS: 'PHPickerViewController (PhotosUI)',
+      xcodeTersedia: tc.ios.xcodebuild,
+      sumberData: tc.ios.siapKompilasiNative ? 'IOS_PHPICKER_READY' : 'KONTRAK_IOS_HOST_NON_MACOS',
     }, 'Media berhasil dipilih via PHPickerViewController iOS.');
   }
 
   public override async simpanAman(kunci: string, nilai: string): Promise<HasilOperasiNative<any>> {
     const res = await super.simpanAman(kunci, nilai);
+    if (!res.sukses) return res;
     return buatHasilSukses({
       ...res.data,
       penyimpanan: 'iOS Keychain Services (kSecClassGenericPassword + kSecAttrAccessibleAfterFirstUnlock)',

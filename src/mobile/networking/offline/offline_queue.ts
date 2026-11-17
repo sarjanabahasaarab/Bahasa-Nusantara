@@ -127,10 +127,35 @@ export class PengelolaOperasiOffline {
   }
 
   public aturJalurPersistensi(jalurBerkas?: string): void {
+    if (jalurBerkas && jalurBerkas.includes('\0')) {
+      throw new Error('Jalur berkas persistensi tidak valid.');
+    }
     this.jalurDiskPersistensi = jalurBerkas;
     if (jalurBerkas) {
       this.muatUlangDariDisk();
     }
+  }
+
+  private bersihkanAntreanJson(parsed: any): OperasiOffline[] {
+    if (!Array.isArray(parsed)) return [];
+    const hasil: OperasiOffline[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+      if (typeof item.id !== 'string' || typeof item.endpoint !== 'string' || typeof item.metode !== 'string') continue;
+      hasil.push({
+        id: item.id,
+        endpoint: item.endpoint,
+        metode: item.metode,
+        body: item.body,
+        headers: item.headers,
+        stempelWaktu: typeof item.stempelWaktu === 'number' ? item.stempelWaktu : Date.now(),
+        percobaan: typeof item.percobaan === 'number' ? item.percobaan : 0,
+        status: item.status || 'tertunda',
+        idempotencyKey: typeof item.idempotencyKey === 'string' ? item.idempotencyKey : item.id,
+        pesanGalat: typeof item.pesanGalat === 'string' ? item.pesanGalat : undefined,
+      });
+    }
+    return hasil;
   }
 
   public muatUlangDariDisk(): void {
@@ -140,9 +165,7 @@ export class PengelolaOperasiOffline {
     try {
       const isi = fs.readFileSync(this.jalurDiskPersistensi, 'utf-8');
       const parsed = JSON.parse(isi);
-      if (Array.isArray(parsed)) {
-        this.antrean = parsed;
-      }
+      this.antrean = this.bersihkanAntreanJson(parsed);
     } catch {
       // Abaikan JSON korup
     }
@@ -170,7 +193,9 @@ export class PengelolaOperasiOffline {
         const path = muatModulNode<any>('path');
         if (fs && path) {
           fs.mkdirSync(path.dirname(this.jalurDiskPersistensi), { recursive: true });
-          fs.writeFileSync(this.jalurDiskPersistensi, serial, 'utf-8');
+          const tmpPath = `${this.jalurDiskPersistensi}.tmp.${process.pid}`;
+          fs.writeFileSync(tmpPath, serial, 'utf-8');
+          fs.renameSync(tmpPath, this.jalurDiskPersistensi);
         }
       }
     } catch {
@@ -182,10 +207,7 @@ export class PengelolaOperasiOffline {
     try {
       const data = PenyimpananAmanMobile.ambil(this.kunciPenyimpanan);
       if (data) {
-        const parsed = JSON.parse(data);
-        if (Array.isArray(parsed)) {
-          this.antrean = parsed;
-        }
+        this.antrean = this.bersihkanAntreanJson(JSON.parse(data));
       }
     } catch {
       this.antrean = [];

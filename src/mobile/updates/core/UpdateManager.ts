@@ -39,6 +39,7 @@ export class UpdateManager {
 
   private applicationId = 'id.nusantara.aplikasi';
   private versiTerpasang = '0.41.0';
+  private revisiTerpasang = 0;
   private platform: PlatformMobile = 'android';
 
   private constructor() {
@@ -56,10 +57,12 @@ export class UpdateManager {
     return UpdateManager.instance;
   }
 
-  public konfigurasiAplikasi(appId: string, versi: string, platform: PlatformMobile = 'android'): void {
+  public konfigurasiAplikasi(appId: string, versi: string, platform: PlatformMobile = 'android', revisi: number = 0): void {
     this.applicationId = appId;
     this.versiTerpasang = versi;
+    this.revisiTerpasang = revisi;
     this.platform = platform;
+    ActivationManager.dapatkanInstance().tetapkanVersiBaseline(versi);
   }
 
   public dapatkanVersiTerpasang(): string {
@@ -257,9 +260,33 @@ export class UpdateManager {
       };
     }
 
+    if (manifest.applicationId !== this.applicationId) {
+      return {
+        sukses: false,
+        pesan: `Application ID manifest ('${manifest.applicationId}') tidak cocok dengan aplikasi terpasang ('${this.applicationId}').`,
+      };
+    }
+
+    const cmpVer = VersionChecker.bandingkan(manifest.releaseVersion, this.versiTerpasang);
+    if (cmpVer < 0) {
+      this.stateManager.transisi('failed', `Penolakan anti-downgrade OTA: ${manifest.releaseVersion} < ${this.versiTerpasang}`);
+      return {
+        sukses: false,
+        pesan: `Pembaruan OTA ditolak (anti-downgrade): versi target '${manifest.releaseVersion}' lebih rendah daripada versi terpasang '${this.versiTerpasang}'.`,
+      };
+    }
+    if (cmpVer === 0 && (manifest.revision || 0) <= this.revisiTerpasang) {
+      this.stateManager.transisi('failed', `Penolakan anti-replay OTA: revisi ${manifest.revision} <= ${this.revisiTerpasang}`);
+      return {
+        sukses: false,
+        pesan: `Pembaruan OTA ditolak (anti-replay): versi '${manifest.releaseVersion}' revisi ${manifest.revision} sudah diterapkan.`,
+      };
+    }
+
     const res = await this.otaManager.terapkanPembaruanOTA(manifest);
     if (res.sukses && res.aktivasi) {
       this.versiTerpasang = res.aktivasi.versiAktif;
+      this.revisiTerpasang = manifest.revision || 0;
     }
 
     return {
@@ -267,6 +294,31 @@ export class UpdateManager {
       aktivasi: res.aktivasi,
       pesan: res.pesan,
     };
+  }
+
+  public async aktivasiDenganHealthCheck(
+    manifest: ManifestPembaruan,
+    pemeriksaKesehatan: () => boolean | Promise<boolean>
+  ): Promise<{ sukses: boolean; rolledBack: boolean; pesan: string }> {
+    const terapkan = await this.terapkanManifestOTA(manifest);
+    if (!terapkan.sukses) {
+      return { sukses: false, rolledBack: false, pesan: terapkan.pesan };
+    }
+    let sehat = false;
+    try {
+      sehat = Boolean(await pemeriksaKesehatan());
+    } catch {
+      sehat = false;
+    }
+    if (!sehat) {
+      const rb = this.rollbackResource();
+      return {
+        sukses: false,
+        rolledBack: rb.sukses,
+        pesan: `Pemeriksaan kesehatan pasca-OTA gagal! Rollback otomatis ke '${rb.versiDipulihkan || 'sebelumnya'}': ${rb.pesan}`,
+      };
+    }
+    return { sukses: true, rolledBack: false, pesan: terapkan.pesan };
   }
 
   /**
@@ -305,10 +357,23 @@ export class UpdateManager {
   }
 
   /**
-   * Melakukan rollback resource non-eksekusi ke versi sebelumnya.
+   * Melakukan rollback resource non-eksekusi ke versi sebelumnya dan memulihkan ActivationManager.
    */
   public rollbackResource(): { sukses: boolean; pesan: string; versiDipulihkan?: string } {
-    return RollbackManager.dapatkanInstance().eksekusiRollback(this.platform);
+    const res = RollbackManager.dapatkanInstance().eksekusiRollback(
+      this.platform,
+      (versiDipulihkan, berkasDipulihkan) => {
+        ActivationManager.dapatkanInstance().pulihkanCadangan(versiDipulihkan, berkasDipulihkan);
+        this.versiTerpasang = versiDipulihkan;
+        this.revisiTerpasang = 0;
+        this.stateManager.transisi('rolled_back', `Dipulihkan ke versi ${versiDipulihkan}`);
+      }
+    );
+    return {
+      sukses: res.sukses,
+      versiDipulihkan: res.versiDipulihkan,
+      pesan: res.pesan,
+    };
   }
 
   /**

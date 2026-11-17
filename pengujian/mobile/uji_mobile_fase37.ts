@@ -624,6 +624,42 @@ async function main(): Promise<void> {
     pastikan(log.includes('Demo Lengkap Nusantara Mobile sukses dijalankan.'), 'Program demo_mobile harus dieksekusi dengan sukses');
   });
 
+  await uji('10.6 Eksekusi Skrip contoh/mobile/navigasi_belanja.nusantara', async () => {
+    const jalurBerkas = path.join(process.cwd(), 'contoh/mobile/navigasi_belanja.nusantara');
+    const kodeSumber = fs.readFileSync(jalurBerkas, 'utf-8');
+
+    const penulis = new PenulisOutputBuffer();
+    const interpreter = new Interpreter(penulis);
+    interpreter.jalankanKode(kodeSumber);
+
+    const log = penulis.ambilOutput();
+    pastikan(log.includes('Aplikasi Katalog Belanja Mobile berjalan'), 'Program navigasi_belanja harus dieksekusi dengan sukses');
+  });
+
+  await uji('10.7 Eksekusi Skrip contoh/mobile/pengaturan_aplikasi.nusantara', async () => {
+    const jalurBerkas = path.join(process.cwd(), 'contoh/mobile/pengaturan_aplikasi.nusantara');
+    const kodeSumber = fs.readFileSync(jalurBerkas, 'utf-8');
+
+    const penulis = new PenulisOutputBuffer();
+    const interpreter = new Interpreter(penulis);
+    interpreter.jalankanKode(kodeSumber);
+
+    const log = penulis.ambilOutput();
+    pastikan(log.includes('Aplikasi Pengaturan Sistem Mobile berhasil dimuat.'), 'Program pengaturan_aplikasi harus dieksekusi dengan sukses');
+  });
+
+  await uji('10.8 Eksekusi Skrip contoh/mobile/daftar_tugas_mobile.nusantara', async () => {
+    const jalurBerkas = path.join(process.cwd(), 'contoh/mobile/daftar_tugas_mobile.nusantara');
+    const kodeSumber = fs.readFileSync(jalurBerkas, 'utf-8');
+
+    const penulis = new PenulisOutputBuffer();
+    const interpreter = new Interpreter(penulis);
+    interpreter.jalankanKode(kodeSumber);
+
+    const log = penulis.ambilOutput();
+    pastikan(log.includes('Aplikasi Daftar Tugas Mobile sukses dijalankan.'), 'Program daftar_tugas_mobile harus dieksekusi dengan sukses');
+  });
+
   // 11. Native Bridge Codegen (Kotlin Android & Swift iOS) & Transport
   console.log('\n[11] Jembatan Native Kotlin & Swift + Pluggable Transport');
 
@@ -794,9 +830,153 @@ async function main(): Promise<void> {
         fs.existsSync(path.join(outIOS, 'ios/Sources/NusantaraNativeBridge.swift')),
         'Keluaran build iOS harus memuat NusantaraNativeBridge.swift'
       );
+
+      // Verifikasi SHA256SUMS & deteksi manipulasi
+      const verifAsli = MobileCLI.verifikasiBundel(outAndroid);
+      pastikan(verifAsli.valid && verifAsli.totalDiperiksa >= 7, 'verifikasiBundel harus lolos pada bundel build Android asli');
+      const targetKt = path.join(outAndroid, 'android/app/src/main/java/id/nusantara/app/NusantaraNativeBridge.kt');
+      fs.appendFileSync(targetKt, '\n// tampered', 'utf-8');
+      const verifRusak = MobileCLI.verifikasiBundel(outAndroid);
+      pastikan(!verifRusak.valid && verifRusak.galat.some((g) => g.includes('SHA-256')), 'verifikasiBundel harus menolak berkas yang dimodifikasi');
     } finally {
       fs.rmSync(tmpRoot, { recursive: true, force: true });
     }
+  });
+
+  // 15. Pengujian Keamanan & Hardening Phase 37 (CSWSH, XSS, Codegen Escaping, Prototype Pollution)
+  console.log('\n[15] Keamanan & Hardening Phase 37');
+
+  await uji('15.1 PerenderMobile mendukung Gambar/Ikon/Daftar/Grid/Alert & memblokir XSS/CSS/javascript: URL', async () => {
+    const app = new AplikasiMobile({ nama: 'Aman<App>', id: 'id.nusantara.aman', versi: '1.0.0', nomorBuild: 1 });
+    const imgAman = new GambarMobile({ sumber: 'https://nusantara.dev/logo.png', teksAlt: 'Logo', lebar: 120, tinggi: 60 });
+    const imgJahat = new GambarMobile({ sumber: 'javascript:alert(1)', teksAlt: 'Blokir' });
+    const teksJahat = new TeksMobile({ teks: '<script>evil()</script>', gaya: { warnaTeks: 'red;background:url(evil)' } });
+    const btnEvil = new TombolMobile({ label: "Klik'Evil", id: "id'inject" });
+    const ikon = new IkonMobile('star', 24, '#f59e0b');
+    const grid = new GridMobile({ jumlahKolom: 2 });
+    grid.tambahAnak(new TeksMobile('Cell1')).tambahAnak(new TeksMobile('Cell2'));
+    const al = new AlertMobile({ judul: 'Peringatan', pesan: 'Uji alert', teksKonfirmasi: 'Ya', teksBatal: 'Tidak' });
+    al.buka();
+    app.tambahKomponenAkar(imgAman).tambahKomponenAkar(imgJahat).tambahKomponenAkar(teksJahat)
+      .tambahKomponenAkar(btnEvil).tambahKomponenAkar(ikon).tambahKomponenAkar(grid).tambahKomponenAkar(al);
+
+    const perender = new PerenderMobile();
+    const html = perender.renderKeHTML(app, "ws://127.0.0.1:9000/ipc");
+    pastikan(html.includes('https://nusantara.dev/logo.png'), 'Gambar HTTPS valid harus dirender');
+    pastikan(!html.includes('javascript:alert(1)'), 'URL javascript: pada gambar harus diblokir');
+    pastikan(!html.includes('<script>evil()</script>'), 'Skrip XSS di teks harus di-escape');
+    pastikan(!html.includes('url(evil)'), 'Injeksi CSS di warnaTeks harus disaring');
+    pastikan(!html.includes("id'inject'"), 'Petik tunggal pada idKomponen dalam attribute JS harus aman');
+    pastikan(html.includes('display:grid') && html.includes('Peringatan') && html.includes('[star]'), 'Grid, Alert, dan Ikon harus dirender ke HTML');
+    await app.hancurkan();
+  });
+
+  await uji('15.2 HostPreviewMobile menolak CSWSH Origin asing, menyertakan header CSP/nosniff, & menangani Dialog/Alert IPC', async () => {
+    const app = new AplikasiMobile({ nama: 'SecurityHostApp', id: 'id.nusantara.sec', versi: '1.0.0', nomorBuild: 1 });
+    const dlg = new DialogMobile({ judul: 'Info', konten: 'Halo Dialog' });
+    dlg.buka();
+    app.tambahKomponenAkar(dlg);
+    await app.jalankan();
+
+    const host = new HostPreviewMobile(app, 0);
+    try {
+      const url = await host.mulai();
+      const res = await fetch(url);
+      const csp = res.headers.get('content-security-policy') || '';
+      const nosniff = res.headers.get('x-content-type-options') || '';
+      const xfo = res.headers.get('x-frame-options') || '';
+      pastikan(csp.includes("default-src 'none'") && nosniff === 'nosniff' && xfo === 'DENY', 'Header keamanan HTTP wajib dikirim');
+
+      const wsUrl = url.replace('http://', 'ws://') + '/ipc';
+      // Origin asing wajib ditolak oleh verifyClient
+      const ditolak = await new Promise<boolean>((resolve) => {
+        const evilWs = new WebSocket(wsUrl, { origin: 'https://evil.example' });
+        evilWs.on('open', () => { evilWs.close(); resolve(false); });
+        evilWs.on('error', () => resolve(true));
+        evilWs.on('unexpected-response', () => resolve(true));
+      });
+      pastikan(ditolak, 'WebSocket IPC wajib menolak koneksi browser dengan Origin eksternal (CSWSH)');
+
+      // Tutup dialog via WebSocket sah
+      await new Promise<void>((resolve, reject) => {
+        const okWs = new WebSocket(wsUrl);
+        okWs.on('open', () => {
+          okWs.send('{"__proto__":{"polluted":true}}');
+          okWs.send(JSON.stringify({ tipe: 'peristiwa', jenis: 'dialog_tutup', idKomponen: dlg.id }));
+        });
+        okWs.on('message', (raw) => {
+          const msg = JSON.parse(String(raw));
+          if (msg.tipe === 'sinkronisasi' && !dlg.terbuka) {
+            okWs.close();
+            resolve();
+          }
+        });
+        okWs.on('error', reject);
+        setTimeout(() => reject(new Error('Timeout menutup dialog lewat WS')), 3000);
+      });
+      pastikan(!dlg.terbuka, 'DialogMobile harus tertutup melalui event IPC dialog_tutup');
+    } finally {
+      await host.hentikan();
+      await app.hancurkan();
+    }
+  });
+
+  await uji('15.3 Escaping Generator Native & Imunitas Prototype Pollution pada State, DeepLink, & Navigator std:mobile', async () => {
+    // Escaping codegen & XML
+    const jahatKonfig = {
+      nama: 'App" </string><evil>\n\'ruby',
+      id: 'id.nusantara.evil',
+      versi: '1.0.0" + panic',
+      nomorBuild: 2,
+      platformTarget: { android: true, ios: true },
+      daftarIzin: ['internet' as any],
+    };
+    const bundel = GeneratorJembatanMobileNative.buatBundelLengkap(jahatKonfig);
+    const stringsXml = bundel.android.find((b) => b.jalur.endsWith('strings.xml'))!.isi;
+    const settingsGradle = bundel.android.find((b) => b.jalur.endsWith('settings.gradle'))!.isi;
+    const podfile = bundel.ios.find((b) => b.jalur.endsWith('Podfile'))!.isi;
+    pastikan(!stringsXml.includes('<evil>'), 'XML strings.xml wajib escape tag berbahaya');
+    pastikan(settingsGradle.includes('\\"'), 'settings.gradle wajib escape tanda kutip ganda');
+    pastikan(podfile.includes("\\'ruby"), 'Podfile wajib escape petik tunggal Ruby');
+
+    // DeepLink & State prototype pollution guard
+    const dl = new PengelolaDeepLinkMobile();
+    const hasilDl = dl.uraikanUrl('nusantara://produk/99?__proto__=hacked&promo=hemat');
+    pastikan(hasilDl !== null && hasilDl.parameter['promo'] === 'hemat', 'Deep link harus mengurai parameter sah');
+    pastikan(({} as any).polluted === undefined && !Object.prototype.hasOwnProperty.call(hasilDl!.parameter, '__proto__'), 'Deep link tidak boleh memodifikasi prototype');
+
+    const st = new PengelolaStateMobile();
+    let gagalProto = false;
+    try {
+      st.tetapkan('__proto__', 'jahat');
+    } catch {
+      gagalProto = true;
+    }
+    pastikan(gagalProto, 'PengelolaStateMobile harus menolak kunci __proto__');
+
+    // Navigator std:mobile dalam skrip Nusantara
+    const kodeNav = `
+gunakan "std:mobile" sebagai seluler
+konfig : peta = { "nama": "NavScript", "id": "id.nusantara.navscript", "versi": "1.0.0", "nomorBuild": 1 }
+app : peta = seluler.buatAplikasiMobile(konfig)
+nav : peta = seluler.buatNavigatorTumpukan()
+hal1 : peta = seluler.buatTeks("Halaman Utama")
+hal2 : peta = seluler.buatTeks("Halaman Detail")
+nav.daftarkanRute("utama", hal1)
+nav.daftarkanRute("detail", hal2)
+nav.dorong("utama")
+nav.dorong("detail")
+seluler.aturNavigatorMobile(app, nav)
+seluler.jalankanAplikasiMobile(app)
+tampilkan("Kedalaman: " + nav.dapatkanKedalaman())
+nav.kembali()
+tampilkan("SetelahKembali: " + nav.dapatkanKedalaman())
+`;
+    const penulis = new PenulisOutputBuffer();
+    const interpreter = new Interpreter(penulis);
+    interpreter.jalankanKode(kodeNav);
+    const out = penulis.ambilOutput();
+    pastikan(out.includes('Kedalaman: 2') && out.includes('SetelahKembali: 1'), 'std:mobile navigator tumpukan harus berfungsi penuh dari skrip Nusantara');
   });
 
   console.log('='.repeat(70));

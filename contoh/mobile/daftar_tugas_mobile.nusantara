@@ -1,0 +1,44 @@
+# Contoh 7: Daftar Tugas Mobile (Grid, Tata Letak Vertikal, Gambar, Ikon & State)
+gunakan "std:mobile" sebagai seluler
+
+fungsi saatTambahTugas(evt : peta) mulai
+  seluler.haptik("ringan")
+  seluler.tampilkanSnackbar("Tugas baru ditambahkan ke daftar harian.", 2000)
+selesai
+
+program DaftarTugasMobile
+mulai
+  konfig : peta = {
+    "nama": "Catatan Tugas",
+    "id": "id.nusantara.tugas",
+    "versi": "1.1.0",
+    "nomorBuild": 8
+  }
+
+  aplikasi : peta = seluler.buatAplikasiMobile(konfig)
+  aplikasi.aturState("totalTugas", 3)
+
+  area : peta = seluler.buatAreaAman()
+  ikonHeader : peta = seluler.buatIkon("check_circle", 28, "#10b981")
+  judul : peta = seluler.buatTeks("Agenda Produktif Harian", 20, "tebal")
+  gambarBanner : peta = seluler.buatGambar("aset/banner.png", 340, 120)
+  inputTugas : peta = seluler.buatInputTeks("Tulis tugas baru...", "")
+  tombolTambah : peta = seluler.buatTombol("Tambah Tugas", saatTambahTugas)
+
+  gridMetrik : peta = seluler.buatGrid(2, 8)
+  kotakA : peta = seluler.buatTeks("Selesai: 2", 14, "tebal")
+  kotakB : peta = seluler.buatTeks("Tersisa: 1", 14, "tebal")
+  seluler.tambahKomponenMobile(gridMetrik, kotakA)
+  seluler.tambahKomponenMobile(gridMetrik, kotakB)
+
+  seluler.tambahKomponenMobile(area, ikonHeader)
+  seluler.tambahKomponenMobile(area, judul)
+  seluler.tambahKomponenMobile(area, gambarBanner)
+  seluler.tambahKomponenMobile(area, gridMetrik)
+  seluler.tambahKomponenMobile(area, inputTugas)
+  seluler.tambahKomponenMobile(area, tombolTambah)
+  seluler.tambahKomponenMobile(aplikasi, area)
+
+  seluler.jalankanAplikasiMobile(aplikasi)
+  tampilkan("Aplikasi Daftar Tugas Mobile sukses dijalankan.")
+selesai

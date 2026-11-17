@@ -29,8 +29,8 @@ export class SecretProvider {
 
     const bersih = teks.trim();
 
-    // Jika berupa berkas kunci PEM/PKCS8
-    if (bersih.includes('BEGIN PRIVATE KEY') || bersih.includes('BEGIN RSA PRIVATE KEY')) {
+    // Jika berupa berkas kunci PEM/PKCS8/EC/OPENSSH
+    if (/-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----/.test(bersih)) {
       return '-----BEGIN PRIVATE KEY-----\n[KUNCI PRIVAT DISEMIRINGKAN / DIRAHASIAKAN]\n-----END PRIVATE KEY-----';
     }
 
@@ -90,11 +90,15 @@ export class SecretProvider {
       '[PEM PRIVATE KEY DIRAHASIAKAN]'
     );
 
-    // Bersihkan pola Bearer token
+    // Bersihkan pola Bearer / X-Auth-Token
     hasil = hasil.replace(/Bearer\s+([A-Za-z0-9\-_=.]+)/gi, 'Bearer [TOKEN_DIRAHASIAKAN]');
+    hasil = hasil.replace(/([?&](?:token|key|secret|api_key)=)[^&\s]+/gi, '$1[DIRAHASIAKAN]');
 
-    // Bersihkan pola password JSON
-    hasil = hasil.replace(/"(password|storePass|keyPass|private_key)":\s*"[^"]+"/gi, '"$1":"[DIRAHASIAKAN]"');
+    // Bersihkan pola password / secret JSON
+    hasil = hasil.replace(
+      /"(password|storePass|keyPass|private_key|apiSecret|client_secret)"\s*:\s*"[^"]+"/gi,
+      '"$1":"[DIRAHASIAKAN]"'
+    );
 
     return hasil;
   }

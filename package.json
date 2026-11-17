@@ -50,6 +50,7 @@
     "test:distribusi-v40": "tsx pengujian/mobile/uji_distribusi_fase40.ts",
     "test:publikasi-v41": "tsx pengujian/mobile/uji_publikasi_fase41.ts",
     "test:pembaruan-v42": "tsx pengujian/mobile/uji_pembaruan_fase42.ts",
+    "test:demo-terpadu": "tsx pengujian/integrasi/uji_demo_terpadu.ts",
     "test:nir-v43": "tsx pengujian/nir/uji_nir_fase43.ts",
     "test:llvm-v44": "tsx pengujian/llvm/uji_llvm_fase44.ts",
     "test:linker-v45": "tsx pengujian/linker/uji_linker_fase45.ts",

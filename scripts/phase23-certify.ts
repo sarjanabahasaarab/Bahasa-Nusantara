@@ -64,6 +64,49 @@ function runGenerate(args: string[]): number {
     const outJson = path.join(evidenceDir, `${target}.json`);
     fs.writeFileSync(outJson, JSON.stringify(ev, null, 2), 'utf-8');
 
+    const reportDir = path.resolve(process.env.NUSANTARA_BUILD_REPORT_DIR || path.join(bundleDir, 'reports'));
+    fs.mkdirSync(reportDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(reportDir, `TARGET_REPORT-${target}.json`),
+      JSON.stringify(
+        {
+          target,
+          triple: ev.targetTriple,
+          hostOS: ev.hostOS,
+          hostArchitecture: ev.hostArchitecture,
+          isCross: ev.isCross,
+          executionMode: ev.executionMode,
+          verificationStatus: ev.verificationStatus,
+          sdk: ev.sdk,
+          binaryMetadata: ev.binaryMetadata,
+          dependencyValidation: ev.dependencyValidation,
+        },
+        null,
+        2
+      ),
+      'utf-8'
+    );
+    fs.writeFileSync(
+      path.join(reportDir, `COMPILER_REPORT-${target}.json`),
+      JSON.stringify(
+        {
+          target,
+          compiler: ev.compiler,
+          compilerVersion: ev.compilerVersion,
+          linker: ev.linker,
+          linkerVersion: ev.linkerVersion,
+          llvmIR: ev.llvmIR,
+          objectFile: ev.objectFile,
+          buildExitCode: ev.buildExitCode,
+          statusCode: ev.statusCode,
+          diagnostics: ev.diagnostics,
+        },
+        null,
+        2
+      ),
+      'utf-8'
+    );
+
     console.log(`[PHASE 23.7] Evidence ditulis: ${outJson}`);
     console.log(
       `[PHASE 23.7] Target=${target} Status=${ev.verificationStatus} Mode=${ev.executionMode} DistInstall=${ev.installResult?.status} DistUninstall=${ev.uninstallResult?.status}`

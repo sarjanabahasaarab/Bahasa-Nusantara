@@ -1,0 +1,33 @@
+# Contoh 6: Pengaturan Aplikasi Mobile (Tema, Dropdown, Radio, Centang & Progres)
+gunakan "std:mobile" sebagai seluler
+
+fungsi saatSimpanPengaturan(evt : peta) mulai
+  seluler.tampilkanAlert("Konfirmasi", "Preferensi tema dan bahasa telah diterapkan.", "OK", "Batal")
+selesai
+
+program PengaturanAplikasiMobile
+mulai
+  konfig : peta = {
+    "nama": "Pengaturan Sistem",
+    "id": "id.nusantara.pengaturan",
+    "versi": "1.0.5",
+    "nomorBuild": 5,
+    "temaAwal": "gelap"
+  }
+
+  aplikasi : peta = seluler.buatAplikasiMobile(konfig)
+
+  judul : peta = seluler.buatTeks("Preferensi Aplikasi", 20, "tebal", "#38bdf8")
+  pilihBahasa : peta = seluler.buatDropdown(["Bahasa Indonesia", "English", "Basa Jawa"], "Bahasa Indonesia")
+  centangAuto : peta = seluler.buatKotakCentang("Sinkronisasi otomatis via Wi-Fi", benar)
+  radioGelap : peta = seluler.buatTombolRadio("Tema Gelap Hemat Daya", "gelap", "tema", benar)
+  sakelarBiometrik : peta = seluler.buatSakelar(benar)
+  progresCache : peta = seluler.buatIndikatorProgres(68, 100)
+  tombolSimpan : peta = seluler.buatTombol("Simpan Pengaturan", saatSimpanPengaturan)
+
+  kartu : peta = seluler.buatKartu([judul, pilihBahasa, centangAuto, radioGelap, sakelarBiometrik, progresCache, tombolSimpan])
+  seluler.tambahKomponenMobile(aplikasi, kartu)
+
+  seluler.jalankanAplikasiMobile(aplikasi)
+  tampilkan("Aplikasi Pengaturan Sistem Mobile berhasil dimuat.")
+selesai

@@ -4,6 +4,20 @@ Seluruh perubahan penting pada proyek bahasa pemrograman NUSANTARA dicatat dalam
 
 Format penomoran versi mengacu pada **Semantic Versioning** (`vMAJOR.MINOR.PATCH`). Pada masa pengembangan awal, versi minor mencerminkan tahapan fase roadmap (misal `v0.1.0` untuk Phase 1, `v0.2.0` untuk Phase 2, `v0.3.0` untuk Phase 3, `v0.4.0` untuk Phase 4, `v0.5.0` untuk Phase 5, `v0.6.0` untuk Phase 6, `v0.7.0` untuk Phase 7, `v0.8.0` untuk Phase 8, `v0.9.0` untuk Phase 9, `v0.10.0` untuk Phase 10).
 
+## [Program Penyelesaian Phase 23 & Phase 36–42] — 2026-11-17
+### Pengerasan Keamanan, Integrasi Lintas Platform, Dokumentasi 9-Berkas & Sertifikasi Jujur (`PARTIAL`)
+
+Menyelesaikan implementasi, perbaikan keamanan, pengujian regresi, integrasi CI, demo lintas platform E2E, dan dokumentasi teknis untuk Phase 23 serta Phase 36–42 pada baseline `v0.50.0` (`docs/PHASE-23-36-42-COMPLETION-REPORT.md`):
+
+#### Diperbaiki & Ditambahkan:
+- **Phase 23 (`46/49`, `3 BELUM DIVERIFIKASI`)**: Hardening `BinaryInspector.inspectStrict` terhadap `e_shoff` ELF korup serta perluasan validasi installer & portabilitas (`docs/phase-23/`).
+- **Phase 36–38 (`22/22`, `40/40`, `24/24`)**: Sanitasi XSS/CSS & host native (`PerenderDesktop`, `PerenderMobile`), proteksi CSWSH `Origin`/CSP pada Preview/Webview Server, penegakan `ditolak_permanen` + enkripsi AES-256-GCM `v2:` (`PenyimpananAmanMobile`) + anti-symlink escape + sanitasi codegen Kotlin/Swift, serta determinisme uji tamper Phase 38 (`docs/phase-36/`..`docs/phase-38/`).
+- **Phase 39–41 (`38/38`, `100/100`, `107/107`)**: Perbaikan silent resolve pada `uji_mobile_networking_fase39.ts`, sanitasi entri Zip-Slip + CRC-32 (`ZipBuilder`), verifikasi SHA-256 disk & `.xcarchive` (`BuildValidator`), escaping XML manifest, verifikator JWT `RS256`/`ES256` dengan klaim `aud`/`exp`, pemblokiran bypass `appstore`, serta sensor query token (`docs/phase-39/`..`docs/phase-41/`).
+- **Phase 42 (`25/25`)**: Perbaikan `UpdateSecurityPolicy.validasiURL` (`new URL()`, tolak `http://localhost.evil.com`), pemblokiran `\0`/`%2e%2e`, batas byte unduhan aktual, validasi `ManifestValidator` pada `OTAResourceManager`, anti-downgrade/anti-replay revisi + kecocokan `applicationId` pada `UpdateManager`, serta pemulihan file/versi nyata `RollbackManager` -> `ActivationManager` & `aktivasiDenganHealthCheck` (`docs/phase-42/`).
+- **Demo Terpadu Lintas Platform & CI/CD (`test:demo-terpadu`: `6/6`, `test:cicd`: `25/25`)**: Menambahkan `contoh/cross_platform_demo/demo_terpadu.nusantara` + `pengujian/integrasi/uji_demo_terpadu.ts` serta integrasi pada `.github/workflows/ci.yml`; total **`1.580` pemeriksaan `npm test` (`167` fondasi + `1.413` kasus TS, `0` gagal)** atau **`1.589` total pemeriksaan repo** (`+3` browser fallback + `6` E2E demo).
+
+---
+
 ## [v0.23.10 — Pemulihan Boot QEMU Bare-Metal, Perbaikan Konstanta NIR & Audit Pra-Phase-51] — 2026-11-16
 ### Phase 23.7–23.10 & Perbaikan Audit Pra-Phase-51 (`SELESAI SEBAGIAN` — Menunggu Eksekusi Runner GitHub Actions 6 Target & QEMU Bare-Metal)
 

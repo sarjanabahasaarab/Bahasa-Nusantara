@@ -66,8 +66,10 @@ export class CredentialValidator {
 
     if (!obj.private_key || typeof obj.private_key !== 'string') {
       daftarGalat.push("Field 'private_key' wajib ada pada Google Service Account.");
-    } else if (!obj.private_key.includes('BEGIN PRIVATE KEY') && !obj.private_key.includes('BEGIN RSA PRIVATE KEY')) {
-      daftarGalat.push("Field 'private_key' tidak memuat header PEM PKCS#8 ('BEGIN PRIVATE KEY').");
+    } else if (
+      !/-----BEGIN (?:RSA )?PRIVATE KEY-----[\s\S]+-----END (?:RSA )?PRIVATE KEY-----/.test(obj.private_key)
+    ) {
+      daftarGalat.push("Field 'private_key' tidak memuat blok PEM PKCS#8 lengkap ('BEGIN' dan 'END PRIVATE KEY').");
     }
 
     return {
@@ -108,14 +110,14 @@ export class CredentialValidator {
       }
     }
 
-    // 3. Validasi Private Key (.p8 / PKCS#8)
+    // 3. Validasi Private Key (.p8 / PKCS#8 / EC)
     const adaPrivKey = Boolean(privateKey && privateKey.trim().length > 0);
     if (!adaPrivKey) {
       daftarGalat.push('Private Key App Store Connect (.p8) belum ditentukan.');
     } else {
       const privKeyBersih = privateKey!.trim();
-      if (!privKeyBersih.includes('BEGIN PRIVATE KEY') && !privKeyBersih.includes('BEGIN EC PRIVATE KEY')) {
-        daftarGalat.push("Kunci privat App Store Connect harus dalam format PEM/PKCS#8 ('BEGIN PRIVATE KEY').");
+      if (!/-----BEGIN (?:EC )?PRIVATE KEY-----[\s\S]+-----END (?:EC )?PRIVATE KEY-----/.test(privKeyBersih)) {
+        daftarGalat.push("Kunci privat App Store Connect harus dalam format PEM/PKCS#8 lengkap ('BEGIN' hingga 'END PRIVATE KEY').");
       }
     }
 
@@ -135,12 +137,16 @@ export class CredentialValidator {
   public static periksaBebasHardcode(konten: string): { aman: boolean; temuan: string[] } {
     const temuan: string[] = [];
 
-    if (/-----BEGIN (?:RSA )?PRIVATE KEY-----/i.test(konten)) {
+    if (/-----BEGIN (?:RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----/i.test(konten)) {
       temuan.push('Ditemukan blok PEM Private Key mentah di dalam berkas.');
     }
 
     if (/"private_key":\s*"-----BEGIN/i.test(konten)) {
       temuan.push("Ditemukan JSON Service Account dengan 'private_key' plaintext.");
+    }
+
+    if (/\b(?:api_secret|client_secret|storePassword)\s*[:=]\s*["'][^"']{4,}["']/i.test(konten)) {
+      temuan.push('Ditemukan rahasia/kredensial hardcoded dalam berkas konfigurasi.');
     }
 
     return {

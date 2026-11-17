@@ -45,6 +45,7 @@ import {
   StackLayout,
   WadahGulirWidget,
   BilahMenu,
+  BilahAlat,
   Menu,
   ItemMenu,
   pengelolaTemaGlobal,
@@ -340,6 +341,15 @@ export const simbolEksporGUI: Map<string, InfoSimbolModul> = new Map([
     'buatBilahMenu',
     {
       nama: 'buatBilahMenu',
+      kategori: 'fungsi',
+      parameter: [],
+      tipeKembalian: 'peta',
+    },
+  ],
+  [
+    'buatBilahAlat',
+    {
+      nama: 'buatBilahAlat',
       kategori: 'fungsi',
       parameter: [],
       tipeKembalian: 'peta',
@@ -865,6 +875,64 @@ export function bungkusJendela(jendela: JendelaGUI): NilaiPeta {
     },
   });
 
+  anggota.set('setBilahAlat', {
+    jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+    nama: 'setBilahAlat',
+    eksekusi: (args: NilaiRuntime[]) => {
+      const alat = (args[0] as any)?.__bilahAlat as BilahAlat;
+      if (alat) {
+        jendela.setBilahAlat(alat);
+      }
+      return peta;
+    },
+  });
+
+  anggota.set('pulihkan', {
+    jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+    nama: 'pulihkan',
+    eksekusi: () => {
+      jendela.pulihkan();
+      return peta;
+    },
+  });
+
+  anggota.set('layarPenuh', {
+    jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+    nama: 'layarPenuh',
+    eksekusi: () => {
+      jendela.layarPenuh();
+      return peta;
+    },
+  });
+
+  anggota.set('sembunyikan', {
+    jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+    nama: 'sembunyikan',
+    eksekusi: () => {
+      jendela.sembunyikan();
+      return peta;
+    },
+  });
+
+  anggota.set('tampilkan', {
+    jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+    nama: 'tampilkan',
+    eksekusi: () => {
+      jendela.tampilkan();
+      return peta;
+    },
+  });
+
+  anggota.set('setIkon', {
+    jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+    nama: 'setIkon',
+    eksekusi: (args: NilaiRuntime[]) => {
+      const ikon = args[0]?.jenis === JenisNilaiRuntime.TEKS ? args[0].nilai : '';
+      jendela.setIkon(ikon);
+      return peta;
+    },
+  });
+
   anggota.set('tutup', {
     jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
     nama: 'tutup',
@@ -1267,6 +1335,28 @@ export function buatEksporGUI(): Map<string, NilaiRuntime> {
         },
       });
       return petaMenu;
+    },
+  });
+
+  ekspor.set('buatBilahAlat', {
+    jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+    nama: 'buatBilahAlat',
+    eksekusi: () => {
+      const ba = new BilahAlat();
+      const petaAlat = buatPeta(new Map<string, NilaiRuntime>());
+      (petaAlat as any).__bilahAlat = ba;
+      petaAlat.nilai.set('tambahAksi', {
+        jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
+        nama: 'tambahAksi',
+        eksekusi: (args: NilaiRuntime[]) => {
+          const itm = (args[0] as any)?.__itemMenu as ItemMenu;
+          if (itm) {
+            ba.tambahAksi(itm);
+          }
+          return petaAlat;
+        },
+      });
+      return petaAlat;
     },
   });
 

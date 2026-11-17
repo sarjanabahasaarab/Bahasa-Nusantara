@@ -1,0 +1,57 @@
+gunakan "gui" sebagai ui
+
+fungsi saatSimpanCatatan()
+mulai
+    hasil : peta = ui.simpanBerkas({ judul: "Simpan Catatan", namaBerkasBawaan: "catatan_harian.txt" })
+    tampilkan("Berkas catatan disimpan ke:", hasil["jalurBerkas"])
+selesai
+
+fungsi saatKeluarEditor()
+mulai
+    tampilkan("Menutup Editor Catatan Nusantara.")
+selesai
+
+program CatatanTeksDesktop
+mulai
+    tampilkan("Membuka Editor Catatan Teks NUSANTARA...")
+
+    aplikasi : peta = ui.buatAplikasi({
+        id: "id.nusantara.catatan",
+        nama: "Catatan Nusantara",
+        temaAwal: "terang"
+    })
+
+    jendela : peta = aplikasi.buatJendela({
+        judul: "Catatan Teks Desktop NUSANTARA",
+        lebar: 760,
+        tinggi: 540
+    })
+
+    menuBar : peta = ui.buatBilahMenu()
+    menuBerkas : peta = ui.buatMenu("Berkas")
+    itemSimpan : peta = ui.buatItemMenu("Simpan...", saatSimpanCatatan, "Ctrl+S")
+    itemKeluar : peta = ui.buatItemMenu("Keluar", saatKeluarEditor, "Ctrl+Q")
+    menuBerkas.tambahItem(itemSimpan)
+    menuBerkas.tambahItem(ui.buatPemisahMenu())
+    menuBerkas.tambahItem(itemKeluar)
+    menuBar.tambahMenu(menuBerkas)
+    jendela.setBilahMenu(menuBar)
+
+    toolbar : peta = ui.buatBilahAlat()
+    toolbar.tambahAksi(itemSimpan)
+    jendela.setBilahAlat(toolbar)
+
+    editor : peta = ui.buatAreaTeks("Tulis catatan di sini...", {
+        nilaiAwal: "Ringkasan Arsitektur NUSANTARA Desktop GUI Framework Phase 36.",
+        baris: 12
+    })
+    editor.tambahBaris("Status: Tersimpan otomatis.")
+
+    statusLabel : peta = ui.buatLabel("Baris: 2 | UTF-8 | Siap")
+    tombolSimpan : peta = ui.buatTombol("Simpan Berkas", saatSimpanCatatan)
+
+    wadah : peta = ui.buatKolom([editor, ui.buatBaris([statusLabel, tombolSimpan], { jarak: 12 })], { jarak: 10 })
+    jendela.setKonten(wadah)
+
+    tampilkan("Editor Catatan Desktop berhasil dimuat dengan BilahMenu dan BilahAlat.")
+selesai

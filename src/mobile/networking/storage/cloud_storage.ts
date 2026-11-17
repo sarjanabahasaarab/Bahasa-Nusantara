@@ -167,15 +167,22 @@ export class AdaptorStorageS3 implements PenyediaStorageNetral {
 
   public async unggah(opsi: OpsiUnggahCloud): Promise<HasilTransferBerkas> {
     const namaAman = LapisanKeamananMobile.amankanNamaBerkas(opsi.namaBerkas);
+    if (!namaAman) {
+      return { sukses: false, galat: 'Nama berkas tidak valid atau memuat path traversal.', stempelWaktu: Date.now() };
+    }
+    const ukuran = typeof opsi.konten === 'string' ? Buffer.byteLength(opsi.konten) : opsi.konten.length;
+    if (ukuran > 50 * 1024 * 1024) {
+      return { sukses: false, galat: 'Ukuran berkas melebihi batas 50 MB.', stempelWaktu: Date.now() };
+    }
     const id = `s3_${Date.now()}`;
     return {
       sukses: true,
       berkas: {
         id,
         nama: namaAman,
-        ukuran: typeof opsi.konten === 'string' ? Buffer.byteLength(opsi.konten) : opsi.konten.length,
+        ukuran,
         mimeType: opsi.mimeType || 'application/octet-stream',
-        url: `${this.endpoint}/${this.bucket}/${namaAman}`,
+        url: `${this.endpoint}/${this.bucket}/${encodeURIComponent(namaAman)}`,
         dibuatPada: new Date().toISOString(),
       },
       stempelWaktu: Date.now(),
@@ -196,7 +203,7 @@ export class AdaptorStorageS3 implements PenyediaStorageNetral {
       nama: 'berkas_s3.bin',
       ukuran: 1024,
       mimeType: 'application/octet-stream',
-      url: `${this.endpoint}/${this.bucket}/${urlAtauId}`,
+      url: `${this.endpoint}/${this.bucket}/${encodeURIComponent(urlAtauId)}`,
       dibuatPada: new Date().toISOString(),
     };
   }
@@ -212,6 +219,7 @@ export class AdaptorStorageS3 implements PenyediaStorageNetral {
 export class PengelolaTransferBerkasMobile {
   private static instance: PengelolaTransferBerkasMobile;
   private penyediaAktif: PenyediaStorageNetral = new AdaptorStorageMock();
+  private cacheSinkron: Map<string, { meta: MetadataBerkasCloud; konten: string | Buffer }> = new Map();
 
   public static dapatkanInstance(): PengelolaTransferBerkasMobile {
     if (!this.instance) {
@@ -234,21 +242,43 @@ export class PengelolaTransferBerkasMobile {
 
   public unggahSinkron(namaBerkas: string, konten: string | Buffer, folder = 'publik'): HasilTransferBerkas {
     const namaAman = LapisanKeamananMobile.amankanNamaBerkas(namaBerkas);
-    const id = `file_${Date.now()}`;
+    if (!namaAman) {
+      return { sukses: false, galat: 'Nama berkas tidak valid atau memuat path traversal.', stempelWaktu: Date.now() };
+    }
     const ukuran = typeof konten === 'string' ? Buffer.byteLength(konten, 'utf8') : konten.length;
+    if (ukuran > 50 * 1024 * 1024) {
+      return { sukses: false, galat: 'Ukuran berkas melebihi batas 50 MB.', stempelWaktu: Date.now() };
+    }
+    const folderAman = LapisanKeamananMobile.amankanNamaBerkas(folder) || 'publik';
+    const id = `file_${Date.now()}`;
+    const meta: MetadataBerkasCloud = {
+      id,
+      nama: namaAman,
+      ukuran,
+      mimeType: namaAman.endsWith('.csv') ? 'text/csv' : 'text/plain',
+      folder: folderAman,
+      url: `https://storage.nusantara.internal/${folderAman}/${id}/${namaAman}`,
+      dibuatPada: new Date().toISOString(),
+    };
+    this.cacheSinkron.set(id, { meta, konten });
     return {
       sukses: true,
-      berkas: {
-        id,
-        nama: namaAman,
-        ukuran,
-        mimeType: 'text/plain',
-        folder,
-        url: `https://storage.nusantara.internal/${folder}/${id}/${namaAman}`,
-        dibuatPada: new Date().toISOString(),
-      },
+      berkas: meta,
       stempelWaktu: Date.now(),
     };
+  }
+
+  public unduhSinkron(urlAtauId: string): { sukses: boolean; data?: Buffer | string; mimeType?: string; galat?: string } {
+    const item = this.cacheSinkron.get(urlAtauId);
+    if (item) {
+      return { sukses: true, data: item.konten, mimeType: item.meta.mimeType };
+    }
+    for (const val of this.cacheSinkron.values()) {
+      if (val.meta.url === urlAtauId) {
+        return { sukses: true, data: val.konten, mimeType: val.meta.mimeType };
+      }
+    }
+    return { sukses: false, galat: `Berkas '${urlAtauId}' tidak ditemukan.` };
   }
 
   public unduh(urlAtauId: string) {

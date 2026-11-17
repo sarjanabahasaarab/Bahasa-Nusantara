@@ -24,6 +24,7 @@ import {
   tetapkanAdaptorPlatform,
 } from '../../src/mobile/native';
 import { KonteksAplikasiMobile } from '../../src/mobile/core/application_context';
+import { PenyimpananAmanMobile } from '../../src/mobile/security/secure_storage';
 import { MobileCLI } from '../../src/mobile/cli/mobile_cli';
 import { Interpreter } from '../../src/interpreter/interpreter';
 import { KATALOG_MODUL_STANDAR } from '../../src/stdlib';
@@ -351,6 +352,116 @@ async function jalankanSemuaPengujianFase38(): Promise<void> {
     } finally {
       fs.rmSync(outTmp, { recursive: true, force: true });
     }
+  });
+
+  // 10. Pengujian Regresi & Keamanan Native API (Phase 38)
+  console.log('\n[10] Pengujian Keamanan, Anti-Symlink, AES-GCM & Sinkronisasi std:mobile');
+
+  await uji('10.1 Penolakan Permanen (ditolak_permanen) Tidak Dapat Dilewati di panggil & panggilSinkron', async () => {
+    const registri = RegistriNativeAPI.dapatkanInstance();
+    const konteks = KonteksAplikasiMobile.dapatkanKonteks();
+    try {
+      konteks.pengelolaIzin.cabutIzin('lokasi', true);
+      pastikan(konteks.pengelolaIzin.periksaIzin('lokasi') === 'ditolak_permanen', 'Status harus ditolak_permanen');
+
+      const resAsync = await registri.panggil('lokasi.ambil');
+      pastikan(!resAsync.sukses && resAsync.kodeGalat === KodeGalatNative.IZIN_DITOLAK, 'panggil async wajib menolak izin ditolak_permanen');
+
+      const resSync = registri.panggilSinkron('lokasi.ambil');
+      pastikan(!resSync.sukses && resSync.kodeGalat === KodeGalatNative.IZIN_DITOLAK, 'panggilSinkron wajib menolak izin ditolak_permanen');
+
+      const mintaUlang = await konteks.pengelolaIzin.mintaIzin('lokasi');
+      pastikan(!mintaUlang.diberikan && mintaUlang.status === 'ditolak_permanen', 'mintaIzin ulang pada ditolak_permanen tetap false');
+    } finally {
+      konteks.pengelolaIzin.tetapkanStatusIzin('lokasi', 'diberikan');
+    }
+  });
+
+  await uji('10.2 Enkripsi Terautentikasi AES-256-GCM Menolak Manipulasi Ciphertext & Kunci Terlarang', async () => {
+    const store = new PenyimpananAmanMobile('kunci-uji-38-gcm');
+    await store.simpan('sesi_jwt', 'rahasia_negara_2026');
+    const mentah = store.dapatkanCiphertextMentah('sesi_jwt');
+    pastikan(Boolean(mentah && mentah.startsWith('v2:')), 'Harus memakai format terautentikasi AES-256-GCM v2');
+
+    // Simulasi manipulasi ciphertext (tampering 1 karakter pada tag/payload)
+    const bagian = mentah!.split(':');
+    const suffix = bagian[3].endsWith('ff') ? '00' : 'ff';
+    const rusak = `${bagian[0]}:${bagian[1]}:${bagian[2]}:${bagian[3].slice(0, -2)}${suffix}`;
+    store.timpaCiphertextUntukUji('sesi_jwt', rusak);
+    const didekripsiRusak = await store.ambil('sesi_jwt');
+    pastikan(didekripsiRusak === null, 'Dekripsi ciphertext termanipulasi wajib gagal dan mengembalikan null');
+
+    // Penolakan kunci berbahaya __proto__
+    pastikan(!PenyimpananAmanMobile.simpan('__proto__', 'jahat'), 'Kunci __proto__ wajib ditolak');
+    pastikan(!PenyimpananAmanMobile.simpan('constructor', 'jahat'), 'Kunci constructor wajib ditolak');
+  });
+
+  await uji('10.3 Proteksi Anti-Symlink Escape pada Sandbox Berkas Simulator', async () => {
+    const tmpSandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'nusantara-p38-symlink-'));
+    const luarDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusantara-p38-luar-'));
+    try {
+      const berkasLuar = path.join(luarDir, 'rahasia_luar.txt');
+      fs.writeFileSync(berkasLuar, 'RAHASIA_SISTEM', 'utf-8');
+
+      const symlinkDalam = path.join(tmpSandbox, 'keluar_link');
+      fs.symlinkSync(luarDir, symlinkDalam);
+
+      const adapter = new AdaptorSimulatorMobile(tmpSandbox);
+      const resBaca = await adapter.bacaBerkas('keluar_link/rahasia_luar.txt');
+      pastikan(!resBaca.sukses && resBaca.kodeGalat === KodeGalatNative.PATH_TIDAK_AMAN, 'Akses baca lewat symlink keluar sandbox wajib ditolak');
+
+      const resTulis = await adapter.tulisBerkas('keluar_link/injeksi.txt', 'PAYLOAD');
+      pastikan(!resTulis.sukses && resTulis.kodeGalat === KodeGalatNative.PATH_TIDAK_AMAN, 'Akses tulis lewat symlink keluar sandbox wajib ditolak');
+      pastikan(!fs.existsSync(path.join(luarDir, 'injeksi.txt')), 'Berkas tidak boleh tercipta di luar sandbox');
+    } finally {
+      fs.rmSync(tmpSandbox, { recursive: true, force: true });
+      fs.rmSync(luarDir, { recursive: true, force: true });
+    }
+  });
+
+  await uji('10.4 Sanitasi ID Aplikasi Codegen & Pergantian Adaptor Platform Dinamis', async () => {
+    const ktMal = GeneratorPluginPerangkatNative.hasilkanPluginAndroid('com.evil;\nimport java.lang.Runtime');
+    const ktHeader = ktMal.split('\n').slice(0, 4).join('\n');
+    pastikan(!ktHeader.includes(';'), 'Karakter berbahaya ; di header package Kotlin harus dihapus');
+    pastikan(!ktHeader.includes('import java.lang.Runtime'), 'Injeksi package Kotlin tidak boleh terjadi di header');
+
+    const ktBadNum = GeneratorPluginPerangkatNative.hasilkanPluginAndroid('123.invalid!!');
+    pastikan(ktBadNum.includes('package id.nusantara.app\n'), 'Package diawali angka harus fallback ke id.nusantara.app');
+
+    const swiftMal = GeneratorPluginPerangkatNative.hasilkanPluginIOS('id.evil"; print("pwn"); //');
+    pastikan(!swiftMal.includes('print("pwn")'), 'Bundle ID berbahaya di Swift tidak boleh menginjeksi kode');
+
+    const adaptorAwal = dapatkanAdaptorPlatformAktif();
+    try {
+      tetapkanAdaptorPlatform(new AdaptorAndroidMobile());
+      const resAndroid = await RegistriNativeAPI.dapatkanInstance().panggil('perangkat.info');
+      pastikan(resAndroid.sukses && resAndroid.data.platform === 'android', 'Pergantian adaptor dinamis harus langsung berlaku di Registri');
+    } finally {
+      tetapkanAdaptorPlatform(adaptorAwal);
+    }
+  });
+
+  await uji('10.5 Eksekusi Sinkron std:mobile panggilNative, mintaIzin, & papan klip', async () => {
+    const konteks = KonteksAplikasiMobile.dapatkanKonteks();
+    konteks.pengelolaIzin.tetapkanStatusIzin('kamera', 'belum_diminta');
+    PenyimpananAmanMobile.hapus('uji38_sync_ok');
+
+    const skrip = `gunakan "std:mobile" sebagai seluler
+program UjiNativeSync38
+mulai
+  diizinkan : logika = seluler.mintaIzin("kamera")
+  seluler.salinPapanKlip("teks_klip_38")
+  klip : teks = seluler.tempelPapanKlip()
+  dev : peta = seluler.panggilNative("perangkat.info")
+  jika diizinkan dan klip == "teks_klip_38" dan dev["sukses"] maka
+    seluler.simpanAman("uji38_sync_ok", dev["status"])
+  akhir
+selesai`;
+    const interpreter = new Interpreter();
+    await interpreter.jalankanKode(skrip);
+    const status = PenyimpananAmanMobile.ambil('uji38_sync_ok');
+    PenyimpananAmanMobile.hapus('uji38_sync_ok');
+    pastikan(status === 'sukses', `Semua pemanggilan sinkron std:mobile wajib berhasil (status=${status})`);
   });
 
   // Ringkasan Akhir

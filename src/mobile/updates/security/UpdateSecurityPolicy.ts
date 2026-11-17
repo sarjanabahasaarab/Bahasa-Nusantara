@@ -43,23 +43,29 @@ export class UpdateSecurityPolicy {
     }
 
     try {
-      // Normalisasi parse URL
-      const isLocal = urlStr.includes('localhost') || urlStr.includes('127.0.0.1');
-      if (urlStr.startsWith('http://') && (!izinkanLocalhost || !isLocal)) {
+      const parsed = new URL(urlStr);
+      if (parsed.username || parsed.password) {
+        return { valid: false, pesan: 'URL pembaruan tidak boleh memuat kredensial tertanam.' };
+      }
+      const host = parsed.hostname.toLowerCase();
+      const isLoopback = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+
+      if (parsed.protocol === 'https:') {
+        return { valid: true };
+      }
+      if (parsed.protocol === 'http:' && izinkanLocalhost && isLoopback) {
+        return { valid: true };
+      }
+      if (parsed.protocol === 'http:') {
         return {
           valid: false,
-          pesan: 'Protokol tidak aman! Pembaruan OTA wajib menggunakan HTTPS terenkripsi.',
+          pesan: `Protokol tidak aman ke host '${host}'! Pembaruan OTA wajib menggunakan HTTPS terenkripsi.`,
         };
       }
-
-      if (!urlStr.startsWith('https://') && !urlStr.startsWith('http://localhost') && !urlStr.startsWith('http://127.0.0.1')) {
-        return {
-          valid: false,
-          pesan: `Skema URL '${urlStr}' tidak didukung. Wajib https://`,
-        };
-      }
-
-      return { valid: true };
+      return {
+        valid: false,
+        pesan: `Skema URL '${parsed.protocol}' tidak didukung. Wajib https://`,
+      };
     } catch {
       return { valid: false, pesan: `Format URL '${urlStr}' tidak valid.` };
     }
@@ -72,12 +78,19 @@ export class UpdateSecurityPolicy {
     if (!jalurRelatif || typeof jalurRelatif !== 'string') {
       return { valid: false, pesan: 'Jalur resource tidak boleh kosong.' };
     }
+    if (jalurRelatif.includes('\0') || /%2e%2e/i.test(jalurRelatif)) {
+      return {
+        valid: false,
+        pesan: `Karakter NUL atau encoded traversal terdeteksi pada jalur '${jalurRelatif}'!`,
+      };
+    }
 
     // Normalisasi slash
     const norm = jalurRelatif.replace(/\\/g, '/');
 
     // Cek traversal ..
-    if (norm.includes('../') || norm.includes('/..') || norm === '..' || norm.startsWith('../')) {
+    const segmen = norm.split('/');
+    if (segmen.some((s) => s === '..')) {
       return {
         valid: false,
         pesan: `Percobaan Path Traversal terdeteksi pada jalur '${jalurRelatif}'!`,

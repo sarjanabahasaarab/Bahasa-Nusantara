@@ -1,0 +1,41 @@
+# Contoh 5: Katalog & Keranjang Belanja Mobile (Navigasi Tab, Daftar, Kartu & Deep Link)
+gunakan "std:mobile" sebagai seluler
+
+fungsi saatBeliProduk(evt : peta) mulai
+  seluler.haptik("sukses")
+  seluler.tampilkanSnackbar("Produk ditambahkan ke keranjang belanja!", 2000)
+selesai
+
+program KatalogBelanjaMobile
+mulai
+  konfig : peta = {
+    "nama": "Katalog Nusantara",
+    "id": "id.nusantara.katalog",
+    "versi": "1.2.0",
+    "nomorBuild": 12
+  }
+
+  aplikasi : peta = seluler.buatAplikasiMobile(konfig)
+
+  tautan : peta = seluler.uraiDeepLinkMobile("nusantara://toko/produk/42?promo=ramadan")
+  judul : peta = seluler.buatTeks("Katalog Produk Nusantara", 20, "tebal", "#1e3a8a")
+  infoLink : peta = seluler.buatTeks("Rute Aktif: /produk/42 (Promo)", 13, "normal", "#047857")
+
+  produkList : daftar = ["Kopi Gayo Arabika", "Batik Tulis Solo", "Tenun Ikat NTT"]
+  daftarProduk : peta = seluler.buatDaftar(produkList)
+
+  kartuPromo : peta = seluler.buatKartu([judul, infoLink, daftarProduk])
+  navBawah : peta = seluler.buatNavigasiBawah([
+    { "kunci": "beranda", "label": "Beranda", "ikon": "home" },
+    { "kunci": "katalog", "label": "Katalog", "ikon": "grid" },
+    { "kunci": "keranjang", "label": "Keranjang", "ikon": "cart" }
+  ])
+  tombolBeli : peta = seluler.buatTombol("Tambah ke Keranjang", saatBeliProduk)
+
+  seluler.tambahKomponenMobile(aplikasi, kartuPromo)
+  seluler.tambahKomponenMobile(aplikasi, tombolBeli)
+  seluler.tambahKomponenMobile(aplikasi, navBawah)
+
+  seluler.jalankanAplikasiMobile(aplikasi)
+  tampilkan("Aplikasi Katalog Belanja Mobile berjalan dengan navigasi & deep link.")
+selesai

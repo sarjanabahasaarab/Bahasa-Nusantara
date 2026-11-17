@@ -45,14 +45,45 @@ function writeU32(arr: Uint8Array, offset: number, val: number): void {
 }
 
 export class ZipBuilder {
+  public static sanitasiNamaEntriZip(nama: string): string {
+    if (!nama || typeof nama !== 'string') {
+      throw new Error('Nama entri ZIP tidak boleh kosong.');
+    }
+    if (nama.includes('\0')) {
+      throw new Error(`Nama entri ZIP mengandung karakter NUL ilegal: '${nama}'`);
+    }
+    if (nama.includes('\\') || /^[a-zA-Z]:/.test(nama)) {
+      throw new Error(`Nama entri ZIP tidak boleh memakai backslash atau prefix drive: '${nama}'`);
+    }
+    const bersih = nama.replace(/^\/+/, '');
+    if (!bersih || bersih.endsWith('/')) {
+      throw new Error(`Nama entri berkas ZIP tidak sah: '${nama}'`);
+    }
+    const segmen = bersih.split('/');
+    for (const s of segmen) {
+      if (!s || s === '.' || s === '..') {
+        throw new Error(`Zip-Slip traversal terdeteksi pada nama entri ZIP: '${nama}'`);
+      }
+    }
+    return segmen.join('/');
+  }
+
   public static buatArsipZip(daftarEntri: EntriZip[]): Uint8Array {
     const encoder = new TextEncoder();
     const localChunks: Uint8Array[] = [];
     const centralChunks: Uint8Array[] = [];
+    const entriTerdaftar = new Set<string>();
     let offset = 0;
 
     for (const entri of daftarEntri) {
-      const namaNorm = entri.nama.replace(/^\/+/, '');
+      if (entri.nama.startsWith('/')) {
+        throw new Error(`Jalur absolut dilarang dalam entri ZIP: '${entri.nama}'`);
+      }
+      const namaNorm = ZipBuilder.sanitasiNamaEntriZip(entri.nama);
+      if (entriTerdaftar.has(namaNorm)) {
+        throw new Error(`Entri ZIP duplikat terdeteksi: '${namaNorm}'`);
+      }
+      entriTerdaftar.add(namaNorm);
       const nameBytes = encoder.encode(namaNorm);
       const dataBytes = typeof entri.konten === 'string' ? encoder.encode(entri.konten) : entri.konten;
       const crc = hitungCRC32(dataBytes);
@@ -128,5 +159,106 @@ export class ZipBuilder {
     }
     hasil.set(eocd, cursor);
     return hasil;
+  }
+
+  public static validasiDanBacaArsipZip(zipBytes: Uint8Array): {
+    valid: boolean;
+    daftarEntri: { nama: string; ukuran: number; crc32: number; data: Uint8Array }[];
+    galat?: string;
+  } {
+    const decoder = new TextDecoder('utf-8', { fatal: true });
+    if (!(zipBytes instanceof Uint8Array) || zipBytes.length < 22) {
+      return { valid: false, daftarEntri: [], galat: 'Ukuran arsip ZIP terlalu kecil (< 22 byte).' };
+    }
+
+    const view = new DataView(zipBytes.buffer, zipBytes.byteOffset, zipBytes.byteLength);
+    // Cari End of Central Directory (PK\x05\x06) dari akhir
+    let eocdOffset = -1;
+    const minSearch = Math.max(0, zipBytes.length - 65557);
+    for (let i = zipBytes.length - 22; i >= minSearch; i--) {
+      if (view.getUint32(i, true) === 0x06054b50) {
+        eocdOffset = i;
+        break;
+      }
+    }
+    if (eocdOffset < 0) {
+      return { valid: false, daftarEntri: [], galat: 'Header End-of-Central-Directory (EOCD) PKZIP tidak ditemukan.' };
+    }
+
+    const totalCdEntries = view.getUint16(eocdOffset + 10, true);
+    const cdSize = view.getUint32(eocdOffset + 12, true);
+    const cdOffset = view.getUint32(eocdOffset + 16, true);
+    if (cdOffset + cdSize > eocdOffset) {
+      return { valid: false, daftarEntri: [], galat: 'Offset/ukuran Central Directory melampaui EOCD.' };
+    }
+
+    const daftarEntri: { nama: string; ukuran: number; crc32: number; data: Uint8Array }[] = [];
+    let ptr = cdOffset;
+    for (let idx = 0; idx < totalCdEntries; idx++) {
+      if (ptr + 46 > cdOffset + cdSize || view.getUint32(ptr, true) !== 0x02014b50) {
+        return { valid: false, daftarEntri: [], galat: `Central Directory Header korup pada entri #${idx}.` };
+      }
+      const metode = view.getUint16(ptr + 10, true);
+      const crcExpected = view.getUint32(ptr + 16, true);
+      const compSize = view.getUint32(ptr + 20, true);
+      const uncompSize = view.getUint32(ptr + 24, true);
+      const nameLen = view.getUint16(ptr + 28, true);
+      const extraLen = view.getUint16(ptr + 30, true);
+      const commentLen = view.getUint16(ptr + 32, true);
+      const localHdrOffset = view.getUint32(ptr + 42, true);
+
+      if (ptr + 46 + nameLen > cdOffset + cdSize) {
+        return { valid: false, daftarEntri: [], galat: 'Panjang nama file pada Central Directory korup.' };
+      }
+
+      let rawName = '';
+      try {
+        rawName = decoder.decode(zipBytes.subarray(ptr + 46, ptr + 46 + nameLen));
+      } catch {
+        return { valid: false, daftarEntri: [], galat: 'Encoding UTF-8 nama file ZIP tidak sah.' };
+      }
+
+      if (rawName.startsWith('/')) {
+        return { valid: false, daftarEntri: [], galat: `Zip-Slip terdeteksi (jalur absolut): '${rawName}'` };
+      }
+      let safeName = '';
+      try {
+        safeName = ZipBuilder.sanitasiNamaEntriZip(rawName);
+      } catch (e: any) {
+        return { valid: false, daftarEntri: [], galat: e.message };
+      }
+
+      if (localHdrOffset + 30 > cdOffset || view.getUint32(localHdrOffset, true) !== 0x04034b50) {
+        return { valid: false, daftarEntri: [], galat: `Local File Header tidak valid untuk '${safeName}'.` };
+      }
+      const lhNameLen = view.getUint16(localHdrOffset + 26, true);
+      const lhExtraLen = view.getUint16(localHdrOffset + 28, true);
+      const dataStart = localHdrOffset + 30 + lhNameLen + lhExtraLen;
+      const dataEnd = dataStart + compSize;
+      if (dataEnd > cdOffset || metode !== 0 || compSize !== uncompSize) {
+        return { valid: false, daftarEntri: [], galat: `Rentang data atau metode kompresi tidak sah untuk '${safeName}'.` };
+      }
+
+      const payload = zipBytes.subarray(dataStart, dataEnd);
+      const actualCrc = hitungCRC32(payload);
+      if (actualCrc !== crcExpected) {
+        return {
+          valid: false,
+          daftarEntri: [],
+          galat: `Checksum CRC-32 tidak cocok pada '${safeName}' (diharapkan ${crcExpected.toString(16)}, aktual ${actualCrc.toString(16)}).`,
+        };
+      }
+
+      daftarEntri.push({
+        nama: safeName,
+        ukuran: uncompSize,
+        crc32: actualCrc,
+        data: new Uint8Array(payload),
+      });
+
+      ptr += 46 + nameLen + extraLen + commentLen;
+    }
+
+    return { valid: true, daftarEntri };
   }
 }

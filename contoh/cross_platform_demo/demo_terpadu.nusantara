@@ -1,0 +1,64 @@
+# Demo Lintas Platform Terpadu: NUSANTARA CROSS-PLATFORM DEMO
+# Menghubungkan GUI Desktop (Phase 36), Mobile UI & Lifecycle (Phase 37),
+# Native Device API & Penyimpanan Aman (Phase 38), Kesiapan Toko (Phase 41), dan OTA (Phase 42)
+
+gunakan "gui" sebagai ui
+gunakan "std:mobile" sebagai seluler
+
+fungsi saatKlikSinkron(evt : peta)
+mulai
+    tampilkan("Aksi sinkronisasi dipicu dari widget:", evt["idWidget"])
+selesai
+
+program NusantaraCrossPlatformDemo
+mulai
+    tampilkan("=== MEMULAI NUSANTARA CROSS-PLATFORM DEMO ===")
+
+    # 1. Bangun Antarmuka Desktop (Phase 36)
+    aplikasiDesktop : peta = ui.buatAplikasi({
+        id: "id.nusantara.crossdemo",
+        nama: "NUSANTARA Cross-Platform Console",
+        temaAwal: "gelap"
+    })
+    jendelaDesktop : peta = aplikasiDesktop.buatJendela({
+        judul: "NUSANTARA Console v0.50.0",
+        lebar: 960,
+        tinggi: 640
+    })
+    labelHeader : peta = ui.buatLabel("NUSANTARA Cross-Platform Console", { ukuranFont: 22 })
+    tombolSync : peta = ui.buatTombol("Sinkronisasi Cloud", saatKlikSinkron)
+    tataLetakDesktop : peta = ui.buatKolom([labelHeader, tombolSync], { jarak: 12 })
+    jendelaDesktop.setKonten(tataLetakDesktop)
+    tombolSync.picu("klik")
+    tampilkan("Desktop UI Siap:", jendelaDesktop["judul"])
+
+    # 2. Bangun Aplikasi Mobile & Navigasi (Phase 37)
+    appMobile : peta = seluler.buatAplikasiMobile({
+        "nama": "NUSANTARA Mobile Client",
+        "id": "id.nusantara.crossdemo",
+        "versi": "1.0.0",
+        "nomorBuild": 1,
+        "orientasi": "potret"
+    })
+    areaAman : peta = seluler.buatAreaAman()
+    kartuJudul : peta = seluler.buatTeks("Panel Klien Seluler Terpadu", 18, "tebal", "#0ea5e9")
+    seluler.tambahKomponenMobile(appMobile, areaAman)
+    seluler.tambahKomponenMobile(appMobile, kartuJudul)
+    seluler.jalankanAplikasiMobile(appMobile)
+    tampilkan("Mobile App Berjalan:", appMobile["nama"])
+
+    # 3. Native Device API & Penyimpanan Aman AES-256-GCM (Phase 38)
+    izinKamera : logika = seluler.mintaIzin("kamera")
+    infoPerangkat : peta = seluler.panggilNative("perangkat.info")
+    jika izinKamera dan infoPerangkat["sukses"] maka
+        seluler.simpanAman("demo_device_status", infoPerangkat["status"])
+    akhir
+    tampilkan("Status Native Tersimpan:", seluler.ambilAman("demo_device_status"))
+
+    # 4. Kesiapan Rilis Toko & Status Pembaruan OTA (Phase 41 & 42)
+    kesiapanToko : peta = seluler.periksaKesiapanTokoMobile()
+    statusUpdate : peta = seluler.periksaPembaruanMobile("id.nusantara.crossdemo", "1.0.0", "android")
+    tampilkan("Kesiapan Toko Valid?", kesiapanToko["valid"])
+    tampilkan("Status Pembaruan:", statusUpdate["status"])
+    tampilkan("=== SELESAI NUSANTARA CROSS-PLATFORM DEMO ===")
+selesai

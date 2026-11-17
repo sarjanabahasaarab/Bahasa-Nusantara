@@ -7,8 +7,7 @@
  */
 
 import { InfoPerangkatMobile } from '../../device/info';
-import { StatusJaringanMobile } from '../../device/network';
-import { StatusBateraiMobile } from '../../device/battery';
+import { PemeriksaHardwareHost } from './hardware_probe';
 
 export interface KemampuanPerangkat {
   kamera: {
@@ -16,6 +15,7 @@ export interface KemampuanPerangkat {
     depan: boolean;
     belakang: boolean;
     flash: boolean;
+    v4l2Host?: string[];
   };
   sensor: {
     akselerometer: boolean;
@@ -30,6 +30,8 @@ export interface KemampuanPerangkat {
     bluetooth: boolean;
     bluetoothLE: boolean;
     gps: boolean;
+    bluetoothHCIHost?: string[];
+    jaringanOSTerhubung?: boolean;
   };
   audio: {
     perekam: boolean;
@@ -48,6 +50,14 @@ export interface KemampuanPerangkat {
     model: string;
     arsitektur: string;
     apakahSimulator: boolean;
+    modeKontrakSimulasi: boolean;
+  };
+  probeHost?: {
+    nodeRuntime: boolean;
+    bateraiSysfsTerdeteksi: boolean;
+    kameraV4L2Terdeteksi: boolean;
+    bluetoothHCITerdeteksi: boolean;
+    adbTerhubung: boolean;
   };
 }
 
@@ -72,6 +82,8 @@ export class PengelolaKemampuanPerangkat {
     const info = InfoPerangkatMobile.dapatkanInfo();
     const isSim = InfoPerangkatMobile.apakahSimulator();
     const plat = info.platform as 'android' | 'ios' | 'desktop' | 'simulator';
+    const probe = PemeriksaHardwareHost.periksaHost();
+    const adbAktif = probe.perangkatADB.some((p) => p.status === 'device');
 
     this.cacheKemampuan = {
       kamera: {
@@ -79,6 +91,7 @@ export class PengelolaKemampuanPerangkat {
         depan: true,
         belakang: true,
         flash: plat === 'android' || plat === 'ios',
+        v4l2Host: probe.kameraV4L2,
       },
       sensor: {
         akselerometer: true,
@@ -93,6 +106,8 @@ export class PengelolaKemampuanPerangkat {
         bluetooth: true,
         bluetoothLE: true,
         gps: true,
+        bluetoothHCIHost: probe.bluetoothHCI,
+        jaringanOSTerhubung: probe.jaringan.terhubung,
       },
       audio: {
         perekam: true,
@@ -111,6 +126,14 @@ export class PengelolaKemampuanPerangkat {
         model: info.model,
         arsitektur: typeof process !== 'undefined' ? process.arch : 'arm64',
         apakahSimulator: isSim,
+        modeKontrakSimulasi: isSim && !adbAktif,
+      },
+      probeHost: {
+        nodeRuntime: probe.nodeRuntime,
+        bateraiSysfsTerdeteksi: probe.baterai.terdeteksi,
+        kameraV4L2Terdeteksi: probe.kameraV4L2.length > 0,
+        bluetoothHCITerdeteksi: probe.bluetoothHCI.length > 0,
+        adbTerhubung: adbAktif,
       },
     };
 

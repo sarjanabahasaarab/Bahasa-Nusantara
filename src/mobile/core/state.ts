@@ -19,8 +19,12 @@ export class PengelolaStateMobile {
     }
   }
 
+  private static apakahKunciTerlarang(kunci: string): boolean {
+    return kunci === '__proto__' || kunci === 'constructor' || kunci === 'prototype' || !kunci;
+  }
+
   public ambil<T = any>(kunci: string, nilaiBawaan?: T): T {
-    if (!this.state.has(kunci)) {
+    if (PengelolaStateMobile.apakahKunciTerlarang(kunci) || !this.state.has(kunci)) {
       return nilaiBawaan as T;
     }
     return this.state.get(kunci);
@@ -31,6 +35,9 @@ export class PengelolaStateMobile {
   }
 
   public tetapkan<T = any>(kunci: string, nilai: T): void {
+    if (typeof kunci !== 'string' || PengelolaStateMobile.apakahKunciTerlarang(kunci)) {
+      throw new Error(`Kunci state tidak diizinkan: '${String(kunci)}'`);
+    }
     const nilaiLama = this.state.get(kunci);
     if (nilaiLama === nilai) return;
 
@@ -63,6 +70,9 @@ export class PengelolaStateMobile {
   }
 
   public pasangPendengar<T = any>(kunci: string, fn: PendengarStateMobile<T>): () => void {
+    if (typeof kunci !== 'string' || PengelolaStateMobile.apakahKunciTerlarang(kunci)) {
+      throw new Error(`Kunci pendengar state tidak diizinkan: '${String(kunci)}'`);
+    }
     let set = this.pendengarPerKunci.get(kunci);
     if (!set) {
       set = new Set();
@@ -84,7 +94,9 @@ export class PengelolaStateMobile {
   public toJSON(): Record<string, any> {
     const hasil: Record<string, any> = {};
     for (const [k, v] of this.state.entries()) {
-      hasil[k] = v;
+      if (!PengelolaStateMobile.apakahKunciTerlarang(k)) {
+        Object.defineProperty(hasil, k, { value: v, enumerable: true, configurable: true, writable: true });
+      }
     }
     return hasil;
   }

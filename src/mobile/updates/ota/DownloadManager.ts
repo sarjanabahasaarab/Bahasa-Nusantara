@@ -117,6 +117,9 @@ export class SecureDownloadManager {
               throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
             }
             const buf = await resp.arrayBuffer();
+            if (buf.byteLength > UpdateSecurityPolicy.MAKS_UKURAN_BERKAS_TUNGGAL) {
+              throw new Error(`Ukuran unduhan (${buf.byteLength} byte) melebihi batas maksimum OTA.`);
+            }
             return new Uint8Array(buf);
           } finally {
             clearTimeout(timer);

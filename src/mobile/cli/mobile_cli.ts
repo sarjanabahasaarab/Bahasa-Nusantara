@@ -132,8 +132,33 @@ export class MobileCLI {
     }
   }
 
+  private static sanitizePkg(id: string): string {
+    const cleaned = String(id || 'id.nusantara.app').replace(/[^a-zA-Z0-9_.]/g, '_');
+    const segs = cleaned.split('.').filter(Boolean).map((s) => (/^[a-zA-Z]/.test(s) ? s : `app_${s}`));
+    return segs.length >= 2 ? segs.join('.') : `id.nusantara.${segs[0] || 'app'}`;
+  }
+
+  private static escapeXml(val: string): string {
+    return String(val ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
+
+  private static escapeCodeStr(val: string): string {
+    return String(val ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\r\n]/g, ' ');
+  }
+
+  private static escapeRubyStr(val: string): string {
+    return String(val ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/[\r\n]/g, ' ');
+  }
+
   public static perintahBaru(args: string[]): number {
-    const namaProyek = args[0] || 'aplikasi_mobile';
+    const namaProyekRaw = args[0] || 'aplikasi_mobile';
+    const namaAman = path.basename(namaProyekRaw) === namaProyekRaw ? namaProyekRaw : path.basename(namaProyekRaw);
+    const namaProyek = namaAman && namaAman !== '.' && namaAman !== '..' ? namaAman : 'aplikasi_mobile';
     const targetDir = path.resolve(process.cwd(), namaProyek);
 
     console.log(`\n======================================================`);
@@ -163,9 +188,10 @@ export class MobileCLI {
       }
 
       // 1. Buat nusantara.json konfigurasi mobile
+      const slug = namaProyek.toLowerCase().replace(/[^a-z0-9]/g, '') || 'aplikasi';
       const konfig: KonfigurasiAplikasiMobile = {
         nama: namaProyek,
-        id: `id.nusantara.${namaProyek.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
+        id: `id.nusantara.${slug}`,
         versi: '1.0.0',
         nomorBuild: 1,
         deskripsi: `Aplikasi mobile ${namaProyek} dibangun dengan Nusantara Mobile Framework`,
@@ -221,8 +247,8 @@ fungsi saatKlikTombol(peristiwa : peta) mulai
 selesai
 
 konfig : peta = {
-  "nama": "${namaProyek}",
-  "id": "${konfig.id}",
+  "nama": ${JSON.stringify(namaProyek)},
+  "id": ${JSON.stringify(konfig.id)},
   "versi": "1.0.0",
   "nomorBuild": 1
 }
@@ -277,6 +303,7 @@ jalankanAplikasiMobile(aplikasi)
   }
 
   public static buatAndroidManifest(konfig: KonfigurasiAplikasiMobile): string {
+    const pkgId = MobileCLI.sanitizePkg(konfig.id);
     const izinMap: Record<string, string> = {
       internet: 'android.permission.INTERNET',
       kamera: 'android.permission.CAMERA',
@@ -286,35 +313,41 @@ jalankanAplikasiMobile(aplikasi)
       bluetooth: 'android.permission.BLUETOOTH',
     };
     const izinXml = (konfig.daftarIzin || ['internet'])
-      .map((i) => `    <uses-permission android:name="${izinMap[i] || `android.permission.${String(i).toUpperCase()}`}" />`)
+      .map((i) => {
+        const perm = izinMap[i] || `android.permission.${String(i).replace(/[^A-Za-z0-9_]/g, '_').toUpperCase()}`;
+        return `    <uses-permission android:name="${MobileCLI.escapeXml(perm)}" />`;
+      })
       .join('\n');
     return `<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="${konfig.id}">
+    package="${MobileCLI.escapeXml(pkgId)}">
 ${izinXml}
-    <application android:label="${konfig.nama}">
+    <application android:label="${MobileCLI.escapeXml(konfig.nama)}">
         <activity android:name=".MainActivity" android:exported="true" />
     </application>
 </manifest>`;
   }
 
   public static buatBuildGradleApp(konfig: KonfigurasiAplikasiMobile): string {
-    const minSdk = konfig.versiMinPlatform?.androidMinSdk ?? 24;
-    const targetSdk = konfig.versiMinPlatform?.androidTargetSdk ?? 34;
+    const pkgId = MobileCLI.sanitizePkg(konfig.id);
+    const minSdk = Number.isInteger(konfig.versiMinPlatform?.androidMinSdk) ? Number(konfig.versiMinPlatform!.androidMinSdk) : 24;
+    const targetSdk = Number.isInteger(konfig.versiMinPlatform?.androidTargetSdk) ? Number(konfig.versiMinPlatform!.androidTargetSdk) : 34;
+    const versionCode = Number.isInteger(konfig.nomorBuild) && konfig.nomorBuild > 0 ? konfig.nomorBuild : 1;
     return `android {
-    namespace "${konfig.id}"
+    namespace "${pkgId}"
     compileSdk ${targetSdk}
     defaultConfig {
-        applicationId "${konfig.id}"
+        applicationId "${pkgId}"
         minSdk ${minSdk}
         targetSdk ${targetSdk}
-        versionCode ${konfig.nomorBuild || 1}
-        versionName "${konfig.versi}"
+        versionCode ${versionCode}
+        versionName "${MobileCLI.escapeCodeStr(konfig.versi)}"
     }
 }`;
   }
 
   public static buatInfoPlist(konfig: KonfigurasiAplikasiMobile): string {
+    const pkgId = MobileCLI.sanitizePkg(konfig.id);
     const izinList = konfig.daftarIzin || [];
     const extraKeys: string[] = [];
     if (izinList.includes('kamera')) {
@@ -328,22 +361,62 @@ ${izinXml}
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>
-    <string>${konfig.id}</string>
+    <string>${MobileCLI.escapeXml(pkgId)}</string>
     <key>CFBundleName</key>
-    <string>${konfig.nama}</string>
+    <string>${MobileCLI.escapeXml(konfig.nama)}</string>
     <key>CFBundleShortVersionString</key>
-    <string>${konfig.versi}</string>
+    <string>${MobileCLI.escapeXml(konfig.versi)}</string>
 ${extraKeys.join('\n')}
 </dict>
 </plist>`;
   }
 
   public static buatPodfileTemplate(konfig: KonfigurasiAplikasiMobile): string {
-    const target = konfig.versiMinPlatform?.iosDeploymentTarget || '15.0';
-    return `platform :ios, '${target}'
-target '${konfig.nama}' do
+    const target: string = /^\d+(\.\d+)?$/.test(String(konfig.versiMinPlatform?.iosDeploymentTarget || ''))
+      ? String(konfig.versiMinPlatform!.iosDeploymentTarget)
+      : '15.0';
+    return `platform :ios, '${MobileCLI.escapeRubyStr(target)}'
+target '${MobileCLI.escapeRubyStr(konfig.nama)}' do
   use_frameworks!
 end`;
+  }
+
+  public static verifikasiBundel(dirBundel: string): { valid: boolean; totalDiperiksa: number; galat: string[] } {
+    const galat: string[] = [];
+    const rootDir = path.resolve(dirBundel);
+    const manifestPath = path.join(rootDir, 'SHA256SUMS');
+    if (!fs.existsSync(manifestPath)) {
+      return { valid: false, totalDiperiksa: 0, galat: ['Berkas SHA256SUMS tidak ditemukan pada direktori bundel.'] };
+    }
+    const baris = fs.readFileSync(manifestPath, 'utf-8').split(/\r?\n/).map((b) => b.trim()).filter(Boolean);
+    if (baris.length === 0) {
+      return { valid: false, totalDiperiksa: 0, galat: ['Berkas SHA256SUMS kosong.'] };
+    }
+    let checked = 0;
+    for (const item of baris) {
+      const match = item.match(/^([0-9a-f]{64})\s{1,2}(.+)$/i);
+      if (!match) {
+        galat.push(`Format baris SHA256SUMS tidak sah: ${item}`);
+        continue;
+      }
+      const expectedSha = match[1].toLowerCase();
+      const relPath = match[2].trim();
+      const resolved = path.resolve(rootDir, relPath);
+      if (!resolved.startsWith(rootDir + path.sep)) {
+        galat.push(`Jalur traversal ditolak pada SHA256SUMS: ${relPath}`);
+        continue;
+      }
+      if (!fs.existsSync(resolved)) {
+        galat.push(`Berkas bundel hilang: ${relPath}`);
+        continue;
+      }
+      const actualSha = crypto.createHash('sha256').update(fs.readFileSync(resolved)).digest('hex').toLowerCase();
+      if (actualSha !== expectedSha) {
+        galat.push(`Checksum SHA-256 tidak cocok untuk ${relPath}`);
+      }
+      checked++;
+    }
+    return { valid: galat.length === 0 && checked > 0, totalDiperiksa: checked, galat };
   }
 
   public static perintahPeriksa(_args: string[]): number {

@@ -71,13 +71,35 @@ export abstract class AdaptorDesktopNativeDasar implements AdaptorPlatformGUI {
   }
 }
 
+function sanitizeAppId(id: string | undefined, fallback: string): string {
+  const bersih = (id || fallback).replace(/[^a-zA-Z0-9._-]/g, '');
+  return bersih.length >= 3 && bersih.includes('.') ? bersih : fallback;
+}
+
+function escapeCString(teks: string): string {
+  return teks
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n');
+}
+
+function escapeSwiftString(teks: string): string {
+  return teks
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n');
+}
+
 export class AdaptorDesktopLinux extends AdaptorDesktopNativeDasar {
   public dapatkanNamaPlatform(): TipePlatformGUI {
     return 'linux';
   }
 
   public hasilkanSumberHostNative(jendela: JendelaGUI): { namaBerkas: string; isi: string; bahasa: string } {
-    const judulAman = jendela.judul.replace(/"/g, '\\"');
+    const judulAman = escapeCString(jendela.judul);
+    const appIdAman = sanitizeAppId(this.konfig?.idAplikasi, 'id.nusantara.desktop');
     return {
       namaBerkas: 'nusantara_linux_host.c',
       bahasa: 'c-gtk3',
@@ -85,16 +107,17 @@ export class AdaptorDesktopLinux extends AdaptorDesktopNativeDasar {
 #include <gtk/gtk.h>
 
 static void aktifkan(GtkApplication *app, gpointer user_data) {
+  (void)user_data;
   GtkWidget *window = gtk_application_window_new(app);
   gtk_window_set_title(GTK_WINDOW(window), "${judulAman}");
-  gtk_window_set_default_size(GTK_WINDOW(window), ${Math.round(jendela.lebar)}, ${Math.round(jendela.tinggi)});
+  gtk_window_set_default_size(GTK_WINDOW(window), ${Math.max(100, Math.round(jendela.lebar))}, ${Math.max(100, Math.round(jendela.tinggi))});
   GtkWidget *label = gtk_label_new("NUSANTARA Desktop Window Ready");
   gtk_container_add(GTK_CONTAINER(window), label);
   gtk_widget_show_all(window);
 }
 
 int main(int argc, char **argv) {
-  GtkApplication *app = gtk_application_new("${this.konfig?.idAplikasi || 'id.nusantara.desktop'}", G_APPLICATION_DEFAULT_FLAGS);
+  GtkApplication *app = gtk_application_new("${appIdAman}", G_APPLICATION_DEFAULT_FLAGS);
   g_signal_connect(app, "activate", G_CALLBACK(aktifkan), NULL);
   int status = g_application_run(G_APPLICATION(app), argc, argv);
   g_object_unref(app);
@@ -173,7 +196,7 @@ export class AdaptorDesktopWindows extends AdaptorDesktopNativeDasar {
   }
 
   public hasilkanSumberHostNative(jendela: JendelaGUI): { namaBerkas: string; isi: string; bahasa: string } {
-    const judulAman = jendela.judul.replace(/"/g, '\\"');
+    const judulAman = escapeCString(jendela.judul);
     return {
       namaBerkas: 'nusantara_win32_host.c',
       bahasa: 'c-win32',
@@ -236,7 +259,7 @@ export class AdaptorDesktopMacOS extends AdaptorDesktopNativeDasar {
   }
 
   public hasilkanSumberHostNative(jendela: JendelaGUI): { namaBerkas: string; isi: string; bahasa: string } {
-    const judulAman = jendela.judul.replace(/"/g, '\\"');
+    const judulAman = escapeSwiftString(jendela.judul);
     return {
       namaBerkas: 'NusantaraCocoaHost.swift',
       bahasa: 'swift-appkit',

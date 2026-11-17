@@ -54,6 +54,7 @@ export interface MetadataNativeAPI {
   dokumentasi: string;
   apakahTersedia?: (platformAktif?: string) => boolean;
   eksekusi: (argumen?: any) => Promise<HasilOperasiNative<any>> | HasilOperasiNative<any>;
+  eksekusiSinkron?: (argumen?: any) => HasilOperasiNative<any>;
 }
 
 export class RegistriNativeAPI {
@@ -94,6 +95,25 @@ export class RegistriNativeAPI {
     return this.dapatkanSemua().filter((a) => a.kategori === kategori);
   }
 
+  private periksaIzinUntukAPI(api: MetadataNativeAPI): HasilOperasiNative<any> | null {
+    for (const iz of api.izin) {
+      const statusIzin = this.pengelolaIzin.periksaIzin(iz);
+      if (statusIzin === 'ditolak' || statusIzin === 'ditolak_permanen') {
+        return buatHasilIzinDitolak(iz);
+      }
+      if (statusIzin !== 'diberikan') {
+        const hasilMinta = this.pengelolaIzin.mintaIzinSinkron(
+          iz,
+          `Aplikasi membutuhkan izin '${iz}' untuk menjalankan '${api.nama}'.`
+        );
+        if (!hasilMinta.diberikan) {
+          return buatHasilIzinDitolak(iz);
+        }
+      }
+    }
+    return null;
+  }
+
   public async panggil(nama: string, argumen?: any): Promise<HasilOperasiNative<any>> {
     const api = this.dapatkan(nama);
     if (!api) {
@@ -108,18 +128,10 @@ export class RegistriNativeAPI {
       return buatHasilTidakDidukung(nama, platformAktif);
     }
 
-    // 2. Periksa perizinan wajib
-    for (const iz of api.izin) {
-      const statusIzin = this.pengelolaIzin.periksaIzin(iz);
-      if (statusIzin === 'ditolak') {
-        return buatHasilIzinDitolak(iz);
-      }
-      if (statusIzin === 'belum_diminta') {
-        const hasilMinta = await this.pengelolaIzin.mintaIzin(iz, `Aplikasi membutuhkan izin '${iz}' untuk menjalankan '${nama}'.`);
-        if (!hasilMinta.diberikan) {
-          return buatHasilIzinDitolak(iz);
-        }
-      }
+    // 2. Periksa perizinan wajib (blokir baik 'ditolak' maupun 'ditolak_permanen')
+    const galatIzin = this.periksaIzinUntukAPI(api);
+    if (galatIzin) {
+      return galatIzin;
     }
 
     // 3. Eksekusi handler API
@@ -130,6 +142,41 @@ export class RegistriNativeAPI {
         sukses: false,
         status: 'kesalahan_sistem',
         pesan: `Kegagalan eksekusi API '${nama}': ${err?.message || err}`,
+        kodeGalat: KodeGalatNative.OPERASI_GAGAL,
+        stempelWaktu: Date.now(),
+      };
+    }
+  }
+
+  public panggilSinkron(nama: string, argumen?: any): HasilOperasiNative<any> {
+    const api = this.dapatkan(nama);
+    if (!api) {
+      return buatHasilTidakDidukung(nama, 'Registri Native API');
+    }
+
+    const info = this.pengelolaKemampuan.dapatkanKemampuan();
+    const platformAktif = info.sistem.platform;
+
+    if (api.apakahTersedia && !api.apakahTersedia(platformAktif)) {
+      return buatHasilTidakDidukung(nama, platformAktif);
+    }
+
+    const galatIzin = this.periksaIzinUntukAPI(api);
+    if (galatIzin) {
+      return galatIzin;
+    }
+
+    if (typeof api.eksekusiSinkron !== 'function') {
+      return buatHasilTidakDidukung(`${nama} (eksekusi sinkron)`, platformAktif);
+    }
+
+    try {
+      return api.eksekusiSinkron(argumen);
+    } catch (err: any) {
+      return {
+        sukses: false,
+        status: 'kesalahan_sistem',
+        pesan: `Kegagalan eksekusi sinkron API '${nama}': ${err?.message || err}`,
         kodeGalat: KodeGalatNative.OPERASI_GAGAL,
         stempelWaktu: Date.now(),
       };

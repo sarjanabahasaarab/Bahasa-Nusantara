@@ -152,16 +152,36 @@ export class BinaryInspector {
 
     // Validasi bounds section headers / program headers
     let phnum = 0;
+    let eShoff = 0n;
+    let eShentsize = 0;
+    let eShnum = 0;
     if (bytes.length >= 64 && is64Bit) {
       const ePhoff = Number(isLittleEndian ? bytes.readBigUInt64LE(32) : bytes.readBigUInt64BE(32));
       phnum = isLittleEndian ? bytes.readUInt16LE(56) : bytes.readUInt16BE(56);
       if (phnum > 0 && ePhoff + phnum * 56 > bytes.length) {
         errors.push('Program Header Table ELF melebihi ukuran berkas.');
       }
+      eShoff = isLittleEndian ? bytes.readBigUInt64LE(40) : bytes.readBigUInt64BE(40);
+      eShentsize = isLittleEndian ? bytes.readUInt16LE(58) : bytes.readUInt16BE(58);
+      eShnum = isLittleEndian ? bytes.readUInt16LE(60) : bytes.readUInt16BE(60);
+      if (eShnum > 0 && eShoff > 0n) {
+        const shEnd = Number(eShoff) + eShnum * (eShentsize || 64);
+        if (shEnd > bytes.length) {
+          errors.push('Section Header Table ELF melebihi ukuran berkas.');
+        }
+      }
     }
 
-    // Jalankan readelf jika tersedia di sistem untuk membaca seksi nyata
-    const sections = this.tryReadelfSections(filePath);
+    // Parse seksi nyata: parser ELF64 native dalam JS terlebih dahulu, lalu lengkapi via readelf jika tersedia
+    const nativeSections = is64Bit ? this.parseNativeElf64Sections(bytes, isLittleEndian) : [];
+    const readelfSections = nativeSections.length === 0 ? this.tryReadelfSections(filePath) : [];
+    const sections = nativeSections.length > 0 ? nativeSections : readelfSections;
+
+    const { dynamicLibraries, importedSymbols, exportedSymbols, hasSymtab } =
+      this.tryReadelfDynamicInfo(filePath, sections);
+    const hasDebugInfo = sections.some((s) => s.name.startsWith('.debug_') || s.name === '.zdebug_info');
+    const isStripped = sections.length > 0 && !hasSymtab && !sections.some((s) => s.name === '.symtab');
+
     const isValidExecutable = errors.length === 0;
 
     if (strict && !isValidExecutable) {
@@ -195,16 +215,12 @@ export class BinaryInspector {
       operatingSystem: 'linux',
       entryPointAddress: entryPointStr,
       fileSizeBytes: fileSize,
-      sections: sections.length > 0 ? sections : [
-        { name: '.text', offset: 0x1000, size: 0x200, flags: 'AX' },
-        { name: '.rodata', offset: 0x1200, size: 0x100, flags: 'A' },
-        { name: '.data', offset: 0x2000, size: 0x100, flags: 'WA' },
-      ],
-      importedSymbols: ['printf', 'malloc', 'free', 'exit'],
-      exportedSymbols: ['utama', '_start'],
-      dynamicLibraries: ['libc.so.6', 'libm.so.6'],
-      hasDebugInfo: false,
-      isStripped: false,
+      sections,
+      importedSymbols,
+      exportedSymbols,
+      dynamicLibraries,
+      hasDebugInfo,
+      isStripped,
       binaryType,
       isValidExecutable,
       validationErrors: errors,
@@ -219,6 +235,7 @@ export class BinaryInspector {
     let bits: 32 | 64 | 'UNKNOWN' = 64;
     let isValidPEHeader = false;
     let binaryType: BinaryMetadata['binaryType'] = 'EXECUTABLE';
+    let isStripped = true;
 
     if (bytes.length < 0x40) {
       errors.push('DOS header PE terlalu pendek (< 64 bytes).');
@@ -242,6 +259,9 @@ export class BinaryInspector {
         }
 
         const numSections = bytes.readUInt16LE(peOffset + 6);
+        const ptrToSymTab = bytes.readUInt32LE(peOffset + 12);
+        const numSymbols = bytes.readUInt32LE(peOffset + 16);
+        isStripped = ptrToSymTab === 0 && numSymbols === 0;
         const optHeaderSize = bytes.readUInt16LE(peOffset + 20);
         const characteristics = bytes.readUInt16LE(peOffset + 22);
         const isDll = (characteristics & 0x2000) !== 0;
@@ -290,6 +310,8 @@ export class BinaryInspector {
     }
 
     const dynamicLibraries = this.extractPEImports(bytes);
+    const exportedSymbols = this.extractPEExports(bytes);
+    const hasDebugInfo = parsedSections.some((s) => s.name.startsWith('.debug'));
     const isValidExecutable = errors.length === 0 && isValidPEHeader;
 
     if (strict && !isValidExecutable) {
@@ -323,16 +345,12 @@ export class BinaryInspector {
       operatingSystem: 'windows',
       entryPointAddress: entryPointStr,
       fileSizeBytes: fileSize,
-      sections: parsedSections.length > 0 ? parsedSections : [
-        { name: '.text', offset: 0x400, size: 0x1000, flags: 'EXECUTE_READ' },
-        { name: '.rdata', offset: 0x1400, size: 0x800, flags: 'READ' },
-        { name: '.data', offset: 0x1c00, size: 0x400, flags: 'READ_WRITE' },
-      ],
-      importedSymbols: ['ExitProcess', 'printf'],
-      exportedSymbols: ['utama'],
-      dynamicLibraries: dynamicLibraries.length > 0 ? dynamicLibraries : ['KERNEL32.dll', 'ucrtbase.dll'],
-      hasDebugInfo: false,
-      isStripped: false,
+      sections: parsedSections,
+      importedSymbols: [],
+      exportedSymbols,
+      dynamicLibraries,
+      hasDebugInfo,
+      isStripped,
       binaryType,
       isValidExecutable,
       validationErrors: errors,
@@ -346,6 +364,7 @@ export class BinaryInspector {
     let binaryType: BinaryMetadata['binaryType'] = 'EXECUTABLE';
     const parsedSections: any[] = [];
     const dynamicLibraries: string[] = [];
+    let hasDwarfSegment = false;
 
     if (bytes.length < 32) {
       errors.push(`Header Mach-O 64-bit terpotong (${bytes.length} bytes < 32 bytes).`);
@@ -380,6 +399,7 @@ export class BinaryInspector {
           // LC_SEGMENT_64 = 0x19
           if (cmd === 0x19 && cursor + 72 <= bytes.length) {
             const segName = bytes.subarray(cursor + 8, cursor + 24).toString('utf-8').replace(/\0+$/, '');
+            if (segName === '__DWARF') hasDwarfSegment = true;
             const fileOff = isLittleEndian ? Number(bytes.readBigUInt64LE(cursor + 40)) : 0;
             const fileSz = isLittleEndian ? Number(bytes.readBigUInt64LE(cursor + 48)) : 0;
             parsedSections.push({ name: segName, offset: fileOff, size: fileSz });
@@ -432,15 +452,11 @@ export class BinaryInspector {
       operatingSystem: 'darwin',
       entryPointAddress: '0x100000000',
       fileSizeBytes: fileSize,
-      sections: parsedSections.length > 0 ? parsedSections : [
-        { name: '__TEXT,__text', offset: 0x1000, size: 0x500 },
-        { name: '__TEXT,__cstring', offset: 0x1500, size: 0x100 },
-        { name: '__DATA,__data', offset: 0x2000, size: 0x200 },
-      ],
-      importedSymbols: ['_printf', '_malloc', '_exit'],
-      exportedSymbols: ['_utama'],
-      dynamicLibraries: dynamicLibraries.length > 0 ? dynamicLibraries : ['/usr/lib/libSystem.B.dylib'],
-      hasDebugInfo: false,
+      sections: parsedSections,
+      importedSymbols: [],
+      exportedSymbols: [],
+      dynamicLibraries,
+      hasDebugInfo: hasDwarfSegment,
       isStripped: false,
       binaryType,
       isValidExecutable,
@@ -503,9 +519,161 @@ export class BinaryInspector {
     return libs;
   }
 
+  private static extractPEExports(bytes: Buffer): string[] {
+    const exports: string[] = [];
+    try {
+      if (bytes.length < 0x40) return exports;
+      const peOffset = bytes.readUInt32LE(0x3c);
+      if (peOffset + 24 >= bytes.length) return exports;
+      const optOffset = peOffset + 24;
+      const numSections = bytes.readUInt16LE(peOffset + 6);
+      const optSize = bytes.readUInt16LE(peOffset + 20);
+      if (optSize < 120 || optOffset + optSize > bytes.length) return exports;
+      const magicOpt = bytes.readUInt16LE(optOffset);
+      // Export Table DataDirectory[0]
+      const ddOffset = optOffset + (magicOpt === 0x020b ? 112 : 96);
+      if (ddOffset + 8 > bytes.length) return exports;
+      const exportRva = bytes.readUInt32LE(ddOffset);
+      if (exportRva === 0) return exports;
+
+      const secTable = optOffset + optSize;
+      const rvaToOffset = (rva: number): number | null => {
+        for (let s = 0; s < numSections; s++) {
+          const off = secTable + s * 40;
+          if (off + 40 > bytes.length) break;
+          const vAddr = bytes.readUInt32LE(off + 12);
+          const vSize = Math.max(bytes.readUInt32LE(off + 8), bytes.readUInt32LE(off + 16));
+          const rawPtr = bytes.readUInt32LE(off + 20);
+          if (rva >= vAddr && rva < vAddr + vSize) {
+            return rawPtr + (rva - vAddr);
+          }
+        }
+        return null;
+      };
+
+      const expOff = rvaToOffset(exportRva);
+      if (expOff === null || expOff + 40 > bytes.length) return exports;
+      const numNames = Math.min(256, bytes.readUInt32LE(expOff + 24));
+      const addrOfNamesRva = bytes.readUInt32LE(expOff + 32);
+      const namesOff = rvaToOffset(addrOfNamesRva);
+      if (namesOff === null) return exports;
+      for (let i = 0; i < numNames; i++) {
+        if (namesOff + i * 4 + 4 > bytes.length) break;
+        const nRva = bytes.readUInt32LE(namesOff + i * 4);
+        const nOff = rvaToOffset(nRva);
+        if (nOff !== null && nOff < bytes.length) {
+          const endIdx = bytes.indexOf(0, nOff);
+          const sym = bytes.subarray(nOff, endIdx > nOff ? endIdx : Math.min(bytes.length, nOff + 128)).toString('ascii');
+          if (sym) exports.push(sym);
+        }
+      }
+    } catch {
+      // Abaikan
+    }
+    return exports;
+  }
+
+  private static parseNativeElf64Sections(bytes: Buffer, isLittleEndian: boolean): any[] {
+    try {
+      if (bytes.length < 64) return [];
+      const read16 = (off: number) => (isLittleEndian ? bytes.readUInt16LE(off) : bytes.readUInt16BE(off));
+      const read64 = (off: number) => Number(isLittleEndian ? bytes.readBigUInt64LE(off) : bytes.readBigUInt64BE(off));
+
+      const shoff = read64(40);
+      const shentsize = read16(58) || 64;
+      const shnum = read16(60);
+      const shstrndx = read16(62);
+      if (shoff === 0 || shnum === 0 || shentsize < 64 || shoff + shnum * shentsize > bytes.length) {
+        return [];
+      }
+
+      let strtabOff = 0;
+      let strtabSize = 0;
+      if (shstrndx < shnum) {
+        const strHdrOff = shoff + shstrndx * shentsize;
+        strtabOff = read64(strHdrOff + 24);
+        strtabSize = read64(strHdrOff + 32);
+      }
+
+      const sections: any[] = [];
+      for (let i = 0; i < shnum; i++) {
+        const off = shoff + i * shentsize;
+        const nameIdx = isLittleEndian ? bytes.readUInt32LE(off) : bytes.readUInt32BE(off);
+        const shFlags = read64(off + 8);
+        const shAddr = read64(off + 16);
+        const shOffset = read64(off + 24);
+        const shSize = read64(off + 32);
+
+        let secName = '';
+        if (strtabSize > 0 && strtabOff + nameIdx < Math.min(bytes.length, strtabOff + strtabSize)) {
+          const slice = bytes.subarray(strtabOff + nameIdx, Math.min(bytes.length, strtabOff + strtabSize));
+          const zero = slice.indexOf(0);
+          secName = (zero >= 0 ? slice.subarray(0, zero) : slice).toString('utf-8');
+        }
+        if (secName || i > 0) {
+          sections.push({
+            name: secName || `.sec${i}`,
+            offset: shOffset,
+            size: shSize,
+            virtualAddress: shAddr,
+            flags: `0x${shFlags.toString(16)}`,
+          });
+        }
+      }
+      return sections;
+    } catch {
+      return [];
+    }
+  }
+
+  private static tryReadelfDynamicInfo(
+    filePath: string,
+    sections: any[]
+  ): {
+    dynamicLibraries: string[];
+    importedSymbols: string[];
+    exportedSymbols: string[];
+    hasSymtab: boolean;
+  } {
+    const dynamicLibraries: string[] = [];
+    const importedSymbols: string[] = [];
+    const exportedSymbols: string[] = [];
+    const hasSymtab = sections.some((s) => s.name === '.symtab');
+    try {
+      const dynRes = safeCP.spawnSync('readelf', ['-d', '--wide', filePath], { encoding: 'utf-8', timeout: 4000 });
+      if (dynRes.status === 0 && dynRes.stdout) {
+        const matches = dynRes.stdout.matchAll(/\(NEEDED\)\s+Shared library:\s+\[([^\]]+)\]/g);
+        for (const m of matches) {
+          if (m[1] && !dynamicLibraries.includes(m[1])) {
+            dynamicLibraries.push(m[1]);
+          }
+        }
+      }
+      const symRes = safeCP.spawnSync('readelf', ['--dyn-syms', '--wide', filePath], { encoding: 'utf-8', timeout: 4000 });
+      if (symRes.status === 0 && symRes.stdout) {
+        for (const line of symRes.stdout.split('\n')) {
+          const m = line.match(/^\s*\d+:\s+[0-9a-f]+\s+\d+\s+\S+\s+(\S+)\s+\S+\s+(\S+)\s+(\S+)/i);
+          if (!m) continue;
+          const bind = m[1];
+          const ndx = m[2];
+          const rawName = m[3].split('@')[0];
+          if (!rawName || bind === 'LOCAL') continue;
+          if (ndx === 'UND') {
+            if (!importedSymbols.includes(rawName)) importedSymbols.push(rawName);
+          } else {
+            if (!exportedSymbols.includes(rawName)) exportedSymbols.push(rawName);
+          }
+        }
+      }
+    } catch {
+      // Abaikan jika readelf tidak tersedia
+    }
+    return { dynamicLibraries, importedSymbols, exportedSymbols, hasSymtab };
+  }
+
   private static tryReadelfSections(filePath: string): any[] {
     try {
-      const res = safeCP.spawnSync('readelf', ['-S', '--wide', filePath]);
+      const res = safeCP.spawnSync('readelf', ['-S', '--wide', filePath], { encoding: 'utf-8', timeout: 4000 });
       if (res.status === 0 && res.stdout) {
         const lines = res.stdout.split('\n');
         const sections: any[] = [];

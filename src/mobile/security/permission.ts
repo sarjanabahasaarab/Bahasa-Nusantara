@@ -47,8 +47,8 @@ export class PengelolaIzinMobile {
     return this.apakahDiberikan(izin);
   }
 
-  public cabutIzin(izin: JenisIzinMobile): void {
-    this.tetapkanStatusIzin(izin, 'ditolak');
+  public cabutIzin(izin: JenisIzinMobile, permanen: boolean = false): void {
+    this.tetapkanStatusIzin(izin, permanen ? 'ditolak_permanen' : 'ditolak');
   }
 
   public tetapkanStatusIzin(izin: JenisIzinMobile, status: StatusIzinMobile): void {
@@ -62,7 +62,7 @@ export class PengelolaIzinMobile {
     }
   }
 
-  public async mintaIzin(permintaan: PermintaanIzinMobile | JenisIzinMobile, _alasan?: string): Promise<HasilIzinMobile> {
+  public mintaIzinSinkron(permintaan: PermintaanIzinMobile | JenisIzinMobile, _alasan?: string): HasilIzinMobile {
     const izin: JenisIzinMobile = typeof permintaan === 'string' ? permintaan : permintaan.izin;
     const statusSaatIni = this.periksaIzin(izin);
 
@@ -81,8 +81,12 @@ export class PengelolaIzinMobile {
     return {
       izin,
       status: statusBaru,
-      diberikan: statusBaru === 'diberikan',
+      diberikan: true,
     };
+  }
+
+  public async mintaIzin(permintaan: PermintaanIzinMobile | JenisIzinMobile, alasan?: string): Promise<HasilIzinMobile> {
+    return this.mintaIzinSinkron(permintaan, alasan);
   }
 
   public async mintaBanyakIzin(daftar: JenisIzinMobile[]): Promise<Map<JenisIzinMobile, HasilIzinMobile>> {

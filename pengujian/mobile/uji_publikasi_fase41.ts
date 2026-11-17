@@ -726,6 +726,121 @@ async function jalankanSemuaPengujianFase41() {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // [11] Keamanan TLS Endpoint, Verifikasi Kriptografis JWT, & Gate App Store
+  // -------------------------------------------------------------------------
+  console.log('\n[11] Keamanan Endpoint TLS, JWT Verification, & Gate Rilis App Store');
+  {
+    let gpHttpDitolak = false;
+    try {
+      new GooglePlayClient({
+        applicationId: 'id.nusantara.test',
+        packageName: 'id.nusantara.test',
+        defaultTrack: 'internal',
+        autoCommitEdit: false,
+        endpointApi: 'http://androidpublisher.external.example/v3',
+      });
+    } catch {
+      gpHttpDitolak = true;
+    }
+    pastikan(gpHttpDitolak, 'GooglePlayClient wajib menolak endpoint HTTP eksternal tidak terenkripsi');
+
+    let ascCredDitolak = false;
+    try {
+      new AppStoreConnectClient({
+        bundleId: 'id.nusantara.test',
+        defaultChannel: 'testflight',
+        endpointApi: 'https://user:secret@api.appstoreconnect.apple.com/v1',
+      });
+    } catch {
+      ascCredDitolak = true;
+    }
+    pastikan(ascCredDitolak, 'AppStoreConnectClient wajib menolak kredensial tertanam pada URL');
+
+    // Uji verifikasi RS256 & penolakan alg=none / tanda tangan terubah
+    const rsa = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const rsaPub = rsa.publicKey.export({ type: 'spki', format: 'pem' }) as string;
+    const rsaPriv = rsa.privateKey.export({ type: 'pkcs8', format: 'pem' }) as string;
+    const gpJwtClient = new GooglePlayClient({
+      applicationId: 'id.nusantara.test',
+      packageName: 'id.nusantara.test',
+      defaultTrack: 'internal',
+      autoCommitEdit: false,
+    });
+    const tokenRs = gpJwtClient.buatAssertionJWTRS256(rsaPriv);
+    const vRsOk = GooglePlayClient.verifikasiAssertionJWTRS256(tokenRs, rsaPub, 'https://oauth2.googleapis.com/token');
+    pastikan(vRsOk.valid, 'Verifikasi JWT RS256 sah wajib lulus');
+
+    const partsRs = tokenRs.split('.');
+    const algNoneToken = `${Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url')}.${partsRs[1]}.`;
+    const vRsNone = GooglePlayClient.verifikasiAssertionJWTRS256(algNoneToken, rsaPub);
+    pastikan(!vRsNone.valid, 'Algoritma JWT alg=none wajib ditolak');
+
+    const vRsWrongAud = GooglePlayClient.verifikasiAssertionJWTRS256(tokenRs, rsaPub, 'https://wrong-aud.example');
+    pastikan(!vRsWrongAud.valid, 'Audience JWT yang tidak cocok wajib ditolak');
+
+    // Uji verifikasi ES256 & tamper payload
+    const ec = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    const ecPub = ec.publicKey.export({ type: 'spki', format: 'pem' }) as string;
+    const ecPriv = ec.privateKey.export({ type: 'pkcs8', format: 'pem' }) as string;
+    const ascJwtClient = new AppStoreConnectClient({
+      bundleId: 'id.nusantara.test',
+      defaultChannel: 'testflight',
+      kunciPrivatPem: ecPriv,
+    });
+    const tokenEs = ascJwtClient.buatDanTandaTanganiJWT();
+    const vEsOk = AppStoreConnectClient.verifikasiJWTES256(tokenEs, ecPub, 'appstoreconnect-v1');
+    pastikan(vEsOk.valid, 'Verifikasi JWT ES256 sah wajib lulus');
+
+    const esParts = tokenEs.split('.');
+    const tamperedPayload = Buffer.from(JSON.stringify({ iss: 'attacker', exp: Math.floor(Date.now() / 1000) + 999, aud: 'appstoreconnect-v1' })).toString('base64url');
+    const vEsTamper = AppStoreConnectClient.verifikasiJWTES256(`${esParts[0]}.${tamperedPayload}.${esParts[2]}`, ecPub);
+    pastikan(!vEsTamper.valid, 'Manipulasi payload JWT ES256 wajib gagal verifikasi kriptografis');
+
+    // Gate persetujuan tidak boleh terlewat untuk channelIOS='appstore'
+    const pipeIosProd = new ReleasePipeline();
+    const resIosProd = await pipeIosProd.jalankan({
+      platform: 'ios',
+      channelIOS: 'appstore',
+      otomatisSetujuiNonProduksi: true,
+    });
+    pastikan(
+      resIosProd.membutuhkanPersetujuan && resIosProd.statusAkhir === 'menunggu_persetujuan',
+      'Pipeline App Store produksi wajib menuntut persetujuan eksplisit walau otomatisSetujuiNonProduksi=true'
+    );
+
+    // Uji GooglePlayClient tidak menutup-nutupi kegagalan HTTP GET/PUT track saat live mode
+    const errSrv = http.createServer((req, res) => {
+      res.statusCode = req.method === 'POST' && (req.url || '').endsWith('/edits') ? 200 : 500;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(res.statusCode === 200 ? JSON.stringify({ id: 'e_err' }) : JSON.stringify({ error: 'Track rejected' }));
+    });
+    await new Promise<void>((r) => errSrv.listen(0, '127.0.0.1', r));
+    const errAddr = errSrv.address() as any;
+    try {
+      const gpErr = new GooglePlayClient({
+        applicationId: 'id.nusantara.test',
+        packageName: 'id.nusantara.test',
+        defaultTrack: 'internal',
+        autoCommitEdit: false,
+        endpointApi: `http://127.0.0.1:${errAddr.port}/play`,
+      });
+      await gpErr.buatEdit(false);
+      let threwStatus = false;
+      try {
+        await gpErr.dapatkanStatusTrack('internal', false);
+      } catch {
+        threwStatus = true;
+      }
+      pastikan(threwStatus, 'GooglePlayClient.dapatkanStatusTrack mode live wajib gagal jujur saat HTTP 500');
+    } finally {
+      await new Promise<void>((r) => errSrv.close(() => r()));
+    }
+
+    const logRedacted = SecretProvider.bersihkanLogDariRahasia('GET /cb?token=secret123&ok=1');
+    pastikan(!logRedacted.includes('secret123'), 'SecretProvider.bersihkanLogDariRahasia wajib menyensor token query string');
+  }
+
   console.log('\n======================================================================');
   console.log(`HASIL PENGUJIAN FASE 41: ${ujiLulus}/${totalUji} LULUS`);
   console.log('Semua pengujian Fase 41 BERHASIL 100%!');

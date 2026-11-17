@@ -15,6 +15,8 @@ import { NavigatorTumpukanMobile } from '../navigation/stack_navigator';
 import { NavigatorTabMobile } from '../navigation/tab_navigator';
 import { NavigasiBawahMobile } from '../navigation/bottom_nav';
 import { PerenderMobile } from '../ui/mobile_renderer';
+import { DialogMobile, AlertMobile } from '../ui/overlay';
+import { DaftarMobile } from '../ui/list';
 import { JembatanMobileNative } from '../bridge/bridge';
 import { muatModulNode, apakahNodeRuntime } from '../../gui/platform/node_bridge';
 
@@ -156,21 +158,31 @@ export class HostPreviewMobile {
       }
     }
 
+    const securityHeaders: Record<string, string> = {
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'no-referrer',
+    };
+
     this.httpServer = http.createServer((req: any, res: any) => {
       const p = (req.url || '/').split('?')[0];
       if (p === '/health') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.writeHead(200, { ...securityHeaders, 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'ok', aplikasi: this.app.konfigurasi.nama, lifecycle: this.app.getStatus() }));
         return;
       }
       if (p === '/api/state') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.writeHead(200, { ...securityHeaders, 'Content-Type': 'application/json' });
         res.end(JSON.stringify(this.perender.bangunPohonUINative(this.app)));
         return;
       }
       const wsUrl = `ws://127.0.0.1:${this.portAktif}/ipc`;
       const html = this.perender.renderKeHTML(this.app, wsUrl);
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.writeHead(200, {
+        ...securityHeaders,
+        'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' ws://127.0.0.1:* ws://localhost:*",
+        'Content-Type': 'text/html; charset=utf-8',
+      });
       res.end(html);
     });
 
@@ -186,12 +198,39 @@ export class HostPreviewMobile {
 
     const WssCtor = wsMod?.WebSocketServer || wsMod?.default?.WebSocketServer;
     if (WssCtor) {
-      this.wss = new WssCtor({ server: this.httpServer, path: '/ipc' });
+      this.wss = new WssCtor({
+        server: this.httpServer,
+        path: '/ipc',
+        maxPayload: 256 * 1024,
+        verifyClient: (info: { origin?: string }) => {
+          const origin = info?.origin;
+          if (!origin) return true; // Izinkan klien native / Node.js non-browser tanpa Origin header
+          try {
+            const parsed = new URL(origin);
+            const host = parsed.hostname.toLowerCase();
+            if (host !== '127.0.0.1' && host !== 'localhost' && host !== '::1' && host !== '[::1]') {
+              return false;
+            }
+            const port = parsed.port ? Number(parsed.port) : parsed.protocol === 'https:' ? 443 : 80;
+            return port === this.portAktif;
+          } catch {
+            return false;
+          }
+        },
+      });
       this.wss.on('connection', (socket: any) => {
         socket.on('message', async (raw: any) => {
           try {
-            const msg = JSON.parse(String(raw));
-            await this.tanganiPesan(msg, socket);
+            const parsed = JSON.parse(String(raw));
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+              socket.send(JSON.stringify({ tipe: 'galat', pesan: 'Muatan IPC tidak valid.' }));
+              return;
+            }
+            if (Object.prototype.hasOwnProperty.call(parsed, '__proto__') || Object.prototype.hasOwnProperty.call(parsed, 'constructor')) {
+              socket.send(JSON.stringify({ tipe: 'galat', pesan: 'Muatan IPC ditolak demi keamanan.' }));
+              return;
+            }
+            await this.tanganiPesan(parsed, socket);
           } catch (err: any) {
             socket.send(JSON.stringify({ tipe: 'galat', pesan: err?.message || String(err) }));
           }
@@ -226,8 +265,8 @@ export class HostPreviewMobile {
   private async tanganiPesan(msg: any, socket: any): Promise<void> {
     if (msg.tipe === 'bridge_call') {
       const res = await JembatanMobileNative.dapatkanInstance().panggilNative(
-        msg.modul,
-        msg.metode,
+        String(msg.modul || ''),
+        String(msg.metode || ''),
         msg.argumen
       );
       socket.send(JSON.stringify({ tipe: 'bridge_respon', id: msg.id, sukses: true, data: res }));
@@ -241,7 +280,7 @@ export class HostPreviewMobile {
     }
 
     if (msg.idKomponen) {
-      const target = this.cariKomponen(msg.idKomponen);
+      const target = this.cariKomponen(String(msg.idKomponen));
       if (target) {
         if (msg.jenis === 'pilih_tab' && (target instanceof NavigatorTabMobile || target instanceof NavigasiBawahMobile)) {
           if (target instanceof NavigatorTabMobile) target.pilihTab(String(msg.kunci));
@@ -254,6 +293,18 @@ export class HostPreviewMobile {
           else if (target instanceof TombolRadioMobile) target.setTerpilih(Boolean(msg.nilaiLogika));
         } else if (msg.jenis === 'seleksi_berubah' && target instanceof DropdownMobile) {
           target.setTerpilih(String(msg.nilaiTeks ?? ''));
+        } else if (msg.jenis === 'dialog_tutup' && target instanceof DialogMobile) {
+          target.tutup();
+        } else if (msg.jenis === 'alert_konfirmasi' && target instanceof AlertMobile) {
+          const idx = target.tombol.findIndex((b) => b.peran !== 'batal');
+          if (idx >= 0) await target.klikTombol(idx);
+          else target.tutup();
+        } else if (msg.jenis === 'alert_batal' && target instanceof AlertMobile) {
+          const idx = target.tombol.findIndex((b) => b.peran === 'batal');
+          if (idx >= 0) await target.klikTombol(idx);
+          else target.tutup();
+        } else if (msg.jenis === 'tarik_refresh' && target instanceof DaftarMobile) {
+          await target.picuRefresh();
         } else {
           await target.picu(msg.jenis || 'klik', msg);
         }

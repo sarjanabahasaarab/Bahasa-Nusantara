@@ -40,6 +40,17 @@ export class OTAResourceManager {
     const awal = Date.now();
     this.stateManager.transisi('downloading', 'Mengunduh paket resource OTA...');
 
+    // 0. Validasi skema manifest, tipe ekstensi aman, batas ukuran, dan expirationDate
+    const { ManifestValidator } = await import('../manifest/ManifestValidator');
+    const validasiSkema = ManifestValidator.validasi(manifest);
+    if (!validasiSkema.valid) {
+      this.stateManager.transisi('failed', `Skema manifest tidak valid: ${validasiSkema.pesanGalat.join(', ')}`);
+      return {
+        sukses: false,
+        pesan: `Skema manifest OTA ditolak: ${validasiSkema.pesanGalat.join(', ')}`,
+      };
+    }
+
     // 1. Verifikasi Tanda Tangan Digital Manifest terlebih dahulu
     const verifSignature = SignatureVerifier.verifikasi(manifest);
     if (!verifSignature.valid) {

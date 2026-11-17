@@ -35,6 +35,10 @@ export class PapanKlipMobile {
     return this.isiMemori;
   }
 
+  public static ambilTeksSinkron(): string {
+    return this.isiMemori;
+  }
+
   public static memilikiTeks(): boolean {
     return Boolean(this.isiMemori && this.isiMemori.length > 0);
   }

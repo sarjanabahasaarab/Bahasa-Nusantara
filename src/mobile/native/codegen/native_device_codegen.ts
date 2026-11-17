@@ -6,10 +6,19 @@
  * Generator Plugin Perangkat Native Nyata (Kotlin Android & Swift iOS Device API Codegen)
  */
 
+function sanitasiIdAplikasi(id: string): string {
+  const bersih = String(id || '').replace(/[^A-Za-z0-9_.]/g, '');
+  if (!bersih || !/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$/.test(bersih)) {
+    return 'id.nusantara.app';
+  }
+  return bersih;
+}
+
 export class GeneratorPluginPerangkatNative {
   public static hasilkanPluginAndroid(appId: string = 'id.nusantara.app'): string {
+    const safeAppId = sanitasiIdAplikasi(appId);
     return `// Dihasilkan otomatis oleh Nusantara Mobile Native Device API Codegen (Phase 38)
-package ${appId}
+package ${safeAppId}
 
 import android.Manifest
 import android.app.NotificationChannel
@@ -258,6 +267,7 @@ class NusantaraDeviceApiPlugin(
     }
 
     private fun resolveSandboxFile(relPath: String): File? {
+        if (relPath.isBlank() || relPath.contains('\u0000') || File(relPath).isAbsolute) return null
         val root = File(context.filesDir, "nusantara_sandbox").canonicalFile
         root.mkdirs()
         val target = File(root, relPath).canonicalFile
@@ -322,6 +332,7 @@ class NusantaraDeviceApiPlugin(
   }
 
   public static hasilkanPluginIOS(bundleId: string = 'id.nusantara.app'): string {
+    const safeBundleId = sanitasiIdAplikasi(bundleId).replace(/["\\]/g, '');
     return `// Dihasilkan otomatis oleh Nusantara Mobile Native Device API Codegen (Phase 38)
 import Foundation
 import UIKit
@@ -336,7 +347,7 @@ import Security
 
 @MainActor
 final class NusantaraDeviceApiPlugin: NSObject, CLLocationManagerDelegate, CBCentralManagerDelegate {
-    private let bundleId: String = "${bundleId}"
+    private let bundleId: String = "${safeBundleId}"
     private let locationManager = CLLocationManager()
     private let motionManager = CMMotionManager()
     private let pathMonitor = NWPathMonitor()
@@ -535,10 +546,11 @@ final class NusantaraDeviceApiPlugin: NSObject, CLLocationManagerDelegate, CBCen
     }
 
     private func resolveSandboxURL(_ relPath: String) -> URL? {
+        if relPath.isEmpty || relPath.contains("\\0") || relPath.hasPrefix("/") { return nil }
         guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return nil }
-        let root = docs.appendingPathComponent("nusantara_sandbox", isDirectory: true).standardizedFileURL
+        let root = docs.appendingPathComponent("nusantara_sandbox", isDirectory: true).resolvingSymlinksInPath().standardizedFileURL
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let target = root.appendingPathComponent(relPath).standardizedFileURL
+        let target = root.appendingPathComponent(relPath).resolvingSymlinksInPath().standardizedFileURL
         guard target.path.hasPrefix(root.path + "/") else { return nil }
         return target
     }

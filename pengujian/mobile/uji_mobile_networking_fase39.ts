@@ -730,6 +730,105 @@ async function jalankanSemuaUji() {
     }
   });
 
+  // ---------------------------------------------------------------------------
+  // [18] Pengujian Keamanan & Regresi Jaringan Mobile (Phase 39)
+  // ---------------------------------------------------------------------------
+  console.log('\n[18] Keamanan TLS, Anti-CRLF, Pembatalan AbortSignal, & Integritas Data');
+  await ujiAsync('18.1 Penegakan TLS & Penolakan Kredensial URL + CRLF Injection Header', async () => {
+    const klienTLS = new KlienAPIMobile({ baseUrl: 'http://api.eksternal-tidak-aman.com' });
+    let tlsDitolak = false;
+    try {
+      await klienTLS.dapatkan('/status');
+    } catch (e: any) {
+      tlsDitolak = String(e.message).includes('Kebijakan TLS menolak');
+    }
+    pastikan(tlsDitolak, 'HTTP polos ke host eksternal dengan validasiTLS=true wajib ditolak');
+
+    const cekKred = LapisanKeamananMobile.validasiUrlAman('https://user:secret@api.nusantara.id/v1', 'produksi');
+    samaDengan(cekKred.valid, false, 'URL berisi kredensial tertanam wajib ditolak');
+
+    let crlfDitolak = false;
+    try {
+      LapisanKeamananMobile.sanitasiHeader({ 'X-Custom': 'nilai\r\nEvil: true' });
+    } catch {
+      crlfDitolak = true;
+    }
+    pastikan(crlfDitolak, 'Header mengandung CRLF wajib ditolak');
+  });
+
+  await ujiAsync('18.2 Deteksi Klaim Role Bersarang, Traversal DB REST, & Validasi Skema WebSocket', async () => {
+    const cekNested = LapisanKeamananMobile.periksaKlaimKlien({ profil: { nama: 'Ali', is_admin: true } });
+    samaDengan(cekNested.aman, false, 'Klaim is_admin bersarang di nested object wajib ditolak');
+
+    const apiMock = new KlienAPIMobile({ baseUrl: 'https://api.nusantara.test' });
+    const db = new KlienDatabaseCloudMobile(apiMock, '/api/v1/db');
+    const dbTrav = await db.ambilBerdasarkanId('produk', '../../admin/users');
+    samaDengan(dbTrav.sukses, false, 'ID dengan path traversal wajib ditolak sebelum request dikirim');
+
+    let wsDitolak = false;
+    try {
+      new KlienWebSocketMobile({ url: 'http://bukan-ws.example.com' });
+    } catch {
+      wsDitolak = true;
+    }
+    pastikan(wsDitolak, 'Skema non-ws/wss pada KlienWebSocketMobile wajib ditolak');
+
+    let wsPlainEksternalDitolak = false;
+    try {
+      new KlienWebSocketMobile({ url: 'ws://publik.example.com/ws', wajibWssEksternal: true });
+    } catch {
+      wsPlainEksternalDitolak = true;
+    }
+    pastikan(wsPlainEksternalDitolak, 'ws:// polos ke host eksternal saat wajibWssEksternal=true wajib ditolak');
+  });
+
+  await ujiAsync('18.3 Pembatalan AbortController menghentikan retry secara langsung & Storage S3 menolak traversal', async () => {
+    const manajer = ManajerPermintaanMobile.dapatkanInstance();
+    const ac = new AbortController();
+    let percobaan = 0;
+
+    setTimeout(() => ac.abort(), 15);
+    let aborted = false;
+    try {
+      await manajer.eksekusiDenganRetry(
+        async () => {
+          percobaan++;
+          throw new Error('Gagal sementara');
+        },
+        { cobaUlangMaks: 5, jedaAwalMs: 2000, signal: ac.signal }
+      );
+    } catch {
+      aborted = true;
+    }
+    pastikan(aborted && percobaan === 1, 'AbortSignal wajib menghentikan retry backoff seketika');
+
+    const s3 = new AdaptorStorageS3('https://s3.ap-southeast-1.amazonaws.com', 'bucket-uji');
+    const badS3 = await s3.unggah({ namaBerkas: '../..', konten: 'x' });
+    samaDengan(badS3.sukses, false, 'Nama berkas kosong pasca-sanitasi S3 wajib ditolak');
+  });
+
+  await ujiAsync('18.4 Verifikasi KlienAPIMobile tidak mengembalikan 200 palsu saat server loopback mati', async () => {
+    // Gunakan port ephemeral yang dipastikan sudah ditutup
+    const srv = http.createServer();
+    await new Promise<void>((r) => srv.listen(0, '127.0.0.1', r));
+    const portMati = (srv.address() as any).port;
+    await new Promise<void>((r) => srv.close(() => r()));
+
+    const klienMati = new KlienAPIMobile({
+      baseUrl: `http://127.0.0.1:${portMati}`,
+      cobaUlangMaks: 1,
+      batasWaktuMs: 1000,
+      antreanOffline: false,
+    });
+    let gagalNyata = false;
+    try {
+      await klienMati.dapatkan('/cek');
+    } catch {
+      gagalNyata = true;
+    }
+    pastikan(gagalNyata, 'Koneksi ke port loopback yang mati wajib gagal jujur (tidak boleh palsu 200 OK)');
+  });
+
   console.log('\n======================================================================');
   console.log(`HASIL PENGUJIAN FASE 39: ${totalLulus}/${totalUji} LULUS`);
   if (totalGagal > 0) {

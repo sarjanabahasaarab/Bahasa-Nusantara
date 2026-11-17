@@ -1,0 +1,50 @@
+gunakan "gui" sebagai ui
+
+fungsi saatSimpanPengaturan(evt : peta)
+mulai
+    tampilkan("Menyimpan konfigurasi pengguna...")
+selesai
+
+program PengaturanAkunDesktop
+mulai
+    tampilkan("Membuka Pengaturan Akun Desktop NUSANTARA...")
+
+    aplikasi : peta = ui.buatAplikasi({
+        id: "id.nusantara.pengaturan",
+        nama: "Pengaturan Akun",
+        temaAwal: "terang"
+    })
+
+    jendela : peta = aplikasi.buatJendela({
+        judul: "Pengaturan Profil & Preferensi Desktop",
+        lebar: 640,
+        tinggi: 520
+    })
+
+    inputEmail : peta = ui.buatInputTeks("Email Pengguna", { nilaiAwal: "dev@nusantara.org", wajib: benar })
+    inputSandi : peta = ui.buatInputTeks("Kata Sandi Baru", { kataSandi: benar, nilaiAwal: "Rahasia123!" })
+
+    validator : peta = ui.buatFormValidator()
+    validator.tambahAturan("email", { wajib: benar, panjangMin: 5 })
+    hasilValidasi : peta = validator.validasi({ email: inputEmail.getNilai() })
+
+    pilihanBahasa : peta = ui.buatPilihan(["Bahasa Indonesia", "English", "Bahasa Daerah"], "Bahasa Indonesia")
+    radioTerang : peta = ui.buatTombolRadio("Tema Terang", "terang", "tema_akun")
+    radioGelap : peta = ui.buatTombolRadio("Tema Gelap", "gelap", "tema_akun")
+    sliderFont : peta = ui.buatSlider(10, 24, 14)
+    tombolSimpan : peta = ui.buatTombol("Simpan Pengaturan", saatSimpanPengaturan)
+
+    wadah : peta = ui.buatKolom([
+        ui.buatLabel("Pengaturan Akun & Tampilan", { ukuranFont: 18 }),
+        inputEmail,
+        inputSandi,
+        pilihanBahasa,
+        ui.buatBaris([radioTerang, radioGelap], { jarak: 16 }),
+        ui.buatLabel("Ukuran Font (10 - 24 px)"),
+        sliderFont,
+        tombolSimpan
+    ], { jarak: 10 })
+
+    jendela.setKonten(wadah)
+    tampilkan("Validasi formulir pengaturan sah:", hasilValidasi["sah"])
+selesai

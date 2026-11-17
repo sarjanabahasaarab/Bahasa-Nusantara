@@ -51,6 +51,13 @@ export class CredentialManager {
     // Periksa jalur berkas jika di lingkungan Node
     const jalurBerkas = konfig.serviceAccountKeyPath || SecretProvider.ambilDariEnv('GOOGLE_APPLICATION_CREDENTIALS');
     if (jalurBerkas) {
+      if (jalurBerkas.includes('\0')) {
+        return {
+          ditemukan: false,
+          sumber: 'berkas',
+          validasi: { valid: false, daftarGalat: ['Jalur berkas kredensial mengandung karakter NUL ilegal.'], pesanPeringatan: [] },
+        };
+      }
       const isNode = typeof window === 'undefined' && typeof process !== 'undefined' && Boolean(process?.versions?.node);
       if (isNode && typeof (fs as any)?.existsSync === 'function') {
         try {
@@ -113,7 +120,7 @@ export class CredentialManager {
 
     let sumber: 'env' | 'berkas' | 'tidak_ada' = privateKey ? 'env' : 'tidak_ada';
 
-    if (!privateKey && konfig.privateKeyPath) {
+    if (!privateKey && konfig.privateKeyPath && !konfig.privateKeyPath.includes('\0')) {
       const isNode = typeof window === 'undefined' && typeof process !== 'undefined' && Boolean(process?.versions?.node);
       if (isNode && typeof (fs as any)?.existsSync === 'function') {
         try {

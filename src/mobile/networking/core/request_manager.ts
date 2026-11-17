@@ -8,7 +8,6 @@
 
 import * as crypto from 'node:crypto';
 import { PrioritasPermintaan } from '../types';
-import { LapisanKeamananMobile } from '../security/cloud_security';
 
 export interface TugasPermintaan<T = any> {
   id: string;
@@ -25,7 +24,9 @@ export class ManajerPermintaanMobile {
   private static instance: ManajerPermintaanMobile;
   private antrean: TugasPermintaan[] = [];
   private permintaanAktif: number = 0;
+  private pengendaliAktif: Set<AbortController> = new Set();
   private readonly batasKonkurensi: number = 4;
+  private readonly maksCacheIdempotency: number = 500;
   private cacheIdempotency: Map<string, any> = new Map();
 
   private constructor() {}
@@ -71,6 +72,12 @@ export class ManajerPermintaanMobile {
         eksekutor,
         resolve: (val) => {
           if (idempotencyKey) {
+            if (this.cacheIdempotency.size >= this.maksCacheIdempotency) {
+              const kunciPertama = this.cacheIdempotency.keys().next().value;
+              if (kunciPertama !== undefined) {
+                this.cacheIdempotency.delete(kunciPertama);
+              }
+            }
             this.cacheIdempotency.set(idempotencyKey, val);
           }
           resolve(val);
@@ -87,6 +94,9 @@ export class ManajerPermintaanMobile {
   }
 
   public batalkanSemua(): void {
+    for (const ctrl of this.pengendaliAktif) {
+      ctrl.abort();
+    }
     for (const tugas of this.antrean) {
       if (tugas.sinyalPembatal) {
         tugas.sinyalPembatal.abort();
@@ -135,6 +145,9 @@ export class ManajerPermintaanMobile {
     if (!tugas) return;
 
     this.permintaanAktif += 1;
+    if (tugas.sinyalPembatal) {
+      this.pengendaliAktif.add(tugas.sinyalPembatal);
+    }
 
     try {
       const hasil = await tugas.eksekutor(tugas.sinyalPembatal?.signal);
@@ -142,6 +155,9 @@ export class ManajerPermintaanMobile {
     } catch (err) {
       tugas.reject(err);
     } finally {
+      if (tugas.sinyalPembatal) {
+        this.pengendaliAktif.delete(tugas.sinyalPembatal);
+      }
       this.permintaanAktif -= 1;
       // Lanjutkan memproses antrean berikutnya
       setTimeout(() => this.prosesAntrean(), 0);
@@ -149,11 +165,11 @@ export class ManajerPermintaanMobile {
   }
 
   /**
-   * Pembantu retry dengan exponential backoff dan jitter
+   * Pembantu retry dengan exponential backoff, jitter, dan dukungan pembatalan AbortSignal
    */
   public async eksekusiDenganRetry<T>(
     operasi: () => Promise<T>,
-    opsi: { cobaUlangMaks?: number; jedaAwalMs?: number; faktor?: number; izinkan?: boolean } = {}
+    opsi: { cobaUlangMaks?: number; jedaAwalMs?: number; faktor?: number; izinkan?: boolean; signal?: AbortSignal } = {}
   ): Promise<T> {
     const maks = opsi.cobaUlangMaks ?? 3;
     const jedaAwal = opsi.jedaAwalMs ?? 400;
@@ -164,17 +180,31 @@ export class ManajerPermintaanMobile {
     let jeda = jedaAwal;
 
     while (true) {
+      if (opsi.signal?.aborted) {
+        throw new Error('Permintaan jaringan dibatalkan.');
+      }
       try {
         return await operasi();
       } catch (err: any) {
         percobaan++;
-        if (!diizinkan || percobaan >= maks) {
+        if (opsi.signal?.aborted || !diizinkan || percobaan >= maks) {
           throw err;
         }
 
-        // Tambahkan jitter acak ±20%
         const jitter = jeda * (0.8 + Math.random() * 0.4);
-        await new Promise((r) => setTimeout(r, jitter));
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            opsi.signal?.removeEventListener('abort', onAbort);
+            resolve();
+          }, jitter);
+          const onAbort = () => {
+            clearTimeout(timer);
+            reject(new Error('Permintaan jaringan dibatalkan saat menunggu retry.'));
+          };
+          if (opsi.signal) {
+            opsi.signal.addEventListener('abort', onAbort, { once: true });
+          }
+        });
         jeda *= faktor;
       }
     }

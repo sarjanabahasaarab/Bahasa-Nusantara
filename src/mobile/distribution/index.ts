@@ -11,6 +11,7 @@ export * from './config/DistributionConfig';
 export * from './config/AndroidConfig';
 export * from './config/IOSConfig';
 export * from './core/VersionManager';
+export * from './core/ZipBuilder';
 export * from './core/BuildManager';
 export * from './core/ReleaseManager';
 export * from './core/DistributionManager';

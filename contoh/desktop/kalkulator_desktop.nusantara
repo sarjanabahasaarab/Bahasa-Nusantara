@@ -1,0 +1,41 @@
+gunakan "gui" sebagai ui
+
+fungsi saatTekanAngka(evt : peta)
+mulai
+    tampilkan("Tombol kalkulator ditekan:", evt["idWidget"])
+selesai
+
+program KalkulatorDesktopNusantara
+mulai
+    tampilkan("Menginisialisasi Kalkulator Desktop NUSANTARA...")
+
+    aplikasi : peta = ui.buatAplikasi({
+        id: "id.nusantara.kalkulator",
+        nama: "Kalkulator Nusantara",
+        temaAwal: "terang"
+    })
+
+    jendela : peta = aplikasi.buatJendela({
+        judul: "Kalkulator Desktop NUSANTARA",
+        lebar: 360,
+        tinggi: 480
+    })
+
+    layar : peta = ui.buatInputTeks("0", { nilaiAwal: "42 + 8 = 50", hanyaBaca: benar })
+    gridTombol : peta = ui.buatGrid(4)
+    daftarTombol : daftar = ["7", "8", "9", "/", "4", "5", "6", "*", "1", "2", "3", "-", "C", "0", "=", "+"]
+
+    untuk i dari 0 sampai 15 lakukan
+        btn : peta = ui.buatTombol(daftarTombol[i], saatTekanAngka)
+        gridTombol.tambahAnak(btn)
+    akhir
+
+    wadah : peta = ui.buatKolom([
+        ui.buatLabel("Kalkulator Ilmiah Desktop", { ukuranFont: 18 }),
+        layar,
+        gridTombol
+    ], { jarak: 12 })
+
+    jendela.setKonten(wadah)
+    tampilkan("Kalkulator Desktop siap: 16 tombol terpasang dalam grid 4 kolom.")
+selesai

@@ -82,6 +82,9 @@ export interface NativeBuildOptions {
   sourceCode?: string;
   appName?: string;
   target?: string;
+  mode?: 'debug' | 'release';
+  targetCpu?: string;
+  abi?: string;
   outputDirectory: string;
   optLevel?: LLVMOptLevel;
   linkingMode?: LinkingMode;
@@ -99,6 +102,9 @@ export interface NativeBuildResult {
   target: string;
   canonicalTarget?: CanonicalDesktopTarget;
   triple: string;
+  abi?: string;
+  targetCpu?: string;
+  mode?: 'debug' | 'release';
   isCross: boolean;
   linkingMode: LinkingMode;
   actualStaticLink: boolean;

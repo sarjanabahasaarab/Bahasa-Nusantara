@@ -34,6 +34,12 @@ export class NativeBuildPipeline {
     const strictTarget = TargetTripleManager.resolveStrict(requestedTarget);
     const targetInfo = strictTarget.info;
     const linkingMode: LinkingMode = options.linkingMode || 'auto';
+    const effectiveMode: 'debug' | 'release' = options.mode || (options.debug ? 'debug' : 'release');
+    const effectiveOptLevel = options.optLevel || (effectiveMode === 'debug' ? 'O0' : 'O2');
+    const effectiveDebug = options.debug ?? effectiveMode === 'debug';
+    const effectiveStrip = options.strip ?? effectiveMode === 'release';
+    const effectiveCpu = options.targetCpu || targetInfo.defaultCpu;
+    const effectiveAbi = options.abi || targetInfo.abi;
 
     // PREFLIGHT 1: Validasi target triple
     if (!strictTarget.supported || !targetInfo.targetId) {
@@ -246,7 +252,8 @@ export class NativeBuildPipeline {
     const aot = new AOTCompiler(options.customToolchainPath);
     const irRes = aot.compileSource(sourceCode, {
       targetTriple: targetInfo.triple,
-      optLevel: options.optLevel || 'O2',
+      optLevel: effectiveOptLevel,
+      debug: effectiveDebug,
       emitLLVM: true,
       emitObject: false,
       emitLLVMOnly: true,
@@ -345,8 +352,8 @@ export class NativeBuildPipeline {
       objectFiles: [objPath],
       outputExecutable: exePath,
       isStatic: wantStatic,
-      debug: options.debug,
-      strip: options.strip,
+      debug: effectiveDebug,
+      strip: effectiveStrip,
       sysroot: options.sysroot || capability.sysroot,
       libraryPaths: options.libraryPaths,
       targetTriple: targetInfo.triple,
@@ -513,6 +520,9 @@ export class NativeBuildPipeline {
       target: canonicalTarget,
       canonicalTarget,
       triple: targetInfo.triple,
+      abi: effectiveAbi,
+      targetCpu: effectiveCpu,
+      mode: effectiveMode,
       isCross: targetInfo.isCross,
       linkingMode,
       actualStaticLink: Boolean(depReport.isStatic || wantStatic),

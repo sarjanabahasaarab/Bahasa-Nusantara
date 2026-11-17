@@ -36,22 +36,74 @@ export interface HasilKemasDesktop {
   manifestPath: string;
 }
 
+function escapeXml(teks: string): string {
+  return teks
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function escapePosixDoubleQuoted(teks: string): string {
+  return teks.replace(/([\\"$`])/g, '\\$1');
+}
+
+function escapeBatchArg(teks: string): string {
+  return teks.replace(/["&|<>^%]/g, '');
+}
+
 export class PengemasAplikasiDesktop {
   private readonly perender = new PerenderDesktop();
 
   private hitungSha256(isi: Uint8Array | string): string {
     const crypto = muatModulNode<any>('crypto');
-    if (crypto && typeof crypto.createHash === 'function') {
-      return crypto.createHash('sha256').update(isi).digest('hex');
+    if (!crypto || typeof crypto.createHash !== 'function') {
+      throw new Error('Modul Node.js crypto tidak tersedia untuk menghitung SHA-256 paket desktop.');
     }
-    // Fallback deterministik apabila modul crypto Node tidak ada
-    const str = typeof isi === 'string' ? isi : Array.from(isi).join(',');
-    let h = 0x811c9dc5;
-    for (let i = 0; i < str.length; i++) {
-      h ^= str.charCodeAt(i);
-      h = Math.imul(h, 0x01000193);
+    return crypto.createHash('sha256').update(isi).digest('hex');
+  }
+
+  public verifikasiBundel(direktoriBundel: string): { valid: boolean; totalBerkas: number; galat: string[] } {
+    const fs = muatModulNode<any>('fs');
+    const path = muatModulNode<any>('path');
+    if (!fs || !path) {
+      throw new Error('Verifikasi bundel desktop membutuhkan runtime Node.js (fs & path).');
     }
-    return (h >>> 0).toString(16).padStart(64, '0');
+
+    const galat: string[] = [];
+    const manifestPath = path.join(direktoriBundel, 'manifest.json');
+    const shaPath = path.join(direktoriBundel, 'SHA256SUMS');
+
+    if (!fs.existsSync(manifestPath)) galat.push('manifest.json tidak ditemukan');
+    if (!fs.existsSync(shaPath)) galat.push('SHA256SUMS tidak ditemukan');
+    if (galat.length > 0) return { valid: false, totalBerkas: 0, galat };
+
+    const baris = fs.readFileSync(shaPath, 'utf-8').split(/\r?\n/).filter((l: string) => l.trim().length > 0);
+    for (const line of baris) {
+      const m = line.match(/^([a-f0-9]{64})\s{2}(.+)$/);
+      if (!m) {
+        galat.push(`Format SHA256SUMS tidak valid: ${line}`);
+        continue;
+      }
+      const [, expectedHash, relPath] = m;
+      const fullPath = path.resolve(direktoriBundel, relPath);
+      const baseResolved = path.resolve(direktoriBundel);
+      if (!fullPath.startsWith(baseResolved + path.sep)) {
+        galat.push(`Path traversal terdeteksi pada SHA256SUMS: ${relPath}`);
+        continue;
+      }
+      if (!fs.existsSync(fullPath)) {
+        galat.push(`Berkas hilang dari bundel: ${relPath}`);
+        continue;
+      }
+      const actualHash = this.hitungSha256(fs.readFileSync(fullPath));
+      if (actualHash !== expectedHash) {
+        galat.push(`Checksum tidak cocok untuk ${relPath}: diharapkan ${expectedHash}, aktual ${actualHash}`);
+      }
+    }
+
+    return { valid: galat.length === 0, totalBerkas: baris.length, galat };
   }
 
   public kemas(opsi: OpsiKemasDesktop): HasilKemasDesktop {
@@ -62,9 +114,10 @@ export class PengemasAplikasiDesktop {
       throw new Error('Pengemasan berkas desktop membutuhkan runtime Node.js (fs & path).');
     }
 
-    const namaAman = opsi.konfig.namaAplikasi.replace(/[^a-zA-Z0-9_-]/g, '-');
-    const idApp = opsi.konfig.idAplikasi || 'id.nusantara.desktop';
-    const versi = opsi.konfig.versi || '1.0.0';
+    const namaAman = opsi.konfig.namaAplikasi.replace(/[^a-zA-Z0-9_-]/g, '-') || 'NusantaraApp';
+    const idApp = (opsi.konfig.idAplikasi || 'id.nusantara.desktop').replace(/[^a-zA-Z0-9._-]/g, '') || 'id.nusantara.desktop';
+    const versi = (opsi.konfig.versi || '1.0.0').replace(/[^a-zA-Z0-9.+_-]/g, '') || '1.0.0';
+    const skripPosix = escapePosixDoubleQuoted(opsi.jalurSkripNusantara || 'src/utama.nusantara');
     const svgIkon = this.perender.renderKeSVG(opsi.jendelaUtama);
     const bmpSnapshot = this.perender.renderKeFramebuffer(opsi.jendelaUtama).eksporBMP();
     const htmlShell = this.perender.renderKeHTML(opsi.jendelaUtama);
@@ -79,9 +132,10 @@ export class PengemasAplikasiDesktop {
       adaptor.inisialisasi(opsi.konfig);
       const sumberC = adaptor.hasilkanSumberHostNative(opsi.jendelaUtama);
 
+      const namaDesktop = opsi.konfig.namaAplikasi.replace(/[\r\n]/g, ' ');
       const desktopEntry = `[Desktop Entry]
 Type=Application
-Name=${opsi.konfig.namaAplikasi}
+Name=${namaDesktop}
 Exec=${idApp}
 Icon=${idApp}
 Categories=Utility;Development;
@@ -94,7 +148,7 @@ HERE="$(dirname "$(readlink -f "$0")")"
 if [ -x "$HERE/usr/bin/${idApp}" ]; then
   exec "$HERE/usr/bin/${idApp}" "$@"
 fi
-exec nusantara desktop run "${opsi.jalurSkripNusantara || 'src/utama.nusantara'}"
+exec nusantara desktop run "${skripPosix}"
 `;
       berkasTercatat.push(
         { relatif: 'AppRun', isi: appRun, exec: true },
@@ -116,13 +170,13 @@ exec nusantara desktop run "${opsi.jalurSkripNusantara || 'src/utama.nusantara'}
 <plist version="1.0">
 <dict>
   <key>CFBundleExecutable</key>
-  <string>${idApp}</string>
+  <string>${escapeXml(idApp)}</string>
   <key>CFBundleIdentifier</key>
-  <string>${idApp}</string>
+  <string>${escapeXml(idApp)}</string>
   <key>CFBundleName</key>
-  <string>${opsi.konfig.namaAplikasi}</string>
+  <string>${escapeXml(opsi.konfig.namaAplikasi)}</string>
   <key>CFBundleShortVersionString</key>
-  <string>${versi}</string>
+  <string>${escapeXml(versi)}</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>NSHighResolutionCapable</key>
@@ -147,15 +201,16 @@ exec nusantara desktop run "$DIR/Resources/utama.nusantara"
       const adaptor = new AdaptorDesktopWindows();
       adaptor.inisialisasi(opsi.konfig);
       const sumberC = adaptor.hasilkanSumberHostNative(opsi.jendelaUtama);
+      const winVersion = /^\d+\.\d+\.\d+$/.test(versi) ? `${versi}.0` : '1.0.0.0';
       const winManifest = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
-  <assemblyIdentity version="${versi}.0" processorArchitecture="amd64" name="${idApp}" type="win32"/>
-  <description>${opsi.konfig.namaAplikasi}</description>
+  <assemblyIdentity version="${escapeXml(winVersion)}" processorArchitecture="amd64" name="${escapeXml(idApp)}" type="win32"/>
+  <description>${escapeXml(opsi.konfig.namaAplikasi)}</description>
 </assembly>
 `;
       const runBat = `@echo off
 setlocal
-nusantara desktop run "%~dp0resources\\utama.nusantara"
+nusantara desktop run "%~dp0resources\\${escapeBatchArg(path.basename(opsi.jalurSkripNusantara || 'utama.nusantara'))}"
 `;
       berkasTercatat.push(
         { relatif: `${idApp}.bat`, isi: runBat },

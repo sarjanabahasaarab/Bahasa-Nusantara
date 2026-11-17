@@ -1,0 +1,49 @@
+gunakan "gui" sebagai ui
+
+fungsi saatTambahTugas(evt : peta)
+mulai
+    tampilkan("Menambah tugas baru melalui:", evt["idWidget"])
+selesai
+
+program ManajerTugasDesktop
+mulai
+    tampilkan("Menjalankan Manajer Tugas Desktop NUSANTARA...")
+
+    aplikasi : peta = ui.buatAplikasi({
+        id: "id.nusantara.tugas",
+        nama: "Manajer Tugas",
+        temaAwal: "terang"
+    })
+
+    jendela : peta = aplikasi.buatJendela({
+        judul: "Manajer Tugas Produktif NUSANTARA",
+        lebar: 680,
+        tinggi: 520
+    })
+
+    judul : peta = ui.buatLabel("Daftar Pekerjaan Harian", { ukuranFont: 20 })
+    inputTugas : peta = ui.buatInputTeks("Tambahkan tugas baru...")
+    tombolTambah : peta = ui.buatTombol("Tambah", saatTambahTugas)
+
+    daftarTugas : peta = ui.buatDaftar([
+        "[x] Audit Layout Engine Phase 36",
+        "[x] Verifikasi Framebuffer BMP & PPM",
+        "[ ] Uji Aplikasi Lintas OS"
+    ])
+    daftarTugas.tambahItem("[ ] Kemas AppDir Linux")
+
+    progresSelesai : peta = ui.buatProgres(2, 4)
+    centangFilter : peta = ui.buatKotakCentang("Tampilkan hanya tugas aktif", salah)
+
+    wadah : peta = ui.buatKolom([
+        judul,
+        ui.buatBaris([inputTugas, tombolTambah], { jarak: 8 }),
+        centangFilter,
+        daftarTugas,
+        ui.buatLabel("Progres Penyelesaian (50%)"),
+        progresSelesai
+    ], { jarak: 12 })
+
+    jendela.setKonten(wadah)
+    tampilkan("Manajer Tugas siap dengan 4 item tugas dan indikator progres.")
+selesai

@@ -449,11 +449,121 @@ selesai
       const aktif = ActivationManager.dapatkanInstance().bacaResource('assets/themes/garuda_v2.json');
       tegas(aktif instanceof Uint8Array && aktif.byteLength === payloadBytes.byteLength, 'Activated payload bytes must match HTTP response');
 
-      // 3. Uji rollback ke versi sebelumnya
+      // 3. Uji rollback ke versi sebelumnya & verifikasi pemulihan file/versi nyata
       const rb = um.rollbackResource();
       tegas(rb.sukses === true, `Rollback after live OTA failed: ${rb.pesan}`);
+      tegas(um.dapatkanVersiTerpasang() === '0.42.0', `Expected version restored to 0.42.0, got ${um.dapatkanVersiTerpasang()}`);
+      tegas(ActivationManager.dapatkanInstance().dapatkanVersiAktif() === '0.42.0', 'ActivationManager active version must be restored to 0.42.0');
+      tegas(ActivationManager.dapatkanInstance().bacaResource('assets/themes/garuda_v2.json') === undefined, 'Rolled-back OTA resource must be removed');
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  // --- 11. Security Hardening, Anti-Downgrade/Replay, Expired Manifest & Health-Check Auto-Rollback ---
+  console.log('\n[KELOMPOK 11] Audit Keamanan URL, Anti-Downgrade/Replay, Kedaluwarsa & Health-Check Auto-Rollback');
+  await uji('UpdateSecurityPolicy menolak subdomain spoofing HTTP, kredensial tertanam, NUL byte & encoded traversal', () => {
+    tegas(UpdateSecurityPolicy.validasiURL('http://localhost.evil.com/manifest.json').valid === false, 'Subdomain spoofing http://localhost.evil.com must be rejected');
+    tegas(UpdateSecurityPolicy.validasiURL('https://user:pass@cdn.nusantara.id/m.json').valid === false, 'Embedded URL credentials must be rejected');
+    tegas(UpdateSecurityPolicy.validasiURL('http://127.0.0.1:8080/m.json').valid === true, 'Loopback HTTP IP must remain allowed for local dev');
+    tegas(UpdateSecurityPolicy.validasiURL('https://cdn.nusantara.id/m.json').valid === true, 'HTTPS CDN URL must be allowed');
+    tegas(UpdateSecurityPolicy.periksaPathTraversal('assets/ok.json\0.txt').valid === false, 'NUL byte path must be rejected');
+    tegas(UpdateSecurityPolicy.periksaPathTraversal('assets/%2e%2e/secret.json').valid === false, 'URL-encoded traversal %2e%2e must be rejected');
+  });
+
+  await uji('UpdateManager menolak applicationId berbeda, downgrade versi, replay revisi, dan manifest kedaluwarsa', async () => {
+    const { kunciPublikPem, kunciPrivatPem, fingerprintHex } = SignatureVerifier.buatPasanganKunciEd25519();
+    const keyId = 'nusantara-ota-hardening-2026';
+    TrustManager.dapatkanInstance().daftarkanKunci({
+      keyId,
+      algoritma: 'Ed25519',
+      kunciPublikHex: fingerprintHex,
+      kunciPublikPem,
+      deskripsi: 'Hardening Test Key',
+      tanggalDibuat: new Date().toISOString(),
+      aktif: true,
+    });
+
+    const content = Buffer.from(JSON.stringify({ ok: true }));
+    const sha256 = HashValidator.hitungSHA256(content);
+    let currentContent = content;
+
+    const srv = http.createServer((req, res) => {
+      if (req.url === '/res.json') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(currentContent);
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    await new Promise<void>((r) => srv.listen(0, '127.0.0.1', () => r()));
+    const { port } = srv.address() as { port: number };
+    const resUrl = `http://127.0.0.1:${port}/res.json`;
+
+    try {
+      const um = UpdateManager.dapatkanInstance();
+      um.konfigurasiAplikasi('id.nusantara.secure', '1.2.0', 'android', 3);
+
+      const baseManifest = (overrides: Partial<ManifestPembaruan>): ManifestPembaruan =>
+        SignatureVerifier.tandaTangani(
+          {
+            schemaVersion: 1,
+            applicationId: 'id.nusantara.secure',
+            platform: 'android',
+            channel: 'stable',
+            releaseVersion: '1.3.0',
+            minimumSupportedVersion: '1.0.0',
+            updateType: 'ota_resource',
+            policy: 'disarankan',
+            releaseDate: new Date().toISOString(),
+            revision: 1,
+            releaseNotes: { id: 'Hardening test' },
+            resources: [
+              {
+                id: 'cfg-main',
+                tipe: 'config',
+                jalurRelatif: 'config/app.json',
+                url: resUrl,
+                sha256,
+                ukuranByte: content.byteLength,
+              },
+            ],
+            ...overrides,
+          },
+          keyId,
+          kunciPrivatPem,
+          'Ed25519'
+        );
+
+      const wrongApp = await um.terapkanManifestOTA(baseManifest({ applicationId: 'id.penyerang.palsu' }));
+      tegas(wrongApp.sukses === false, 'Mismatched applicationId must be rejected');
+
+      const downgrade = await um.terapkanManifestOTA(baseManifest({ releaseVersion: '1.1.9' }));
+      tegas(downgrade.sukses === false && downgrade.pesan.includes('anti-downgrade'), 'Downgrade to 1.1.9 must be rejected');
+
+      const replay = await um.terapkanManifestOTA(baseManifest({ releaseVersion: '1.2.0', revision: 3 }));
+      tegas(replay.sukses === false && replay.pesan.includes('anti-replay'), 'Same version & revision replay must be rejected');
+
+      const expired = await um.terapkanManifestOTA(
+        baseManifest({ releaseVersion: '1.3.0', expirationDate: '2020-01-01T00:00:00.000Z' })
+      );
+      tegas(expired.sukses === false, 'Expired manifest must be rejected by OTAResourceManager');
+
+      // Test aktivasiDenganHealthCheck rollback otomatis saat health check gagal
+      const unhealthy = await um.aktivasiDenganHealthCheck(
+        baseManifest({ releaseVersion: '1.3.0', revision: 1 }),
+        async () => {
+          const aktif = ActivationManager.dapatkanInstance().bacaResource('config/app.json');
+          tegas(aktif instanceof Uint8Array, 'Resource must be staged during health check');
+          return false; // Simulasikan crash/kegagalan pasca-aktivasi
+        }
+      );
+      tegas(unhealthy.sukses === false && unhealthy.rolledBack === true, 'Failed health check must trigger automatic rollback');
+      tegas(um.dapatkanVersiTerpasang() === '1.2.0', `Expected version rolled back to 1.2.0, got ${um.dapatkanVersiTerpasang()}`);
+      tegas(ActivationManager.dapatkanInstance().bacaResource('config/app.json') === undefined, 'Rolled-back config/app.json must be removed');
+    } finally {
+      await new Promise<void>((r) => srv.close(() => r()));
     }
   });
 

@@ -56,7 +56,9 @@ export class KlienAPIMobile {
 
   public setTokenHeader(token?: string, tipe = 'Bearer'): void {
     if (token) {
-      this.tokenOtentikasiHeader = `${tipe} ${token}`;
+      const tokBersih = String(token).replace(/[\r\n\0]/g, '');
+      const tipeBersih = String(tipe).replace(/[\r\n\0]/g, '');
+      this.tokenOtentikasiHeader = `${tipeBersih} ${tokBersih}`;
     } else {
       this.tokenOtentikasiHeader = undefined;
     }
@@ -139,6 +141,31 @@ export class KlienAPIMobile {
     };
   }
 
+  private periksaKebijakanTLS(url: string): void {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new Error(`URL permintaan tidak valid: '${url}'`);
+    }
+
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      throw new Error(`Protokol HTTP tidak didukung: '${parsed.protocol}'`);
+    }
+
+    if (parsed.username || parsed.password) {
+      throw new Error('URL dengan kredensial tertanam ditolak oleh lapisan keamanan.');
+    }
+
+    const host = parsed.hostname.toLowerCase();
+    const domainMock = host.endsWith('.test') || host.endsWith('.internal') || host.includes('mock');
+    if (this.validasiTLS && parsed.protocol === 'http:' && !LapisanKeamananMobile.apakahHostLoopback(host) && !domainMock) {
+      throw new Error(
+        `Kebijakan TLS menolak koneksi HTTP tidak terenkripsi ke host eksternal '${host}'. Aktifkan HTTPS atau gunakan validasiTLS: false hanya pada lingkungan pengembangan.`
+      );
+    }
+  }
+
   public async permintaan<T = any>(endpoint: string, opsi: OpsiPermintaanAPI = {}): Promise<HasilResponAPI<T>> {
     const mulai = Date.now();
     const metode: MetodeHTTPMobile = opsi.metode || 'GET';
@@ -172,28 +199,32 @@ export class KlienAPIMobile {
       };
     }
 
-    // 2. Susun URL lengkap dengan query parameter yang di-encode secara aman
+    // 2. Susun URL lengkap dan periksa kebijakan keamanan TLS
     const urlLengkap = this.bangunUrl(endpoint, opsi.query);
+    this.periksaKebijakanTLS(urlLengkap);
 
-    // 3. Gabungkan Header
-    const headers: Record<string, string> = {
+    // 3. Gabungkan dan sanitasi Header (anti-CRLF injection)
+    const headers = LapisanKeamananMobile.sanitasiHeader({
       ...this.headersBawaan,
       ...(this.tokenOtentikasiHeader ? { 'Authorization': this.tokenOtentikasiHeader } : {}),
       ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
       ...(opsi.headers || {}),
-    };
+    });
+
+    const timeoutEfektif = opsi.batasWaktuMs ?? this.batasWaktuMs;
 
     // 4. Jadwalkan eksekusi melalui Manajer Permintaan dengan prioritas
     return manajer.jadwalkan<HasilResponAPI<T>>(
       async (signal) => {
         return manajer.eksekusiDenganRetry(
           async () => {
-            return this.eksekusiFetch<T>(urlLengkap, metode, headers, opsi.body, signal, idempotencyKey);
+            return this.eksekusiFetch<T>(urlLengkap, metode, headers, opsi.body, timeoutEfektif, signal, idempotencyKey);
           },
           {
             cobaUlangMaks: opsi.izinkanCobaUlang !== false && (metode === 'GET' || Boolean(idempotencyKey)) ? this.cobaUlangMaks : 1,
             jedaAwalMs: this.jedaCobaUlangMs,
             izinkan: opsi.izinkanCobaUlang !== false,
+            signal,
           }
         );
       },
@@ -227,13 +258,16 @@ export class KlienAPIMobile {
     metode: MetodeHTTPMobile,
     headers: Record<string, string>,
     body: any,
+    timeoutMs: number,
     signal?: AbortSignal,
     idempotencyKey?: string
   ): Promise<HasilResponAPI<T>> {
     const mulai = Date.now();
 
-    // Jika target adalah domain simulasi / mock untuk unit testing
-    if (url.includes('.test') || url.includes('.internal') || url.includes('mock')) {
+    // Jika target adalah domain simulasi / mock untuk unit testing offline
+    const parsedUrl = new URL(url);
+    const host = parsedUrl.hostname.toLowerCase();
+    if (host.endsWith('.test') || host.endsWith('.internal') || host.includes('mock')) {
       return {
         sukses: true,
         status: 200,
@@ -246,8 +280,18 @@ export class KlienAPIMobile {
       };
     }
 
-    // Jika berjalan pada environment yang mendukung fetch
     if (typeof fetch !== 'undefined') {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      const onExternalAbort = () => controller.abort();
+      if (signal) {
+        if (signal.aborted) {
+          clearTimeout(timeoutId);
+          throw new Error('Permintaan HTTP dibatalkan sebelum dikirim.');
+        }
+        signal.addEventListener('abort', onExternalAbort, { once: true });
+      }
+
       try {
         const bodyContent = body !== undefined && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(metode)
           ? typeof body === 'string' ? body : JSON.stringify(body)
@@ -257,7 +301,7 @@ export class KlienAPIMobile {
           method: metode,
           headers,
           body: bodyContent,
-          signal,
+          signal: controller.signal,
         });
 
         const status = res.status;
@@ -293,33 +337,15 @@ export class KlienAPIMobile {
           idempotencyKey,
         };
       } catch (err: any) {
-        if (url.includes('localhost') || url.includes('127.0.0.1')) {
-          return {
-            sukses: true,
-            status: 200,
-            statusTeks: 'OK (Simulasi Localhost)',
-            headers: { 'content-type': 'application/json' },
-            data: { pesan: `Respon simulasi ${metode} ke ${url}`, endpoint: url, metode, data: body } as any,
-            durasiMs: Date.now() - mulai,
-            stempelWaktu: Date.now(),
-            idempotencyKey,
-          };
+        throw new Error(`Galat koneksi ke '${url}': ${err?.message || 'Jaringan tidak dapat diakses'}`);
+      } finally {
+        clearTimeout(timeoutId);
+        if (signal) {
+          signal.removeEventListener('abort', onExternalAbort);
         }
-        const durasiMs = Date.now() - mulai;
-        throw new Error(`Galat koneksi ke '${url}': ${err.message || 'Jaringan tidak dapat diakses'}`);
       }
     }
 
-    // Fallback simulasi / server-side KlienHTTP
-    return {
-      sukses: true,
-      status: 200,
-      statusTeks: 'OK (Simulasi Klien Mobile)',
-      headers: { 'content-type': 'application/json' },
-      data: { pesan: 'Respon simulasi REST API Mobile', endpoint: url, metode } as any,
-      durasiMs: Date.now() - mulai,
-      stempelWaktu: Date.now(),
-      idempotencyKey,
-    };
+    throw new Error(`Runtime tidak menyediakan API fetch untuk melakukan permintaan nyata ke '${url}'.`);
   }
 }

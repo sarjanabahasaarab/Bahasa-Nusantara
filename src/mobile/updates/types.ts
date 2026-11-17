@@ -39,6 +39,7 @@ export type StatusPembaruan =
   | 'completed'
   | 'failed'
   | 'cancelled'
+  | 'rolled_back'
   | 'requires_store_update';
 
 export type TipeResourceOTA =

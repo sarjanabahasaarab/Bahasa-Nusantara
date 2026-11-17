@@ -1,0 +1,48 @@
+gunakan "gui" sebagai ui
+
+program DashboardSistemDesktop
+mulai
+    tampilkan("Memuat Dashboard Monitor Sistem NUSANTARA...")
+    ui.aturTema("gelap")
+
+    aplikasi : peta = ui.buatAplikasi({
+        id: "id.nusantara.monitor",
+        nama: "Monitor Sistem Nusantara",
+        temaAwal: "gelap"
+    })
+
+    jendela : peta = aplikasi.buatJendela({
+        judul: "Dashboard Monitor Sistem Desktop",
+        lebar: 860,
+        tinggi: 600
+    })
+
+    progresCpu : peta = ui.buatProgres(42, 100)
+    progresMem : peta = ui.buatProgres(68, 100)
+    panelRingkasan : peta = ui.buatKolom([
+        ui.buatLabel("Penggunaan CPU (42%)"),
+        progresCpu,
+        ui.buatLabel("Penggunaan Memori (68%)"),
+        progresMem
+    ], { jarak: 10 })
+
+    tabelProses : peta = ui.buatTabel(
+        [{ id: "pid", judul: "PID" }, { id: "nama", judul: "Layanan" }, { id: "status", judul: "Status" }],
+        [
+            { pid: 101, nama: "nusantara-lsp", status: "Aktif" },
+            { pid: 204, nama: "webview-ipc", status: "Siaga" }
+        ]
+    )
+
+    tabUtama : peta = ui.buatTab()
+    tabUtama.tambahTab("Ringkasan", panelRingkasan)
+    tabUtama.tambahTab("Daftar Proses", tabelProses)
+
+    wadah : peta = ui.buatKolom([
+        ui.buatLabel("MONITOR SISTEM NUSANTARA", { ukuranFont: 20 }),
+        tabUtama
+    ], { jarak: 12 })
+
+    jendela.setKonten(wadah)
+    tampilkan("Dashboard Monitor Sistem aktif dengan tema:", ui.dapatkanTema())
+selesai

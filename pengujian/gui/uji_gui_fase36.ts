@@ -56,6 +56,7 @@ import {
   sesuaikanShortcutOS,
   buatAtributAria,
   temukanWidgetDapatDifokuskan,
+  KonteksAplikasiGUI,
 } from '../../src/gui';
 import * as os from 'node:os';
 import { WebSocket } from 'ws';
@@ -431,6 +432,43 @@ async function main() {
     pastikan(log.includes('Item berhasil ditambahkan: Buku Catatan Nusantara A5 (Subtotal: Rp 30000)'), 'Transaksi kasir harus menghitung subtotal dengan tepat');
   });
 
+  await uji('10.3 Eksekusi & Render Nyata Seluruh 7 Aplikasi Demo Desktop NUSANTARA', async () => {
+    const daftarDemo = [
+      'demo_desktop.nusantara',
+      'aplikasi_kasir.nusantara',
+      'kalkulator_desktop.nusantara',
+      'catatan_teks.nusantara',
+      'manajer_tugas.nusantara',
+      'dashboard_sistem.nusantara',
+      'pengaturan_akun.nusantara',
+    ];
+    const perender = new PerenderDesktop();
+    for (const berkas of daftarDemo) {
+      KonteksAplikasiGUI.resetKonteks();
+      const jalur = path.join(process.cwd(), 'contoh/desktop', berkas);
+      pastikan(fs.existsSync(jalur), `Demo desktop ${berkas} harus tersedia`);
+      const kode = fs.readFileSync(jalur, 'utf-8');
+      const penulis = new PenulisOutputBuffer();
+      const interp = new Interpreter(penulis);
+      interp.jalankanKode(kode);
+
+      const jendela = KonteksAplikasiGUI.dapatkanKonteks().jendelaAktif;
+      pastikan(jendela !== null, `${berkas} harus mendaftarkan JendelaGUI aktif`);
+      const bmp = perender.renderKeFramebuffer(jendela!).eksporBMP();
+      const svg = perender.renderKeSVG(jendela!);
+      const html = perender.renderKeHTML(jendela!);
+      pastikan(bmp[0] === 0x42 && bmp[1] === 0x4d, `${berkas} harus menghasilkan BMP valid`);
+      pastikan(svg.includes('<svg') && html.includes('<!DOCTYPE html>'), `${berkas} harus menghasilkan SVG dan HTML valid`);
+      if (berkas === 'aplikasi_kasir.nusantara') {
+        pastikan(html.includes('<table') && html.includes('Buku Catatan Nusantara A5'), 'Render HTML kasir harus merender TabelWidget lengkap');
+      }
+      if (berkas === 'dashboard_sistem.nusantara') {
+        pastikan(html.includes('<progress') && html.includes('Daftar Proses'), 'Render HTML dashboard harus merender Progres dan TabWidget');
+      }
+    }
+    KonteksAplikasiGUI.resetKonteks();
+  });
+
   // --- 11. REAL LAYOUT ENGINE (PHASE 36 COMPLETION) ---
   await uji('11.1 MesinTataLetak menghitung koordinat Baris, Kolom, Grid, Tab, dan BilahMenu', async () => {
     const jendela = new JendelaGUI({ judul: 'Uji Layout', lebar: 800, tinggi: 600 });
@@ -594,6 +632,61 @@ async function main() {
     }
   });
 
+  await uji('14.2 Keamanan HTTP CSP & Penolakan Origin CSWSH pada AdaptorDesktopWebviewServer', async () => {
+    const srv = new AdaptorDesktopWebviewServer(0);
+    const jendela = new JendelaGUI({ judul: 'Sec <script>alert(1)</script>', lebar: 480, tinggi: 320 });
+    const slider = new SliderWidget(0, 100, 20);
+    const tab = new TabWidget();
+    tab.tambahTab('Umum', slider);
+    jendela.setKonten(tab);
+
+    await srv.inisialisasi({ idAplikasi: 'id.test.sec', namaAplikasi: 'Sec App' });
+    await srv.bukaJendela(jendela);
+
+    try {
+      const url = srv.getUrlAktif();
+      const res = await fetch(url);
+      const html = await res.text();
+      pastikan(res.headers.get('x-frame-options') === 'DENY', 'Header X-Frame-Options: DENY wajib dikirim');
+      pastikan((res.headers.get('content-security-policy') || '').includes("default-src 'self'"), 'Header Content-Security-Policy wajib dikirim');
+      pastikan(!html.includes('<title>Sec <script>'), 'Judul HTML wajib di-escape terhadap XSS');
+
+      // Tolak Cross-Site WebSocket Hijacking dari Origin eksternal
+      const wsUrl = url.replace('http://', 'ws://') + '/ipc';
+      await new Promise<void>((resolve, reject) => {
+        const evilClient = new WebSocket(wsUrl, { headers: { Origin: 'https://evil.example' } });
+        evilClient.on('open', () => {
+          evilClient.close();
+          reject(new Error('WebSocket CSWSH dari origin eksternal seharusnya ditolak'));
+        });
+        evilClient.on('unexpected-response', (_req, incoming) => {
+          pastikan(incoming.statusCode === 401 || incoming.statusCode === 403, 'Handshake WebSocket lintas-origin harus ditolak HTTP 401/403');
+          resolve();
+        });
+        evilClient.on('error', () => resolve());
+      });
+
+      // Uji kontrol slider via IPC dari klien sah
+      await new Promise<void>((resolve, reject) => {
+        const client = new WebSocket(wsUrl);
+        client.on('open', () => {
+          client.send(JSON.stringify({ tipe: 'peristiwa', jenis: 'nilai_berubah', idWidget: slider.id, nilaiAngka: 88 }));
+        });
+        client.on('message', () => {
+          if (slider.getNilai() === 88) {
+            client.close();
+            resolve();
+          }
+        });
+        client.on('error', reject);
+        setTimeout(() => reject(new Error('Timeout slider IPC')), 3000);
+      });
+      pastikan(slider.getNilai() === 88, 'Nilai slider harus berubah ke 88 via IPC WebSocket');
+    } finally {
+      await srv.hancurkan();
+    }
+  });
+
   // --- 15. NATIVE OS DETECTORS, PLATFORM ADAPTERS & DESKTOP PACKAGING ---
   await uji('15.1 Detektor OS, Adaptor Native & PengemasAplikasiDesktop menghasilkan bundel sah', async () => {
     const status = DetektorPlatformDesktop.deteksi();
@@ -667,6 +760,39 @@ async function main() {
 
       pastikan(cli.jalankan(['desktop', 'package', '--target=linux', `--out=${tmpDir}`]) === 0, 'desktop package harus exit 0');
       pastikan(cli.jalankan(['desktop', 'run']) === 0, 'desktop run harus exit 0 dan melaporkan status display');
+      pastikan(cli.jalankan(['desktop', 'render', path.join(tmpDir, 'tidak_ada.nusantara')]) === 1, 'Berkas desktop yang tidak ada harus mengembalikan kode keluar 1');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  await uji('15.2 Verifikasi Integritas SHA256SUMS Bundel & Sanitasi Host Native', async () => {
+    const jendela = new JendelaGUI({ judul: 'Judul "Aman"\\Test\nBaris', lebar: 500, tinggi: 350 });
+    jendela.setKonten(new LabelWidget('Uji'));
+    const adLinux = new AdaptorDesktopLinux();
+    await adLinux.inisialisasi({ idAplikasi: 'id.nusantara.uji;rm -rf', namaAplikasi: 'App <Test> & "Demo"' });
+    const srcC = adLinux.hasilkanSumberHostNative(jendela).isi;
+    pastikan(!srcC.includes('rm -rf'), 'ID aplikasi tidak aman harus disanitasi sebelum disematkan di sumber C GTK3');
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusantara-pkg-sec-'));
+    try {
+      const pengemas = new PengemasAplikasiDesktop();
+      const res = pengemas.kemas({
+        konfig: { idAplikasi: 'id.nusantara.sec', namaAplikasi: 'App & "Sec"', versi: '0.36.0' },
+        jendelaUtama: jendela,
+        target: 'macos',
+        direktoriKeluaran: tmpDir,
+      });
+      const verifikasiUtuh = pengemas.verifikasiBundel(res.direktoriBundel);
+      pastikan(verifikasiUtuh.valid && verifikasiUtuh.totalBerkas >= 7, 'Verifikasi SHA256SUMS bundel utuh harus valid');
+
+      const plist = fs.readFileSync(path.join(res.direktoriBundel, 'Contents/Info.plist'), 'utf-8');
+      pastikan(plist.includes('App &amp; &quot;Sec&quot;'), 'Info.plist macOS harus meng-escape karakter XML');
+
+      // Uji deteksi tamper
+      fs.writeFileSync(path.join(res.direktoriBundel, 'Contents/Resources/index.html'), '<h1>TAMPERED</h1>');
+      const verifikasiRusak = pengemas.verifikasiBundel(res.direktoriBundel);
+      pastikan(!verifikasiRusak.valid && verifikasiRusak.galat.some((g) => g.includes('Checksum tidak cocok')), 'Bundel yang dimodifikasi harus ditolak oleh verifikasi SHA256SUMS');
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }

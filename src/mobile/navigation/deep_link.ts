@@ -48,6 +48,9 @@ export class PengelolaDeepLinkMobile {
 
   public uraikanUrl(url: string): HasilDeepLink | null {
     try {
+      if (typeof url !== 'string' || !url.trim() || /[\r\n\0]/.test(url)) {
+        return null;
+      }
       // Regex parsing untuk skema seperti nusantara://produk/123?promo=true atau https://domain.id/produk/123
       const regex = /^([a-zA-Z][a-zA-Z0-9+.-]*):\/\/([^/?#]+)([^?#]*)(?:\?([^#]*))?/;
       const cocok = url.match(regex);
@@ -62,9 +65,20 @@ export class PengelolaDeepLinkMobile {
       if (kueri) {
         const pasangan = kueri.split('&');
         for (const p of pasangan) {
-          const [k, v] = p.split('=');
-          if (k) {
-            parameter[decodeURIComponent(k)] = decodeURIComponent(v || '');
+          const eqIdx = p.indexOf('=');
+          const rawKey = eqIdx === -1 ? p : p.slice(0, eqIdx);
+          const rawVal = eqIdx === -1 ? '' : p.slice(eqIdx + 1);
+          if (rawKey) {
+            const kunci = decodeURIComponent(rawKey);
+            if (kunci === '__proto__' || kunci === 'constructor' || kunci === 'prototype') {
+              continue;
+            }
+            Object.defineProperty(parameter, kunci, {
+              value: decodeURIComponent(rawVal),
+              enumerable: true,
+              configurable: true,
+              writable: true,
+            });
           }
         }
       }

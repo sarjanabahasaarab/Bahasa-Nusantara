@@ -8,6 +8,7 @@
 
 import { HasilAktivasiResource } from '../types';
 import { RollbackManager } from '../storage/RollbackManager';
+import { UpdateSecurityPolicy } from '../security/UpdateSecurityPolicy';
 
 export class ActivationManager {
   private static instance: ActivationManager;
@@ -57,11 +58,21 @@ export class ActivationManager {
     return this.aktifkanAtomik(versiBaru, map);
   }
 
+  public tetapkanVersiBaseline(versi: string): void {
+    this.versiAktif = versi;
+  }
+
+  public pulihkanCadangan(versiCadangan: string, berkasCadangan: Map<string, string | Uint8Array>): void {
+    this.resourceAktif = new Map(berkasCadangan);
+    this.versiAktif = versiCadangan;
+  }
+
   /**
    * Mengaktifkan paket resource baru secara atomik:
-   * 1. Salin resource aktif saat ini ke backup RollbackManager.
-   * 2. Terapkan paket baru ke memori aktif.
-   * 3. Perbarui pointer versi.
+   * 1. Validasi path & ekstensi aman (defense-in-depth).
+   * 2. Salin resource aktif saat ini ke backup RollbackManager.
+   * 3. Terapkan paket baru ke memori aktif.
+   * 4. Perbarui pointer versi.
    */
   public aktifkanAtomik(
     versiBaru: string,
@@ -75,6 +86,20 @@ export class ActivationManager {
         pesan: 'Tidak ada berkas resource baru yang dapat diaktifkan.',
         stempelWaktu: new Date().toISOString(),
       };
+    }
+
+    for (const jalur of berkasBaru.keys()) {
+      const cekPath = UpdateSecurityPolicy.periksaPathTraversal(jalur);
+      const cekExt = UpdateSecurityPolicy.periksaEkstensiAman(jalur);
+      if (!cekPath.valid || !cekExt.valid) {
+        return {
+          sukses: false,
+          versiAktif: this.versiAktif,
+          resourceDiaktifkan: [],
+          pesan: cekPath.pesan || cekExt.pesan || `Resource '${jalur}' ditolak kebijakan keamanan.`,
+          stempelWaktu: new Date().toISOString(),
+        };
+      }
     }
 
     const versiLama = this.versiAktif;

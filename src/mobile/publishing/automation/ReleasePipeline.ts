@@ -183,16 +183,14 @@ export class ReleasePipeline {
               laporan.status = 'skipped';
               laporan.pesan = 'Mode hanya-validasi aktif. Melewati tahap publikasi dan persetujuan.';
             } else {
+              const apakahProduksi = opsi.trackAndroid === 'production' || opsi.channelIOS === 'appstore';
               permintaanPersetujuan = this.approvalGate.buatPermintaan({
-                tipeAksi:
-                  opsi.trackAndroid === 'production'
-                    ? 'luncurkan_rilis_produksi'
-                    : 'luncurkan_rilis_testing',
+                tipeAksi: apakahProduksi ? 'luncurkan_rilis_produksi' : 'luncurkan_rilis_testing',
                 namaAplikasi: 'Aplikasi Nusantara',
                 platform: opsi.platform === 'keduanya' ? 'android' : opsi.platform,
                 versi: '1.0.0',
                 versionCodeAtauBuild: 1,
-                trackAtauChannel: opsi.trackAndroid || 'internal',
+                trackAtauChannel: opsi.platform === 'ios' ? (opsi.channelIOS || 'testflight') : (opsi.trackAndroid || 'internal'),
                 berkasBinary: 'id.nusantara.aplikasi-1.0.0.aab',
                 ukuranBinaryKb: 1850,
                 sha256Binary: 'd71b67f34d1f7f201b2dceeb61c638ad7f5a47ec16d8088e77bd7ab2089baf7d',
@@ -201,7 +199,7 @@ export class ReleasePipeline {
                 akunTokoTujuan: 'Google Play & Apple Developer Account (Masked)',
               });
 
-              if (opsi.otomatisSetujuiNonProduksi && opsi.trackAndroid !== 'production') {
+              if (opsi.otomatisSetujuiNonProduksi && !apakahProduksi) {
                 this.approvalGate.setujui(permintaanPersetujuan.id, 'Otomasi CI/CD Pipeline');
                 laporan.status = 'passed';
                 laporan.pesan = 'Persetujuan rilis non-produksi diberikan secara otomatis oleh CI/CD.';

@@ -52,6 +52,8 @@ export class AdaptorAndroidMobile extends AdaptorSimulatorMobile implements Adap
   }
 
   public override async pilihMedia(opsi?: { tipe?: 'foto' | 'video' | 'semua'; maksPilihan?: number }): Promise<HasilOperasiNative<any>> {
+    const probe = PemeriksaHardwareHost.periksaHost();
+    const adbAktif = probe.perangkatADB.find((p) => p.status === 'device');
     return buatHasilSukses({
       item: [
         {
@@ -62,11 +64,14 @@ export class AdaptorAndroidMobile extends AdaptorSimulatorMobile implements Adap
       ],
       jumlah: 1,
       kontrakAndroid: 'androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia',
+      perangkatFisikTerhubung: Boolean(adbAktif),
+      sumberData: adbAktif ? 'ADB_MEDIA_PICKER_CONTRACT' : 'KONTRAK_ANDROID_TANPA_PERANGKAT',
     }, 'Media berhasil dipilih via Android Photo Picker.');
   }
 
   public override async simpanAman(kunci: string, nilai: string): Promise<HasilOperasiNative<any>> {
     const res = await super.simpanAman(kunci, nilai);
+    if (!res.sukses) return res;
     return buatHasilSukses({
       ...res.data,
       penyimpanan: 'EncryptedSharedPreferences (Android Keystore MasterKey AES-256-GCM)',

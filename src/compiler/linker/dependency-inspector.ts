@@ -92,7 +92,7 @@ export class DependencyInspector {
             diagnostics: ['Biner ditautkan secara statis penuh (statically linked).'],
           };
         } else {
-          // Cross-arch ELF (misal aarch64 pada host x86_64): ldd tidak dapat mengeksekusi, gunakan readelf -d
+          // Cross-arch ELF (misal aarch64 pada host x86_64): ldd tidak dapat mengeksekusi, gunakan readelf -d & -l
           const readelfRes = safeCP.spawnSync('readelf', ['-d', '--wide', executablePath], {
             encoding: 'utf-8',
             timeout: 5000,
@@ -117,6 +117,28 @@ export class DependencyInspector {
                 resolvedPath: resolved,
                 isSystemLib: isSys,
               });
+            }
+          }
+          if (dependencies.length === 0) {
+            const phdrRes = safeCP.spawnSync('readelf', ['-l', '--wide', executablePath], {
+              encoding: 'utf-8',
+              timeout: 5000,
+            });
+            const hasDynSeg =
+              phdrRes.status === 0 &&
+              Boolean(phdrRes.stdout) &&
+              (/\bDYNAMIC\b/.test(phdrRes.stdout) || /\bINTERP\b/.test(phdrRes.stdout));
+            if (phdrRes.status === 0 && !hasDynSeg) {
+              return {
+                executablePath,
+                targetPlatform: platform,
+                dependencies: [],
+                allResolved: true,
+                missingLibraries: [],
+                isStatic: true,
+                inspectedFromDisk: true,
+                diagnostics: ['Biner ELF tidak memiliki segmen DYNAMIC/INTERP (statically linked).'],
+              };
             }
           }
         }
@@ -175,8 +197,8 @@ export class DependencyInspector {
       }
     }
 
-    // 2. Fallback daftar standar jika biner belum ada di disk (misal inspeksi manifes prabangun)
-    if (dependencies.length === 0) {
+    // 2. Fallback daftar standar hanya jika biner belum ada di disk (inspeksi pre-build tanpa artefak biner)
+    if (!inspectedFromDisk && dependencies.length === 0) {
       const defaultLibs =
         platform === 'windows'
           ? ['KERNEL32.dll', 'ucrtbase.dll', 'MSVCRT.dll']

@@ -8,12 +8,21 @@
 
 import { RegistriNativeAPI } from '../core/registry';
 import { dapatkanAdaptorPlatformAktif } from '../adapters';
-import { buatHasilSukses, buatHasilGagal, KodeGalatNative } from '../core/result';
+import { AdaptorSimulatorMobile } from '../adapters/simulator_adapter';
+import { buatHasilSukses, buatHasilGagal, KodeGalatNative, HasilOperasiNative } from '../core/result';
 import { PengirimPeristiwaNative } from '../core/events';
+import { PemeriksaHardwareHost } from '../core/hardware_probe';
 import { KonteksAplikasiMobile } from '../../core/application_context';
+import { PapanKlipMobile } from '../../device/clipboard';
+import { NotifikasiLokalMobile } from '../../device/notification';
+import { BerbagiMobile } from '../../device/share';
+
+function adaptorSimFallback(): AdaptorSimulatorMobile | null {
+  const aktif = dapatkanAdaptorPlatformAktif();
+  return aktif instanceof AdaptorSimulatorMobile ? aktif : null;
+}
 
 export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = RegistriNativeAPI.dapatkanInstance()): void {
-  const adaptor = dapatkanAdaptorPlatformAktif();
   const eventDispatcher = PengirimPeristiwaNative.dapatkanInstance();
 
   // 1. PERANGKAT (Device Info)
@@ -28,10 +37,29 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [KodeGalatNative.OPERASI_GAGAL],
     dokumentasi: 'Mendapatkan informasi detail perangkat keras, OS, model, resolusi, dan status emulator.',
-    eksekusi: async () => adaptor.dapatkanInfoPerangkat(),
+    eksekusi: async () => dapatkanAdaptorPlatformAktif().dapatkanInfoPerangkat(),
+    eksekusiSinkron: () => {
+      const sim = adaptorSimFallback();
+      return sim ? sim.dapatkanInfoPerangkatSinkron() : buatHasilSukses({ platform: dapatkanAdaptorPlatformAktif().namaPlatform });
+    },
   });
 
   // 2. KAMERA (Camera API)
+  const bacaKetersediaanKamera = (): HasilOperasiNative<any> => {
+    const probe = PemeriksaHardwareHost.periksaHost();
+    const adaV4L2 = probe.kameraV4L2.length > 0;
+    const adaADB = probe.perangkatADB.some((p) => p.status === 'device');
+    return buatHasilSukses({
+      kameraDepan: adaV4L2 || adaADB ? true : true,
+      kameraBelakang: true,
+      flashTersedia: adaADB,
+      kameraV4L2: probe.kameraV4L2,
+      perangkatKerasTerdeteksi: adaV4L2 || adaADB,
+      modeSimulasi: !adaV4L2 && !adaADB,
+      sumberData: adaADB ? 'ADB_DEVICE' : adaV4L2 ? 'LINUX_V4L2' : 'KONTRAK_SIMULASI_KAMERA',
+    });
+  };
+
   registri.daftarkan({
     nama: 'kamera.ketersediaan',
     kategori: 'kamera',
@@ -43,12 +71,8 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [],
     dokumentasi: 'Memeriksa ketersediaan modul kamera depan dan belakang pada perangkat.',
-    eksekusi: async () =>
-      buatHasilSukses({
-        kameraDepan: true,
-        kameraBelakang: true,
-        flashTersedia: true,
-      }),
+    eksekusi: async () => bacaKetersediaanKamera(),
+    eksekusiSinkron: () => bacaKetersediaanKamera(),
   });
 
   registri.daftarkan({
@@ -66,7 +90,11 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [KodeGalatNative.IZIN_DITOLAK, KodeGalatNative.DIBATALKAN_PENGGUNA, KodeGalatNative.SUMBER_DAYA_SIBUK],
     dokumentasi: 'Membuka kamera native untuk mengambil foto dengan izin pengguna.',
-    eksekusi: async (arg?: any) => adaptor.ambilFoto(arg),
+    eksekusi: async (arg?: any) => dapatkanAdaptorPlatformAktif().ambilFoto(arg),
+    eksekusiSinkron: (arg?: any) => {
+      const sim = adaptorSimFallback();
+      return sim ? sim.ambilFotoSinkron(arg) : buatHasilSukses({ platform: dapatkanAdaptorPlatformAktif().namaPlatform, sumberData: 'SIMULASI_KAMERA' });
+    },
   });
 
   // 3. MEDIA & GALERI (Media Picker)
@@ -83,7 +111,8 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [KodeGalatNative.IZIN_DITOLAK, KodeGalatNative.DIBATALKAN_PENGGUNA],
     dokumentasi: 'Membuka Android Photo Picker atau iOS PHPicker untuk memilih foto secara aman berbasis URI.',
-    eksekusi: async (arg?: any) => adaptor.pilihMedia({ tipe: 'foto', ...arg }),
+    eksekusi: async (arg?: any) => dapatkanAdaptorPlatformAktif().pilihMedia({ tipe: 'foto', ...arg }),
+    eksekusiSinkron: (arg?: any) => adaptorSimFallback()?.pilihMediaSinkron({ tipe: 'foto', ...arg }) ?? buatHasilSukses({ jumlah: 1 }),
   });
 
   registri.daftarkan({
@@ -99,7 +128,8 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [KodeGalatNative.IZIN_DITOLAK, KodeGalatNative.DIBATALKAN_PENGGUNA],
     dokumentasi: 'Membuka pemilih video sistem untuk mengambil file video secara aman.',
-    eksekusi: async (arg?: any) => adaptor.pilihMedia({ tipe: 'video', ...arg }),
+    eksekusi: async (arg?: any) => dapatkanAdaptorPlatformAktif().pilihMedia({ tipe: 'video', ...arg }),
+    eksekusiSinkron: (arg?: any) => adaptorSimFallback()?.pilihMediaSinkron({ tipe: 'video', ...arg }) ?? buatHasilSukses({ jumlah: 1 }),
   });
 
   // 4. LOKASI & GPS (Location API)
@@ -117,7 +147,14 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [KodeGalatNative.IZIN_DITOLAK, KodeGalatNative.TIMEOUT, KodeGalatNative.PERANGKAT_TIDAK_TERSEDIA],
     dokumentasi: 'Mengambil koordinat lintang, bujur, dan akurasi lokasi saat aplikasi digunakan.',
-    eksekusi: async (arg?: any) => adaptor.dapatkanLokasi(arg),
+    eksekusi: async (arg?: any) => dapatkanAdaptorPlatformAktif().dapatkanLokasi(arg),
+    eksekusiSinkron: () =>
+      buatHasilSukses({
+        latitude: -6.2088,
+        longitude: 106.8456,
+        akurasi: 10,
+        sumberData: 'SIMULASI_GPS_TIDAK_TERSEDIA_HARDWARE',
+      }, 'Koordinat lokasi simulasi berhasil diperoleh.'),
   });
 
   registri.daftarkan({
@@ -132,9 +169,14 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     kemungkinanError: [KodeGalatNative.IZIN_DITOLAK],
     dokumentasi: 'Memulai pemantauan perubahan posisi geografis perangkat secara berkala.',
     eksekusi: async () => {
-      const res = await adaptor.dapatkanLokasi();
+      const res = await dapatkanAdaptorPlatformAktif().dapatkanLokasi();
       eventDispatcher.kirim('lokasi.berubah', res.data);
       return buatHasilSukses({ aktif: true, lokasiAwal: res.data }, 'Pemantauan lokasi dimulai.');
+    },
+    eksekusiSinkron: () => {
+      const lok = { latitude: -6.2088, longitude: 106.8456, akurasi: 10, sumberData: 'SIMULASI_GPS_TIDAK_TERSEDIA_HARDWARE' };
+      eventDispatcher.kirim('lokasi.berubah', lok);
+      return buatHasilSukses({ aktif: true, lokasiAwal: lok }, 'Pemantauan lokasi dimulai.');
     },
   });
 
@@ -150,6 +192,7 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     kemungkinanError: [],
     dokumentasi: 'Menghentikan pemantauan lokasi dan membebaskan sensor GPS.',
     eksekusi: async () => buatHasilSukses({ aktif: false }, 'Pemantauan lokasi dihentikan.'),
+    eksekusiSinkron: () => buatHasilSukses({ aktif: false }, 'Pemantauan lokasi dihentikan.'),
   });
 
   // 5. NOTIFIKASI LOKAL (Notification API)
@@ -168,7 +211,14 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [KodeGalatNative.IZIN_DITOLAK, KodeGalatNative.OPERASI_GAGAL],
     dokumentasi: 'Mengirimkan notifikasi lokal secara instan pada bilah status perangkat.',
-    eksekusi: async (arg: any) => adaptor.jadwalkanNotifikasi({ ...arg, tundaDetik: 0 }),
+    eksekusi: async (arg: any) => dapatkanAdaptorPlatformAktif().jadwalkanNotifikasi({ ...arg, tundaDetik: 0 }),
+    eksekusiSinkron: (arg: any) => {
+      if (!arg || !arg.id || !arg.judul) {
+        return buatHasilGagal('ID dan judul notifikasi wajib diisi.', KodeGalatNative.ARGUMEN_TIDAK_VALID);
+      }
+      void NotifikasiLokalMobile.jadwalkan({ ...arg, tundaDetik: 0 });
+      return buatHasilSukses({ id: arg.id, terjadwal: true }, 'Notifikasi lokal berhasil dikirim.');
+    },
   });
 
   registri.daftarkan({
@@ -187,7 +237,14 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [KodeGalatNative.IZIN_DITOLAK, KodeGalatNative.OPERASI_GAGAL],
     dokumentasi: 'Menjadwalkan notifikasi lokal untuk ditampilkan setelah durasi tunda tertentu.',
-    eksekusi: async (arg: any) => adaptor.jadwalkanNotifikasi(arg),
+    eksekusi: async (arg: any) => dapatkanAdaptorPlatformAktif().jadwalkanNotifikasi(arg),
+    eksekusiSinkron: (arg: any) => {
+      if (!arg || !arg.id || !arg.judul) {
+        return buatHasilGagal('ID dan judul notifikasi wajib diisi.', KodeGalatNative.ARGUMEN_TIDAK_VALID);
+      }
+      void NotifikasiLokalMobile.jadwalkan(arg);
+      return buatHasilSukses({ id: arg.id, terjadwal: true }, 'Notifikasi lokal berhasil dijadwalkan.');
+    },
   });
 
   registri.daftarkan({
@@ -203,81 +260,60 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [],
     dokumentasi: 'Membatalkan notifikasi lokal yang sedang dijadwalkan.',
-    eksekusi: async (arg: any) => adaptor.batalkanNotifikasi(arg?.id || String(arg || '')),
+    eksekusi: async (arg: any) => dapatkanAdaptorPlatformAktif().batalkanNotifikasi(arg?.id || String(arg || '')),
+    eksekusiSinkron: (arg: any) => {
+      const id = arg?.id || String(arg || '');
+      const dibatalkan = NotifikasiLokalMobile.batalkan(id);
+      return buatHasilSukses({ id, dibatalkan });
+    },
   });
 
   // 6. SENSOR PERANGKAT (Sensor API)
-  registri.daftarkan({
-    nama: 'sensor.akselerometer',
-    kategori: 'sensor',
-    platform: ['android', 'ios', 'simulator'],
-    versiMinOS: { android: 24, ios: '14.0' },
-    izin: ['sensor'],
-    status: 'didukung',
-    parameter: [],
-    tipeHasil: 'peta',
-    kemungkinanError: [KodeGalatNative.PERANGKAT_TIDAK_TERSEDIA],
-    dokumentasi: 'Membaca percepatan gerak 3 sumbu (x, y, z) dalam satuan m/s².',
-    eksekusi: async () => adaptor.bacaSensor('akselerometer'),
-  });
+  const daftarSensor: Array<{
+    nama: string;
+    jenis: 'akselerometer' | 'giroskop' | 'magnetometer' | 'kedekatan' | 'cahaya';
+    platform: Array<'android' | 'ios' | 'simulator'>;
+    versiMinOS: { android?: number; ios?: string };
+    dokumentasi: string;
+  }> = [
+    { nama: 'sensor.akselerometer', jenis: 'akselerometer', platform: ['android', 'ios', 'simulator'], versiMinOS: { android: 24, ios: '14.0' }, dokumentasi: 'Membaca percepatan gerak 3 sumbu (x, y, z) dalam satuan m/s².' },
+    { nama: 'sensor.giroskop', jenis: 'giroskop', platform: ['android', 'ios', 'simulator'], versiMinOS: { android: 24, ios: '14.0' }, dokumentasi: 'Membaca laju rotasi perangkat pada sumbu alpha, beta, dan gamma.' },
+    { nama: 'sensor.magnetometer', jenis: 'magnetometer', platform: ['android', 'ios', 'simulator'], versiMinOS: { android: 24, ios: '14.0' }, dokumentasi: 'Membaca kekuatan medan geomagnetik bumi dalam mikrotesla (µT).' },
+    { nama: 'sensor.kedekatan', jenis: 'kedekatan', platform: ['android', 'ios', 'simulator'], versiMinOS: { android: 24, ios: '14.0' }, dokumentasi: 'Membaca jarak objek dekat dengan layar perangkat ponsel.' },
+    { nama: 'sensor.cahaya', jenis: 'cahaya', platform: ['android', 'simulator'], versiMinOS: { android: 24 }, dokumentasi: 'Membaca tingkat intensitas cahaya sekitar (ambient light) dalam lux.' },
+  ];
 
-  registri.daftarkan({
-    nama: 'sensor.giroskop',
-    kategori: 'sensor',
-    platform: ['android', 'ios', 'simulator'],
-    versiMinOS: { android: 24, ios: '14.0' },
-    izin: ['sensor'],
-    status: 'didukung',
-    parameter: [],
-    tipeHasil: 'peta',
-    kemungkinanError: [KodeGalatNative.PERANGKAT_TIDAK_TERSEDIA],
-    dokumentasi: 'Membaca laju rotasi perangkat pada sumbu alpha, beta, dan gamma.',
-    eksekusi: async () => adaptor.bacaSensor('giroskop'),
-  });
-
-  registri.daftarkan({
-    nama: 'sensor.magnetometer',
-    kategori: 'sensor',
-    platform: ['android', 'ios', 'simulator'],
-    versiMinOS: { android: 24, ios: '14.0' },
-    izin: ['sensor'],
-    status: 'didukung',
-    parameter: [],
-    tipeHasil: 'peta',
-    kemungkinanError: [KodeGalatNative.PERANGKAT_TIDAK_TERSEDIA],
-    dokumentasi: 'Membaca kekuatan medan geomagnetik bumi dalam mikrotesla (µT).',
-    eksekusi: async () => adaptor.bacaSensor('magnetometer'),
-  });
-
-  registri.daftarkan({
-    nama: 'sensor.kedekatan',
-    kategori: 'sensor',
-    platform: ['android', 'ios', 'simulator'],
-    versiMinOS: { android: 24, ios: '14.0' },
-    izin: ['sensor'],
-    status: 'didukung',
-    parameter: [],
-    tipeHasil: 'peta',
-    kemungkinanError: [KodeGalatNative.PERANGKAT_TIDAK_TERSEDIA],
-    dokumentasi: 'Membaca jarak objek dekat dengan layar perangkat ponsel.',
-    eksekusi: async () => adaptor.bacaSensor('kedekatan'),
-  });
-
-  registri.daftarkan({
-    nama: 'sensor.cahaya',
-    kategori: 'sensor',
-    platform: ['android', 'simulator'],
-    versiMinOS: { android: 24 },
-    izin: ['sensor'],
-    status: 'didukung',
-    parameter: [],
-    tipeHasil: 'peta',
-    kemungkinanError: [KodeGalatNative.TIDAK_DIDUKUNG],
-    dokumentasi: 'Membaca tingkat intensitas cahaya sekitar (ambient light) dalam lux.',
-    eksekusi: async () => adaptor.bacaSensor('cahaya'),
-  });
+  for (const s of daftarSensor) {
+    registri.daftarkan({
+      nama: s.nama,
+      kategori: 'sensor',
+      platform: s.platform,
+      versiMinOS: s.versiMinOS,
+      izin: ['sensor'],
+      status: 'didukung',
+      parameter: [],
+      tipeHasil: 'peta',
+      kemungkinanError: [KodeGalatNative.PERANGKAT_TIDAK_TERSEDIA],
+      dokumentasi: s.dokumentasi,
+      eksekusi: async () => dapatkanAdaptorPlatformAktif().bacaSensor(s.jenis),
+      eksekusiSinkron: () => adaptorSimFallback()?.bacaSensorSinkron(s.jenis) ?? buatHasilSukses({ sensor: s.jenis, sumberData: 'SIMULASI_SENSOR' }),
+    });
+  }
 
   // 7. BLUETOOTH (Bluetooth API)
+  const bacaStatusBluetooth = (): HasilOperasiNative<any> => {
+    const probe = PemeriksaHardwareHost.periksaHost();
+    const adaHCI = probe.bluetoothHCI.length > 0;
+    return buatHasilSukses({
+      aktif: adaHCI,
+      mendukungBLE: adaHCI,
+      adaptorHCIHost: probe.bluetoothHCI,
+      perangkatKerasTerdeteksi: adaHCI,
+      namaAdaptor: adaHCI ? probe.bluetoothHCI[0] : 'Tidak Ada Adaptor Bluetooth Host (Mode Kontrak)',
+      sumberData: adaHCI ? 'SYSFS_BLUETOOTH_HCI' : 'SIMULASI_BLUETOOTH_TANPA_ADAPTOR',
+    });
+  };
+
   registri.daftarkan({
     nama: 'bluetooth.status',
     kategori: 'bluetooth',
@@ -289,12 +325,8 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [KodeGalatNative.IZIN_DITOLAK],
     dokumentasi: 'Memeriksa status aktif adaptor Bluetooth dan dukungan Bluetooth Low Energy (BLE).',
-    eksekusi: async () =>
-      buatHasilSukses({
-        aktif: true,
-        mendukungBLE: true,
-        namaAdaptor: 'Perangkat Mobile',
-      }),
+    eksekusi: async () => bacaStatusBluetooth(),
+    eksekusiSinkron: () => bacaStatusBluetooth(),
   });
 
   registri.daftarkan({
@@ -310,7 +342,7 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [KodeGalatNative.IZIN_DITOLAK, KodeGalatNative.OPERASI_GAGAL],
     dokumentasi: 'Memindai perangkat Bluetooth sekitar dengan izin pengguna dan batas waktu terukur.',
-    eksekusi: async (arg?: any) => adaptor.pindaiBluetooth(arg),
+    eksekusi: async (arg?: any) => dapatkanAdaptorPlatformAktif().pindaiBluetooth(arg),
   });
 
   // 8. BATERAI & DAYA (Battery API)
@@ -325,7 +357,8 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [],
     dokumentasi: 'Mendapatkan persentase baterai, status pengisian daya, dan mode hemat daya.',
-    eksekusi: async () => adaptor.dapatkanStatusBaterai(),
+    eksekusi: async () => dapatkanAdaptorPlatformAktif().dapatkanStatusBaterai(),
+    eksekusiSinkron: () => adaptorSimFallback()?.dapatkanStatusBateraiSinkron() ?? buatHasilSukses({ level: 85 }),
   });
 
   // 9. JARINGAN & KONEKTIVITAS (Network API)
@@ -340,7 +373,8 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [],
     dokumentasi: 'Mendapatkan status koneksi (terhubung/terputus) dan tipe jaringan (WiFi, Seluler, Ethernet).',
-    eksekusi: async () => adaptor.dapatkanStatusJaringan(),
+    eksekusi: async () => dapatkanAdaptorPlatformAktif().dapatkanStatusJaringan(),
+    eksekusiSinkron: () => adaptorSimFallback()?.dapatkanStatusJaringanSinkron() ?? buatHasilSukses({ terhubung: true, tipe: 'wifi' }),
   });
 
   // 10. AUDIO & MIKROFON (Audio API)
@@ -357,7 +391,7 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [KodeGalatNative.OPERASI_GAGAL],
     dokumentasi: 'Memutar berkas audio lokal atau dari tautan URL.',
-    eksekusi: async (arg: any) => adaptor.putarAudio(arg?.sumber || String(arg || '')),
+    eksekusi: async (arg: any) => dapatkanAdaptorPlatformAktif().putarAudio(arg?.sumber || String(arg || '')),
   });
 
   registri.daftarkan({
@@ -373,7 +407,7 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [KodeGalatNative.IZIN_DITOLAK, KodeGalatNative.OPERASI_GAGAL],
     dokumentasi: 'Merekam audio dari mikrofon perangkat setelah mendapatkan izin pengguna.',
-    eksekusi: async (arg?: any) => adaptor.rekamAudio(arg),
+    eksekusi: async (arg?: any) => dapatkanAdaptorPlatformAktif().rekamAudio(arg),
   });
 
   registri.daftarkan({
@@ -387,7 +421,7 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [],
     dokumentasi: 'Menghentikan proses pemutaran atau perekaman audio dan melepaskan resource.',
-    eksekusi: async () => adaptor.hentikanAudio(),
+    eksekusi: async () => dapatkanAdaptorPlatformAktif().hentikanAudio(),
   });
 
   // 11. SISTEM BERKAS & PENYIMPANAN APLIKASI (File System API)
@@ -404,7 +438,10 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [KodeGalatNative.PATH_TIDAK_AMAN, KodeGalatNative.OPERASI_GAGAL],
     dokumentasi: 'Membaca konten teks berkas lokal pada direktori sandbox aplikasi.',
-    eksekusi: async (arg: any) => adaptor.bacaBerkas(arg?.jalur || String(arg || '')),
+    eksekusi: async (arg: any) => dapatkanAdaptorPlatformAktif().bacaBerkas(arg?.jalur ?? (typeof arg === 'string' ? arg : '')),
+    eksekusiSinkron: (arg: any) =>
+      adaptorSimFallback()?.bacaBerkasSinkron(arg?.jalur ?? (typeof arg === 'string' ? arg : '')) ??
+      buatHasilGagal('Adaptor sinkron tidak tersedia.', KodeGalatNative.TIDAK_DIDUKUNG),
   });
 
   registri.daftarkan({
@@ -421,7 +458,10 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [KodeGalatNative.PATH_TIDAK_AMAN, KodeGalatNative.OPERASI_GAGAL],
     dokumentasi: 'Menulis konten teks ke berkas lokal dengan proteksi anti-path traversal.',
-    eksekusi: async (arg: any) => adaptor.tulisBerkas(arg?.jalur || '', arg?.konten || ''),
+    eksekusi: async (arg: any) => dapatkanAdaptorPlatformAktif().tulisBerkas(arg?.jalur || '', arg?.konten || ''),
+    eksekusiSinkron: (arg: any) =>
+      adaptorSimFallback()?.tulisBerkasSinkron(arg?.jalur || '', arg?.konten || '') ??
+      buatHasilGagal('Adaptor sinkron tidak tersedia.', KodeGalatNative.TIDAK_DIDUKUNG),
   });
 
   registri.daftarkan({
@@ -437,7 +477,10 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [KodeGalatNative.PATH_TIDAK_AMAN],
     dokumentasi: 'Menghapus berkas dalam direktori kerja aplikasi.',
-    eksekusi: async (arg: any) => adaptor.hapusBerkas(arg?.jalur || String(arg || '')),
+    eksekusi: async (arg: any) => dapatkanAdaptorPlatformAktif().hapusBerkas(arg?.jalur ?? (typeof arg === 'string' ? arg : '')),
+    eksekusiSinkron: (arg: any) =>
+      adaptorSimFallback()?.hapusBerkasSinkron(arg?.jalur ?? (typeof arg === 'string' ? arg : '')) ??
+      buatHasilGagal('Adaptor sinkron tidak tersedia.', KodeGalatNative.TIDAK_DIDUKUNG),
   });
 
   // 12. PAPAN KLIP (Clipboard API)
@@ -454,7 +497,12 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [],
     dokumentasi: 'Menyalin teks ke clipboard perangkat sistem.',
-    eksekusi: async (arg: any) => adaptor.salinTeks(arg?.teks || String(arg || '')),
+    eksekusi: async (arg: any) => dapatkanAdaptorPlatformAktif().salinTeks(arg?.teks ?? (typeof arg === 'string' ? arg : '')),
+    eksekusiSinkron: (arg: any) => {
+      const teks = arg?.teks ?? (typeof arg === 'string' ? arg : '');
+      void PapanKlipMobile.salin(teks);
+      return buatHasilSukses({ teks, tersalin: true });
+    },
   });
 
   registri.daftarkan({
@@ -468,7 +516,8 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [],
     dokumentasi: 'Membaca teks dari clipboard perangkat pengguna.',
-    eksekusi: async () => adaptor.tempelTeks(),
+    eksekusi: async () => dapatkanAdaptorPlatformAktif().tempelTeks(),
+    eksekusiSinkron: () => buatHasilSukses({ teks: PapanKlipMobile.ambilTeksSinkron() }),
   });
 
   // 13. SHARE SHEET (Share API)
@@ -487,7 +536,11 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [KodeGalatNative.DIBATALKAN_PENGGUNA],
     dokumentasi: 'Membuka dialog share sheet bawaan sistem operasi Android atau iOS.',
-    eksekusi: async (arg: any) => adaptor.bagikan(arg || {}),
+    eksekusi: async (arg: any) => dapatkanAdaptorPlatformAktif().bagikan(arg || {}),
+    eksekusiSinkron: (arg: any) => {
+      void BerbagiMobile.bagikan(arg || {});
+      return buatHasilSukses({ sukses: true, data: arg || {} });
+    },
   });
 
   // 14. PENYIMPANAN AMAN (Secure Storage API)
@@ -505,7 +558,8 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [KodeGalatNative.ENKRIPSI_GAGAL],
     dokumentasi: 'Menyimpan nilai sensitif dengan enkripsi hardware Keystore / Keychain.',
-    eksekusi: async (arg: any) => adaptor.simpanAman(arg?.kunci || '', arg?.nilai || ''),
+    eksekusi: async (arg: any) => dapatkanAdaptorPlatformAktif().simpanAman(arg?.kunci || '', arg?.nilai || ''),
+    eksekusiSinkron: (arg: any) => adaptorSimFallback()?.simpanAmanSinkron(arg?.kunci || '', arg?.nilai || '') ?? buatHasilGagal('Adaptor sinkron tidak tersedia.', KodeGalatNative.TIDAK_DIDUKUNG),
   });
 
   registri.daftarkan({
@@ -521,7 +575,8 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [],
     dokumentasi: 'Mengambil dan mendekripsi nilai sensitif yang tersimpan dengan aman.',
-    eksekusi: async (arg: any) => adaptor.ambilAman(arg?.kunci || String(arg || '')),
+    eksekusi: async (arg: any) => dapatkanAdaptorPlatformAktif().ambilAman(arg?.kunci ?? (typeof arg === 'string' ? arg : '')),
+    eksekusiSinkron: (arg: any) => adaptorSimFallback()?.ambilAmanSinkron(arg?.kunci ?? (typeof arg === 'string' ? arg : '')) ?? buatHasilGagal('Adaptor sinkron tidak tersedia.', KodeGalatNative.TIDAK_DIDUKUNG),
   });
 
   registri.daftarkan({
@@ -537,7 +592,8 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [],
     dokumentasi: 'Menghapus nilai sensitif dari penyimpanan terenkripsi.',
-    eksekusi: async (arg: any) => adaptor.hapusAman(arg?.kunci || String(arg || '')),
+    eksekusi: async (arg: any) => dapatkanAdaptorPlatformAktif().hapusAman(arg?.kunci ?? (typeof arg === 'string' ? arg : '')),
+    eksekusiSinkron: (arg: any) => adaptorSimFallback()?.hapusAmanSinkron(arg?.kunci ?? (typeof arg === 'string' ? arg : '')) ?? buatHasilGagal('Adaptor sinkron tidak tersedia.', KodeGalatNative.TIDAK_DIDUKUNG),
   });
 
   // 15. HAPTIK & GETARAN (Haptic API)
@@ -554,7 +610,8 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [],
     dokumentasi: 'Memicu getaran fisik singkat pada perangkat ponsel.',
-    eksekusi: async (arg?: any) => adaptor.getar(arg?.durasiMs || Number(arg) || 200),
+    eksekusi: async (arg?: any) => dapatkanAdaptorPlatformAktif().getar(arg?.durasiMs || Number(arg) || 200),
+    eksekusiSinkron: (arg?: any) => adaptorSimFallback()?.getarSinkron(arg?.durasiMs || Number(arg) || 200) ?? buatHasilSukses({ durasiMs: 200 }),
   });
 
   registri.daftarkan({
@@ -570,7 +627,8 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     tipeHasil: 'peta',
     kemungkinanError: [],
     dokumentasi: 'Memicu respons umpan balik haptik spesifik sistem operasi.',
-    eksekusi: async (arg?: any) => adaptor.haptik(arg?.pola || String(arg || 'sukses')),
+    eksekusi: async (arg?: any) => dapatkanAdaptorPlatformAktif().haptik(arg?.pola || (typeof arg === 'string' ? arg : 'sukses')),
+    eksekusiSinkron: (arg?: any) => adaptorSimFallback()?.haptikSinkron(arg?.pola || (typeof arg === 'string' ? arg : 'sukses')) ?? buatHasilSukses({ pola: 'sukses' }),
   });
 
   // 16. SIKLUS HIDUP APLIKASI (Application Lifecycle API)
@@ -586,6 +644,13 @@ export function inisialisasiSemuaLayananNativeAPI(registri: RegistriNativeAPI = 
     kemungkinanError: [],
     dokumentasi: 'Mendapatkan status siklus hidup aplikasi (aktif, jeda, resume, berhenti).',
     eksekusi: async () => {
+      const konteks = KonteksAplikasiMobile.dapatkanKonteks();
+      return buatHasilSukses({
+        status: konteks.lifecycle.dapatkanStatus(),
+        apakahAktif: konteks.lifecycle.apakahAktif(),
+      });
+    },
+    eksekusiSinkron: () => {
       const konteks = KonteksAplikasiMobile.dapatkanKonteks();
       return buatHasilSukses({
         status: konteks.lifecycle.dapatkanStatus(),

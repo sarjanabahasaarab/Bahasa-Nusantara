@@ -4079,9 +4079,13 @@ Kode Status Keluar (Exit Codes):
     };
 
     const argFile = subArgs.slice(1).find((a) => !a.startsWith('-'));
+    if (argFile && !this.pembaca.apakahAda(argFile)) {
+      this.error(`Berkas aplikasi desktop '${argFile}' tidak ditemukan.`);
+      return 1;
+    }
     const muatJendelaDariProgram = (): JendelaGUI => {
       KonteksAplikasiGUI.resetKonteks();
-      if (argFile && this.pembaca.apakahAda(argFile)) {
+      if (argFile) {
         const kode = this.pembaca.baca(argFile);
         const interp = new Interpreter(new PenulisOutputBuffer());
         interp.jalankanKode(kode);

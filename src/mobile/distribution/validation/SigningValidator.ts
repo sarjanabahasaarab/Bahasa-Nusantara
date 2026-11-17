@@ -21,13 +21,16 @@ export class SigningValidator {
 
   public static periksaKeamananKredensial(teksKonten: string): { aman: boolean; temuanRahasia: string[] } {
     const temuanRahasia: string[] = [];
-    // Pola umum kredensial sensitif
+    // Pola umum kredensial sensitif (tidak mengenai *Env seperti storePasswordEnv)
     const polaSensitif = [
-      /password\s*[:=]\s*["']([^"']{3,})["']/i,
-      /storePassword\s*[:=]\s*["']([^"']{3,})["']/i,
-      /keyPassword\s*[:=]\s*["']([^"']{3,})["']/i,
+      /\bpassword\s*[:=]\s*["']([^"']{3,})["']/i,
+      /\bstorePassword\s*[:=]\s*["']([^"']{3,})["']/i,
+      /\bkeyPassword\s*[:=]\s*["']([^"']{3,})["']/i,
+      /\bkeystorePassword\s*[:=]\s*["']([^"']{3,})["']/i,
+      /\bapiSecret\s*[:=]\s*["']([^"']{3,})["']/i,
+      /\bclient_secret\s*[:=]\s*["']([^"']{3,})["']/i,
       /private_key/i,
-      /-----BEGIN RSA PRIVATE KEY-----/,
+      /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
     ];
 
     for (const pola of polaSensitif) {

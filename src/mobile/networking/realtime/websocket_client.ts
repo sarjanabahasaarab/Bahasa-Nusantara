@@ -6,6 +6,8 @@
  * Klien WebSocket Mobile & Penanganan Latar Belakang (Mobile WebSocket Client)
  */
 
+import { LapisanKeamananMobile } from '../security/cloud_security';
+
 export interface KonfigurasiWebSocketMobile {
   url: string;
   protokol?: string[];
@@ -13,29 +15,52 @@ export interface KonfigurasiWebSocketMobile {
   jedaReconnectAwalMs?: number;
   jedaReconnectMaksMs?: number;
   intervalHeartbeatMs?: number;
+  wajibWssEksternal?: boolean;
 }
 
 export type StatusKoneksiWS = 'terputus' | 'menghubungkan' | 'terbuka' | 'ditutup';
 
+function bersihkanObjekJsonAman(nilai: any): any {
+  if (nilai === null || typeof nilai !== 'object') return nilai;
+  if (Array.isArray(nilai)) return nilai.map(bersihkanObjekJsonAman);
+  const hasil: Record<string, any> = {};
+  for (const k of Object.keys(nilai)) {
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+    hasil[k] = bersihkanObjekJsonAman(nilai[k]);
+  }
+  return hasil;
+}
+
 export class KlienWebSocketMobile {
   private url: string;
+  private protokol?: string[];
   private socket?: any;
   private status: StatusKoneksiWS = 'terputus';
   private autoReconnect: boolean;
   private jedaReconnectMs: number;
   private readonly jedaReconnectMaksMs: number;
   private readonly intervalHeartbeatMs: number;
+  private readonly wajibWssEksternal: boolean;
   private pengaturHeartbeat?: any;
   private timerReconnect?: any;
   private pendengarPesan: Array<(data: any) => void> = [];
   private pendengarStatus: Array<(status: StatusKoneksiWS) => void> = [];
 
   constructor(konfigurasi: KonfigurasiWebSocketMobile) {
+    const valid = LapisanKeamananMobile.validasiUrlWebSocketAman(
+      konfigurasi.url,
+      konfigurasi.wajibWssEksternal ?? false
+    );
+    if (!valid.valid) {
+      throw new Error(valid.pesan || `URL WebSocket tidak valid: '${konfigurasi.url}'`);
+    }
     this.url = konfigurasi.url;
+    this.protokol = konfigurasi.protokol;
     this.autoReconnect = konfigurasi.autoReconnect ?? true;
     this.jedaReconnectMs = konfigurasi.jedaReconnectAwalMs ?? 1000;
     this.jedaReconnectMaksMs = konfigurasi.jedaReconnectMaksMs ?? 30000;
     this.intervalHeartbeatMs = konfigurasi.intervalHeartbeatMs ?? 25000;
+    this.wajibWssEksternal = konfigurasi.wajibWssEksternal ?? false;
   }
 
   public dapatkanStatus(): StatusKoneksiWS {
@@ -45,7 +70,15 @@ export class KlienWebSocketMobile {
   public buka(): void {
     if (this.status === 'terbuka' || this.status === 'menghubungkan') return;
 
-    if (this.url.includes('.internal') || this.url.includes('.test') || this.url.includes('mock')) {
+    const cek = LapisanKeamananMobile.validasiUrlWebSocketAman(this.url, this.wajibWssEksternal);
+    if (!cek.valid) {
+      this.ubahStatus('terputus');
+      return;
+    }
+
+    const parsed = new URL(this.url);
+    const host = parsed.hostname.toLowerCase();
+    if (host.endsWith('.internal') || host.endsWith('.test') || host.includes('mock')) {
       this.ubahStatus('terbuka');
       this.mulaiHeartbeat();
       return;
@@ -55,7 +88,7 @@ export class KlienWebSocketMobile {
 
     try {
       if (typeof WebSocket !== 'undefined') {
-        this.socket = new WebSocket(this.url);
+        this.socket = this.protokol ? new WebSocket(this.url, this.protokol) : new WebSocket(this.url);
         this.socket.onopen = () => {
           this.ubahStatus('terbuka');
           this.jedaReconnectMs = 1000;
@@ -78,7 +111,6 @@ export class KlienWebSocketMobile {
           this.ubahStatus('terputus');
         };
       } else {
-        // Lingkungan node/simulator
         this.ubahStatus('terbuka');
         this.mulaiHeartbeat();
       }
@@ -97,10 +129,17 @@ export class KlienWebSocketMobile {
       clearTimeout(this.timerReconnect);
       this.timerReconnect = undefined;
     }
-    if (this.socket && typeof this.socket.close === 'function') {
+    if (this.socket) {
       try {
-        this.socket.close();
+        this.socket.onopen = null;
+        this.socket.onmessage = null;
+        this.socket.onclose = null;
+        this.socket.onerror = null;
+        if (typeof this.socket.close === 'function') {
+          this.socket.close();
+        }
       } catch {}
+      this.socket = undefined;
     }
     this.ubahStatus('ditutup');
   }
@@ -165,14 +204,13 @@ export class KlienWebSocketMobile {
     let diproses = teks;
     if (typeof teks === 'string') {
       try {
-        diproses = JSON.parse(teks);
+        diproses = bersihkanObjekJsonAman(JSON.parse(teks));
       } catch {
         // Biarkan berupa teks murni
       }
     }
 
     if (diproses && typeof diproses === 'object' && diproses.tipe === 'pong') {
-      // Tanggapan heartbeat server
       return;
     }
 

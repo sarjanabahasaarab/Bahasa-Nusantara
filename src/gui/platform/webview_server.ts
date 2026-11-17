@@ -63,8 +63,15 @@ export class AdaptorDesktopWebviewServer implements AdaptorPlatformGUI {
 
     this.httpServer = http.createServer((req: any, res: any) => {
       const reqPath = (req.url || '/').split('?')[0];
+      const securityHeaders: Record<string, string> = {
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'Referrer-Policy': 'no-referrer',
+        'Content-Security-Policy': `default-src 'self' 'unsafe-inline'; connect-src 'self' ws://127.0.0.1:${this.portAktif} ws://localhost:${this.portAktif}; img-src 'self' data:;`,
+      };
+
       if (reqPath === '/health') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.writeHead(200, { 'Content-Type': 'application/json', ...securityHeaders });
         res.end(JSON.stringify({ status: 'ok', jendela: Array.from(this.jendelaMap.keys()) }));
         return;
       }
@@ -75,7 +82,7 @@ export class AdaptorDesktopWebviewServer implements AdaptorPlatformGUI {
         Array.from(this.jendelaMap.values())[0];
 
       if (!jendela) {
-        res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', ...securityHeaders });
         res.end('Belum ada jendela GUI terdaftar.');
         return;
       }
@@ -84,7 +91,7 @@ export class AdaptorDesktopWebviewServer implements AdaptorPlatformGUI {
       const html = this.perender.renderKeHTML(jendela, wsUrl, {
         skemaWarna: pengelolaTemaGlobal.dapatkanSkema(),
       });
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', ...securityHeaders });
       res.end(html);
     });
 
@@ -100,11 +107,26 @@ export class AdaptorDesktopWebviewServer implements AdaptorPlatformGUI {
 
     const WssCtor = wsMod?.WebSocketServer || wsMod?.default?.WebSocketServer;
     if (WssCtor) {
-      this.wss = new WssCtor({ server: this.httpServer, path: '/ipc' });
+      this.wss = new WssCtor({
+        server: this.httpServer,
+        path: '/ipc',
+        maxPayload: 256 * 1024,
+        verifyClient: (info: any) => {
+          const origin = info?.origin || info?.req?.headers?.origin;
+          if (!origin) return true; // Non-browser native/Node client
+          return (
+            origin === `http://127.0.0.1:${this.portAktif}` ||
+            origin === `http://localhost:${this.portAktif}`
+          );
+        },
+      });
       this.wss.on('connection', (socket: any) => {
         socket.on('message', async (raw: any) => {
           try {
             const msg = JSON.parse(String(raw));
+            if (!msg || typeof msg !== 'object' || Array.isArray(msg)) {
+              throw new Error('Format muatan IPC harus berupa objek JSON.');
+            }
             await this.tanganiPesanKlien(msg);
           } catch (err) {
             this.jembatan.siarkan('desktop:error', { galat: String(err) });
@@ -115,20 +137,38 @@ export class AdaptorDesktopWebviewServer implements AdaptorPlatformGUI {
   }
 
   private async tanganiPesanKlien(msg: any): Promise<void> {
-    this.jembatan.siarkan(`ipc:${msg.jenis || 'umum'}`, msg);
-    const idWidget = msg.idWidget as string | undefined;
+    const jenisRaw = typeof msg.jenis === 'string' ? msg.jenis : 'umum';
+    if (jenisRaw === '__proto__' || jenisRaw === 'constructor' || jenisRaw === 'prototype') return;
+
+    this.jembatan.siarkan(`ipc:${jenisRaw}`, msg);
+    const idWidget = typeof msg.idWidget === 'string' ? msg.idWidget : undefined;
     if (!idWidget) return;
 
     for (const jendela of this.jendelaMap.values()) {
       const target = this.cariWidgetRekursif(jendela.kontenUtama, idWidget);
       if (target) {
-        if (msg.jenis === 'teks_berubah' && typeof (target as any).setNilai === 'function') {
+        if (jenisRaw === 'teks_berubah' && typeof (target as any).setNilai === 'function') {
           (target as any).setNilai(String(msg.nilaiTeks ?? ''));
-        } else if (msg.jenis === 'klik' && typeof (target as any).toggle === 'function') {
+        } else if (jenisRaw === 'nilai_berubah' && typeof (target as any).setNilai === 'function' && msg.nilaiAngka !== undefined) {
+          (target as any).setNilai(Number(msg.nilaiAngka));
+        } else if (jenisRaw === 'seleksi_berubah') {
+          if (typeof (target as any).pilih === 'function' && msg.nilaiTeks !== undefined) {
+            (target as any).pilih(String(msg.nilaiTeks));
+          } else if (typeof (target as any).pilihTab === 'function' && msg.nilaiAngka !== undefined) {
+            (target as any).pilihTab(Number(msg.nilaiAngka));
+          } else if (typeof (target as any).pilihBaris === 'function' && msg.nilaiAngka !== undefined) {
+            (target as any).pilihBaris(Number(msg.nilaiAngka));
+          } else {
+            await target.picu(jenisRaw, msg);
+          }
+        } else if (jenisRaw === 'klik' && typeof (target as any).toggle === 'function') {
           (target as any).toggle();
           await target.picu('klik');
+        } else if (jenisRaw === 'klik' && typeof (target as any).pilih === 'function' && target.jenis === 'tombol_radio') {
+          (target as any).pilih();
+          await target.picu('klik');
         } else {
-          await target.picu(msg.jenis || 'klik', msg);
+          await target.picu(jenisRaw, msg);
         }
         await this.perbaruiTampilan(jendela);
         break;

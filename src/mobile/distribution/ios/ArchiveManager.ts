@@ -64,6 +64,13 @@ export class ArchiveManager {
         }
       }
 
+      const escXml = (s: string) =>
+        String(s || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+
       // 4. Struktur .xcarchive resmi
       const infoPlistKonten = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -72,24 +79,24 @@ export class ArchiveManager {
     <key>ApplicationProperties</key>
     <dict>
         <key>ApplicationPath</key>
-        <string>Applications/${konfig.aplikasi.nama}.app</string>
+        <string>Applications/${escXml(konfig.aplikasi.nama)}.app</string>
         <key>CFBundleIdentifier</key>
-        <string>${konfig.ios.bundleId}</string>
+        <string>${escXml(konfig.ios.bundleId)}</string>
         <key>CFBundleShortVersionString</key>
-        <string>${konfig.aplikasi.versi}</string>
+        <string>${escXml(konfig.aplikasi.versi)}</string>
         <key>CFBundleVersion</key>
-        <string>${konfig.aplikasi.nomorBuild}</string>
+        <string>${Number(konfig.aplikasi.nomorBuild)}</string>
         <key>SigningIdentity</key>
-        <string>${konfig.ios.signing.identitasSigning || 'Apple Distribution'}</string>
+        <string>${escXml(konfig.ios.signing.identitasSigning || 'Apple Distribution')}</string>
         <key>Team</key>
-        <string>${konfig.ios.signing.teamId || 'TEAMNUSANTARA'}</string>
+        <string>${escXml(konfig.ios.signing.teamId || 'TEAMNUSANTARA')}</string>
     </dict>
     <key>ArchiveVersion</key>
     <integer>2</integer>
     <key>CreationDate</key>
     <date>${new Date().toISOString()}</date>
     <key>Name</key>
-    <string>${konfig.aplikasi.nama}</string>
+    <string>${escXml(konfig.aplikasi.nama)}</string>
     <key>SchemeName</key>
     <string>NusantaraApp</string>
 </dict>

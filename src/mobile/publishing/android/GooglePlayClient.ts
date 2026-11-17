@@ -36,10 +36,57 @@ export class GooglePlayClient {
 
   constructor(konfig: KonfigurasiGooglePlay) {
     this.konfig = { ...konfig };
-    this.baseUrl = (konfig.endpointApi || 'https://androidpublisher.googleapis.com/androidpublisher/v3/applications').replace(/\/+$/, '');
+    const rawUrl = (konfig.endpointApi || 'https://androidpublisher.googleapis.com/androidpublisher/v3/applications').replace(/\/+$/, '');
+    const parsed = new URL(rawUrl);
+    if (parsed.username || parsed.password) {
+      throw new Error('URL endpoint Google Play API tidak boleh memuat kredensial tertanam.');
+    }
+    const isLoopback = ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname.toLowerCase());
+    if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLoopback)) {
+      throw new Error(`Endpoint Google Play API wajib menggunakan HTTPS (atau HTTP loopback pengujian), ditemukan: '${rawUrl}'`);
+    }
+    this.baseUrl = rawUrl;
     if (konfig.bearerTokenAkses) {
       this.tokenAksesOauth = konfig.bearerTokenAkses;
       this.kedaluwarsaToken = Date.now() + 3600 * 1000;
+    }
+  }
+
+  public static verifikasiAssertionJWTRS256(
+    jwt: string,
+    kunciPublikPem: string,
+    expectedAudience?: string
+  ): { valid: boolean; header?: any; payload?: any; galat?: string } {
+    const parts = String(jwt || '').split('.');
+    if (parts.length !== 3) {
+      return { valid: false, galat: 'Format JWT harus terdiri atas 3 bagian (header.payload.signature).' };
+    }
+    try {
+      const header = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf-8'));
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'));
+      if (header?.alg !== 'RS256') {
+        return { valid: false, galat: `Algoritma JWT ditolak: diharapkan 'RS256', ditemukan '${header?.alg}'.` };
+      }
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (typeof payload?.exp !== 'number' || payload.exp <= nowSec) {
+        return { valid: false, galat: 'Token JWT Google Play telah kedaluwarsa.' };
+      }
+      if (expectedAudience && payload?.aud !== expectedAudience) {
+        return { valid: false, galat: `Audience JWT tidak cocok: diharapkan '${expectedAudience}', ditemukan '${payload?.aud}'.` };
+      }
+      const cryptoMod = muatModulNode<any>('crypto');
+      if (!cryptoMod || typeof cryptoMod.verify !== 'function') {
+        return { valid: false, galat: 'Node.js crypto runtime tidak tersedia untuk verifikasi RS256.' };
+      }
+      const ok = cryptoMod.verify(
+        'RSA-SHA256',
+        Buffer.from(`${parts[0]}.${parts[1]}`, 'utf-8'),
+        kunciPublikPem,
+        Buffer.from(parts[2], 'base64url')
+      );
+      return ok ? { valid: true, header, payload } : { valid: false, galat: 'Tanda tangan kriptografis RS256 tidak sah.' };
+    } catch (err: any) {
+      return { valid: false, galat: `Gagal memverifikasi JWT RS256: ${err.message}` };
     }
   }
 
@@ -226,7 +273,7 @@ export class GooglePlayClient {
       }
 
       const trackUrl = `${this.baseUrl}/${encodeURIComponent(this.konfig.packageName)}/edits/${encodeURIComponent(this.editIdAktif!)}/tracks/${encodeURIComponent(track)}`;
-      await fetch(trackUrl, {
+      const trackRes = await fetch(trackUrl, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...authHdr },
         body: JSON.stringify({
@@ -234,6 +281,19 @@ export class GooglePlayClient {
           releases: [{ versionCodes: [String(versionCode)], status: 'completed' }],
         }),
       });
+      if (!trackRes.ok) {
+        return {
+          sukses: false,
+          versionCode,
+          sha256,
+          ukuranBytes: payloadBytes.length,
+          track,
+          editId: this.editIdAktif,
+          pesan: `AAB terunggah namun pembaruan track '${track}' gagal (HTTP ${trackRes.status}).`,
+          waktuUpload: new Date().toISOString(),
+          modeSandbox: false,
+        };
+      }
 
       return {
         sukses: true,
@@ -266,25 +326,22 @@ export class GooglePlayClient {
    */
   public async dapatkanStatusTrack(track: GooglePlayTrack, modeSimulasi: boolean = true): Promise<InfoRilisTrackPlay> {
     if (!modeSimulasi && this.editIdAktif) {
-      try {
-        const authHdr = await this.pastikanHeaderOtorisasi();
-        const url = `${this.baseUrl}/${encodeURIComponent(this.konfig.packageName)}/edits/${encodeURIComponent(this.editIdAktif)}/tracks/${encodeURIComponent(track)}`;
-        const res = await fetch(url, { method: 'GET', headers: { ...authHdr } });
-        if (res.ok) {
-          const json: any = await res.json();
-          const rilis = Array.isArray(json.releases) && json.releases[0] ? json.releases[0] : {};
-          return {
-            track,
-            name: `Rilis ${track.toUpperCase()}`,
-            versionCodes: Array.isArray(rilis.versionCodes) ? rilis.versionCodes.map(Number) : [1],
-            status: (rilis.status as any) || 'completed',
-            releaseNotes: { id: 'Pembaruan terkini aplikasi Nusantara.' },
-            updateTime: new Date().toISOString(),
-          };
-        }
-      } catch {
-        // Fallback metadata jika endpoint tidak terjangkau
+      const authHdr = await this.pastikanHeaderOtorisasi();
+      const url = `${this.baseUrl}/${encodeURIComponent(this.konfig.packageName)}/edits/${encodeURIComponent(this.editIdAktif)}/tracks/${encodeURIComponent(track)}`;
+      const res = await fetch(url, { method: 'GET', headers: { ...authHdr } });
+      if (!res.ok) {
+        throw new Error(`Gagal membaca status track Google Play '${track}' (HTTP ${res.status}).`);
       }
+      const json: any = await res.json();
+      const rilis = Array.isArray(json.releases) && json.releases[0] ? json.releases[0] : {};
+      return {
+        track,
+        name: `Rilis ${track.toUpperCase()}`,
+        versionCodes: Array.isArray(rilis.versionCodes) ? rilis.versionCodes.map(Number) : [1],
+        status: (rilis.status as any) || 'completed',
+        releaseNotes: { id: 'Pembaruan terkini aplikasi Nusantara.' },
+        updateTime: new Date().toISOString(),
+      };
     }
 
     return {

@@ -8,6 +8,7 @@
  */
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
 import {
@@ -30,6 +31,7 @@ import {
   ReleaseValidator,
   BuildReportGenerator,
   ReleaseReportGenerator,
+  ZipBuilder,
   MobileCLI,
 } from '../../src/mobile';
 import { Interpreter } from '../../src/interpreter/interpreter';
@@ -397,6 +399,117 @@ print('ZIP_OK')`,
 
     const envAndroid = AndroidDistributionManager.periksaLingkungan();
     pastikan(typeof envAndroid.adaAapt2 === 'boolean' && typeof envAndroid.adaD8 === 'boolean', 'Probe biner SDK Android harus terisi');
+  });
+
+  // ---------------------------------------------------------------------------
+  // [12] Pengujian Keamanan & Integritas Tambahan (Zip-Slip, Tamper, XML, Secrets)
+  // ---------------------------------------------------------------------------
+  console.log('\n[12] Keamanan Zip-Slip, Integritas SHA-256 Tamper, & XML Escaping');
+  uji('12.1 ZipBuilder menolak entri Zip-Slip & memvalidasi CRC-32', () => {
+    let blockedTrav = false;
+    try {
+      ZipBuilder.buatArsipZip([{ nama: '../../etc/passwd', konten: 'x' }]);
+    } catch {
+      blockedTrav = true;
+    }
+    pastikan(blockedTrav, 'ZipBuilder wajib menolak entri path traversal (../)');
+
+    let blockedAbs = false;
+    try {
+      ZipBuilder.buatArsipZip([{ nama: '/etc/shadow', konten: 'x' }]);
+    } catch {
+      blockedAbs = true;
+    }
+    pastikan(blockedAbs, 'ZipBuilder wajib menolak jalur absolut (/...)');
+
+    let blockedSlash = false;
+    try {
+      ZipBuilder.buatArsipZip([{ nama: 'foo\\evil.txt', konten: 'x' }]);
+    } catch {
+      blockedSlash = true;
+    }
+    pastikan(blockedSlash, 'ZipBuilder wajib menolak backslash (\\)');
+
+    const zipOk = ZipBuilder.buatArsipZip([
+      { nama: 'META-INF/MANIFEST.MF', konten: 'Manifest-Version: 1.0\n' },
+      { nama: 'res/info.txt', konten: 'Nusantara' },
+    ]);
+    const parsedOk = ZipBuilder.validasiDanBacaArsipZip(zipOk);
+    pastikan(parsedOk.valid && parsedOk.daftarEntri.length === 2, 'Validasi PKZIP internal wajib lolos untuk arsip sah');
+
+    // Rusak satu byte payload untuk uji deteksi CRC-32 mismatch
+    const zipRusak = new Uint8Array(zipOk);
+    zipRusak[zipRusak.length - 120] ^= 0xff;
+    const parsedBad = ZipBuilder.validasiDanBacaArsipZip(zipRusak);
+    pastikan(!parsedBad.valid, 'Kerusakan bit pada arsip ZIP wajib terdeteksi oleh verifikasi CRC-32');
+  });
+
+  uji('12.2 BuildValidator mendeteksi tamper APK di disk & memverifikasi SHA256SUMS', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusantara-v40-'));
+    try {
+      const cfgTmp = {
+        ...konfig,
+        android: { ...konfig.android, outputDir: tmpDir },
+      };
+      const built = APKBuilder.bangunAPK(cfgTmp, 'debug');
+      pastikan(built.sukses && Boolean(built.artefak), 'APK sementara harus terbuat');
+      const artefak = built.artefak!;
+
+      const validAwal = BuildValidator.validasiArtefak(artefak);
+      pastikan(validAwal.valid && validAwal.sha256Sah && validAwal.zipSah === true, 'APK sah harus lolos verifikasi SHA-256 + PKZIP');
+
+      const sums = BuildValidator.buatSha256Sums([artefak]);
+      const sumsOk = BuildValidator.verifikasiSha256Sums(sums, path.dirname(artefak.jalurLokal));
+      pastikan(sumsOk.valid, 'SHA256SUMS valid wajib terverifikasi');
+
+      // Modifikasi 1 byte pada APK di disk
+      const bytes = fs.readFileSync(artefak.jalurLokal);
+      bytes[0] = 0x00;
+      fs.writeFileSync(artefak.jalurLokal, bytes);
+
+      const validTamper = BuildValidator.validasiArtefak(artefak);
+      pastikan(!validTamper.valid && !validTamper.sha256Sah, 'BuildValidator wajib menolak APK yang dimodifikasi di disk');
+
+      const sumsTamper = BuildValidator.verifikasiSha256Sums(sums, path.dirname(artefak.jalurLokal));
+      pastikan(!sumsTamper.valid, 'SHA256SUMS wajib mendeteksi modifikasi berkas di disk');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  uji('12.3 Escaping XML AndroidManifest & Info.plist serta validasi direktori .xcarchive', () => {
+    const xml = AndroidManifestManager.buatXmlManifes({
+      ...konfig,
+      aplikasi: { ...konfig.aplikasi, nama: 'Demo & <App> "Aman"' },
+    });
+    pastikan(
+      xml.includes('android:label="Demo &amp; &lt;App&gt; &quot;Aman&quot;"'),
+      'AndroidManifest.xml wajib melakukan escaping karakter XML khusus'
+    );
+
+    const tmpIos = fs.mkdtempSync(path.join(os.tmpdir(), 'nusantara-v40-ios-'));
+    try {
+      const arc = ArchiveManager.siapkanArchive({
+        ...konfig,
+        ios: { ...konfig.ios, outputDir: tmpIos },
+      });
+      pastikan(arc.sukses && Boolean(arc.artefak), 'Persiapan .xcarchive harus sukses');
+      const cekDir = BuildValidator.validasiArtefak(arc.artefak!);
+      pastikan(cekDir.valid && cekDir.adaBerkas, 'BuildValidator wajib mendukung direktori .xcarchive berisi Info.plist');
+    } finally {
+      fs.rmSync(tmpIos, { recursive: true, force: true });
+    }
+  });
+
+  uji('12.4 SigningValidator mendeteksi PKCS8/apiSecret tanpa false-positive storePasswordEnv', () => {
+    const cekPkcs8 = SigningValidator.periksaKeamananKredensial('-----BEGIN PRIVATE KEY-----\nMII...');
+    pastikan(!cekPkcs8.aman, 'Header -----BEGIN PRIVATE KEY----- wajib terdeteksi');
+
+    const cekApiSecret = SigningValidator.periksaKeamananKredensial('apiSecret="superRahasia42"');
+    pastikan(!cekApiSecret.aman, 'apiSecret plaintext wajib terdeteksi');
+
+    const cekEnvSafe = SigningValidator.periksaKeamananKredensial('storePasswordEnv="NUSANTARA_RELEASE_KEYSTORE_PASS"');
+    pastikan(cekEnvSafe.aman, 'Nama variabel env storePasswordEnv tidak boleh memicu false positive');
   });
 
   console.log('\n======================================================================');

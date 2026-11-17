@@ -43,27 +43,62 @@ export class AdaptorSimulatorMobile implements AdaptorPlatformNative {
   }
 
   private selesaikanJalurSandbox(jalur: string): { ok: true; absolut: string } | { ok: false } {
-    if (!jalur || jalur.includes('\0') || jalur.startsWith('/') || jalur.startsWith('\\')) {
+    if (!jalur || typeof jalur !== 'string' || jalur.includes('\0') || jalur.startsWith('/') || jalur.startsWith('\\')) {
       return { ok: false };
     }
     const path = muatModulNode<any>('path');
+    const fs = muatModulNode<any>('fs');
     const akar = this.dapatkanAkarSandbox();
-    if (!path || !akar) {
+    if (!path || !fs || !akar) {
       if (jalur.includes('..')) return { ok: false };
       return { ok: true, absolut: jalur };
     }
     const bersih = path.normalize(jalur);
-    if (bersih.startsWith('..') || path.isAbsolute(bersih)) {
+    if (!bersih || bersih === '.' || bersih.startsWith('..') || path.isAbsolute(bersih)) {
       return { ok: false };
     }
     const tujuan = path.resolve(akar, bersih);
     if (tujuan !== akar && !tujuan.startsWith(akar + path.sep)) {
       return { ok: false };
     }
+
+    // Tolak symlink yang mengarah ke luar root sandbox, termasuk di direktori induk atau symlink rusak
+    try {
+      const segmen = path.relative(akar, tujuan).split(path.sep).filter(Boolean);
+      let cursor = akar;
+      for (const s of segmen) {
+        cursor = path.join(cursor, s);
+        if (fs.existsSync(cursor)) {
+          const lstat = fs.lstatSync(cursor);
+          if (lstat.isSymbolicLink()) {
+            const targetAsli = fs.realpathSync(cursor);
+            if (targetAsli !== akar && !targetAsli.startsWith(akar + path.sep)) {
+              return { ok: false };
+            }
+          }
+        }
+      }
+      // Periksa realpath ancestor terdekat yang ada
+      let cek = tujuan;
+      while (!fs.existsSync(cek) && cek !== akar) {
+        const induk = path.dirname(cek);
+        if (induk === cek) break;
+        cek = induk;
+      }
+      if (fs.existsSync(cek)) {
+        const realAncestor = fs.realpathSync(cek);
+        if (realAncestor !== akar && !realAncestor.startsWith(akar + path.sep)) {
+          return { ok: false };
+        }
+      }
+    } catch {
+      return { ok: false };
+    }
+
     return { ok: true, absolut: tujuan };
   }
 
-  public async dapatkanInfoPerangkat(): Promise<HasilOperasiNative<any>> {
+  public dapatkanInfoPerangkatSinkron(): HasilOperasiNative<any> {
     const info = InfoPerangkatMobile.dapatkanInfo();
     const probe = PemeriksaHardwareHost.periksaHost();
     return buatHasilSukses({
@@ -87,7 +122,11 @@ export class AdaptorSimulatorMobile implements AdaptorPlatformNative {
     });
   }
 
-  public async ambilFoto(opsi?: { kamera?: 'depan' | 'belakang'; flash?: boolean; kualitas?: number }): Promise<HasilOperasiNative<any>> {
+  public async dapatkanInfoPerangkat(): Promise<HasilOperasiNative<any>> {
+    return this.dapatkanInfoPerangkatSinkron();
+  }
+
+  public ambilFotoSinkron(opsi?: { kamera?: 'depan' | 'belakang'; flash?: boolean; kualitas?: number }): HasilOperasiNative<any> {
     const kamera = opsi?.kamera || 'belakang';
     const probe = PemeriksaHardwareHost.periksaHost();
     return buatHasilSukses({
@@ -99,11 +138,16 @@ export class AdaptorSimulatorMobile implements AdaptorPlatformNative {
       flashDigunakan: Boolean(opsi?.flash),
       ukuranByte: 1024 * 350,
       perangkatKameraHost: probe.kameraV4L2,
-      sumberData: probe.kameraV4L2.length > 0 ? 'V4L2_NODE_DETECTED' : 'SIMULASI_KAMERA',
-    }, 'Foto simulator berhasil diambil.');
+      v4l2Terdeteksi: probe.kameraV4L2.length > 0,
+      sumberData: 'SIMULASI_KAMERA',
+    }, 'Foto simulator berhasil diambil (mode simulasi).');
   }
 
-  public async pilihMedia(opsi?: { tipe?: 'foto' | 'video' | 'semua'; maksPilihan?: number }): Promise<HasilOperasiNative<any>> {
+  public async ambilFoto(opsi?: { kamera?: 'depan' | 'belakang'; flash?: boolean; kualitas?: number }): Promise<HasilOperasiNative<any>> {
+    return this.ambilFotoSinkron(opsi);
+  }
+
+  public pilihMediaSinkron(opsi?: { tipe?: 'foto' | 'video' | 'semua'; maksPilihan?: number }): HasilOperasiNative<any> {
     const tipe = opsi?.tipe || 'foto';
     return buatHasilSukses({
       item: [
@@ -115,7 +159,12 @@ export class AdaptorSimulatorMobile implements AdaptorPlatformNative {
         },
       ],
       jumlah: 1,
+      sumberData: 'SIMULASI_MEDIA_PICKER',
     }, 'Media berhasil dipilih dari pemilih sistem.');
+  }
+
+  public async pilihMedia(opsi?: { tipe?: 'foto' | 'video' | 'semua'; maksPilihan?: number }): Promise<HasilOperasiNative<any>> {
+    return this.pilihMediaSinkron(opsi);
   }
 
   public async dapatkanLokasi(opsi?: { akurasiTinggi?: boolean; timeoutMs?: number }): Promise<HasilOperasiNative<any>> {
@@ -127,6 +176,9 @@ export class AdaptorSimulatorMobile implements AdaptorPlatformNative {
   }
 
   public async jadwalkanNotifikasi(notif: { id: string; judul: string; pesan: string; tundaDetik?: number }): Promise<HasilOperasiNative<any>> {
+    if (!notif || !notif.id || !notif.judul) {
+      return buatHasilGagal('ID dan judul notifikasi wajib diisi.', KodeGalatNative.ARGUMEN_TIDAK_VALID);
+    }
     const sukses = await NotifikasiLokalMobile.jadwalkan(notif);
     if (!sukses) {
       return buatHasilGagal('Gagal menjadwalkan notifikasi lokal.', KodeGalatNative.OPERASI_GAGAL);
@@ -139,7 +191,7 @@ export class AdaptorSimulatorMobile implements AdaptorPlatformNative {
     return buatHasilSukses({ id, dibatalkan: sukses }, sukses ? 'Notifikasi berhasil dibatalkan.' : 'Notifikasi tidak ditemukan.');
   }
 
-  public async bacaSensor(sensor: 'akselerometer' | 'giroskop' | 'magnetometer' | 'kedekatan' | 'cahaya'): Promise<HasilOperasiNative<any>> {
+  public bacaSensorSinkron(sensor: 'akselerometer' | 'giroskop' | 'magnetometer' | 'kedekatan' | 'cahaya'): HasilOperasiNative<any> {
     const stempel = Date.now();
     let data: any;
 
@@ -167,6 +219,10 @@ export class AdaptorSimulatorMobile implements AdaptorPlatformNative {
     return buatHasilSukses(data, `Pembacaan sensor ${sensor} berhasil.`);
   }
 
+  public async bacaSensor(sensor: 'akselerometer' | 'giroskop' | 'magnetometer' | 'kedekatan' | 'cahaya'): Promise<HasilOperasiNative<any>> {
+    return this.bacaSensorSinkron(sensor);
+  }
+
   public async pindaiBluetooth(opsi?: { durasiMs?: number }): Promise<HasilOperasiNative<any>> {
     const durasi = opsi?.durasiMs || 3000;
     const probe = PemeriksaHardwareHost.periksaHost();
@@ -183,7 +239,7 @@ export class AdaptorSimulatorMobile implements AdaptorPlatformNative {
     }, 'Pemindaian Bluetooth selesai.');
   }
 
-  public async dapatkanStatusBaterai(): Promise<HasilOperasiNative<any>> {
+  public dapatkanStatusBateraiSinkron(): HasilOperasiNative<any> {
     const batSim = StatusBateraiMobile.dapatkanStatus();
     const probe = PemeriksaHardwareHost.periksaHost();
     if (probe.baterai.terdeteksi && probe.baterai.level !== null) {
@@ -201,7 +257,11 @@ export class AdaptorSimulatorMobile implements AdaptorPlatformNative {
     }, 'Status baterai berhasil diambil.');
   }
 
-  public async dapatkanStatusJaringan(): Promise<HasilOperasiNative<any>> {
+  public async dapatkanStatusBaterai(): Promise<HasilOperasiNative<any>> {
+    return this.dapatkanStatusBateraiSinkron();
+  }
+
+  public dapatkanStatusJaringanSinkron(): HasilOperasiNative<any> {
     const netSim = StatusJaringanMobile.dapatkanStatus();
     const probe = PemeriksaHardwareHost.periksaHost();
     if (probe.jaringan.sumber === 'OS_NETWORK_INTERFACES') {
@@ -220,8 +280,12 @@ export class AdaptorSimulatorMobile implements AdaptorPlatformNative {
     }, 'Status jaringan berhasil diambil.');
   }
 
+  public async dapatkanStatusJaringan(): Promise<HasilOperasiNative<any>> {
+    return this.dapatkanStatusJaringanSinkron();
+  }
+
   public async putarAudio(urlAtauPath: string): Promise<HasilOperasiNative<any>> {
-    return buatHasilSukses({ sumber: urlAtauPath, diputar: true }, `Audio '${urlAtauPath}' sedang diputar.`);
+    return buatHasilSukses({ sumber: urlAtauPath, diputar: true, sumberData: 'SIMULASI_AUDIO' }, `Audio '${urlAtauPath}' sedang diputar.`);
   }
 
   public async rekamAudio(opsi?: { durasiMaksDetik?: number }): Promise<HasilOperasiNative<any>> {
@@ -230,6 +294,7 @@ export class AdaptorSimulatorMobile implements AdaptorPlatformNative {
       jalurBerkas: `file:///data/user/0/id.nusantara.app/cache/rekaman_${Date.now()}.m4a`,
       format: 'audio/m4a',
       durasiDetik: durasi,
+      sumberData: 'SIMULASI_AUDIO',
     }, 'Perekaman audio berhasil diselesaikan.');
   }
 
@@ -237,10 +302,10 @@ export class AdaptorSimulatorMobile implements AdaptorPlatformNative {
     return buatHasilSukses({ dihentikan: true }, 'Pemutaran/perekaman audio dihentikan.');
   }
 
-  public async bacaBerkas(jalur: string): Promise<HasilOperasiNative<any>> {
+  public bacaBerkasSinkron(jalur: string): HasilOperasiNative<any> {
     const valid = this.selesaikanJalurSandbox(jalur);
     if (!valid.ok) {
-      return buatHasilGagal('Deteksi path traversal pada jalur berkas.', KodeGalatNative.PATH_TIDAK_AMAN);
+      return buatHasilGagal('Deteksi path traversal atau symlink tidak aman pada jalur berkas.', KodeGalatNative.PATH_TIDAK_AMAN);
     }
     const fs = muatModulNode<any>('fs');
     if (fs && apakahNodeRuntime()) {
@@ -258,10 +323,14 @@ export class AdaptorSimulatorMobile implements AdaptorPlatformNative {
     return buatHasilSukses({ jalur, konten: kontenMem, ukuran: kontenMem.length, sumberData: 'BROWSER_MEMORY_SANDBOX' }, 'Berkas berhasil dibaca.');
   }
 
-  public async tulisBerkas(jalur: string, konten: string): Promise<HasilOperasiNative<any>> {
+  public async bacaBerkas(jalur: string): Promise<HasilOperasiNative<any>> {
+    return this.bacaBerkasSinkron(jalur);
+  }
+
+  public tulisBerkasSinkron(jalur: string, konten: string): HasilOperasiNative<any> {
     const valid = this.selesaikanJalurSandbox(jalur);
     if (!valid.ok) {
-      return buatHasilGagal('Deteksi path traversal pada jalur berkas.', KodeGalatNative.PATH_TIDAK_AMAN);
+      return buatHasilGagal('Deteksi path traversal atau symlink tidak aman pada jalur berkas.', KodeGalatNative.PATH_TIDAK_AMAN);
     }
     const fs = muatModulNode<any>('fs');
     const path = muatModulNode<any>('path');
@@ -275,10 +344,14 @@ export class AdaptorSimulatorMobile implements AdaptorPlatformNative {
     return buatHasilSukses({ jalur, byteTertulis: konten.length, sumberData: 'BROWSER_MEMORY_SANDBOX' }, 'Berkas berhasil ditulis.');
   }
 
-  public async hapusBerkas(jalur: string): Promise<HasilOperasiNative<any>> {
+  public async tulisBerkas(jalur: string, konten: string): Promise<HasilOperasiNative<any>> {
+    return this.tulisBerkasSinkron(jalur, konten);
+  }
+
+  public hapusBerkasSinkron(jalur: string): HasilOperasiNative<any> {
     const valid = this.selesaikanJalurSandbox(jalur);
     if (!valid.ok) {
-      return buatHasilGagal('Deteksi path traversal pada jalur berkas.', KodeGalatNative.PATH_TIDAK_AMAN);
+      return buatHasilGagal('Deteksi path traversal atau symlink tidak aman pada jalur berkas.', KodeGalatNative.PATH_TIDAK_AMAN);
     }
     const fs = muatModulNode<any>('fs');
     if (fs && apakahNodeRuntime()) {
@@ -288,6 +361,10 @@ export class AdaptorSimulatorMobile implements AdaptorPlatformNative {
     }
     const terhapus = this.berkasMemoriBrowser.delete(jalur);
     return buatHasilSukses({ jalur, terhapus, sumberData: 'BROWSER_MEMORY_SANDBOX' }, 'Berkas berhasil dihapus.');
+  }
+
+  public async hapusBerkas(jalur: string): Promise<HasilOperasiNative<any>> {
+    return this.hapusBerkasSinkron(jalur);
   }
 
   public async salinTeks(teks: string): Promise<HasilOperasiNative<any>> {
@@ -301,32 +378,61 @@ export class AdaptorSimulatorMobile implements AdaptorPlatformNative {
   }
 
   public async bagikan(opsi: { judul?: string; teks?: string; url?: string; jalurBerkas?: string }): Promise<HasilOperasiNative<any>> {
-    const sukses = BerbagiMobile.bagikan(opsi);
-    return buatHasilSukses({ sukses, data: opsi }, 'Dialog berbagi sistem berhasil dibuka.');
+    const sukses = await BerbagiMobile.bagikan(opsi);
+    if (!sukses) {
+      return buatHasilGagal('Berbagi konten dibatalkan atau gagal.', KodeGalatNative.DIBATALKAN_PENGGUNA, 'dibatalkan');
+    }
+    return buatHasilSukses({ sukses: true, data: opsi }, 'Dialog berbagi sistem berhasil dibuka.');
+  }
+
+  public simpanAmanSinkron(kunci: string, nilai: string): HasilOperasiNative<any> {
+    if (!kunci || typeof kunci !== 'string' || typeof nilai !== 'string') {
+      return buatHasilGagal('Kunci dan nilai penyimpanan aman wajib berupa teks tidak kosong.', KodeGalatNative.ARGUMEN_TIDAK_VALID);
+    }
+    const sukses = PenyimpananAmanMobile.simpan(kunci, nilai);
+    if (!sukses) {
+      return buatHasilGagal('Gagal mengenkripsi atau menyimpan kunci aman (kunci tidak valid).', KodeGalatNative.ENKRIPSI_GAGAL);
+    }
+    return buatHasilSukses({ kunci, tersimpan: true, skemaEnkripsi: 'AES-256-GCM' }, 'Nilai berhasil disimpan dengan enkripsi AES-256-GCM.');
   }
 
   public async simpanAman(kunci: string, nilai: string): Promise<HasilOperasiNative<any>> {
-    const sukses = PenyimpananAmanMobile.simpan(kunci, nilai);
-    return buatHasilSukses({ kunci, tersimpan: sukses }, 'Nilai berhasil disimpan dengan enkripsi AES-256.');
+    return this.simpanAmanSinkron(kunci, nilai);
   }
 
-  public async ambilAman(kunci: string): Promise<HasilOperasiNative<any>> {
+  public ambilAmanSinkron(kunci: string): HasilOperasiNative<any> {
     const nilai = PenyimpananAmanMobile.ambil(kunci);
     return buatHasilSukses({ kunci, nilai, ditemukan: nilai !== null }, nilai !== null ? 'Nilai aman ditemukan.' : 'Kunci tidak ditemukan.');
   }
 
-  public async hapusAman(kunci: string): Promise<HasilOperasiNative<any>> {
+  public async ambilAman(kunci: string): Promise<HasilOperasiNative<any>> {
+    return this.ambilAmanSinkron(kunci);
+  }
+
+  public hapusAmanSinkron(kunci: string): HasilOperasiNative<any> {
     const sukses = PenyimpananAmanMobile.hapus(kunci);
     return buatHasilSukses({ kunci, terhapus: sukses }, 'Nilai aman berhasil dihapus.');
   }
 
-  public async getar(durasiMs: number = 200): Promise<HasilOperasiNative<any>> {
+  public async hapusAman(kunci: string): Promise<HasilOperasiNative<any>> {
+    return this.hapusAmanSinkron(kunci);
+  }
+
+  public getarSinkron(durasiMs: number = 200): HasilOperasiNative<any> {
     GetaranMobile.getar(durasiMs);
     return buatHasilSukses({ durasiMs }, 'Getaran perangkat dipicu.');
   }
 
-  public async haptik(pola: string = 'sukses'): Promise<HasilOperasiNative<any>> {
+  public async getar(durasiMs: number = 200): Promise<HasilOperasiNative<any>> {
+    return this.getarSinkron(durasiMs);
+  }
+
+  public haptikSinkron(pola: string = 'sukses'): HasilOperasiNative<any> {
     GetaranMobile.haptik(pola as any);
     return buatHasilSukses({ pola }, 'Umpan balik haptik dipicu.');
+  }
+
+  public async haptik(pola: string = 'sukses'): Promise<HasilOperasiNative<any>> {
+    return this.haptikSinkron(pola);
   }
 }
