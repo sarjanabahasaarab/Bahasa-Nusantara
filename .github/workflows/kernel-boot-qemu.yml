@@ -121,3 +121,4 @@ jobs:
             artifacts/phase50/test-results.txt
             artifacts/phase50/SHA256SUMS
             artifacts/phase50/FINAL-CERTIFICATION.md
+          retention-days: 14

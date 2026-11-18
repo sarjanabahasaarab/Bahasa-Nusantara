@@ -1,7 +1,7 @@
 # LAPORAN PUBLIKASI RILIS APLIKASI (NUSANTARA)
 
 > ID Laporan: `lap_cross_demo`  
-> Tanggal & Waktu: `2026-11-18T00:22:05.089Z`  
+> Tanggal & Waktu: `2026-11-18T23:08:24.927Z`  
 > Mode: **SANDBOX SIMULATOR (AMAN)**  
 
 ## 1. Identitas Rilis & Aplikasi
@@ -20,7 +20,7 @@
 
 ## 2. Berkas Binary Rilis
 
-* **Android**: `/tmp/nusantara-cross-demo-SPrp74/mobile-dist/android/release/id.nusantara.crossdemo-1.0.0.aab`
+* **Android**: `/tmp/nusantara-cross-demo-1syGrI/mobile-dist/android/release/id.nusantara.crossdemo-1.0.0.aab`
 
 ## 3. Catatan Peringatan & Kesalahan
 

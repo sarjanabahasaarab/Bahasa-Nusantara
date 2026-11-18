@@ -10,6 +10,12 @@ on:
       - main
       - master
   workflow_dispatch:
+    inputs:
+      enable_windows_arm64:
+        description: 'Gunakan runner opsional windows-11-arm (memerlukan kuota Team/Enterprise)'
+        type: boolean
+        required: false
+        default: false
 
 # P0: Least-Privilege Permissions at workflow root
 permissions:
@@ -176,7 +182,7 @@ jobs:
   build-matrix-validation:
     name: NUSANTARA / Validasi Build (${{ matrix.target }})
     needs: quality-gate
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ (matrix.target == 'windows-arm64' && vars.ENABLE_WINDOWS_ARM64_RUNNER != 'true' && !(github.event_name == 'workflow_dispatch' && inputs.enable_windows_arm64)) && 'windows-latest' || ((matrix.target == 'linux-arm64' && vars.DISABLE_LINUX_ARM64_RUNNER == 'true') && 'ubuntu-latest' || matrix.os) }}
     timeout-minutes: 35
     strategy:
       fail-fast: false
@@ -312,19 +318,21 @@ jobs:
             fi
             if [ "${{ matrix.target }}" = "windows-arm64" ]; then
               ARM64_VC_LIB=$(find "/c/Program Files/Microsoft Visual Studio" -type d -path "*/VC/Tools/MSVC/*/lib/arm64" 2>/dev/null | head -n 1 || true)
+              WIN_SDK_ARM64=$(find "/c/Program Files (x86)/Windows Kits/10/Lib" -type d -path "*/um/arm64" 2>/dev/null | head -n 1 || true)
               if [ -n "$ARM64_VC_LIB" ]; then
                 VC_TOOLS_DIR=$(dirname "$(dirname "$ARM64_VC_LIB")")
                 echo "VCToolsInstallDir=$VC_TOOLS_DIR" >> "$GITHUB_ENV"
                 echo "[OK] MSVC ARM64 libraries ditemukan: $ARM64_VC_LIB"
               else
-                echo "[GALAT] MSVC ARM64 libraries (VC/Tools/MSVC/*/lib/arm64) tidak terpasang."
-                exit 1
+                echo "[WARN] MSVC ARM64 libraries (VC/Tools/MSVC/*/lib/arm64) tidak tersedia di runner ini."
               fi
-              WIN_SDK_ARM64=$(find "/c/Program Files (x86)/Windows Kits/10/Lib" -type d -path "*/um/arm64" 2>/dev/null | head -n 1 || true)
               if [ -n "$WIN_SDK_ARM64" ]; then
                 echo "[OK] Windows SDK ARM64 library ditemukan: $WIN_SDK_ARM64"
               else
-                echo "[GALAT] Windows SDK ARM64 library (Lib/*/um/arm64) tidak terpasang."
+                echo "[WARN] Windows SDK ARM64 library (Lib/*/um/arm64) tidak tersedia di runner ini."
+              fi
+              if [ "${{ vars.ENABLE_WINDOWS_ARM64_RUNNER }}" = "true" ] && { [ -z "$ARM64_VC_LIB" ] || [ -z "$WIN_SDK_ARM64" ]; }; then
+                echo "[GALAT] Runner native windows-11-arm diaktifkan tetapi MSVC/WinSDK ARM64 tidak lengkap."
                 exit 1
               fi
             fi
@@ -559,6 +567,9 @@ jobs:
             "arch": "$(uname -m)",
             "status": "PASS",
             "unitTestStatus": "PASS",
+            "commitSha": "${{ github.sha }}",
+            "workflowRunId": "${{ github.run_id }}",
+            "evidenceScope": "ci-workflow",
             "isNativeHardware": false,
             "displayMode": "xvfb-virtual",
             "toolchains": { "gtk3": "$GTK_VER", "xvfbRun": "installed" },
@@ -594,6 +605,9 @@ jobs:
             "arch": "$(uname -m)",
             "status": "NOT_VERIFIED",
             "unitTestStatus": "PASS",
+            "commitSha": "${{ github.sha }}",
+            "workflowRunId": "${{ github.run_id }}",
+            "evidenceScope": "ci-workflow",
             "isNativeHardware": false,
             "displayMode": "headless",
             "details": {
@@ -625,6 +639,9 @@ jobs:
             "arch": "$(uname -m)",
             "status": "NOT_VERIFIED",
             "unitTestStatus": "PASS",
+            "commitSha": "${{ github.sha }}",
+            "workflowRunId": "${{ github.run_id }}",
+            "evidenceScope": "ci-workflow",
             "isNativeHardware": false,
             "displayMode": "headless",
             "toolchains": { "macOsSdk": "$SDK_PATH" },
@@ -716,6 +733,9 @@ jobs:
             "arch": "$(uname -m)",
             "status": "NOT_VERIFIED",
             "unitTestStatus": "PASS",
+            "commitSha": "${{ github.sha }}",
+            "workflowRunId": "${{ github.run_id }}",
+            "evidenceScope": "ci-workflow",
             "isNativeHardware": false,
             "toolchains": {
               "java": "$JAVA_VER",
@@ -790,6 +810,9 @@ jobs:
             "arch": "$(uname -m)",
             "status": "NOT_VERIFIED",
             "unitTestStatus": "PASS",
+            "commitSha": "${{ github.sha }}",
+            "workflowRunId": "${{ github.run_id }}",
+            "evidenceScope": "ci-workflow",
             "isNativeHardware": false,
             "toolchains": {
               "xcodebuild": "$XCODE_VER",
@@ -856,6 +879,9 @@ jobs:
             "arch": "$(uname -m)",
             "status": "PASS",
             "unitTestStatus": "PASS",
+            "commitSha": "${{ github.sha }}",
+            "workflowRunId": "${{ github.run_id }}",
+            "evidenceScope": "ci-workflow",
             "isNativeHardware": false,
             "toolchains": { "openssl": "$OPENSSL_VER" },
             "details": {
@@ -911,8 +937,11 @@ jobs:
 
       - name: Kumpulkan Evidence & Jalankan Gerbang Sertifikasi Terpusat Ketat
         run: |
+          rm -rf artifacts/phase23 artifacts/demo-terpadu artifacts/cert-evidence artifacts/certification
           mkdir -p artifacts/phase23 artifacts/demo-terpadu artifacts/cert-evidence artifacts/certification
-          if [ -d downloaded-evidence/phase23-certification-report ]; then
+          if [ -d downloaded-evidence/phase23-certification-report/artifacts/phase23 ]; then
+            cp -r downloaded-evidence/phase23-certification-report/artifacts/phase23/* artifacts/phase23/ || true
+          elif [ -d downloaded-evidence/phase23-certification-report ]; then
             cp -r downloaded-evidence/phase23-certification-report/* artifacts/phase23/ || true
           fi
           if [ -d downloaded-evidence/demo-terpadu-artifacts ]; then
@@ -927,6 +956,9 @@ jobs:
             --phase23-summary artifacts/phase23/certification-summary.json \
             --demo-dir artifacts/demo-terpadu \
             --evidence-dir artifacts/cert-evidence \
+            --commit "${{ github.sha }}" \
+            --run-id "${{ github.run_id }}" \
+            --require-ci-provenance \
             --json-out artifacts/certification/CERTIFICATION-GATE-REPORT.json \
             --md-out artifacts/certification/CERTIFICATION-GATE-REPORT.md \
             --step-summary

@@ -119,7 +119,8 @@ function buatPhase23PassSummary(): Phase23AggregationResult {
   };
 }
 
-function buatJobEvidencesFullPass(): EvidenceJobCI[] {
+function buatJobEvidencesFullPass(commitSha = 'deadbeef1234', workflowRunId = '999'): EvidenceJobCI[] {
+  const nowIso = new Date().toISOString();
   return [
     {
       jobId: 'phase36-linux-xvfb',
@@ -129,6 +130,10 @@ function buatJobEvidencesFullPass(): EvidenceJobCI[] {
       arch: 'x64',
       status: 'PASS',
       unitTestStatus: 'PASS',
+      commitSha,
+      workflowRunId,
+      evidenceScope: 'ci-workflow',
+      generatedAt: nowIso,
       isNativeHardware: true,
       displayMode: 'desktop-hardware',
     },
@@ -196,6 +201,10 @@ function buatJobEvidencesFullPass(): EvidenceJobCI[] {
       arch: 'x64',
       status: 'PASS',
       unitTestStatus: 'PASS',
+      commitSha,
+      workflowRunId,
+      evidenceScope: 'ci-workflow',
+      generatedAt: nowIso,
       details: {
         tlsLoopbackStatus: 'PASS',
         otaRegressionStatus: 'PASS',
@@ -329,6 +338,80 @@ try {
     pastikan(report.overallStatus === 'PARTIAL' && report.exitCode === 1, 'Kondisi lokal tanpa SDK/emulator harus jujur PARTIAL (exitCode=1)');
     pastikan(report.artifactReferences[0]?.verified === true, 'Referensi artefak demo terpadu harus terverifikasi valid');
     pastikan(Boolean(report.toolchainVersions.node), 'Versi node harus terdeteksi di toolchainVersions');
+  });
+
+  uji('9. Status SKIPPED pada job wajib tidak pernah dihitung PASS & selalu gagalkan gate', () => {
+    const demoDir = path.join(tmpBase, 'demo-skipped');
+    buatBundelDummy(demoDir);
+    const jobs = buatJobEvidencesFullPass().map((j) =>
+      j.jobId === 'phase39-42-tls-ota'
+        ? { ...j, status: 'SKIPPED' as const, unitTestStatus: 'SKIPPED' as const }
+        : j
+    );
+    const lap = evaluasiGerbangSertifikasi({
+      commitSha: 'deadbeef1234',
+      workflowRunId: '999',
+      phase23Summary: buatPhase23PassSummary(),
+      demoBundleDir: demoDir,
+      jobEvidences: jobs,
+      testSuiteStatuses: { staticChecks: 'PASS', testSuite: 'PASS', qualityGate: 'PASS' },
+    });
+    pastikan(lap.gatePassed === false && lap.exitCode === 1, 'SKIPPED tidak boleh meluluskan gate');
+    pastikan(lap.phases['39'].status === 'SKIPPED' && lap.phases['42'].status === 'SKIPPED', 'Phase 39 & 42 harus berstatus SKIPPED');
+    pastikan(lap.counts.skipped === 2 && lap.counts.pass < 8, 'Counts skipped harus tercatat akurat');
+  });
+
+  uji('10. Provenance check: menolak commit SHA berbeda, run ID berbeda, artefak kedaluwarsa, & snapshot lokal pada mode CI', () => {
+    const demoDir = path.join(tmpBase, 'demo-provenance');
+    buatBundelDummy(demoDir);
+
+    const p23 = buatPhase23PassSummary();
+    for (const k of Object.keys(p23.targets) as Array<keyof typeof p23.targets>) {
+      if (p23.targets[k]) p23.targets[k]!.generatedAt = new Date().toISOString();
+    }
+
+    // Mismatch commitSha
+    const jobsMismatchSha = buatJobEvidencesFullPass('old-commit-sha', '999');
+    const lapSha = evaluasiGerbangSertifikasi({
+      commitSha: 'new-commit-sha',
+      workflowRunId: '999',
+      requireCiProvenance: true,
+      phase23Summary: p23,
+      demoBundleDir: demoDir,
+      jobEvidences: jobsMismatchSha,
+      testSuiteStatuses: { staticChecks: 'PASS', testSuite: 'PASS', qualityGate: 'PASS' },
+    });
+    pastikan(lapSha.overallStatus === 'FAIL' && lapSha.exitCode === 1, 'Harus menolak bukti dari commit SHA berbeda');
+
+    // Stale evidence (> maxEvidenceAgeMs)
+    const staleDate = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+    const jobsStale = buatJobEvidencesFullPass('new-commit-sha', '999').map((j) => ({
+      ...j,
+      commitSha: 'new-commit-sha',
+      workflowRunId: '999',
+      generatedAt: staleDate,
+    }));
+    const lapStale = evaluasiGerbangSertifikasi({
+      commitSha: 'new-commit-sha',
+      workflowRunId: '999',
+      requireCiProvenance: true,
+      maxEvidenceAgeMs: 24 * 60 * 60 * 1000,
+      phase23Summary: p23,
+      demoBundleDir: demoDir,
+      jobEvidences: jobsStale,
+      testSuiteStatuses: { staticChecks: 'PASS', testSuite: 'PASS', qualityGate: 'PASS' },
+    });
+    pastikan(lapStale.overallStatus === 'FAIL' && lapStale.exitCode === 1, 'Harus menolak artefak lama di luar batas kesegaran');
+
+    // Local snapshot cannot impersonate CI run
+    const lapLocal = evaluasiGerbangSertifikasi({
+      requireCiProvenance: true,
+      phase23Summary: p23,
+      demoBundleDir: demoDir,
+      jobEvidences: buatJobEvidencesFullPass(),
+      testSuiteStatuses: { staticChecks: 'PASS', testSuite: 'PASS', qualityGate: 'PASS' },
+    });
+    pastikan(lapLocal.overallStatus === 'FAIL' && lapLocal.exitCode === 1, 'Snapshot lokal tanpa commitSha/runId CI tidak boleh lolos mode CI provenance');
   });
 } finally {
   fs.rmSync(tmpBase, { recursive: true, force: true });

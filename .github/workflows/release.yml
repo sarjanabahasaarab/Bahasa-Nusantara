@@ -135,6 +135,10 @@ jobs:
     needs: test-and-gate
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      checks: read
+      actions: read
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
@@ -174,6 +178,9 @@ jobs:
             npx tsx scripts/certification-gate.ts evaluate \
               --demo-dir artifacts/demo-terpadu \
               --phase23-evidence-dir artifacts/phase23/evidence \
+              --commit "${{ github.sha }}" \
+              --run-id "${{ github.run_id }}" \
+              --require-ci-provenance \
               --json-out artifacts/certification/RELEASE-GATE-REPORT.json \
               --md-out artifacts/certification/RELEASE-GATE-REPORT.md \
               --step-summary
@@ -194,10 +201,10 @@ jobs:
   build-release-artifacts:
     name: NUSANTARA / Bangun Artefak Rilis (${{ matrix.target }})
     needs: verify-certification-gate
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ (matrix.target == 'windows-arm64' && vars.ENABLE_WINDOWS_ARM64_RUNNER != 'true') && 'windows-latest' || ((matrix.target == 'linux-arm64' && vars.DISABLE_LINUX_ARM64_RUNNER == 'true') && 'ubuntu-latest' || matrix.os) }}
     timeout-minutes: 30
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - target: windows-x86_64
@@ -387,7 +394,7 @@ jobs:
             dist/*.tar.gz
             dist/SHA256SUMS
             dist/release-manifest.json
-          name: 'NUSANTARA v${{ inputs.version || "0.50.0" }} — Release & Distribution'
+          name: "NUSANTARA v${{ inputs.version || '0.50.0' }} — Release & Distribution"
           tag_name: v${{ inputs.version || '0.50.0' }}
           body_path: dist/RELEASE_NOTES.md
           draft: ${{ inputs.release_type == 'draft' }}

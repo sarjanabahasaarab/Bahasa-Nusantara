@@ -1,7 +1,7 @@
 # Laporan Gerbang Sertifikasi Terpusat NUSANTARA (Phase 23 & Phase 36–42)
 
 - **Verdict Sertifikasi:** `PARTIAL` (`overallStatus=PARTIAL`, `gatePassed=false`, `exitCode=1`)
-- **Waktu Evaluasi:** `2026-11-18T00:22:23.202Z`
+- **Waktu Evaluasi:** `2026-11-18T00:33:04.345Z`
 - **Commit SHA:** `unavailable-no-git-metadata` | **Workflow Run ID:** `local-run` | **Runner:** `linux-x64` (`linux-x64`)
 - **Ringkasan 8 Fase:** PASS=`0` | NOT_VERIFIED=`8` | SKIPPED=`0` | BLOCKED=`0` | FAIL=`0`
 

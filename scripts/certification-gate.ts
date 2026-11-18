@@ -84,6 +84,13 @@ function cmdEvaluate(args: string[]): number {
   const stepSummary = hasFlag(args, '--step-summary');
   const snapshotOnly = hasFlag(args, '--snapshot');
   const dryRun = hasFlag(args, '--dry-run');
+  const requireCiProvenance = hasFlag(args, '--require-ci-provenance');
+  const maxAgeRaw = getArg(args, '--max-age-hours');
+  const maxAgeHours = maxAgeRaw ? Number(maxAgeRaw) : undefined;
+  const maxEvidenceAgeMs =
+    typeof maxAgeHours === 'number' && Number.isFinite(maxAgeHours) && maxAgeHours > 0
+      ? maxAgeHours * 60 * 60 * 1000
+      : undefined;
 
   const { report, corruptEvidenceFiles } = muatDanEvaluasiDariDisk({
     phase23SummaryPath: phase23SummaryPath ? path.resolve(phase23SummaryPath) : undefined,
@@ -94,6 +101,8 @@ function cmdEvaluate(args: string[]): number {
     workflowRunId: getArg(args, '--run-id') || process.env.GITHUB_RUN_ID,
     runner: getArg(args, '--runner') || process.env.RUNNER_OS,
     dryRun,
+    requireCiProvenance,
+    maxEvidenceAgeMs,
   });
 
   if (jsonOut) {

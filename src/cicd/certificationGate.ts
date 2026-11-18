@@ -49,6 +49,9 @@ export interface EvidenceJobCI {
   arch: string;
   targetPlatform?: string;
   status: StatusSertifikasiFase;
+  commitSha?: string;
+  workflowRunId?: string;
+  evidenceScope?: 'ci-workflow' | 'local-snapshot' | string;
   isNativeHardware?: boolean;
   displayMode?: 'xvfb-virtual' | 'win32-desktop' | 'cocoa-desktop' | 'headless' | string;
   unitTestStatus?: StatusSertifikasiFase;
@@ -115,6 +118,9 @@ export interface InputEvaluasiGerbangSertifikasi {
   runner?: string;
   targetPlatform?: string;
   dryRun?: boolean;
+  requireCiProvenance?: boolean;
+  maxEvidenceAgeMs?: number;
+  nowMs?: number;
   toolchainVersions?: Record<string, string | null>;
   phase23Summary?: Phase23AggregationResult | null;
   phase23EvidenceDir?: string;
@@ -255,15 +261,18 @@ function readAllJobEvidencesFromDir(dirPath?: string): { evidences: EvidenceJobC
 export function evaluasiGerbangSertifikasi(
   input: InputEvaluasiGerbangSertifikasi = {}
 ): LaporanGerbangSertifikasiTerpusat {
-  const generatedAt = new Date().toISOString();
+  const nowMs = typeof input.nowMs === 'number' ? input.nowMs : Date.now();
+  const generatedAt = new Date(nowMs).toISOString();
   const commitSha = input.commitSha || process.env.GITHUB_SHA || 'unavailable-no-git-metadata';
   const workflowRunId = input.workflowRunId || process.env.GITHUB_RUN_ID || 'local-run';
   const targetPlatform = input.targetPlatform || `${process.platform}-${process.arch}`;
   const runner = input.runner || process.env.RUNNER_OS || targetPlatform;
   const dryRun = Boolean(input.dryRun);
+  const requireCiProvenance = Boolean(input.requireCiProvenance);
+  const maxEvidenceAgeMs = typeof input.maxEvidenceAgeMs === 'number' ? input.maxEvidenceAgeMs : 24 * 60 * 60 * 1000;
   const toolchainVersions = input.toolchainVersions || deteksiVersiToolchainHost();
 
-  const jobEvidences = [...(input.jobEvidences || [])];
+  const rawJobEvidences = [...(input.jobEvidences || [])];
   const jobEvidenceFiles = [...(input.jobEvidenceFiles || [])];
 
   // 1. Validasi Demo Terpadu Artifacts (jika direktori diberikan / ada)
@@ -288,6 +297,68 @@ export function evaluasiGerbangSertifikasi(
   const artifactReferences: ReferensiArtefakSertifikasi[] = [];
   const testResults: RingkasanUjiSertifikasi[] = [];
   const globalBlockers: string[] = [];
+
+  const isLocalFallbackContext =
+    commitSha === 'unavailable-no-git-metadata' || workflowRunId === 'local-run';
+  let provenanceFailed = false;
+
+  if (requireCiProvenance && isLocalFallbackContext) {
+    provenanceFailed = true;
+    globalBlockers.push(
+      `Snapshot lokal atau metadata git/run hilang (commitSha='${commitSha}', workflowRunId='${workflowRunId}') tidak dapat menggantikan bukti CI GitHub Actions.`
+    );
+  }
+
+  // Audit provenance & kesegaran setiap job evidence CI dan Phase 23 evidence
+  const jobEvidences: EvidenceJobCI[] = [];
+  const hasRealCommit = commitSha !== 'unavailable-no-git-metadata';
+  const hasRealRunId = workflowRunId !== 'local-run';
+
+  for (const ev of rawJobEvidences) {
+    let tamperedReason: string | null = null;
+    if (requireCiProvenance && ev.evidenceScope === 'local-snapshot') {
+      tamperedReason = `Evidence '${ev.jobId}' berlabel local-snapshot dan dilarang menggantikan bukti CI.`;
+    } else if (ev.commitSha && hasRealCommit && ev.commitSha !== commitSha) {
+      tamperedReason = `Commit SHA evidence '${ev.jobId}' (${ev.commitSha}) tidak cocok dengan run saat ini (${commitSha}).`;
+    } else if (ev.workflowRunId && hasRealRunId && ev.workflowRunId !== workflowRunId) {
+      tamperedReason = `Workflow Run ID evidence '${ev.jobId}' (${ev.workflowRunId}) tidak cocok dengan run saat ini (${workflowRunId}).`;
+    } else if (requireCiProvenance && (!ev.commitSha || !ev.workflowRunId)) {
+      tamperedReason = `Evidence '${ev.jobId}' tidak menyertakan commitSha/workflowRunId sah untuk provenance CI.`;
+    } else if (ev.generatedAt) {
+      const ts = Date.parse(ev.generatedAt);
+      if (Number.isNaN(ts) || nowMs - ts > maxEvidenceAgeMs || ts - nowMs > 15 * 60 * 1000) {
+        tamperedReason = `Evidence '${ev.jobId}' usang atau memiliki timestamp tidak valid (${ev.generatedAt}).`;
+      }
+    } else if (requireCiProvenance) {
+      tamperedReason = `Evidence '${ev.jobId}' tidak memiliki timestamp generatedAt.`;
+    }
+
+    if (tamperedReason) {
+      provenanceFailed = true;
+      globalBlockers.push(tamperedReason);
+      jobEvidences.push({
+        ...ev,
+        status: 'FAIL',
+        unitTestStatus: ev.unitTestStatus === 'FAIL' ? 'FAIL' : 'FAIL',
+        blockers: [...(ev.blockers || []), tamperedReason],
+      });
+    } else {
+      jobEvidences.push(ev);
+    }
+  }
+
+  if (p23Summary && requireCiProvenance) {
+    for (const [tName, tEv] of Object.entries(p23Summary.targets)) {
+      if (!tEv) continue;
+      const ts = tEv.generatedAt ? Date.parse(tEv.generatedAt) : Number.NaN;
+      if (Number.isNaN(ts) || nowMs - ts > maxEvidenceAgeMs || ts - nowMs > 15 * 60 * 1000) {
+        provenanceFailed = true;
+        globalBlockers.push(
+          `Evidence target Phase 23 '${tName}' kedaluwarsa/bukan hasil run terbaru (generatedAt='${tEv.generatedAt}').`
+        );
+      }
+    }
+  }
 
   if (demoValidation) {
     if (demoValidation.sha256Manifest) checksums['artifacts/demo-terpadu/manifest.json'] = demoValidation.sha256Manifest;
@@ -629,16 +700,16 @@ export function evaluasiGerbangSertifikasi(
   // ---- PHASE 39: Mobile Networking ----
   {
     const loopbackTlsStatus: StatusSertifikasiFase =
-      tlsOtaJob?.status === 'FAIL'
-        ? 'FAIL'
+      tlsOtaJob?.status === 'FAIL' || tlsOtaJob?.status === 'BLOCKED' || tlsOtaJob?.status === 'SKIPPED'
+        ? tlsOtaJob.status
         : tlsOtaJob?.details?.tlsLoopbackStatus && isValidStatus(tlsOtaJob.details.tlsLoopbackStatus)
         ? tlsOtaJob.details.tlsLoopbackStatus
         : tlsOtaJob
         ? tlsOtaJob.status
         : input.testSuiteStatuses?.testSuite || 'NOT_VERIFIED';
     const prodSpkiStatus: StatusSertifikasiFase =
-      tlsOtaJob?.status === 'FAIL'
-        ? 'FAIL'
+      tlsOtaJob?.status === 'FAIL' || tlsOtaJob?.status === 'BLOCKED' || tlsOtaJob?.status === 'SKIPPED'
+        ? tlsOtaJob.status
         : tlsOtaJob?.details?.nativeSpkiPinningVerified === true
         ? 'PASS'
         : 'NOT_VERIFIED';
@@ -783,16 +854,16 @@ export function evaluasiGerbangSertifikasi(
   // ---- PHASE 42: OTA Updates & Secure Update System ----
   {
     const otaRegressionStatus: StatusSertifikasiFase =
-      tlsOtaJob?.status === 'FAIL'
-        ? 'FAIL'
+      tlsOtaJob?.status === 'FAIL' || tlsOtaJob?.status === 'BLOCKED' || tlsOtaJob?.status === 'SKIPPED'
+        ? tlsOtaJob.status
         : tlsOtaJob?.details?.otaRegressionStatus && isValidStatus(tlsOtaJob.details.otaRegressionStatus)
         ? tlsOtaJob.details.otaRegressionStatus
         : tlsOtaJob
         ? tlsOtaJob.status
         : input.testSuiteStatuses?.testSuite || 'NOT_VERIFIED';
     const mobileNativeStoreOta: StatusSertifikasiFase =
-      tlsOtaJob?.status === 'FAIL'
-        ? 'FAIL'
+      tlsOtaJob?.status === 'FAIL' || tlsOtaJob?.status === 'BLOCKED' || tlsOtaJob?.status === 'SKIPPED'
+        ? tlsOtaJob.status
         : tlsOtaJob?.details?.playCoreAndStoreKitVerified === true
         ? 'PASS'
         : 'NOT_VERIFIED';
@@ -859,7 +930,7 @@ export function evaluasiGerbangSertifikasi(
   let certificationVerdict: LaporanGerbangSertifikasiTerpusat['certificationVerdict'];
   let gatePassed = false;
 
-  if (fail > 0 || anyDemoFail || anyTopStepFail) {
+  if (fail > 0 || anyDemoFail || anyTopStepFail || provenanceFailed) {
     overallStatus = 'FAIL';
     certificationVerdict = 'FAILED';
   } else if (blocked > 0 || anyTopStepBlocked) {
@@ -950,6 +1021,8 @@ export function muatDanEvaluasiDariDisk(options: {
   workflowRunId?: string;
   runner?: string;
   dryRun?: boolean;
+  requireCiProvenance?: boolean;
+  maxEvidenceAgeMs?: number;
 }): { report: LaporanGerbangSertifikasiTerpusat; corruptEvidenceFiles: string[] } {
   const phase23Summary = readJsonSafe<Phase23AggregationResult>(options.phase23SummaryPath);
   const { evidences, files, corruptFiles } = readAllJobEvidencesFromDir(options.evidenceDir);
@@ -964,6 +1037,8 @@ export function muatDanEvaluasiDariDisk(options: {
     workflowRunId: options.workflowRunId,
     runner: options.runner,
     dryRun: options.dryRun,
+    requireCiProvenance: options.requireCiProvenance,
+    maxEvidenceAgeMs: options.maxEvidenceAgeMs,
     phase23Summary,
     phase23EvidenceDir: options.phase23EvidenceDir,
     demoBundleDir: options.demoBundleDir,
