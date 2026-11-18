@@ -168,7 +168,7 @@ export type PernyataanAST =
 export interface NodeDeklarasiVariabel extends NodeAST {
   jenis: JenisNodeAST.DEKLARASI_VARIABEL;
   nama: string;
-  tipeData: string;
+  tipeData?: string;
   nilaiAwal: EkspresiAST;
 }
 
