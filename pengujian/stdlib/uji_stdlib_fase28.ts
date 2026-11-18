@@ -572,6 +572,7 @@ uji('kripto.sha256 dan kripto.md5 menghasilkan digest heksadesimal sah', () => {
 
   const hSha: any = fnSha256.eksekusi([buatTeks('nusantara')]);
   samaDengan(hSha.nilai.length, 64, 'SHA-256 harus 64 karakter heksadesimal');
+  samaDengan(hSha.nilai, 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad', 'SHA-256 harus memakai implementasi kriptografi nyata untuk input abc');
 
   const hMd5: any = fnMd5.eksekusi([buatTeks('nusantara')]);
   samaDengan(hMd5.nilai.length, 32, 'MD5 harus 32 karakter heksadesimal');
@@ -596,11 +597,16 @@ uji('kripto.byteAcak, kripto.bilanganAcak, dan kripto.bandingkanWaktuKonstan', (
   const fnAngka = k.get('bilanganAcak') as NilaiFungsiBawaan;
   const fnBanding = k.get('bandingkanWaktuKonstan') as NilaiFungsiBawaan;
 
-  const b16: any = fnByte.eksekusi([buatBilangan(16)]);
-  samaDengan(b16.nilai.length, 32);
-
-  const n: any = fnAngka.eksekusi([buatBilangan(10), buatBilangan(20)]);
-  benar(n.nilai >= 10 && n.nilai <= 20);
+  const randomAsli = Math.random;
+  try {
+    Math.random = () => { throw new Error('Fallback Math.random tidak boleh digunakan oleh API kripto'); };
+    const b16: any = fnByte.eksekusi([buatBilangan(16)]);
+    samaDengan(b16.nilai.length, 32);
+    const n: any = fnAngka.eksekusi([buatBilangan(10), buatBilangan(20)]);
+    benar(n.nilai >= 10 && n.nilai <= 20);
+  } finally {
+    Math.random = randomAsli;
+  }
 
   benar((fnBanding.eksekusi([buatTeks('kunci_rahasia_123'), buatTeks('kunci_rahasia_123')]) as any).nilai);
   salah((fnBanding.eksekusi([buatTeks('kunci_rahasia_123'), buatTeks('kunci_palsu_456')]) as any).nilai);
