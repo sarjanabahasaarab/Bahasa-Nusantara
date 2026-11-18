@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>ApplicationProperties</key>
+    <dict>
+        <key>ApplicationPath</key>
+        <string>Applications/Cross Demo.app</string>
+        <key>CFBundleIdentifier</key>
+        <string>id.nusantara.crossdemo</string>
+        <key>CFBundleShortVersionString</key>
+        <string>1.0.0</string>
+        <key>CFBundleVersion</key>
+        <string>10</string>
+        <key>SigningIdentity</key>
+        <string>Apple Distribution: Demo</string>
+        <key>Team</key>
+        <string>TEAM12345</string>
+    </dict>
+    <key>ArchiveVersion</key>
+    <integer>2</integer>
+    <key>CreationDate</key>
+    <date>2026-11-18T00:04:46.258Z</date>
+    <key>Name</key>
+    <string>Cross Demo</string>
+    <key>SchemeName</key>
+    <string>NusantaraApp</string>
+</dict>
+</plist>

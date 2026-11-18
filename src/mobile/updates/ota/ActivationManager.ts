@@ -103,23 +103,36 @@ export class ActivationManager {
     }
 
     const versiLama = this.versiAktif;
+    const snapshotLama = new Map(this.resourceAktif);
 
     // 1. Simpan cadangan untuk rollback
     RollbackManager.dapatkanInstance().simpanCadangan(
       versiLama,
-      Array.from(this.resourceAktif.keys()),
-      this.resourceAktif
+      Array.from(snapshotLama.keys()),
+      snapshotLama
     );
 
-    // 2. Terapkan paket baru
+    // 2. Terapkan paket baru secara atomik
     const daftarDiaktifkan: string[] = [];
-    for (const [jalur, konten] of berkasBaru.entries()) {
-      this.resourceAktif.set(jalur, konten);
-      daftarDiaktifkan.push(jalur);
-    }
+    try {
+      for (const [jalur, konten] of berkasBaru.entries()) {
+        this.resourceAktif.set(jalur, konten);
+        daftarDiaktifkan.push(jalur);
+      }
 
-    // 3. Update versi
-    this.versiAktif = versiBaru;
+      // 3. Update versi
+      this.versiAktif = versiBaru;
+    } catch (err: any) {
+      this.resourceAktif = snapshotLama;
+      this.versiAktif = versiLama;
+      return {
+        sukses: false,
+        versiAktif: versiLama,
+        resourceDiaktifkan: [],
+        pesan: `Aktivasi OTA terganggu (${err?.message || 'galat tulis'}). State dipulihkan ke versi ${versiLama}.`,
+        stempelWaktu: new Date().toISOString(),
+      };
+    }
 
     return {
       sukses: true,

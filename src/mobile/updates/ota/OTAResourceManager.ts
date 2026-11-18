@@ -62,7 +62,18 @@ export class OTAResourceManager {
     }
 
     // 2. Unduh daftar resource
-    const hasilUnduhan = await this.downloadManager.unduhDaftarResource(manifest.resources, opsi);
+    let hasilUnduhan: Awaited<ReturnType<SecureDownloadManager['unduhDaftarResource']>>;
+    try {
+      hasilUnduhan = await this.downloadManager.unduhDaftarResource(manifest.resources, opsi);
+    } catch (err: any) {
+      const pesanGalat = err?.message || 'Unduhan resource OTA terputus sebelum selesai.';
+      this.stateManager.transisi('failed', pesanGalat);
+      return {
+        sukses: false,
+        pesan: pesanGalat,
+      };
+    }
+
     if (!hasilUnduhan.sukses) {
       const statusAkhir = hasilUnduhan.dibatalkan ? 'cancelled' : 'failed';
       this.stateManager.transisi(statusAkhir, hasilUnduhan.pesan);

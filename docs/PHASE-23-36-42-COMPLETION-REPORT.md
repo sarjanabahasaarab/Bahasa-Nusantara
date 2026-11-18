@@ -12,10 +12,10 @@
 | **36** | Desktop GUI Framework | `test:gui-v36`: **22/22 LULUS** | **`PARTIAL`** | Tampilan window fisik X11/Wayland/GTK3/Win32/Cocoa (`NATIVE_DISPLAY_UNAVAILABLE`) |
 | **37** | Mobile Framework | `test:mobile-v37`: **40/40 LULUS** | **`PARTIAL`** | Kompilasi proyek Android/iOS ke biner lewat Gradle / `xcodebuild` (`TOOLCHAIN_INCOMPLETE`) |
 | **38** | Native Device API | `test:native-api-v38`: **24/24 LULUS** | **`PARTIAL`** | Pembacaan kamera, GPS, sensor & biometrik pada ponsel fisik Android/iOS (`DEVICE_UNAVAILABLE`) |
-| **39** | Mobile Networking | `test:mobile-networking-v39`: **38/38 LULUS** | **`PARTIAL`** | Endpoint TLS/S3/APNs/FCM komersial eksternal & uji jaringan seluler fisik |
+| **39** | Mobile Networking | `test:mobile-networking-v39`: **40/40 LULUS** | **`PARTIAL`** | Endpoint TLS/S3/APNs/FCM komersial eksternal & uji jaringan seluler fisik |
 | **40** | Mobile Application Distribution | `test:distribusi-v40`: **100/100 LULUS** | **`PARTIAL`** | Kompilasi bytecode Dalvik `.dex` & biner Mach-O via Android SDK / Xcode macOS |
 | **41** | Store Publishing & Digital Signing | `test:publikasi-v41`: **107/107 LULUS** | **`PARTIAL`** | Publikasi live ke Google Play Developer Console & Apple App Store Connect produksi |
-| **42** | OTA Updates & Secure Update System | `test:pembaruan-v42`: **25/25 LULUS** | **`PARTIAL`** | Eksekusi Play Core In-App Updates & StoreKit di perangkat fisik serta CDN HTTPS jarak jauh |
+| **42** | OTA Updates & Secure Update System | `test:pembaruan-v42`: **27/27 LULUS** | **`PARTIAL`** | Eksekusi Play Core In-App Updates & StoreKit di perangkat fisik serta CDN HTTPS jarak jauh |
 
 ## 2. Penguatan Teknis & Keamanan yang Diterapkan
 
@@ -30,10 +30,10 @@
 
 ## 3. Verifikasi Integrasi, CI/CD & Kualitas Keseluruhan
 
-- **Integrasi Terpadu (`npm run test:demo-terpadu`)**: **6/6 LULUS** (menjalankan `contoh/cross_platform_demo/demo_terpadu.nusantara`, render BMP & bundel Desktop, Android `.apk`/`.aab` + `.xcarchive` tervalidasi SHA-256/CRC-32, HTTP/WebSocket loopback sync + offline disk queue, Store API JWT `RS256`/`ES256`, & OTA Ed25519 + health-check auto-rollback).
-- **CI/CD Workflow (`npm run test:cicd`)**: **25/25 LULUS**; `.github/workflows/ci.yml` kini mengeksekusi `npm run test:demo-terpadu` dan melaporkan ringkasan Phase 36–42.
+- **Integrasi Terpadu (`npm run test:demo-terpadu`)**: **7/7 LULUS** (menjalankan `contoh/cross_platform_demo/demo_terpadu.nusantara`, render BMP & bundel Desktop, Android `.apk`/`.aab` + `.xcarchive` struktural tervalidasi SHA-256/CRC-32, HTTP/WebSocket loopback sync + offline disk queue, Store API JWT `RS256`/`ES256`, OTA Ed25519 + health-check auto-rollback, serta persistensi & verifikasi 20 artefak ke `artifacts/demo-terpadu/` dengan `manifest.json` + `SHA256SUMS`).
+- **CI/CD Workflow (`npm run test:cicd`)**: **25/25 LULUS**; `.github/workflows/ci.yml` mengeksekusi `npm run test:demo-terpadu` dan melaporkan ringkasan Phase 36–42.
 - **Kualitas & Build Repo Penuh**:
   - `npm run lint` (`tsc --noEmit`): **LULUS (0 galat)**
   - `npm run build` (`vite build`): **LULUS**
   - `npm run quality-gate`: **29/29 LULUS**
-  - `npm test`: **46/46 perintah keluar `0`** (**167** fondasi + **1.413** skenario TS: **1.407 LULUS**, **0 GAGAL**, **3 SKIPPED**, **3 BELUM DIVERIFIKASI** = **1.580 pemeriksaan**, atau **1.589** total dengan `test:database-browser-v29` `3/3` dan `test:demo-terpadu` `6/6`).
+  - `npm test`: **46/46 perintah keluar `0`** (**167** fondasi + **1.387** skenario TS: **1.381 LULUS**, **0 GAGAL**, **3 SKIPPED**, **3 BELUM DIVERIFIKASI** = **1.554 pemeriksaan**, atau **1.564** total dengan `test:database-browser-v29` `3/3` dan `test:demo-terpadu` `7/7`).

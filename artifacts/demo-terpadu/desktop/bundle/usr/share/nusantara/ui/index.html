@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <title>NUSANTARA Cross Console</title>
+  <style>body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:#0f172a;color:#f8fafc;}</style>
+</head>
+<body>
+  
+  <main id="nusantara-root" style="padding:16px;"><div data-widget-id="widget_kolom_4" style="display:flex;flex-direction:column;gap:8px;"><span data-widget-id="widget_label_5" style="color:#f8fafc;font-size:14px;">Dashboard Terpadu NUSANTARA</span><button data-widget-id="widget_tombol_6" onclick="nusantaraKirim('klik',{idWidget:'widget_tombol_6'})" style="padding:8px 16px;border-radius:6px;border:1px solid #334155;background:#38bdf8;color:#0f172a;cursor:pointer;">Sinkronisasi</button></div></main>
+  <script>
+    const ws = null;
+    function nusantaraKirim(jenis, data) {
+      if (ws && ws.readyState === 1) ws.send(JSON.stringify({ tipe: 'peristiwa', jenis, ...data }));
+    }
+    if (ws) {
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg.tipe === 'sinkronisasi' && msg.html) {
+            document.getElementById('nusantara-root').innerHTML = msg.html;
+          }
+        } catch {}
+      };
+    }
+  </script>
+</body>
+</html>

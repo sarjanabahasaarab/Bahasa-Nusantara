@@ -48,8 +48,6 @@ import {
   TargetPaketDesktop,
 } from '../gui';
 import { safeFS, safePath } from '../compiler/llvm/node-compat';
-import { ZipBuilder } from '../mobile/distribution/core/ZipBuilder';
-import { HashValidator } from '../mobile/updates/security/HashValidator';
 import { apakahNodeRuntime, muatModulNode } from '../gui/platform/node_bridge';
 import {
   ASTToNIRLowering,

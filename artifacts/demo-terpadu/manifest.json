@@ -1,0 +1,228 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-18T00:04:46.406Z",
+  "totalArtefak": 20,
+  "peringatanKeterbatasan": "Artefak Android (.apk/.aab) adalah kontainer PKZIP struktural tanpa classes.dex/AAPT2, dan .xcarchive hanya berisi Info.plist tanpa biner Mach-O maupun .ipa. Build native memerlukan Android SDK & macOS/Xcode.",
+  "artefak": [
+    {
+      "nama": "preview-desktop.bmp",
+      "jalurRelatif": "desktop/preview-desktop.bmp",
+      "ukuranByte": 768054,
+      "sha256": "884bf0d09e9551e3d68a560ebc7dd9ed940efc809d9be878ca7319fa74f493e1",
+      "jenisArtefak": "desktop-raster-bmp",
+      "kategoriBuild": "runtime-output",
+      "nativeBinary": false,
+      "statusValidasi": "VERIFIED_BMP_HEADER",
+      "catatan": "Raster BMP framebuffer software headless (Phase 36); bukan window fisik X11/Win32/Cocoa."
+    },
+    {
+      "nama": "bundle-SHA256SUMS",
+      "jalurRelatif": "desktop/bundle/SHA256SUMS",
+      "ukuranByte": 792,
+      "sha256": "9aa4d5886c0bf5e973e156c42cd26e06427633999ee8b9522ca5931b8e3562f3",
+      "jenisArtefak": "desktop-bundle-checksums",
+      "kategoriBuild": "runtime-output",
+      "nativeBinary": false,
+      "statusValidasi": "VERIFIED_SHA256",
+      "catatan": "Daftar checksum SHA-256 berkas bundel desktop Phase 36."
+    },
+    {
+      "nama": "AppRun",
+      "jalurRelatif": "desktop/bundle/AppRun",
+      "ukuranByte": 216,
+      "sha256": "7b1562023336cc8a72af7c46bfcb929bac32e21855e2c8bab84a093dafd3dca6",
+      "jenisArtefak": "desktop-bundle-file",
+      "kategoriBuild": "runtime-output",
+      "nativeBinary": false,
+      "statusValidasi": "VERIFIED_BUNDLE_MEMBER",
+      "catatan": "Berkas bundel aplikasi desktop (Phase 36)."
+    },
+    {
+      "nama": "id.nusantara.crossdemo.desktop",
+      "jalurRelatif": "desktop/bundle/id.nusantara.crossdemo.desktop",
+      "ukuranByte": 203,
+      "sha256": "c66418badf42abf4e4c28bb6c1cdcfe5d3680369eb8df9715277fa46167d27fa",
+      "jenisArtefak": "desktop-bundle-file",
+      "kategoriBuild": "runtime-output",
+      "nativeBinary": false,
+      "statusValidasi": "VERIFIED_BUNDLE_MEMBER",
+      "catatan": "Berkas bundel aplikasi desktop (Phase 36)."
+    },
+    {
+      "nama": "id.nusantara.crossdemo.desktop",
+      "jalurRelatif": "desktop/bundle/usr/share/applications/id.nusantara.crossdemo.desktop",
+      "ukuranByte": 203,
+      "sha256": "c66418badf42abf4e4c28bb6c1cdcfe5d3680369eb8df9715277fa46167d27fa",
+      "jenisArtefak": "desktop-bundle-file",
+      "kategoriBuild": "runtime-output",
+      "nativeBinary": false,
+      "statusValidasi": "VERIFIED_BUNDLE_MEMBER",
+      "catatan": "Berkas bundel aplikasi desktop (Phase 36)."
+    },
+    {
+      "nama": "id.nusantara.crossdemo.svg",
+      "jalurRelatif": "desktop/bundle/usr/share/icons/hicolor/scalable/apps/id.nusantara.crossdemo.svg",
+      "ukuranByte": 448,
+      "sha256": "132045a8e315e228cb5316ffab4d067b0db8f221461be3d8b5f6205b0f1289d0",
+      "jenisArtefak": "desktop-bundle-file",
+      "kategoriBuild": "runtime-output",
+      "nativeBinary": false,
+      "statusValidasi": "VERIFIED_BUNDLE_MEMBER",
+      "catatan": "Berkas bundel aplikasi desktop (Phase 36)."
+    },
+    {
+      "nama": "index.html",
+      "jalurRelatif": "desktop/bundle/usr/share/nusantara/ui/index.html",
+      "ukuranByte": 1233,
+      "sha256": "f7220451d0b3dedfe46c9ea045a9b243e25be0fd1d4fec50fbec7a9f711ba80e",
+      "jenisArtefak": "desktop-bundle-file",
+      "kategoriBuild": "runtime-output",
+      "nativeBinary": false,
+      "statusValidasi": "VERIFIED_BUNDLE_MEMBER",
+      "catatan": "Berkas bundel aplikasi desktop (Phase 36)."
+    },
+    {
+      "nama": "preview.bmp",
+      "jalurRelatif": "desktop/bundle/usr/share/nusantara/preview.bmp",
+      "ukuranByte": 768054,
+      "sha256": "884bf0d09e9551e3d68a560ebc7dd9ed940efc809d9be878ca7319fa74f493e1",
+      "jenisArtefak": "desktop-bundle-file",
+      "kategoriBuild": "runtime-output",
+      "nativeBinary": false,
+      "statusValidasi": "VERIFIED_BUNDLE_MEMBER",
+      "catatan": "Berkas bundel aplikasi desktop (Phase 36)."
+    },
+    {
+      "nama": "nusantara_linux_host.c",
+      "jalurRelatif": "desktop/bundle/src/nusantara_linux_host.c",
+      "ukuranByte": 808,
+      "sha256": "6936b66090c2457060be151eea952d90811bdd296826ac59d9c7d64f87dd279f",
+      "jenisArtefak": "desktop-bundle-file",
+      "kategoriBuild": "runtime-output",
+      "nativeBinary": false,
+      "statusValidasi": "VERIFIED_BUNDLE_MEMBER",
+      "catatan": "Berkas bundel aplikasi desktop (Phase 36)."
+    },
+    {
+      "nama": "manifest.json",
+      "jalurRelatif": "desktop/bundle/manifest.json",
+      "ukuranByte": 612,
+      "sha256": "e3aae2283bcd14b6eb52df486ec06897fa8803e5127319e06d2619a79cd80782",
+      "jenisArtefak": "desktop-bundle-file",
+      "kategoriBuild": "runtime-output",
+      "nativeBinary": false,
+      "statusValidasi": "VERIFIED_BUNDLE_MEMBER",
+      "catatan": "Berkas bundel aplikasi desktop (Phase 36)."
+    },
+    {
+      "nama": "nusantara-v0.50.0-linux-x64.zip",
+      "jalurRelatif": "phase23-dist/nusantara-v0.50.0-linux-x64.zip",
+      "ukuranByte": 4546,
+      "sha256": "685df716550853350cf9f93b0f71dd6e2f0a6d82528f8a2ee56a5cc73533eef4",
+      "jenisArtefak": "phase23-cli-zip",
+      "kategoriBuild": "archive-bundle",
+      "nativeBinary": false,
+      "statusValidasi": "VERIFIED_ARCHIVE",
+      "catatan": "Arsip rilis CLI nusantara bangun (Phase 23 JS bundle; kompilasi native ELF/PE/Mach-O memerlukan Clang/LLD)."
+    },
+    {
+      "nama": "nusantara-v0.50.0-linux-x64.tar.gz",
+      "jalurRelatif": "phase23-dist/nusantara-v0.50.0-linux-x64.tar.gz",
+      "ukuranByte": 3071,
+      "sha256": "0fc3f49202c8922cc0a3f5d9e7271aee1c7a5f23f88beb39b64e46d010e6eb39",
+      "jenisArtefak": "phase23-cli-tar.gz",
+      "kategoriBuild": "archive-bundle",
+      "nativeBinary": false,
+      "statusValidasi": "VERIFIED_ARCHIVE",
+      "catatan": "Arsip rilis CLI nusantara bangun (Phase 23 JS bundle; kompilasi native ELF/PE/Mach-O memerlukan Clang/LLD)."
+    },
+    {
+      "nama": "offline_q_snapshot.json",
+      "jalurRelatif": "networking/offline_q_snapshot.json",
+      "ukuranByte": 190,
+      "sha256": "b997ca128103da01889931c8f7586a743095158706721f824e1855cba1669dcf",
+      "jenisArtefak": "offline-sync-evidence-json",
+      "kategoriBuild": "runtime-output",
+      "nativeBinary": false,
+      "statusValidasi": "VERIFIED_LOOPBACK_SYNC",
+      "catatan": "Bukti transisi antrean disk offline -> sinkronisasi HTTP server loopback (Phase 39)."
+    },
+    {
+      "nama": "id.nusantara.crossdemo-1.0.0-release.apk",
+      "jalurRelatif": "mobile/android/id.nusantara.crossdemo-1.0.0-release.apk",
+      "ukuranByte": 2086,
+      "sha256": "30e4f0c26bd2c8f1ce7c9fa525f163258a04b8f9742a1cd18c223ba26922af03",
+      "jenisArtefak": "structural-pkzip-apk-container",
+      "kategoriBuild": "structural",
+      "nativeBinary": false,
+      "statusValidasi": "VERIFIED_STRUCTURAL_PKZIP_CRC32",
+      "catatan": "Kontainer PKZIP APK struktural (AndroidManifest.xml, NUSANTARA.json, CERT.SF) TANPA classes.dex/AAPT2; bukan APK terkompilasi Android SDK."
+    },
+    {
+      "nama": "id.nusantara.crossdemo-1.0.0.aab",
+      "jalurRelatif": "mobile/android/id.nusantara.crossdemo-1.0.0.aab",
+      "ukuranByte": 3456,
+      "sha256": "a90035ba0860d9973d0a42b30b179df9240adbaa4049e4bf49553780f2b6bd5d",
+      "jenisArtefak": "structural-pkzip-aab-container",
+      "kategoriBuild": "structural",
+      "nativeBinary": false,
+      "statusValidasi": "VERIFIED_STRUCTURAL_PKZIP_CRC32",
+      "catatan": "Kontainer PKZIP AAB struktural TANPA protobuf bundletool/classes.dex; bukan AAB terkompilasi Android SDK."
+    },
+    {
+      "nama": "android-SHA256SUMS",
+      "jalurRelatif": "mobile/android/SHA256SUMS",
+      "ukuranByte": 206,
+      "sha256": "943c99e027bd36966cc604cb6504ffdffe8176c9a8dadf47df1ee0bb1a5d361a",
+      "jenisArtefak": "mobile-android-checksums",
+      "kategoriBuild": "structural",
+      "nativeBinary": false,
+      "statusValidasi": "VERIFIED_SHA256",
+      "catatan": "Checksum SHA-256 artefak kontainer Android demo."
+    },
+    {
+      "nama": "Info.plist",
+      "jalurRelatif": "mobile/ios/CrossDemo.xcarchive/Info.plist",
+      "ukuranByte": 942,
+      "sha256": "dccaed50adf349b4c42a50ab224bf0c872fa4b011706ba84bf3b46a491385cf0",
+      "jenisArtefak": "structural-ios-xcarchive-plist",
+      "kategoriBuild": "structural",
+      "nativeBinary": false,
+      "statusValidasi": "VERIFIED_STRUCTURAL_PLIST_ONLY",
+      "catatan": "Direktori .xcarchive struktural (Info.plist saja, TANPA biner Mach-O dan BUKAN .ipa); kompilasi .ipa memerlukan macOS + Xcode."
+    },
+    {
+      "nama": "publishing-report.md",
+      "jalurRelatif": "publishing/publishing-report.md",
+      "ukuranByte": 967,
+      "sha256": "f6b3b7070311fec96ec66b953bccc8089d1a0acf88dca8f99cd368b0858fcd1a",
+      "jenisArtefak": "store-publishing-report-md",
+      "kategoriBuild": "runtime-output",
+      "nativeBinary": false,
+      "statusValidasi": "VERIFIED_SANDBOX_LOOPBACK",
+      "catatan": "Laporan kepatuhan publikasi loopback RS256/ES256 & ApprovalGate (Phase 41)."
+    },
+    {
+      "nama": "manifest-ota-signed.json",
+      "jalurRelatif": "ota/manifest-ota-signed.json",
+      "ukuranByte": 966,
+      "sha256": "7e5c51b204c35bebc4fc51ade7334fbf1521736cfd2c1ebb30d4da6027b37f73",
+      "jenisArtefak": "ota-ed25519-manifest-json",
+      "kategoriBuild": "runtime-output",
+      "nativeBinary": false,
+      "statusValidasi": "VERIFIED_ED25519_SIGNATURE",
+      "catatan": "Manifest OTA bertanda tangan Ed25519 (tanpa kunci privat) hasil demo Phase 42."
+    },
+    {
+      "nama": "batik_v2.json",
+      "jalurRelatif": "ota/batik_v2.json",
+      "ukuranByte": 37,
+      "sha256": "d17df53d38b2be041e00ab29c6a47070658757c5fa8169884eced850239ca140",
+      "jenisArtefak": "ota-resource-payload",
+      "kategoriBuild": "runtime-output",
+      "nativeBinary": false,
+      "statusValidasi": "VERIFIED_SHA256_PAYLOAD",
+      "catatan": "Payload resource OTA terverifikasi SHA-256 via server loopback."
+    }
+  ]
+}

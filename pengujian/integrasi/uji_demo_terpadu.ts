@@ -86,6 +86,21 @@ async function jalankanDemoTerpadu(): Promise<void> {
   console.log('======================================================================\n');
 
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nusantara-cross-demo-'));
+  const artifactsDir = path.resolve('artifacts/demo-terpadu');
+  fs.rmSync(artifactsDir, { recursive: true, force: true });
+  fs.mkdirSync(artifactsDir, { recursive: true });
+
+  interface SpecArtefakDemo {
+    nama: string;
+    sumberAbsolut: string;
+    jalurRelatifTujuan: string;
+    jenisArtefak: string;
+    kategoriBuild: 'runtime-output' | 'archive-bundle' | 'structural';
+    statusValidasi: string;
+    nativeBinary: boolean;
+    catatan: string;
+  }
+  const daftarSalin: SpecArtefakDemo[] = [];
 
   try {
     // 1. Bahasa & Runtime: Eksekusi demo_terpadu.nusantara
@@ -140,6 +155,60 @@ async function jalankanDemoTerpadu(): Promise<void> {
       pastikan(code === 0, 'CLI nusantara bangun harus exit 0');
       const jsonOut = JSON.parse(logs.join('\n'));
       pastikan(jsonOut.sukses === true && jsonOut.artefak.length === 2, 'Distribusi Phase 23 harus menghasilkan .zip & .tar.gz');
+
+      const bmpPath = path.join(tmpRoot, 'preview-desktop.bmp');
+      fs.writeFileSync(bmpPath, bmpBytes);
+      daftarSalin.push(
+        {
+          nama: 'preview-desktop.bmp',
+          sumberAbsolut: bmpPath,
+          jalurRelatifTujuan: 'desktop/preview-desktop.bmp',
+          jenisArtefak: 'desktop-raster-bmp',
+          kategoriBuild: 'runtime-output',
+          statusValidasi: 'VERIFIED_BMP_HEADER',
+          nativeBinary: false,
+          catatan: 'Raster BMP framebuffer software headless (Phase 36); bukan window fisik X11/Win32/Cocoa.',
+        },
+        {
+          nama: 'bundle-SHA256SUMS',
+          sumberAbsolut: path.join(pkt.direktoriBundel, 'SHA256SUMS'),
+          jalurRelatifTujuan: 'desktop/bundle/SHA256SUMS',
+          jenisArtefak: 'desktop-bundle-checksums',
+          kategoriBuild: 'runtime-output',
+          statusValidasi: 'VERIFIED_SHA256',
+          nativeBinary: false,
+          catatan: 'Daftar checksum SHA-256 berkas bundel desktop Phase 36.',
+        }
+      );
+      for (const berkasBundel of pkt.daftarBerkas) {
+        const sumberAbsolut = path.isAbsolute(berkasBundel)
+          ? berkasBundel
+          : path.join(pkt.direktoriBundel, berkasBundel);
+        const relBundel = path.relative(pkt.direktoriBundel, sumberAbsolut).replace(/\\/g, '/');
+        if (relBundel === 'SHA256SUMS') continue;
+        daftarSalin.push({
+          nama: path.basename(sumberAbsolut),
+          sumberAbsolut,
+          jalurRelatifTujuan: `desktop/bundle/${relBundel}`,
+          jenisArtefak: 'desktop-bundle-file',
+          kategoriBuild: 'runtime-output',
+          statusValidasi: 'VERIFIED_BUNDLE_MEMBER',
+          nativeBinary: false,
+          catatan: 'Berkas bundel aplikasi desktop (Phase 36).',
+        });
+      }
+      for (const artP23 of jsonOut.artefak as Array<{ format: string; namaBerkas: string; jalurKeluaran: string }>) {
+        daftarSalin.push({
+          nama: artP23.namaBerkas,
+          sumberAbsolut: artP23.jalurKeluaran,
+          jalurRelatifTujuan: `phase23-dist/${artP23.namaBerkas}`,
+          jenisArtefak: `phase23-cli-${artP23.format}`,
+          kategoriBuild: 'archive-bundle',
+          statusValidasi: 'VERIFIED_ARCHIVE',
+          nativeBinary: false,
+          catatan: 'Arsip rilis CLI nusantara bangun (Phase 23 JS bundle; kompilasi native ELF/PE/Mach-O memerlukan Clang/LLD).',
+        });
+      }
       await appGui.berhenti();
     });
 
@@ -239,6 +308,33 @@ async function jalankanDemoTerpadu(): Promise<void> {
         if (antrean.hitung().tertunda > 0) await sync.sinkronkan();
         pastikan(dbItems['demo_row_1']?.nama === 'Item Cross Demo', 'Data offline harus tersinkronkan ke server loopback');
 
+        // Rekam snapshot berkas antrean offline disk untuk inspeksi artefak
+        const queueSnapshot = path.join(tmpRoot, 'offline_q_snapshot.json');
+        fs.writeFileSync(
+          queueSnapshot,
+          JSON.stringify(
+            {
+              persistedQueuePath: path.basename(queueFile),
+              syncedItem: dbItems['demo_row_1'],
+              pendingAfterSync: antrean.hitung().tertunda,
+              recordedAt: new Date().toISOString(),
+            },
+            null,
+            2
+          ),
+          'utf-8'
+        );
+        daftarSalin.push({
+          nama: 'offline_q_snapshot.json',
+          sumberAbsolut: queueSnapshot,
+          jalurRelatifTujuan: 'networking/offline_q_snapshot.json',
+          jenisArtefak: 'offline-sync-evidence-json',
+          kategoriBuild: 'runtime-output',
+          statusValidasi: 'VERIFIED_LOOPBACK_SYNC',
+          nativeBinary: false,
+          catatan: 'Bukti transisi antrean disk offline -> sinkronisasi HTTP server loopback (Phase 39).',
+        });
+
         const wsClient = new KlienWebSocketMobile({ url: `ws://127.0.0.1:${wsPort}`, autoReconnect: false, intervalHeartbeatMs: 60000 });
         try {
           const wsReply = await new Promise<any>((resolve, reject) => {
@@ -317,6 +413,51 @@ async function jalankanDemoTerpadu(): Promise<void> {
 
       const sums = BuildValidator.buatSha256Sums([apk.artefak!, aab.artefak!]);
       pastikan(BuildValidator.verifikasiSha256Sums(sums, path.dirname(apk.artefak!.jalurLokal)).valid, 'SHA256SUMS Android harus terverifikasi di disk');
+      const androidSumsPath = path.join(path.dirname(apk.artefak!.jalurLokal), 'SHA256SUMS');
+      fs.writeFileSync(androidSumsPath, sums, 'utf-8');
+
+      daftarSalin.push(
+        {
+          nama: path.basename(apk.artefak!.jalurLokal),
+          sumberAbsolut: apk.artefak!.jalurLokal,
+          jalurRelatifTujuan: `mobile/android/${path.basename(apk.artefak!.jalurLokal)}`,
+          jenisArtefak: 'structural-pkzip-apk-container',
+          kategoriBuild: 'structural',
+          statusValidasi: 'VERIFIED_STRUCTURAL_PKZIP_CRC32',
+          nativeBinary: false,
+          catatan: 'Kontainer PKZIP APK struktural (AndroidManifest.xml, NUSANTARA.json, CERT.SF) TANPA classes.dex/AAPT2; bukan APK terkompilasi Android SDK.',
+        },
+        {
+          nama: path.basename(aab.artefak!.jalurLokal),
+          sumberAbsolut: aab.artefak!.jalurLokal,
+          jalurRelatifTujuan: `mobile/android/${path.basename(aab.artefak!.jalurLokal)}`,
+          jenisArtefak: 'structural-pkzip-aab-container',
+          kategoriBuild: 'structural',
+          statusValidasi: 'VERIFIED_STRUCTURAL_PKZIP_CRC32',
+          nativeBinary: false,
+          catatan: 'Kontainer PKZIP AAB struktural TANPA protobuf bundletool/classes.dex; bukan AAB terkompilasi Android SDK.',
+        },
+        {
+          nama: 'android-SHA256SUMS',
+          sumberAbsolut: androidSumsPath,
+          jalurRelatifTujuan: 'mobile/android/SHA256SUMS',
+          jenisArtefak: 'mobile-android-checksums',
+          kategoriBuild: 'structural',
+          statusValidasi: 'VERIFIED_SHA256',
+          nativeBinary: false,
+          catatan: 'Checksum SHA-256 artefak kontainer Android demo.',
+        },
+        {
+          nama: 'Info.plist',
+          sumberAbsolut: path.join(iosArc.artefak!.jalurLokal, 'Info.plist'),
+          jalurRelatifTujuan: 'mobile/ios/CrossDemo.xcarchive/Info.plist',
+          jenisArtefak: 'structural-ios-xcarchive-plist',
+          kategoriBuild: 'structural',
+          statusValidasi: 'VERIFIED_STRUCTURAL_PLIST_ONLY',
+          nativeBinary: false,
+          catatan: 'Direktori .xcarchive struktural (Info.plist saja, TANPA biner Mach-O dan BUKAN .ipa); kompilasi .ipa memerlukan macOS + Xcode.',
+        }
+      );
 
       // Phase 41: Loopback Store API dengan RS256 & ES256 nyata
       const rsa = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -414,6 +555,18 @@ async function jalankanDemoTerpadu(): Promise<void> {
           statusPublikasi: 'siap_diunggah',
         });
         pastikan(repMd.includes('LAPORAN PUBLIKASI RILIS APLIKASI'), 'Laporan Markdown publikasi harus terbuat');
+        const repMdPath = path.join(tmpRoot, 'publishing-report.md');
+        fs.writeFileSync(repMdPath, repMd, 'utf-8');
+        daftarSalin.push({
+          nama: 'publishing-report.md',
+          sumberAbsolut: repMdPath,
+          jalurRelatifTujuan: 'publishing/publishing-report.md',
+          jenisArtefak: 'store-publishing-report-md',
+          kategoriBuild: 'runtime-output',
+          statusValidasi: 'VERIFIED_SANDBOX_LOOPBACK',
+          nativeBinary: false,
+          catatan: 'Laporan kepatuhan publikasi loopback RS256/ES256 & ApprovalGate (Phase 41).',
+        });
       } finally {
         await new Promise<void>((r) => storeSrv.close(() => r()));
       }
@@ -515,9 +668,107 @@ async function jalankanDemoTerpadu(): Promise<void> {
         pastikan(!gagal.sukses && gagal.rolledBack, 'Health check gagal harus memicu auto-rollback');
         pastikan(um.dapatkanVersiTerpasang() === '1.1.0', 'Versi harus pulih ke 1.1.0');
         pastikan(ActivationManager.dapatkanInstance().bacaResource('assets/themes/batik_v3_rusak.json') === undefined, 'Resource OTA gagal harus bersih pasca-rollback');
+
+        const otaManifestPath = path.join(tmpRoot, 'manifest-ota-signed.json');
+        const otaPayloadPath = path.join(tmpRoot, 'batik_v2.json');
+        fs.writeFileSync(otaManifestPath, JSON.stringify(cek.manifest!, null, 2), 'utf-8');
+        fs.writeFileSync(otaPayloadPath, payloadTheme);
+        daftarSalin.push(
+          {
+            nama: 'manifest-ota-signed.json',
+            sumberAbsolut: otaManifestPath,
+            jalurRelatifTujuan: 'ota/manifest-ota-signed.json',
+            jenisArtefak: 'ota-ed25519-manifest-json',
+            kategoriBuild: 'runtime-output',
+            statusValidasi: 'VERIFIED_ED25519_SIGNATURE',
+            nativeBinary: false,
+            catatan: 'Manifest OTA bertanda tangan Ed25519 (tanpa kunci privat) hasil demo Phase 42.',
+          },
+          {
+            nama: 'batik_v2.json',
+            sumberAbsolut: otaPayloadPath,
+            jalurRelatifTujuan: 'ota/batik_v2.json',
+            jenisArtefak: 'ota-resource-payload',
+            kategoriBuild: 'runtime-output',
+            statusValidasi: 'VERIFIED_SHA256_PAYLOAD',
+            nativeBinary: false,
+            catatan: 'Payload resource OTA terverifikasi SHA-256 via server loopback.',
+          }
+        );
       } finally {
         await new Promise<void>((r) => otaSrv.close(() => r()));
       }
+    });
+
+    // 7. Persistensi, Manifest & Verifikasi Integritas SHA-256 ke artifacts/demo-terpadu/
+    await ujiLangkah('7. Persistensi & verifikasi integritas SHA256SUMS + manifest.json ke artifacts/demo-terpadu/', () => {
+      pastikan(daftarSalin.length >= 10, `Minimal 10 artefak demo harus terkumpul, aktual=${daftarSalin.length}`);
+      const entriManifest: Array<Record<string, any>> = [];
+      const barisSha: string[] = [];
+
+      for (const spec of daftarSalin) {
+        if (!fs.existsSync(spec.sumberAbsolut)) {
+          throw new Error(`Sumber artefak hilang sebelum penyalinan: ${spec.sumberAbsolut}`);
+        }
+        const srcBuf = fs.readFileSync(spec.sumberAbsolut);
+        const destAbs = path.join(artifactsDir, spec.jalurRelatifTujuan);
+        fs.mkdirSync(path.dirname(destAbs), { recursive: true });
+        fs.writeFileSync(destAbs, srcBuf);
+
+        if (!fs.existsSync(destAbs)) {
+          throw new Error(`Penyalinan artefak ke '${destAbs}' gagal.`);
+        }
+        const destBuf = fs.readFileSync(destAbs);
+        const srcSha = crypto.createHash('sha256').update(srcBuf).digest('hex');
+        const destSha = crypto.createHash('sha256').update(destBuf).digest('hex');
+        if (srcSha !== destSha || destBuf.byteLength !== srcBuf.byteLength) {
+          throw new Error(`Hash/ukuran artefak tidak cocok setelah penyalinan untuk '${spec.jalurRelatifTujuan}'.`);
+        }
+
+        barisSha.push(`${destSha}  ${spec.jalurRelatifTujuan}`);
+        entriManifest.push({
+          nama: spec.nama,
+          jalurRelatif: spec.jalurRelatifTujuan,
+          ukuranByte: destBuf.byteLength,
+          sha256: destSha,
+          jenisArtefak: spec.jenisArtefak,
+          kategoriBuild: spec.kategoriBuild,
+          nativeBinary: spec.nativeBinary,
+          statusValidasi: spec.statusValidasi,
+          catatan: spec.catatan,
+        });
+      }
+
+      const sumsPath = path.join(artifactsDir, 'SHA256SUMS');
+      const manifestPath = path.join(artifactsDir, 'manifest.json');
+      fs.writeFileSync(sumsPath, barisSha.join('\n') + '\n', 'utf-8');
+      fs.writeFileSync(
+        manifestPath,
+        JSON.stringify(
+          {
+            schemaVersion: 1,
+            generatedAt: new Date().toISOString(),
+            totalArtefak: entriManifest.length,
+            peringatanKeterbatasan:
+              'Artefak Android (.apk/.aab) adalah kontainer PKZIP struktural tanpa classes.dex/AAPT2, dan .xcarchive hanya berisi Info.plist tanpa biner Mach-O maupun .ipa. Build native memerlukan Android SDK & macOS/Xcode.',
+            artefak: entriManifest,
+          },
+          null,
+          2
+        ),
+        'utf-8'
+      );
+
+      // Verifikasi ulang SHA256SUMS langsung dari disk tujuan
+      const lines = fs.readFileSync(sumsPath, 'utf-8').trim().split('\n');
+      pastikan(lines.length === entriManifest.length, 'Jumlah baris SHA256SUMS harus sama dengan manifest');
+      for (const line of lines) {
+        const [expectedHash, rel] = line.split(/\s{2}/);
+        const actualBuf = fs.readFileSync(path.join(artifactsDir, rel));
+        const actualHash = crypto.createHash('sha256').update(actualBuf).digest('hex');
+        pastikan(actualHash === expectedHash, `Checksum mismatch di disk untuk ${rel}`);
+      }
+      pastikan(fs.existsSync(manifestPath) && fs.existsSync(sumsPath), 'manifest.json dan SHA256SUMS harus tersimpan di disk');
     });
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });

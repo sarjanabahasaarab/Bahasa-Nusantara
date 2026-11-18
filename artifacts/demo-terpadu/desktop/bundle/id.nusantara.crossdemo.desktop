@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=NUSANTARA Cross Console
+Exec=id.nusantara.crossdemo
+Icon=id.nusantara.crossdemo
+Categories=Utility;Development;
+Terminal=false
+Version=1.0
+X-AppImage-Version=0.50.0

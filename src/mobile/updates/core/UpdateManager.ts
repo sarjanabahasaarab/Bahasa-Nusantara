@@ -40,6 +40,7 @@ export class UpdateManager {
   private applicationId = 'id.nusantara.aplikasi';
   private versiTerpasang = '0.41.0';
   private revisiTerpasang = 0;
+  private revisiPerVersi: Map<string, number> = new Map();
   private platform: PlatformMobile = 'android';
 
   private constructor() {
@@ -61,6 +62,7 @@ export class UpdateManager {
     this.applicationId = appId;
     this.versiTerpasang = versi;
     this.revisiTerpasang = revisi;
+    this.revisiPerVersi = new Map([[versi, revisi]]);
     this.platform = platform;
     ActivationManager.dapatkanInstance().tetapkanVersiBaseline(versi);
   }
@@ -275,8 +277,9 @@ export class UpdateManager {
         pesan: `Pembaruan OTA ditolak (anti-downgrade): versi target '${manifest.releaseVersion}' lebih rendah daripada versi terpasang '${this.versiTerpasang}'.`,
       };
     }
-    if (cmpVer === 0 && (manifest.revision || 0) <= this.revisiTerpasang) {
-      this.stateManager.transisi('failed', `Penolakan anti-replay OTA: revisi ${manifest.revision} <= ${this.revisiTerpasang}`);
+    const revisiTercatat = this.revisiPerVersi.get(manifest.releaseVersion) ?? -1;
+    if (cmpVer === 0 && (manifest.revision || 0) <= Math.max(this.revisiTerpasang, revisiTercatat)) {
+      this.stateManager.transisi('failed', `Penolakan anti-replay OTA: revisi ${manifest.revision} <= ${Math.max(this.revisiTerpasang, revisiTercatat)}`);
       return {
         sukses: false,
         pesan: `Pembaruan OTA ditolak (anti-replay): versi '${manifest.releaseVersion}' revisi ${manifest.revision} sudah diterapkan.`,
@@ -287,6 +290,8 @@ export class UpdateManager {
     if (res.sukses && res.aktivasi) {
       this.versiTerpasang = res.aktivasi.versiAktif;
       this.revisiTerpasang = manifest.revision || 0;
+      const prevMax = this.revisiPerVersi.get(this.versiTerpasang) ?? 0;
+      this.revisiPerVersi.set(this.versiTerpasang, Math.max(prevMax, this.revisiTerpasang));
     }
 
     return {
@@ -365,7 +370,7 @@ export class UpdateManager {
       (versiDipulihkan, berkasDipulihkan) => {
         ActivationManager.dapatkanInstance().pulihkanCadangan(versiDipulihkan, berkasDipulihkan);
         this.versiTerpasang = versiDipulihkan;
-        this.revisiTerpasang = 0;
+        this.revisiTerpasang = this.revisiPerVersi.get(versiDipulihkan) ?? 0;
         this.stateManager.transisi('rolled_back', `Dipulihkan ke versi ${versiDipulihkan}`);
       }
     );

@@ -9,8 +9,11 @@
 
 import * as fs from 'fs';
 import * as http from 'http';
+import * as https from 'https';
 import * as os from 'os';
 import * as path from 'path';
+import { execFileSync, spawn } from 'child_process';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { WebSocketServer } from 'ws';
 import {
   LapisanKeamananMobile,
@@ -829,6 +832,355 @@ async function jalankanSemuaUji() {
     pastikan(gagalNyata, 'Koneksi ke port loopback yang mati wajib gagal jujur (tidak boleh palsu 200 OK)');
   });
 
+  // ---------------------------------------------------------------------------
+  // [19] Pengujian HTTPS Nyata, Validasi Sertifikat TLS, SAN, & Transfer Putus
+  // ---------------------------------------------------------------------------
+  console.log('\n[19] Pengujian HTTPS/TLS Lokal Nyata (OpenSSL CA, Expired, SAN Mismatch, Drop & Retry)');
+
+  function cariOpenSSL(): string {
+    const kandidat = process.platform === 'win32'
+      ? ['openssl.exe', 'C:\\Program Files\\Git\\usr\\bin\\openssl.exe', 'C:\\Program Files\\OpenSSL-Win64\\bin\\openssl.exe']
+      : ['openssl', '/usr/bin/openssl', '/usr/local/bin/openssl'];
+    for (const cmd of kandidat) {
+      try {
+        execFileSync(cmd, ['version'], { stdio: 'pipe' });
+        return cmd;
+      } catch {
+        // Coba kandidat berikutnya
+      }
+    }
+    throw new Error('OpenSSL CLI tidak ditemukan pada sistem untuk pembangkitan sertifikat TLS uji.');
+  }
+
+  async function jalankanSubprocessProbeTLS(
+    mode: 'get' | 'drop' | 'retry',
+    baseUrl: string,
+    extraCaPath?: string,
+    opts?: { cobaUlangMaks?: number; jedaCobaUlangMs?: number; batasWaktuMs?: number }
+  ): Promise<{ ok: boolean; status?: number; data?: any; error?: string }> {
+    const fileIni = fileURLToPath(import.meta.url);
+    const tsxArgs = process.execArgv.some((a) => a.includes('tsx'))
+      ? process.execArgv.filter((a) => a !== '--eval' && !a.startsWith('--eval='))
+      : ['--import', pathToFileURL(path.resolve(process.cwd(), 'node_modules/tsx/dist/loader.mjs')).href];
+
+    const envAnak: NodeJS.ProcessEnv = {
+      ...process.env,
+      NUSANTARA_TLS_PROBE_MODE: mode,
+      NUSANTARA_TLS_PROBE_URL: baseUrl,
+      NUSANTARA_TLS_PROBE_RETRY: String(opts?.cobaUlangMaks ?? 1),
+      NUSANTARA_TLS_PROBE_DELAY: String(opts?.jedaCobaUlangMs ?? 20),
+      NUSANTARA_TLS_PROBE_TIMEOUT: String(opts?.batasWaktuMs ?? 3000),
+    };
+    if (extraCaPath) {
+      envAnak.NODE_EXTRA_CA_CERTS = extraCaPath;
+    } else {
+      delete envAnak.NODE_EXTRA_CA_CERTS;
+    }
+    delete envAnak.NODE_TLS_REJECT_UNAUTHORIZED;
+
+    return new Promise((resolve) => {
+      const child = spawn(process.execPath, [...tsxArgs, fileIni], {
+        env: envAnak,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let stdout = '';
+      let stderr = '';
+      const killTimer = setTimeout(() => {
+        child.kill('SIGKILL');
+      }, 15000);
+      child.stdout.on('data', (d) => { stdout += String(d); });
+      child.stderr.on('data', (d) => { stderr += String(d); });
+      child.on('error', (err) => {
+        clearTimeout(killTimer);
+        resolve({ ok: false, error: err.message });
+      });
+      child.on('close', (code) => {
+        clearTimeout(killTimer);
+        const baris = stdout
+          .trim()
+          .split(/\r?\n/)
+          .filter((l) => l.startsWith('{'));
+        if (baris.length === 0) {
+          resolve({
+            ok: false,
+            error: `Subprocess TLS probe gagal keluar (status=${code}): ${(stderr || stdout).trim()}`,
+          });
+          return;
+        }
+        resolve(JSON.parse(baris[baris.length - 1]));
+      });
+    });
+  }
+
+  await ujiAsync('19.1 Handshake HTTPS nyata: tolak untrusted CA, expired cert & SAN mismatch; terima valid SAN CA tepercaya', async () => {
+    const opensslBin = cariOpenSSL();
+    const tmpTlsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusantara-p39-tls-'));
+
+    try {
+      const jalankanOpenSSL = (args: string[]) => {
+        execFileSync(opensslBin, args, { cwd: tmpTlsDir, stdio: 'pipe' });
+      };
+
+      // 1. Root CA Ephemeral
+      fs.writeFileSync(path.join(tmpTlsDir, 'index.txt'), '');
+      fs.writeFileSync(path.join(tmpTlsDir, 'serial'), '1000\n');
+      fs.writeFileSync(
+        path.join(tmpTlsDir, 'ca.cnf'),
+        [
+          '[ca]',
+          'default_ca = CA_default',
+          '[CA_default]',
+          `dir = ${tmpTlsDir.replace(/\\/g, '/')}`,
+          'database = $dir/index.txt',
+          'serial = $dir/serial',
+          `new_certs_dir = ${tmpTlsDir.replace(/\\/g, '/')}`,
+          `certificate = ${path.join(tmpTlsDir, 'ca.crt').replace(/\\/g, '/')}`,
+          `private_key = ${path.join(tmpTlsDir, 'ca.key').replace(/\\/g, '/')}`,
+          'default_md = sha256',
+          'policy = policy_any',
+          'copy_extensions = copy',
+          '[policy_any]',
+          'commonName = supplied',
+          '[req]',
+          'distinguished_name = dn',
+          'x509_extensions = v3_ca',
+          'prompt = no',
+          '[dn]',
+          'CN = Nusantara-Test-CA',
+          '[v3_ca]',
+          'basicConstraints = critical, CA:true',
+          'keyUsage = critical, keyCertSign, cRLSign',
+          'subjectKeyIdentifier = hash',
+        ].join('\n')
+      );
+
+      jalankanOpenSSL([
+        'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
+        '-keyout', 'ca.key', '-out', 'ca.crt', '-days', '3',
+        '-config', 'ca.cnf', '-extensions', 'v3_ca',
+      ]);
+
+      const buatLeafCert = (
+        prefix: string,
+        cn: string,
+        san: string,
+        opsiTanggal?: { start: string; end: string }
+      ) => {
+        const extCnf = path.join(tmpTlsDir, `${prefix}.cnf`);
+        fs.writeFileSync(
+          extCnf,
+          [
+            '[req]',
+            'distinguished_name = dn',
+            'req_extensions = v3_req',
+            'prompt = no',
+            '[dn]',
+            `CN = ${cn}`,
+            '[v3_req]',
+            'basicConstraints = CA:false',
+            'keyUsage = digitalSignature, keyEncipherment',
+            'extendedKeyUsage = serverAuth',
+            `subjectAltName = ${san}`,
+          ].join('\n')
+        );
+        jalankanOpenSSL([
+          'req', '-new', '-newkey', 'rsa:2048', '-nodes',
+          '-keyout', `${prefix}.key`, '-out', `${prefix}.csr`, '-config', extCnf,
+        ]);
+        if (opsiTanggal) {
+          jalankanOpenSSL([
+            'ca', '-batch', '-config', 'ca.cnf',
+            '-startdate', opsiTanggal.start, '-enddate', opsiTanggal.end,
+            '-extensions', 'v3_req', '-extfile', extCnf,
+            '-in', `${prefix}.csr`, '-out', `${prefix}.crt`,
+          ]);
+        } else {
+          jalankanOpenSSL([
+            'x509', '-req', '-in', `${prefix}.csr`,
+            '-CA', 'ca.crt', '-CAkey', 'ca.key', '-CAcreateserial',
+            '-out', `${prefix}.crt`, '-days', '2', '-sha256',
+            '-extensions', 'v3_req', '-extfile', extCnf,
+          ]);
+        }
+      };
+
+      // Leaf A: Valid SAN (DNS:localhost, IP:127.0.0.1)
+      buatLeafCert('valid', 'localhost', 'DNS:localhost,IP:127.0.0.1');
+      // Leaf B: Expired (2020-01-01 -> 2020-01-02) dengan CA tepercaya
+      buatLeafCert('expired', 'localhost', 'DNS:localhost,IP:127.0.0.1', {
+        start: '20200101000000Z',
+        end: '20200102000000Z',
+      });
+      // Leaf C: SAN mismatch (DNS:salah-host.example.com)
+      buatLeafCert('wrongsan', 'salah-host.example.com', 'DNS:salah-host.example.com');
+
+      const buatServerTLS = async (prefix: string) => {
+        const srv = https.createServer(
+          {
+            key: fs.readFileSync(path.join(tmpTlsDir, `${prefix}.key`)),
+            cert: fs.readFileSync(path.join(tmpTlsDir, `${prefix}.crt`)),
+          },
+          (_req, res) => {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ tlsValid: true, cert: prefix }));
+          }
+        );
+        await new Promise<void>((resolve) => srv.listen(0, '127.0.0.1', resolve));
+        return srv;
+      };
+
+      const srvValid = await buatServerTLS('valid');
+      const srvExpired = await buatServerTLS('expired');
+      const srvWrongSan = await buatServerTLS('wrongsan');
+      const caPath = path.join(tmpTlsDir, 'ca.crt');
+
+      try {
+        const portValid = (srvValid.address() as any).port;
+        const portExpired = (srvExpired.address() as any).port;
+        const portWrongSan = (srvWrongSan.address() as any).port;
+
+        // 1) Sertifikat tidak dipercaya (tanpa NODE_EXTRA_CA_CERTS) wajib ditolak
+        const klienTanpaCA = new KlienAPIMobile({
+          baseUrl: `https://127.0.0.1:${portValid}`,
+          cobaUlangMaks: 1,
+          antreanOffline: false,
+        });
+        let untrustedDitolak = false;
+        let untrustedMsg = '';
+        try {
+          await klienTanpaCA.dapatkan('/probe');
+        } catch (err: any) {
+          untrustedMsg = String(err?.message || '');
+          untrustedDitolak = /SELF_SIGNED_CERT_IN_CHAIN|UNABLE_TO_VERIFY|certificate|TLS/i.test(untrustedMsg);
+        }
+        pastikan(untrustedDitolak, `Sertifikat CA tidak tepercaya wajib ditolak TLS stack (aktual: ${untrustedMsg})`);
+
+        // 2) Sertifikat valid (CA tepercaya via NODE_EXTRA_CA_CERTS + SAN valid) wajib sukses pada IP 127.0.0.1 dan DNS localhost
+        const resValidIp = await jalankanSubprocessProbeTLS('get', `https://127.0.0.1:${portValid}`, caPath);
+        pastikan(resValidIp.ok && resValidIp.status === 200 && resValidIp.data?.tlsValid === true, `HTTPS valid CA+SAN IP wajib HTTP 200 (aktual: ${JSON.stringify(resValidIp)})`);
+
+        const resValidLocalhost = await jalankanSubprocessProbeTLS('get', `https://localhost:${portValid}`, caPath);
+        pastikan(resValidLocalhost.ok && resValidLocalhost.status === 200, `HTTPS valid CA+SAN localhost wajib HTTP 200 (aktual: ${JSON.stringify(resValidLocalhost)})`);
+
+        // 3) Sertifikat kedaluwarsa (meski CA tepercaya) wajib ditolak TLS stack
+        const resExpired = await jalankanSubprocessProbeTLS('get', `https://127.0.0.1:${portExpired}`, caPath);
+        pastikan(
+          !resExpired.ok && /CERT_HAS_EXPIRED|expired/i.test(resExpired.error || ''),
+          `Sertifikat TLS kedaluwarsa wajib ditolak (aktual: ${JSON.stringify(resExpired)})`
+        );
+
+        // 4) Hostname / SAN mismatch (meski CA tepercaya) wajib ditolak TLS stack
+        const resWrongSan = await jalankanSubprocessProbeTLS('get', `https://127.0.0.1:${portWrongSan}`, caPath);
+        pastikan(
+          !resWrongSan.ok && /ERR_TLS_CERT_ALTNAME_INVALID|altnames|hostname|127\.0\.0\.1/i.test(resWrongSan.error || ''),
+          `Hostname SAN mismatch wajib ditolak (aktual: ${JSON.stringify(resWrongSan)})`
+        );
+      } finally {
+        await Promise.all([
+          new Promise<void>((r) => srvValid.close(() => r())),
+          new Promise<void>((r) => srvExpired.close(() => r())),
+          new Promise<void>((r) => srvWrongSan.close(() => r())),
+        ]);
+      }
+    } finally {
+      fs.rmSync(tmpTlsDir, { recursive: true, force: true });
+    }
+  });
+
+  await ujiAsync('19.2 HTTPS mid-transfer socket drop ditolak jujur & timeout memicu retry recovery sampai HTTP 200', async () => {
+    const opensslBin = cariOpenSSL();
+    const tmpTlsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nusantara-p39-tls-net-'));
+
+    try {
+      const cnf = path.join(tmpTlsDir, 'san.cnf');
+      fs.writeFileSync(
+        cnf,
+        [
+          '[req]',
+          'distinguished_name = dn',
+          'x509_extensions = v3_ext',
+          'prompt = no',
+          '[dn]',
+          'CN = localhost',
+          '[v3_ext]',
+          'basicConstraints = CA:false',
+          'keyUsage = digitalSignature, keyEncipherment',
+          'extendedKeyUsage = serverAuth',
+          'subjectAltName = DNS:localhost,IP:127.0.0.1',
+        ].join('\n')
+      );
+      execFileSync(
+        opensslBin,
+        ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', 'srv.key', '-out', 'srv.crt', '-days', '2', '-config', cnf, '-extensions', 'v3_ext'],
+        { cwd: tmpTlsDir, stdio: 'pipe' }
+      );
+
+      const creds = {
+        key: fs.readFileSync(path.join(tmpTlsDir, 'srv.key')),
+        cert: fs.readFileSync(path.join(tmpTlsDir, 'srv.crt')),
+      };
+      const caPath = path.join(tmpTlsDir, 'srv.crt');
+
+      // Server Drop: kirim sebagian header & body JSON lalu hancurkan soket di tengah transfer
+      const srvDrop = https.createServer(creds, (req, res) => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.write('{"bagian":"terpotong",');
+        setTimeout(() => {
+          req.socket?.destroy();
+          res.socket?.destroy();
+        }, 15);
+      });
+
+      // Server Retry: percobaan ke-1 delay melebihi batasWaktuMs (memicu AbortError), percobaan ke-2 sukses 200
+      let jumlahMasuk = 0;
+      const srvRetry = https.createServer(creds, (_req, res) => {
+        jumlahMasuk++;
+        if (jumlahMasuk === 1) {
+          setTimeout(() => {
+            if (!res.writableEnded && !res.destroyed) {
+              res.writeHead(504, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ pesan: 'Terlambat' }));
+            }
+          }, 450);
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ pulih: true, percobaan: jumlahMasuk }));
+      });
+
+      await new Promise<void>((r) => srvDrop.listen(0, '127.0.0.1', r));
+      await new Promise<void>((r) => srvRetry.listen(0, '127.0.0.1', r));
+
+      try {
+        const portDrop = (srvDrop.address() as any).port;
+        const portRetry = (srvRetry.address() as any).port;
+
+        const hasilDrop = await jalankanSubprocessProbeTLS('drop', `https://127.0.0.1:${portDrop}`, caPath, {
+          cobaUlangMaks: 1,
+          batasWaktuMs: 3000,
+        });
+        pastikan(!hasilDrop.ok, `Pemutusan soket HTTPS di tengah transfer wajib gagal jujur (aktual: ${JSON.stringify(hasilDrop)})`);
+
+        const hasilRetry = await jalankanSubprocessProbeTLS('retry', `https://127.0.0.1:${portRetry}`, caPath, {
+          cobaUlangMaks: 3,
+          jedaCobaUlangMs: 25,
+          batasWaktuMs: 120,
+        });
+        pastikan(
+          hasilRetry.ok && hasilRetry.status === 200 && hasilRetry.data?.pulih === true && jumlahMasuk >= 2,
+          `Timeout HTTPS percobaan awal wajib memicu retry recovery hingga HTTP 200 (percobaan=${jumlahMasuk}, aktual=${JSON.stringify(hasilRetry)})`
+        );
+      } finally {
+        await Promise.all([
+          new Promise<void>((r) => srvDrop.close(() => r())),
+          new Promise<void>((r) => srvRetry.close(() => r())),
+        ]);
+      }
+    } finally {
+      fs.rmSync(tmpTlsDir, { recursive: true, force: true });
+    }
+  });
+
   console.log('\n======================================================================');
   console.log(`HASIL PENGUJIAN FASE 39: ${totalLulus}/${totalUji} LULUS`);
   if (totalGagal > 0) {
@@ -839,7 +1191,39 @@ async function jalankanSemuaUji() {
   }
 }
 
-jalankanSemuaUji().catch((err) => {
-  console.error('Galat fatal dalam pengujian Fase 39:', err);
-  process.exit(1);
-});
+async function jalankanSubprocessMode(): Promise<void> {
+  const mode = process.env.NUSANTARA_TLS_PROBE_MODE;
+  const baseUrl = process.env.NUSANTARA_TLS_PROBE_URL || '';
+  const cobaUlangMaks = Number(process.env.NUSANTARA_TLS_PROBE_RETRY || '1');
+  const jedaCobaUlangMs = Number(process.env.NUSANTARA_TLS_PROBE_DELAY || '20');
+  const batasWaktuMs = Number(process.env.NUSANTARA_TLS_PROBE_TIMEOUT || '3000');
+
+  try {
+    const klien = new KlienAPIMobile({
+      baseUrl,
+      cobaUlangMaks,
+      jedaCobaUlangMs,
+      batasWaktuMs,
+      antreanOffline: false,
+      validasiTLS: true,
+    });
+    const res = await klien.dapatkan(mode === 'drop' ? '/drop' : mode === 'retry' ? '/retry' : '/probe');
+    console.log(JSON.stringify({ ok: true, status: res.status, data: res.data }));
+    process.exit(0);
+  } catch (err: any) {
+    console.log(JSON.stringify({ ok: false, error: err?.message || String(err) }));
+    process.exit(0);
+  }
+}
+
+if (process.env.NUSANTARA_TLS_PROBE_MODE) {
+  jalankanSubprocessMode().catch((err) => {
+    console.log(JSON.stringify({ ok: false, error: err?.message || String(err) }));
+    process.exit(1);
+  });
+} else {
+  jalankanSemuaUji().catch((err) => {
+    console.error('Galat fatal dalam pengujian Fase 39:', err);
+    process.exit(1);
+  });
+}

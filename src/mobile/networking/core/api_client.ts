@@ -337,7 +337,13 @@ export class KlienAPIMobile {
           idempotencyKey,
         };
       } catch (err: any) {
-        throw new Error(`Galat koneksi ke '${url}': ${err?.message || 'Jaringan tidak dapat diakses'}`);
+        const cause = err?.cause;
+        const causeParts = cause
+          ? [cause.code, cause.message].filter((x) => typeof x === 'string' && x.length > 0)
+          : [];
+        const baseMsg = err?.message || 'Jaringan tidak dapat diakses';
+        const fullMsg = causeParts.length > 0 ? `${baseMsg} [${causeParts.join(': ')}]` : baseMsg;
+        throw new Error(`Galat koneksi ke '${url}': ${fullMsg}`);
       } finally {
         clearTimeout(timeoutId);
         if (signal) {

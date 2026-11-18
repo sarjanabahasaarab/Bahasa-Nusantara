@@ -1,0 +1,21 @@
+{
+  "idAplikasi": "id.nusantara.crossdemo",
+  "namaAplikasi": "NUSANTARA Cross Console",
+  "versi": "0.50.0",
+  "target": "linux",
+  "statusKompilasiBiner": "SKIPPED_NO_NATIVE_TOOLCHAIN",
+  "jendelaUtama": {
+    "judul": "NUSANTARA Cross Console",
+    "lebar": 640,
+    "tinggi": 400
+  },
+  "daftarBerkas": [
+    "AppRun",
+    "id.nusantara.crossdemo.desktop",
+    "usr/share/applications/id.nusantara.crossdemo.desktop",
+    "usr/share/icons/hicolor/scalable/apps/id.nusantara.crossdemo.svg",
+    "usr/share/nusantara/ui/index.html",
+    "usr/share/nusantara/preview.bmp",
+    "src/nusantara_linux_host.c"
+  ]
+}

@@ -567,6 +567,194 @@ selesai
     }
   });
 
+  // --- 12. Pra-CI Hardening: Key Revocation, Key Rotation, Interrupted OTA Download & Post-Rollback Replay Guard ---
+  console.log('\n[KELOMPOK 12] Pencabutan Kunci, Rotasi Kunci Multi-Generasi, Unduhan Terputus & Anti-Replay Pasca-Rollback');
+  await uji('TrustManager.cabutKunci menolak manifest bertanda tangan kunci dicabut & mendukung rotasi Ed25519 multi-generasi', async () => {
+    const gen1 = SignatureVerifier.buatPasanganKunciEd25519();
+    const gen2 = SignatureVerifier.buatPasanganKunciEd25519();
+    const gen3 = SignatureVerifier.buatPasanganKunciEd25519();
+
+    const k1 = 'nusantara-rotasi-gen1';
+    const k2 = 'nusantara-rotasi-gen2';
+    const k3 = 'nusantara-rotasi-gen3';
+    const tm = TrustManager.dapatkanInstance();
+
+    tm.daftarkanKunci({ keyId: k1, algoritma: 'Ed25519', kunciPublikHex: gen1.fingerprintHex, kunciPublikPem: gen1.kunciPublikPem, deskripsi: 'Gen 1', tanggalDibuat: new Date().toISOString(), aktif: true });
+    tm.daftarkanKunci({ keyId: k2, algoritma: 'Ed25519', kunciPublikHex: gen2.fingerprintHex, kunciPublikPem: gen2.kunciPublikPem, deskripsi: 'Gen 2', tanggalDibuat: new Date().toISOString(), aktif: true });
+    tm.daftarkanKunci({ keyId: k3, algoritma: 'Ed25519', kunciPublikHex: gen3.fingerprintHex, kunciPublikPem: gen3.kunciPublikPem, deskripsi: 'Gen 3', tanggalDibuat: new Date().toISOString(), aktif: true });
+
+    const payload = Buffer.from(JSON.stringify({ gen: 'rotasi-test' }));
+    const sha = HashValidator.hitungSHA256(payload);
+    const srv = http.createServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(payload);
+    });
+    await new Promise<void>((r) => srv.listen(0, '127.0.0.1', () => r()));
+    const { port } = srv.address() as { port: number };
+    const url = `http://127.0.0.1:${port}/r.json`;
+
+    try {
+      const um = UpdateManager.dapatkanInstance();
+      um.konfigurasiAplikasi('id.nusantara.rotasi', '1.9.0', 'android', 1);
+
+      const mkManifest = (ver: string, rev: number, kid: string, priv: string): ManifestPembaruan =>
+        SignatureVerifier.tandaTangani(
+          {
+            schemaVersion: 1,
+            applicationId: 'id.nusantara.rotasi',
+            platform: 'android',
+            channel: 'stable',
+            releaseVersion: ver,
+            minimumSupportedVersion: '1.0.0',
+            updateType: 'ota_resource',
+            policy: 'disarankan',
+            releaseDate: new Date().toISOString(),
+            revision: rev,
+            releaseNotes: { id: `Rilis ${ver}` },
+            resources: [{ id: 'cfg', tipe: 'config', jalurRelatif: 'config/rot.json', url, sha256: sha, ukuranByte: payload.byteLength }],
+          },
+          kid,
+          priv,
+          'Ed25519'
+        );
+
+      // 1. Terapkan dengan generasi 1 -> sukses
+      const mGen1 = mkManifest('2.0.0', 1, k1, gen1.kunciPrivatPem);
+      const r1 = await um.terapkanManifestOTA(mGen1);
+      tegas(r1.sukses === true, `Rilis Gen-1 harus berhasil: ${r1.pesan}`);
+
+      // 2. Cabut Gen-1 -> verifikasi langsung & pembaruan memakai Gen-1 wajib ditolak
+      tegas(tm.cabutKunci(k1) === true, 'cabutKunci harus mengembalikan true untuk kunci terdaftar');
+      tegas(tm.apakahKunciDipercaya(k1) === false, 'Gen-1 yang dicabut tidak boleh dipercaya lagi');
+      const mGen1AfterRevoke = mkManifest('2.0.1', 1, k1, gen1.kunciPrivatPem);
+      const sigRevoked = SignatureVerifier.verifikasi(mGen1AfterRevoke);
+      tegas(sigRevoked.valid === false && sigRevoked.alasan === 'UNTRUSTED_KEY_ID', 'SignatureVerifier wajib menolak kunci yang dicabut');
+      const r1Blocked = await um.terapkanManifestOTA(mGen1AfterRevoke);
+      tegas(r1Blocked.sukses === false, 'UpdateManager wajib menolak paket dari kunci Gen-1 yang dicabut');
+
+      // 3. Terapkan rilis baru dengan Gen-2 pasca-rotasi -> sukses
+      const r2 = await um.terapkanManifestOTA(mkManifest('2.1.0', 1, k2, gen2.kunciPrivatPem));
+      tegas(r2.sukses === true && um.dapatkanVersiTerpasang() === '2.1.0', 'Rotasi ke Gen-2 harus berhasil');
+
+      // 4. Rotasi berikutnya ke Gen-3 & pencabutan Gen-2 -> Gen-2 ditolak, Gen-3 sukses
+      tegas(tm.cabutKunci(k2) === true, 'Gen-2 harus berhasil dicabut');
+      const r2Blocked = await um.terapkanManifestOTA(mkManifest('2.2.0', 1, k2, gen2.kunciPrivatPem));
+      tegas(r2Blocked.sukses === false, 'Kunci Gen-2 yang dicabut tidak boleh dipakai lagi');
+
+      const r3 = await um.terapkanManifestOTA(mkManifest('2.2.0', 2, k3, gen3.kunciPrivatPem));
+      tegas(r3.sukses === true && um.dapatkanVersiTerpasang() === '2.2.0', `Rotasi ke Gen-3 harus berhasil: ${r3.pesan}`);
+
+      // 5. Health check gagal pada 2.3.0 -> rollback ke 2.2.0 rev 2 + blokir replay 2.2.0 rev <= 2 & downgrade 2.1.0
+      const fail230 = await um.aktivasiDenganHealthCheck(
+        mkManifest('2.3.0', 1, k3, gen3.kunciPrivatPem),
+        () => false
+      );
+      tegas(fail230.sukses === false && fail230.rolledBack === true, 'Health check gagal harus memicu rollback ke 2.2.0');
+      tegas(um.dapatkanVersiTerpasang() === '2.2.0', 'Versi pasca-rollback harus 2.2.0');
+
+      const replayRev1 = await um.terapkanManifestOTA(mkManifest('2.2.0', 1, k3, gen3.kunciPrivatPem));
+      tegas(replayRev1.sukses === false && replayRev1.pesan.includes('anti-replay'), 'Replay revisi 1 setelah rollback ke 2.2.0 (rev 2) wajib ditolak');
+
+      const replayOldVer = await um.terapkanManifestOTA(mkManifest('2.1.0', 1, k3, gen3.kunciPrivatPem));
+      tegas(replayOldVer.sukses === false && replayOldVer.pesan.includes('anti-downgrade'), 'Downgrade ke 2.1.0 setelah rollback ke 2.2.0 wajib ditolak');
+    } finally {
+      await new Promise<void>((r) => srv.close(() => r()));
+    }
+  });
+
+  await uji('Penanganan koneksi HTTP OTA terputus di tengah transfer dan penolakan unduhan parsial tanpa merusak state aktif', async () => {
+    const keys = SignatureVerifier.buatPasanganKunciEd25519();
+    const kid = 'nusantara-ota-interrupted-2026';
+    TrustManager.dapatkanInstance().daftarkanKunci({
+      keyId: kid,
+      algoritma: 'Ed25519',
+      kunciPublikHex: keys.fingerprintHex,
+      kunciPublikPem: keys.kunciPublikPem,
+      deskripsi: 'Interrupted Transfer Key',
+      tanggalDibuat: new Date().toISOString(),
+      aktif: true,
+    });
+
+    const fullPayload = Buffer.from(JSON.stringify({ konfigurasi: 'utuh', baris: 'A'.repeat(2048) }));
+    const fullSha = HashValidator.hitungSHA256(fullPayload);
+    let mode: 'abort' | 'partial' = 'abort';
+
+    const srv = http.createServer((req, res) => {
+      if (mode === 'abort') {
+        res.writeHead(200, {
+          'Content-Type': 'application/octet-stream',
+          'Content-Length': String(fullPayload.byteLength),
+        });
+        res.write(fullPayload.subarray(0, 256));
+        setTimeout(() => req.socket.destroy(), 10);
+        return;
+      }
+      // Mode partial: akhiri respons hanya setengah tanpa mengirim sisa bytes
+      res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
+      res.end(fullPayload.subarray(0, 512));
+    });
+    await new Promise<void>((r) => srv.listen(0, '127.0.0.1', () => r()));
+    const { port } = srv.address() as { port: number };
+
+    try {
+      const um = UpdateManager.dapatkanInstance();
+      um.konfigurasiAplikasi('id.nusantara.interrupted', '3.0.0', 'android', 1);
+
+      // Siapkan state baseline v3.0.0
+      ActivationManager.dapatkanInstance().aktifkanAtomik(
+        '3.0.0',
+        new Map([['config/stabil.json', JSON.stringify({ versi: '3.0.0', aman: true })]])
+      );
+
+      const mTarget = SignatureVerifier.tandaTangani(
+        {
+          schemaVersion: 1,
+          applicationId: 'id.nusantara.interrupted',
+          platform: 'android',
+          channel: 'stable',
+          releaseVersion: '3.1.0',
+          minimumSupportedVersion: '3.0.0',
+          updateType: 'ota_resource',
+          policy: 'disarankan',
+          releaseDate: new Date().toISOString(),
+          revision: 1,
+          releaseNotes: { id: 'Rilis uji putus jaringan' },
+          resources: [
+            {
+              id: 'cfg-large',
+              tipe: 'config',
+              jalurRelatif: 'config/baru_rusak.json',
+              url: `http://127.0.0.1:${port}/bundle.json`,
+              sha256: fullSha,
+              ukuranByte: fullPayload.byteLength,
+            },
+          ],
+        },
+        kid,
+        keys.kunciPrivatPem,
+        'Ed25519'
+      );
+
+      // A. Putus koneksi TCP mid-stream
+      mode = 'abort';
+      const abortRes = await um.terapkanManifestOTA(mTarget);
+      tegas(abortRes.sukses === false, 'Unduhan HTTP yang terputus soket mid-stream wajib gagal');
+      tegas(um.dapatkanStateManager().dapatkanStatus() === 'failed', `Status harus failed setelah putus, aktual=${um.dapatkanStateManager().dapatkanStatus()}`);
+      tegas(um.dapatkanVersiTerpasang() === '3.0.0', 'Versi terpasang tidak boleh berubah pasca putus koneksi');
+      tegas(ActivationManager.dapatkanInstance().bacaResource('config/baru_rusak.json') === undefined, 'Resource tidak lengkap tidak boleh diaktifkan');
+      tegas(ActivationManager.dapatkanInstance().bacaResource('config/stabil.json') !== undefined, 'Resource stabil lama harus tetap utuh');
+
+      // B. Unduhan parsial terpotong -> wajib ditolak IntegrityValidator
+      mode = 'partial';
+      const partialRes = await um.terapkanManifestOTA(mTarget);
+      tegas(partialRes.sukses === false, 'Artefak OTA parsial (512B dari 2KB+) wajib ditolak');
+      tegas(um.dapatkanVersiTerpasang() === '3.0.0', 'Versi terpasang tetap 3.0.0 pasca penolakan paket parsial');
+      tegas(ActivationManager.dapatkanInstance().bacaResource('config/baru_rusak.json') === undefined, 'Paket parsial tidak boleh masuk ActivationManager');
+    } finally {
+      await new Promise<void>((r) => srv.close(() => r()));
+    }
+  });
+
   console.log('\n======================================================================');
   console.log(`  HASIL PENGUJIAN PHASE 42: ${ujiBerhasil} LULUS, ${ujiGagal} GAGAL (Total: ${totalUji})`);
   console.log('======================================================================\n');

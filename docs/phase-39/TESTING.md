@@ -2,7 +2,7 @@
 
 ## 1. Perintah Verifikasi
 - TypeScript lint: `npm run lint` (`tsc --noEmit`) — exit `0`
-- Suite Fase 39: `npm run test:mobile-networking-v39` (`tsx pengujian/mobile/uji_mobile_networking_fase39.ts`) — **38/38 LULUS**
+- Suite Fase 39: `npm run test:mobile-networking-v39` (`tsx pengujian/mobile/uji_mobile_networking_fase39.ts`) — **40/40 LULUS**
 
 ## 2. Cakupan Suite `uji_mobile_networking_fase39.ts`
 - `[1]` Ekspor modul & konstanta versi (`1.1`–`1.2`).
@@ -27,3 +27,6 @@
   - `18.2`: Deteksi klaim role bersarang, anti-traversal REST DB (`../../admin/users`), & validasi skema `ws:`/`wss:`.
   - `18.3`: Pembatalan `AbortController` menghentikan backoff retry seketika & `AdaptorStorageS3` menolak traversal kosong.
   - `18.4`: Verifikasi `KlienAPIMobile` menolak koneksi ke port loopback mati secara jujur tanpa `200 OK` palsu.
+- `[19]` Pengujian HTTPS/TLS Lokal Nyata dengan `https.createServer` & OpenSSL X.509 (`19.1`–`19.2`):
+  - `19.1`: Handshake HTTPS nyata dengan sertifikat CA sementara (`NODE_EXTRA_CA_CERTS`, tanpa menonaktifkan verifikasi TLS): menolak sertifikat tidak tepercaya, sertifikat kedaluwarsa (`CERT_HAS_EXPIRED`), dan SAN mismatch (`ERR_TLS_CERT_ALTNAME_INVALID`), serta menerima CA tepercaya + SAN valid (`DNS:localhost,IP:127.0.0.1`).
+  - `19.2`: Pemutusan soket HTTPS di tengah transfer ditolak jujur dan timeout memicu retry recovery hingga `200 OK`.

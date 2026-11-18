@@ -18,7 +18,8 @@ npm run test:pembaruan-v42
 - **[KELOMPOK 9] Standard Library `std:mobile`** (1 uji): eksekusi skrip `.nusantara` memakai fungsi pembaruan mobile.
 - **[KELOMPOK 10] Ed25519 Asimetris & Loopback HTTP OTA** (2 uji): kunci PKCS#8/SPKI Ed25519 nyata, pengunduhan HTTP loopback nyata, penolakan payload korup (SHA-256), aktivasi, serta verifikasi pemulihan file/versi pasca-rollback.
 - **[KELOMPOK 11] Audit Keamanan URL, Anti-Downgrade/Replay, Kedaluwarsa & Health-Check Auto-Rollback** (2 uji): penolakan `http://localhost.evil.com`, kredensial tertanam, NUL/`%2e%2e`, mismatch `applicationId`, downgrade versi, replay revisi, manifest kedaluwarsa, serta rollback otomatis saat health check pasca-aktivasi mengembalikan `false`.
+- **[KELOMPOK 12] Pencabutan Kunci, Rotasi Multi-Generasi, Unduhan Terputus & Anti-Replay Pasca-Rollback** (2 uji): `TrustManager.cabutKunci()`, penolakan kunci dicabut & tergantikan pada rotasi Ed25519 3 generasi, penolakan soket HTTP OTA terputus mid-stream & paket parsial tanpa merusak state aktif, serta pelestarian revisi pasca-rollback untuk mencegah replay.
 
 ## Hasil Aktual
 - `npm run lint` (`tsc --noEmit`): **LULUS** (0 galat)
-- `npm run test:pembaruan-v42`: **25 LULUS, 0 GAGAL (Total: 25)**
+- `npm run test:pembaruan-v42`: **27 LULUS, 0 GAGAL (Total: 27)**

@@ -1,0 +1,9 @@
+{
+  "persistedQueuePath": "offline_q.json",
+  "syncedItem": {
+    "id": "demo_row_1",
+    "nama": "Item Cross Demo"
+  },
+  "pendingAfterSync": 0,
+  "recordedAt": "2026-11-18T00:04:46.235Z"
+}

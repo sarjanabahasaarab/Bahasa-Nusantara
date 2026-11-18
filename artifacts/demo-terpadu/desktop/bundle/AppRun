@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+HERE="$(dirname "$(readlink -f "$0")")"
+if [ -x "$HERE/usr/bin/id.nusantara.crossdemo" ]; then
+  exec "$HERE/usr/bin/id.nusantara.crossdemo" "$@"
+fi
+exec nusantara desktop run "src/utama.nusantara"
