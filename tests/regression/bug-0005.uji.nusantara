@@ -5,14 +5,15 @@
 
 definisi nilai_global = 100
 
-fungsi uji_cakupan() {
+fungsi uji_cakupan() : bilangan
+mulai
     definisi nilai_lokal = 50
-    jika benar {
+    jika benar maka
         definisi nilai_blok = 25
         kembalikan nilai_lokal + nilai_blok
-    }
+    akhir
     kembalikan nilai_lokal
-}
+selesai
 
 pastikan_sama(nilai_global, 100, "Variabel global tetap 100")
 pastikan_sama(uji_cakupan(), 75, "Hasil fungsi dalam blok percabangan harus 75")

@@ -270,6 +270,52 @@ uji('Menolak perbandingan relasional lebih besar antara teks dan bilangan', () =
   samaDengan(galat[0].jenis, JenisGalatTipe.OPERATOR_TIDAK_DIDUKUNG);
 });
 
+uji('Inferensi tipe deklarasi tanpa anotasi berdasarkan ekspresi awal', () => {
+  const sumber = `
+  program InferensiTipe
+  mulai
+      definisi depan = "Halo"
+      definisi sapaan = depan + " Dunia"
+      definisi angka = [1, 2, 3]
+      tampilkan(sapaan, angka)
+  selesai`;
+  const parser = new Parser(sumber);
+  const ast = parser.parse();
+  const pemeriksa = new PemeriksaTipe();
+  const galat = pemeriksa.periksa(ast);
+  samaDengan(galat.length, 0, 'Ekspresi non-literal harus dapat diinferensikan');
+  const deklarasi = ast.tubuhUtama.filter((stmt: any) => stmt.jenis === 'DEKLARASI_VARIABEL') as any[];
+  samaDengan(deklarasi.find(d => d.nama === 'sapaan')?.tipeData, 'teks');
+  samaDengan(deklarasi.find(d => d.nama === 'angka')?.tipeData, 'daftar');
+  samaDengan(jalankanProgram(sumber)[0], 'Halo Dunia [1, 2, 3]');
+});
+
+uji('Inferensi tipe tidak mengubah anotasi eksplisit dan menolak penugasan salah', () => {
+  const sumber = `
+  program AnotasiTegas
+  mulai
+      definisi nama: teks = "Nusantara"
+      nama = 42
+  selesai`;
+  const galat = periksaTipeProgram(sumber);
+  samaDengan(galat.length > 0, true, 'Penugasan bilangan ke teks harus ditolak');
+  samaDengan(galat[0].jenis, JenisGalatTipe.KETIDAKCOCOKAN_TIPE);
+});
+
+uji('Literal kosong tanpa anotasi tetap memiliki tipe kosong yang eksplisit', () => {
+  const sumber = `
+  program NilaiKosong
+  mulai
+      definisi hasil = kosong
+  selesai`;
+  const parser = new Parser(sumber);
+  const ast = parser.parse();
+  const galat = new PemeriksaTipe().periksa(ast);
+  samaDengan(galat.length, 0);
+  const deklarasi = ast.tubuhUtama.find((stmt: any) => stmt.jenis === 'DEKLARASI_VARIABEL') as any;
+  samaDengan(deklarasi.tipeData, 'kosong');
+});
+
 // 9. REKAPITULASI HASIL
 console.log('\n-----------------------------------------------------------------------------');
 const jumlahLulus = daftarHasil.filter(h => h.lulus).length;

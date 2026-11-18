@@ -371,7 +371,10 @@ export class PemeriksaTipe {
     switch (stmt.jenis) {
       case JenisNodeAST.DEKLARASI_VARIABEL: {
         const s = stmt as NodeDeklarasiVariabel;
-        if (!apakahTipeSah(s.tipeData)) {
+        const tipeNilai = this.periksaEkspresi(s.nilaiAwal);
+        const memilikiAnotasiTipe = s.tipeData !== undefined;
+
+        if (memilikiAnotasiTipe && !apakahTipeSah(s.tipeData!)) {
           throw new GalatTipe(
             JenisGalatTipe.TIPE_TIDAK_DIKENAL,
             `Tipe data '${s.tipeData}' pada deklarasi variabel '${s.nama}' tidak sah.`,
@@ -379,18 +382,23 @@ export class PemeriksaTipe {
           );
         }
 
-        const tipeNilai = this.periksaEkspresi(s.nilaiAwal);
-        if (!apakahKompatibel(s.tipeData, tipeNilai)) {
+        // Anotasi eksplisit divalidasi secara ketat. Tanpa anotasi, tipe deklarasi
+        // diturunkan dari hasil pemeriksaan ekspresi awal, bukan APAPUN secara umum.
+        const tipeDeklarasi = (s.tipeData ?? tipeNilai) as NamaTipe;
+        if (!apakahKompatibel(tipeDeklarasi, tipeNilai)) {
           throw buatGalatKetidakcocokanTipe(
             `Deklarasi variabel '${s.nama}'`,
-            s.tipeData,
+            tipeDeklarasi,
             tipeNilai,
             s.nilaiAwal.posisi.awal
           );
         }
 
+        // Simpan hasil inferensi pada AST agar interpreter/runtime memakai tipe
+        // statis yang sama saat memvalidasi penugasan berikutnya.
+        s.tipeData = tipeDeklarasi;
         this.lingkupSaatIni.definisikan(
-          { nama: s.nama, tipe: s.tipeData as NamaTipe, tetap: false },
+          { nama: s.nama, tipe: tipeDeklarasi, tetap: false },
           s.posisi.awal
         );
         break;

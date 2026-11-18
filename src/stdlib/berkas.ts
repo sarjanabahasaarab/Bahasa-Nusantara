@@ -15,6 +15,7 @@ import {
 } from '../interpreter/nilai';
 import { GalatRuntime, JenisGalatRuntime } from '../interpreter/galat';
 import { InfoSimbolModul } from '../modul/jenisModul';
+import { muatModulNode } from './modulNode';
 import { PembacaBerkas, PembacaBerkasMemori, PembacaBerkasNode } from '../modul/pembacaBerkas';
 
 export const simbolEksporBerkas: Map<string, InfoSimbolModul> = new Map([
@@ -234,9 +235,9 @@ export class SandboxBerkas {
     }
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const fs = typeof window === 'undefined' ? require('fs') : null;
+      const fs = muatModulNode('node:fs');
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const path = typeof window === 'undefined' ? require('path') : null;
+      const path = muatModulNode('node:path');
       if (fs && path) {
         const dir = path.dirname(kanonikal);
         if (!fs.existsSync(dir)) {
