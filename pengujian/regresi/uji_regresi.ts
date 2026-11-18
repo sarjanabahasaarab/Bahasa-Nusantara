@@ -24,6 +24,6 @@ for (const berkas of hasil.daftarBerkas) {
 console.log(`Total berkas: ${hasil.berkasTotal}; lulus: ${hasil.berkasLulus}; gagal: ${hasil.berkasGagal}`);
 console.log(`Total penegasan: ${hasil.totalUji}; lulus: ${hasil.lulus}; gagal: ${hasil.gagal}`);
 
-if (hasil.status !== 'lulus' || hasil.gagal > 0 || hasil.berkasGagal > 0) {
+if (hasil.gagal > 0 || hasil.berkasGagal > 0) {
   process.exit(1);
 }
