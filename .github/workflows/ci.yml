@@ -57,7 +57,32 @@ jobs:
           npm run build
 
   # ============================================================================
-  # 2. AUTOMATED TEST SUITE (PHASE 1 - 50) & CROSS-PLATFORM DEMO TERPADU
+  # 1B. REGRESSION PROGRAMS (tests/regression)
+  # Berjalan terpisah agar tetap dieksekusi walaupun suite utama memiliki kegagalan lain.
+  # ============================================================================
+  regression-suite:
+    name: NUSANTARA / Regresi Bahasa (.uji.nusantara)
+    needs: static-checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Pasang Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Pasang Dependensi
+        run: npm ci
+
+      - name: Jalankan Seluruh Berkas tests/regression
+        run: npm run test:regression
+
+  # ============================================================================
+  # 3. AUTOMATED TEST SUITE (PHASE 1 - 50) & CROSS-PLATFORM DEMO TERPADU
   # ============================================================================
   test-suite:
     name: NUSANTARA / Pengujian Otomatis (${{ matrix.os }})
