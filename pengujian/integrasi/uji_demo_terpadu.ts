@@ -16,6 +16,7 @@ import { Interpreter } from '../../src/interpreter/interpreter';
 import { PenulisOutputBuffer } from '../../src/interpreter/outputWriter';
 import { NusantaraCLI } from '../../src/paket/cli';
 import { PembacaBerkasNode } from '../../src/modul/pembacaBerkas';
+import { validasiIntegritasBundelArtefak } from '../../src/cicd';
 
 // Phase 36 — Desktop GUI
 import {
@@ -759,7 +760,7 @@ async function jalankanDemoTerpadu(): Promise<void> {
         'utf-8'
       );
 
-      // Verifikasi ulang SHA256SUMS langsung dari disk tujuan
+      // Verifikasi ulang SHA256SUMS langsung dari disk tujuan + anti-traversal, anti-yatim, kejujuran struktural
       const lines = fs.readFileSync(sumsPath, 'utf-8').trim().split('\n');
       pastikan(lines.length === entriManifest.length, 'Jumlah baris SHA256SUMS harus sama dengan manifest');
       for (const line of lines) {
@@ -769,6 +770,17 @@ async function jalankanDemoTerpadu(): Promise<void> {
         pastikan(actualHash === expectedHash, `Checksum mismatch di disk untuk ${rel}`);
       }
       pastikan(fs.existsSync(manifestPath) && fs.existsSync(sumsPath), 'manifest.json dan SHA256SUMS harus tersimpan di disk');
+
+      const hasilValidasiKetat = validasiIntegritasBundelArtefak(artifactsDir, {
+        strictStructuralSeparation: true,
+        minimumArtifacts: 20,
+      });
+      pastikan(
+        hasilValidasiKetat.valid,
+        `Validasi ketat integritas artefak gagal: ${hasilValidasiKetat.temuan.map((t) => `${t.kode}:${t.pesan}`).join(' | ')}`
+      );
+      pastikan(hasilValidasiKetat.jumlahNativeBinary === 0, 'Demo kontainer tidak boleh mengklaim nativeBinary=true');
+      pastikan(hasilValidasiKetat.jumlahStruktural >= 4, 'Minimal 4 artefak mobile harus bertanda kategoriBuild=structural');
     });
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });

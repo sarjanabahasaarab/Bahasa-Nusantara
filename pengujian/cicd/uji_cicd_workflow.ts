@@ -221,6 +221,51 @@ uji('5.5 ci.yml memasang C runtime Ubuntu pada test-suite, verifikasi stdio.h/ll
   pastikan(Boolean(gate && gate.needs.includes('build-matrix-validation')), 'phase23-certification-gate wajib bergantung pada build-matrix-validation');
 });
 
+uji('5.6 ci.yml mencakup job Phase 36–42, timeout-minutes, demo-terpadu artifact, & unified-certification-gate', () => {
+  const kontenCI = pembacaReal.baca('.github/workflows/ci.yml');
+  const parsedCI = validator.validasiBerkas('.github/workflows/ci.yml');
+  const jobIds = parsedCI.daftarJob.map((j) => j.id);
+
+  for (const jobWajib of [
+    'phase36-gui-matrix',
+    'phase37-42-android-sdk',
+    'phase37-42-apple',
+    'phase39-42-tls-ota',
+    'unified-certification-gate',
+  ]) {
+    pastikan(jobIds.includes(jobWajib), `ci.yml wajib memiliki job '${jobWajib}'`);
+  }
+
+  pastikan(!/^\s*os:\s*macos-13\b/m.test(kontenCI), 'ci.yml dilarang memakai runner retired macos-13 pada matriks build');
+  pastikan(kontenCI.includes('xvfb-run -a'), 'ci.yml wajib memvalidasi GUI Linux melalui xvfb-run');
+  pastikan(kontenCI.includes('demo-terpadu-artifacts'), 'ci.yml wajib mengunggah artefak demo-terpadu');
+  pastikan(kontenCI.includes('scripts/certification-gate.ts evaluate'), 'ci.yml wajib memanggil gerbang sertifikasi terpusat');
+  pastikan(kontenCI.includes('timeout-minutes:'), 'ci.yml wajib menetapkan timeout-minutes pada job');
+});
+
+uji('5.7 release.yml, kernel-boot-qemu.yml, & nusantara-os-ci.yml bebas runner retired/hardcoded date & terlindungi gate', () => {
+  const kontenRel = pembacaReal.baca('.github/workflows/release.yml');
+  const parsedRel = validator.validasiBerkas('.github/workflows/release.yml');
+  const parsedQemu = validator.validasiBerkas('.github/workflows/kernel-boot-qemu.yml');
+  const parsedOs = validator.validasiBerkas('.github/workflows/nusantara-os-ci.yml');
+
+  pastikan(parsedQemu.valid && parsedQemu.leastPrivilegeTercapai && parsedQemu.concurrencyAman, 'kernel-boot-qemu.yml wajib valid & least-privilege');
+  pastikan(parsedOs.valid && parsedOs.leastPrivilegeTercapai && parsedOs.concurrencyAman, 'nusantara-os-ci.yml wajib valid & least-privilege');
+
+  pastikan(!/^\s*os:\s*macos-13\b/m.test(kontenRel) && !kontenRel.includes('macos-13'), 'release.yml dilarang memakai runner retired macos-13');
+  pastikan(!kontenRel.includes('2026-10-25T00:00:00.000Z'), 'release.yml dilarang memakai timestamp rilis hardcoded');
+  pastikan(kontenRel.includes('default: true'), 'release.yml dry_run wajib default true agar tidak rilis tidak sengaja');
+  pastikan(kontenRel.includes('scripts/certification-gate.ts evaluate'), 'release.yml wajib memeriksa certification gate');
+
+  const jobCertGate = parsedRel.daftarJob.find((j) => j.id === 'verify-certification-gate');
+  const jobPublish = parsedRel.daftarJob.find((j) => j.id === 'publish-release');
+  pastikan(Boolean(jobCertGate), 'release.yml wajib memiliki job verify-certification-gate');
+  pastikan(
+    Boolean(jobPublish && jobPublish.needs.includes('verify-certification-gate')),
+    'publish-release wajib bergantung pada verify-certification-gate'
+  );
+});
+
 // -----------------------------------------------------------------------------
 // GRUP 6: Mesin Eksekusi CI Lokal & Step Summary
 // -----------------------------------------------------------------------------

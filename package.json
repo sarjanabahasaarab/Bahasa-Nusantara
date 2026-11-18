@@ -31,6 +31,7 @@
     "test:ekosistem": "tsx pengujian/paket/uji_ekosistem_registri.ts",
     "test:build-v23": "tsx pengujian/build/uji_build_distribusi_fase23.ts",
     "test:cicd": "tsx pengujian/cicd/uji_cicd_workflow.ts",
+    "test:cert-gate": "tsx pengujian/cicd/uji_certification_gate.ts",
     "test:debugger": "tsx pengujian/debugger/uji_debugger_profiler.ts",
     "test:ide": "tsx pengujian/ide/uji_ide_foundation.ts",
     "test:paket-v27": "tsx pengujian/paket/uji_ekosistem_dependensi.ts",

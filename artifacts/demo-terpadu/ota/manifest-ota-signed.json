@@ -7,7 +7,7 @@
   "minimumSupportedVersion": "1.0.0",
   "updateType": "ota_resource",
   "policy": "disarankan",
-  "releaseDate": "2026-11-18T00:04:46.366Z",
+  "releaseDate": "2026-11-18T00:22:05.096Z",
   "revision": 1,
   "releaseNotes": {
     "id": "Tema Batik v2"
@@ -17,7 +17,7 @@
       "id": "batik-theme",
       "tipe": "theme",
       "jalurRelatif": "assets/themes/batik_v2.json",
-      "url": "http://127.0.0.1:42367/assets/themes/batik_v2.json",
+      "url": "http://127.0.0.1:29072/assets/themes/batik_v2.json",
       "sha256": "d17df53d38b2be041e00ab29c6a47070658757c5fa8169884eced850239ca140",
       "ukuranByte": 37
     }
@@ -25,7 +25,7 @@
   "tandaTangan": {
     "algoritma": "Ed25519",
     "keyId": "nusantara-crossdemo-ota-2026",
-    "nilaiTandaTangan": "14bb6e29bb1d7f56e6a5d81fbd2da1d11dbf8b377056c4e735ce6eb5cdb6b6ef095b8cfbbe782103deeb807b6ed6acd76c03493bbcb7164c9dd1ceba3f8d0207",
-    "stempelWaktu": "2026-11-18T00:04:46.367Z"
+    "nilaiTandaTangan": "917774cb88d2a0efb36e1cf1a17e13e32d0c73d18839b30774cac084e9330a1a200bdc3e004f86e5caf8d970284025e0b0a431c3caa58e1100f2205495f8da06",
+    "stempelWaktu": "2026-11-18T00:22:05.096Z"
   }
 }

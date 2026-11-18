@@ -98,7 +98,7 @@ function resolveTargetMetadata(target: PlatformTarget): {
       return { requested: target, canonical: 'linux-arm64', runner: 'ubuntu-latest', formats: ['zip', 'tar.gz'] };
     case 'macos-x64':
     case 'macos-x86_64':
-      return { requested: target, canonical: 'macos-x86_64', runner: 'macos-13', formats: ['zip', 'tar.gz'] };
+      return { requested: target, canonical: 'macos-x86_64', runner: 'macos-latest', formats: ['zip', 'tar.gz'] };
     case 'macos-arm64':
       return { requested: target, canonical: 'macos-arm64', runner: 'macos-latest', formats: ['zip', 'tar.gz'] };
     default:

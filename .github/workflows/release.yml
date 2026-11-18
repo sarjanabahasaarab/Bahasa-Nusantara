@@ -21,9 +21,9 @@ on:
           - 'prerelease'
         default: 'release'
       dry_run:
-        description: 'Uji alur rilis tanpa mempublikasikan artefak publik'
+        description: 'Uji alur rilis non-produksi (periksa manifest & metadata tanpa membuat tag/release)'
         type: boolean
-        default: false
+        default: true
   push:
     tags:
       - 'v*.*.*'
@@ -39,11 +39,12 @@ concurrency:
 
 jobs:
   # ============================================================================
-  # 1. VERIFIKASI PERSETUJUAN & INTEGRITAS RILIS
+  # 1. VERIFIKASI PERSETUJUAN & INTEGRITAS VERSI
   # ============================================================================
   verify-release-approval:
     name: NUSANTARA / Verifikasi Persetujuan & Versi
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
@@ -51,12 +52,16 @@ jobs:
       - name: Periksa Persetujuan Manual Pengguna
         if: github.event_name == 'workflow_dispatch'
         run: |
-          if [ "${{ inputs.confirm_release }}" != "true" ]; then
+          if [ "${{ inputs.dry_run }}" != "true" ] && [ "${{ inputs.confirm_release }}" != "true" ]; then
             echo "❌ [GAGAL] Persetujuan eksplisit rilis belum diberikan (confirm_release=false)."
             echo "Rilis resmi tidak dapat dilanjutkan tanpa persetujuan manual pengguna."
             exit 1
           fi
-          echo "✅ Persetujuan manual rilis telah dikonfirmasi oleh pengguna."
+          if [ "${{ inputs.confirm_release }}" != "true" ]; then
+            echo "ℹ️ Mode dry-run berjalan tanpa persetujuan publikasi penuh; publikasi tetap diblokir."
+          else
+            echo "✅ Persetujuan manual rilis telah dikonfirmasi oleh pengguna."
+          fi
 
       - name: Pasang Lingkungan Node.js
         uses: actions/setup-node@v4
@@ -67,27 +72,29 @@ jobs:
       - name: Pasang Dependensi
         run: npm ci
 
-      - name: Validasi Konsistensi Versi Proyek
+      - name: Validasi Konsistensi Versi Proyek (Tanpa Mengubah Versi)
         run: |
           npx tsx -e "
-            import { VERSI_NUSANTARA, LABEL_VERSI_NUSANTARA } from './src/konstanta/versi';
+            import { VERSI_NUSANTARA } from './src/konstanta/versi';
             import fs from 'node:fs';
             console.log('Versi Resmi:', VERSI_NUSANTARA);
             const toml = fs.readFileSync('nusantara.toml', 'utf-8');
-            if (!toml.includes('versi = \"' + VERSI_NUSANTARA + '\"')) {
-              console.error('Versi di nusantara.toml tidak cocok dengan versi.ts');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf-8'));
+            if (!toml.includes('versi = \"' + VERSI_NUSANTARA + '\"') || pkg.version !== VERSI_NUSANTARA) {
+              console.error('Ketidakkonsistenan versi antara versi.ts, nusantara.toml, dan package.json');
               process.exit(1);
             }
-            console.log('✅ Konsistensi versi tervalidasi.');
+            console.log('✅ Konsistensi versi tervalidasi (0 perubahan versi).');
           "
 
   # ============================================================================
-  # 2. RUN FULL TEST SUITE & QUALITY GATE
+  # 2. RUN CONSISTENT CI TEST SUITE, DEMO TERPADU & QUALITY GATE
   # ============================================================================
   test-and-gate:
-    name: NUSANTARA / Pengujian Penuh Sebelum Rilis
+    name: NUSANTARA / Pengujian Konsisten CI & Quality Gate
     needs: verify-release-approval
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
@@ -101,22 +108,94 @@ jobs:
       - name: Pasang Dependensi
         run: npm ci
 
-      - name: Jalankan Static Check & Seluruh Rangkaian Uji
+      - name: Jalankan Static Check, Build, & Seluruh Rangkaian Uji Konsisten CI
         run: |
           npm run lint
+          npm run build
           npm test
+          npm run test:cicd
+          npm run test:cert-gate
+          npm run test:mobile-networking-v39
+          npm run test:pembaruan-v42
+          npm run test:demo-terpadu
+
+      - name: Verifikasi Integritas Artefak & SHA256SUMS Demo Terpadu
+        run: |
+          npx tsx scripts/certification-gate.ts verify-artifacts --dir artifacts/demo-terpadu --min-artifacts 20
 
       - name: Verifikasi Quality Gate
         run: |
-          npx tsx pengujian/testing/uji_testing.ts
+          npm run quality-gate
 
   # ============================================================================
-  # 3. BUILD RELEASE ARTIFACTS MATRIX
+  # 3. CERTIFICATION GATE PROTECTION (MEMBLOKIR RILIS BILA ADA FAIL/SKIPPED/NOT_VERIFIED/BLOCKED)
+  # ============================================================================
+  verify-certification-gate:
+    name: NUSANTARA / Verifikasi Gerbang Sertifikasi Sebelum Rilis
+    needs: test-and-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Pasang Lingkungan Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Pasang Dependensi
+        run: npm ci
+
+      - name: Periksa Status CI Unified Certification Gate pada Commit Target & Evaluasi Ketat
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p artifacts/certification
+          IS_DRY_RUN="${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}"
+          if [ "$IS_DRY_RUN" = "true" ]; then
+            echo "=== MODE DRY-RUN NON-PRODUKSI: Memeriksa manifest, metadata & laporan sertifikasi tanpa membuat tag/release ==="
+            npx tsx scripts/certification-gate.ts evaluate \
+              --demo-dir artifacts/demo-terpadu \
+              --phase23-evidence-dir artifacts/phase23/evidence \
+              --json-out artifacts/certification/RELEASE-DRYRUN-GATE.json \
+              --md-out artifacts/certification/RELEASE-DRYRUN-GATE.md \
+              --dry-run \
+              --step-summary
+          else
+            echo "=== RELEASE GATE KETAT: Mewajibkan CI 'unified-certification-gate' PASS & 0 FAIL/SKIPPED/NOT_VERIFIED/BLOCKED ==="
+            CI_STATUS=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/check-runs" --jq '[.check_runs[] | select(.name | test("Gerbang Sertifikasi Terpusat|Gerbang Sertifikasi 6 Target")) | .conclusion] | if length == 0 then "MISSING" else (if all(. == "success") then "PASS" else "NOT_PASS" end) end' 2>/dev/null || echo "UNAVAILABLE")
+            echo "Status CI Certification Check pada commit ${{ github.sha }}: $CI_STATUS"
+            if [ "$CI_STATUS" != "PASS" ]; then
+              echo "❌ [BLOCKED] Commit ini belum lolos 'Gerbang Sertifikasi Terpusat' di workflow CI (status=$CI_STATUS). Rilis DIBLOKIR."
+              exit 1
+            fi
+            npx tsx scripts/certification-gate.ts evaluate \
+              --demo-dir artifacts/demo-terpadu \
+              --phase23-evidence-dir artifacts/phase23/evidence \
+              --json-out artifacts/certification/RELEASE-GATE-REPORT.json \
+              --md-out artifacts/certification/RELEASE-GATE-REPORT.md \
+              --step-summary
+          fi
+
+      - name: Unggah Laporan Gate Rilis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-certification-gate-report
+          path: artifacts/certification/
+          retention-days: 14
+          if-no-files-found: warn
+
+  # ============================================================================
+  # 4. BUILD RELEASE ARTIFACTS MATRIX (SEMUA RUNNER AKTIF / ROSETTA 2)
   # ============================================================================
   build-release-artifacts:
     name: NUSANTARA / Bangun Artefak Rilis (${{ matrix.target }})
-    needs: test-and-gate
+    needs: verify-certification-gate
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: true
       matrix:
@@ -130,7 +209,7 @@ jobs:
           - target: linux-arm64
             os: ubuntu-24.04-arm
           - target: macos-x86_64
-            os: macos-13
+            os: macos-latest
           - target: macos-arm64
             os: macos-latest
     steps:
@@ -155,7 +234,7 @@ jobs:
               pembaca: new PembacaBerkasNode(),
               targetPlatforms: ['${{ matrix.target }}'],
               simulasikanRilis: true,
-              persetujuanRilis: true
+              persetujuanRilis: '${{ inputs.dry_run }}' !== 'true' && '${{ inputs.confirm_release }}' === 'true'
             });
             const hasil = mesin.jalankan();
             if (hasil.statusAkhir !== 'PASS') {
@@ -173,12 +252,13 @@ jobs:
           retention-days: 1
 
   # ============================================================================
-  # 4. COMPILE CHECKSUMS, MANIFEST & VALIDASI INTEGRITAS
+  # 5. COMPILE CHECKSUMS, MANIFEST & VALIDASI INTEGRITAS
   # ============================================================================
   compile-release-bundle:
     name: NUSANTARA / Kompilasi SHA256SUMS & Manifest
     needs: build-release-artifacts
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
@@ -196,40 +276,62 @@ jobs:
           path: dist/
           merge-multiple: true
 
-      - name: Hitung Checksum SHA-256 & Buat Manifest Rilis Resmi
+      - name: Hitung Checksum SHA-256 & Buat Manifest Rilis Dinamis
         run: |
           npx tsx -e "
             import fs from 'node:fs';
             import crypto from 'node:crypto';
             import { VERSI_NUSANTARA } from './src/konstanta/versi';
-            
-            const files = fs.readdirSync('dist').filter(f => f.endsWith('.zip') || f.endsWith('.tar.gz'));
+
+            const files = fs.readdirSync('dist').filter(f => f.endsWith('.zip') || f.endsWith('.tar.gz')).sort();
+            if (files.length === 0) {
+              console.error('Tidak ada arsip rilis ditemukan di dist/');
+              process.exit(1);
+            }
             console.log('Menghitung SHA-256 untuk berkas:', files);
-            let shaLines = [];
-            let manifestItems = [];
-            
+            const shaLines = [];
+            const manifestItems = [];
+
             for (const f of files) {
               const buf = fs.readFileSync('dist/' + f);
               const hash = crypto.createHash('sha256').update(buf).digest('hex');
               shaLines.push(hash + '  ' + f);
               manifestItems.push({ filename: f, sha256: hash, sizeBytes: buf.length });
             }
-            
+
             fs.writeFileSync('dist/SHA256SUMS', shaLines.join('\n') + '\n');
             const manifest = {
+              name: 'nusantara',
               version: VERSI_NUSANTARA,
-              generatedAt: '2026-10-25T00:00:00.000Z',
+              commitSha: process.env.GITHUB_SHA || 'unknown',
+              dryRun: '${{ inputs.dry_run }}' === 'true',
+              generatedAt: new Date().toISOString(),
               artifacts: manifestItems
             };
             fs.writeFileSync('dist/release-manifest.json', JSON.stringify(manifest, null, 2));
-            console.log('✅ SHA256SUMS dan release-manifest.json berhasil dibuat.');
+            console.log('✅ SHA256SUMS dan release-manifest.json berhasil dibuat dengan timestamp dinamis.');
           "
 
-      - name: Validasi Integritas SHA256SUMS
+      - name: Validasi Integritas SHA256SUMS & Kelengkapan Manifest
         run: |
           cd dist && sha256sum -c SHA256SUMS
+          cd .. && npx tsx -e "
+            import fs from 'node:fs';
+            const mf = JSON.parse(fs.readFileSync('dist/release-manifest.json', 'utf8'));
+            if (!mf.version || !mf.generatedAt || !Array.isArray(mf.artifacts) || mf.artifacts.length === 0) {
+              console.error('Manifest rilis tidak lengkap');
+              process.exit(1);
+            }
+            for (const a of mf.artifacts) {
+              if (!a.filename || !/^[a-f0-9]{64}$/.test(a.sha256) || !a.sizeBytes) {
+                console.error('Entri manifest rusak:', a);
+                process.exit(1);
+              }
+            }
+            console.log('✅ Kelengkapan metadata release-manifest.json terverifikasi:', mf.artifacts.length, 'artefak.');
+          "
 
-      - name: Unggah Bundel Rilis Siap Publikasi
+      - name: Unggah Bundel Rilis Siap Inspeksi (Retention 14 Hari)
         uses: actions/upload-artifact@v4
         with:
           name: nusantara-release-bundle
@@ -237,12 +339,14 @@ jobs:
           retention-days: 14
 
   # ============================================================================
-  # 5. PUBLIKASI RELEASE GITHUB (LEAST PRIVILEGE UPGRADE)
+  # 6. PUBLIKASI RELEASE GITHUB (TERBLOKIR PADA DRY-RUN, TAG PUSH OTOMATIS, ATAU GATE BELUM LULUS)
   # ============================================================================
   publish-release:
     name: NUSANTARA / Publikasi Rilis Resmi
-    needs: compile-release-bundle
+    needs: [compile-release-bundle, verify-certification-gate]
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run != true && inputs.confirm_release == true }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # Elevated permissions ONLY on the publishing job
     permissions:
       contents: write
@@ -267,16 +371,15 @@ jobs:
 
           ### 🚀 Cakupan Rilis:
           - **GitHub Actions CI/CD & Quality Gate**: Pemeriksaan statis, uji regresi multi-OS (Linux, Windows, macOS), dan Quality Gate.
-          - **Matriks Build 6 Target Desktop**: Windows x86_64/ARM64, Linux x86_64/ARM64, dan macOS Intel/Apple Silicon.
-          - **Integritas Kriptografis**: Checksum SHA-256 resmi (`SHA256SUMS`) dan manifest terstruktur (`release-manifest.json`).
-          - **Audit Keamanan & Least Privilege**: Kebijakan permission `contents: read` standar, concurrency aman, dan release approval gate.
+          - **Gerbang Sertifikasi Terpusat**: Seluruh kriteria Phase 23 serta Phase 36–42 terverifikasi lulus sebelum publikasi.
+          - **Integritas Kriptografis**: Checksum SHA-256 resmi (\`SHA256SUMS\`) dan manifest terstruktur (\`release-manifest.json\`).
 
           ### 📦 Verifikasi Integritas Checksum:
-          Lihat berkas `SHA256SUMS` terlampir untuk memverifikasi keaslian bundel biner.
+          Lihat berkas \`SHA256SUMS\` terlampir untuk memverifikasi keaslian bundel biner.
           EOF
 
-      - name: Publikasikan Rilis GitHub (Hanya Jika Bukan Dry Run)
-        if: inputs.dry_run != true
+      - name: Publikasikan Rilis GitHub (Hanya Jika Bukan Dry Run & Gate Lulus)
+        if: inputs.dry_run != true && inputs.confirm_release == true
         uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -285,7 +388,7 @@ jobs:
             dist/SHA256SUMS
             dist/release-manifest.json
           name: 'NUSANTARA v${{ inputs.version || "0.50.0" }} — Release & Distribution'
-          tag_name: ${{ github.ref_name }}
+          tag_name: v${{ inputs.version || '0.50.0' }}
           body_path: dist/RELEASE_NOTES.md
           draft: ${{ inputs.release_type == 'draft' }}
           prerelease: ${{ inputs.release_type == 'prerelease' }}
@@ -299,6 +402,5 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Status Eksekusi Rilis**: ${{ job.status == 'success' && '✅ SUKSES' || '❌ GAGAL' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Tipe Rilis**: \`${{ inputs.release_type || 'release' }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Persetujuan Manual**: Dikonfirmasi oleh operator." >> $GITHUB_STEP_SUMMARY
-          echo "- **Dry Run**: \`${{ inputs.dry_run || 'false' }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Artefak Terbit**: Tersedia di GitHub Releases dan Artifacts." >> $GITHUB_STEP_SUMMARY
+          echo "- **Dry Run**: \`${{ inputs.dry_run || 'true' }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Catatan Keamanan**: Publikasi toko aplikasi produksi tidak dijalankan otomatis oleh workflow ini." >> $GITHUB_STEP_SUMMARY

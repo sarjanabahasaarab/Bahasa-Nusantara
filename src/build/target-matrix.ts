@@ -36,7 +36,7 @@ export const RUNNER_RECOMMENDATION_MAP: Record<CanonicalDesktopTarget, string> =
   'windows-arm64': 'windows-11-arm / windows-latest (MSVC ARM64 + WinSDK ARM64)',
   'linux-x86_64': 'ubuntu-latest',
   'linux-arm64': 'ubuntu-24.04-arm / ubuntu-latest (cross + qemu-aarch64)',
-  'macos-x86_64': 'macos-latest / macos-13 (Apple Clang + MacOSX.sdk)',
+  'macos-x86_64': 'macos-latest (Apple Clang + MacOSX.sdk + Rosetta 2)',
   'macos-arm64': 'macos-latest',
 };
 
@@ -292,7 +292,7 @@ export class TargetMatrixManager {
       const hasMacSdk = Boolean(osxcrossRoot && safeFS.existsSync(osxcrossRoot));
       const missing: string[] = [];
       if (!clangAvailable) missing.push('clang tidak tersedia');
-      if (!hasMacSdk) missing.push('Apple MacOSX.sdk / OSXCross sysroot (wajib runner macos-latest/macos-13)');
+      if (!hasMacSdk) missing.push('Apple MacOSX.sdk / OSXCross sysroot (wajib runner macos-latest)');
       return {
         input: rawTarget || canonical,
         canonicalTarget: canonical,

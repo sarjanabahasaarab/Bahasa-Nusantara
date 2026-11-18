@@ -25,6 +25,7 @@ jobs:
   static-analysis:
     name: "1. Pemeriksaan Statis & Analisis Tipe"
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: "Checkout Source Code"
         uses: actions/checkout@v4
@@ -50,6 +51,7 @@ jobs:
     name: "2. Pengujian Unit & Kompilator Inti"
     needs: static-analysis
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: "Checkout Source Code"
         uses: actions/checkout@v4
@@ -101,6 +103,7 @@ jobs:
     name: "3. Pengujian NIR, LLVM Backend & Native Linker"
     needs: static-analysis
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: "Checkout Source Code"
         uses: actions/checkout@v4
@@ -136,6 +139,7 @@ jobs:
     name: "4. Pengujian Nusantara OS Minimal Kernel (Phase 48)"
     needs: static-analysis
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: "Checkout Source Code"
         uses: actions/checkout@v4
@@ -159,6 +163,7 @@ jobs:
     name: "5. Pengujian Bootable Kernel & Multiboot2 (Phase 49)"
     needs: kernel-phase48-interface
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: "Checkout Source Code"
         uses: actions/checkout@v4
@@ -182,6 +187,7 @@ jobs:
     name: "6. Pengujian Process Isolation & User Mode (Phase 50)"
     needs: kernel-phase49-bootable
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: "Checkout Source Code"
         uses: actions/checkout@v4
@@ -205,6 +211,7 @@ jobs:
     name: "7. Build Biner ELF & Pembangkitan ISO Bootable"
     needs: [unit-and-compiler-tests, llvm-and-native-tests, kernel-phase50-usermode]
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: "Checkout Source Code"
         uses: actions/checkout@v4
@@ -265,6 +272,7 @@ jobs:
     name: "8. Eksekusi Nyata QEMU Headless & Validasi 18 Sentinel"
     needs: kernel-build-and-iso
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: "Checkout Source Code"
         uses: actions/checkout@v4

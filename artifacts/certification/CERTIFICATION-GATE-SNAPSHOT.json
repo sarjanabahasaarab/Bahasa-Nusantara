@@ -1,0 +1,354 @@
+{
+  "schemaVersion": "1.0",
+  "generatedAt": "2026-11-18T00:22:23.202Z",
+  "commitSha": "unavailable-no-git-metadata",
+  "workflowRunId": "local-run",
+  "runner": "linux-x64",
+  "targetPlatform": "linux-x64",
+  "dryRun": false,
+  "toolchainVersions": {
+    "node": "v22.23.2",
+    "npm": "10.9.8",
+    "openssl": "OpenSSL 3.0.22 25 Aug 2026 (Library: OpenSSL 3.0.22 25 Aug 2026)",
+    "clang": null,
+    "lld": null,
+    "llc": null,
+    "aarch64CrossGcc": null,
+    "xvfbRun": null,
+    "pkgConfigGtk3": null,
+    "java": null,
+    "gradle": null,
+    "adb": null,
+    "apksigner": null,
+    "bundletool": null,
+    "androidSdkRoot": null,
+    "kvmDevice": null,
+    "xcodebuild": null,
+    "codesign": null
+  },
+  "testResults": [
+    {
+      "id": "demo-terpadu-integrity",
+      "phase": "23,36-42",
+      "name": "Integritas Artefak & SHA256SUMS Demo Terpadu",
+      "status": "PASS",
+      "runner": "linux-x64",
+      "isNativeExecution": false,
+      "details": "20 artefak tervalidasi SHA-256 & bebas traversal (4 struktural, 0 native)."
+    },
+    {
+      "id": "phase23-six-target-matrix",
+      "phase": "23",
+      "name": "Phase 23 Six-Target Native Matrix",
+      "status": "NOT_VERIFIED",
+      "runner": "linux-x64",
+      "isNativeExecution": false,
+      "details": "PASS=0/6, NOT_VERIFIED=6, FAIL=0, MISSING=0, CORRUPT=0"
+    }
+  ],
+  "artifactReferences": [
+    {
+      "name": "demo-terpadu-bundle",
+      "path": "/app/applet/artifacts/demo-terpadu",
+      "exists": true,
+      "verified": true,
+      "totalEntries": 20,
+      "structuralOnlyCount": 4,
+      "sha256": "e372018d96869434c616f922b93011ea6732483e5eb9631f2beae135588a52eb"
+    }
+  ],
+  "checksums": {
+    "artifacts/demo-terpadu/manifest.json": "847a335f2b4808ee53e8ad0990f371d1061824a0cec8829e8e0be02d18f99f4a",
+    "artifacts/demo-terpadu/SHA256SUMS": "e372018d96869434c616f922b93011ea6732483e5eb9631f2beae135588a52eb"
+  },
+  "phases": {
+    "23": {
+      "phase": "23",
+      "name": "Build System & Desktop Distribution",
+      "status": "NOT_VERIFIED",
+      "unitTestStatus": "PASS",
+      "nativeVerificationStatus": "NOT_VERIFIED",
+      "criteria": [
+        {
+          "id": "p23-target-windows-x86_64",
+          "deskripsi": "Native compile, execute sentinel & verify-dist target windows-x86_64",
+          "wajibNative": true,
+          "status": "NOT_VERIFIED",
+          "catatan": "Target 'windows-x86_64' belum dapat diverifikasi pada host ini: MSVC CRT (libcmt.lib/msvcrt.lib) & Windows SDK (kernel32.lib/ucrt.lib) tidak tersedia di host non-Windows."
+        },
+        {
+          "id": "p23-target-windows-arm64",
+          "deskripsi": "Native compile, execute sentinel & verify-dist target windows-arm64",
+          "wajibNative": true,
+          "status": "NOT_VERIFIED",
+          "catatan": "Target 'windows-arm64' belum dapat diverifikasi pada host ini: MSVC CRT (libcmt.lib/msvcrt.lib) & Windows SDK (kernel32.lib/ucrt.lib) tidak tersedia di host non-Windows."
+        },
+        {
+          "id": "p23-target-linux-x86_64",
+          "deskripsi": "Native compile, execute sentinel & verify-dist target linux-x86_64",
+          "wajibNative": true,
+          "status": "NOT_VERIFIED",
+          "catatan": "Target 'linux-x86_64' belum dapat diverifikasi pada host ini: clang (driver compiler + linker C runtime) tidak ditemukan di PATH.; Header standar C 'stdio.h' tidak ditemukan (pasang build-essential & libc6-dev).; C runtime startup/libc (x86_64-linux-gnu: crt1.o/libc.so) tidak ditemukan (pasang libc6-dev)."
+        },
+        {
+          "id": "p23-target-linux-arm64",
+          "deskripsi": "Native compile, execute sentinel & verify-dist target linux-arm64",
+          "wajibNative": true,
+          "status": "NOT_VERIFIED",
+          "catatan": "Target 'linux-arm64' belum dapat diverifikasi pada host ini: llvm / clang (objek generator) tidak tersedia.; libc6-dev-arm64-cross (/usr/aarch64-linux-gnu/include/stdio.h & CRT) tidak ditemukan."
+        },
+        {
+          "id": "p23-target-macos-x86_64",
+          "deskripsi": "Native compile, execute sentinel & verify-dist target macos-x86_64",
+          "wajibNative": true,
+          "status": "NOT_VERIFIED",
+          "catatan": "Target 'macos-x86_64' belum dapat diverifikasi pada host ini: clang tidak tersedia; Apple MacOSX.sdk / OSXCross sysroot (wajib runner macos-latest/macos-13)"
+        },
+        {
+          "id": "p23-target-macos-arm64",
+          "deskripsi": "Native compile, execute sentinel & verify-dist target macos-arm64",
+          "wajibNative": true,
+          "status": "NOT_VERIFIED",
+          "catatan": "Target 'macos-arm64' belum dapat diverifikasi pada host ini: clang tidak tersedia; Apple MacOSX.sdk / OSXCross sysroot (wajib runner macos-latest/macos-13)"
+        }
+      ],
+      "blockers": [
+        "Baru 0/6 target desktop terverifikasi native; 6 target masih NOT_VERIFIED."
+      ],
+      "evidenceFiles": []
+    },
+    "36": {
+      "phase": "36",
+      "name": "Desktop GUI Framework",
+      "status": "NOT_VERIFIED",
+      "unitTestStatus": "PASS",
+      "nativeVerificationStatus": "NOT_VERIFIED",
+      "criteria": [
+        {
+          "id": "p36-linux-xvfb-gtk3",
+          "deskripsi": "Linux Xvfb + GTK3 rendering, window lifecycle & event probe (virtual headless)",
+          "wajibNative": true,
+          "status": "NOT_VERIFIED",
+          "catatan": "Job CI phase36 Linux Xvfb belum dijalankan."
+        },
+        {
+          "id": "p36-windows-win32",
+          "deskripsi": "Windows Win32 / WebView2 window lifecycle verification",
+          "wajibNative": true,
+          "status": "NOT_VERIFIED",
+          "catatan": "Job CI phase36 Windows belum dijalankan."
+        },
+        {
+          "id": "p36-macos-cocoa",
+          "deskripsi": "macOS Cocoa NSWindow lifecycle verification",
+          "wajibNative": true,
+          "status": "NOT_VERIFIED",
+          "catatan": "Job CI phase36 macOS belum dijalankan."
+        },
+        {
+          "id": "p36-physical-display-hardware",
+          "deskripsi": "Rendering GUI & input interaktif pada layar desktop fisik (non-headless)",
+          "wajibNative": true,
+          "status": "NOT_VERIFIED",
+          "catatan": "Pengujian CI menggunakan Xvfb virtual/headless; uji display desktop fisik belum dijalankan."
+        }
+      ],
+      "blockers": [
+        "[p36-linux-xvfb-gtk3] NOT_VERIFIED: Job CI phase36 Linux Xvfb belum dijalankan.",
+        "[p36-windows-win32] NOT_VERIFIED: Job CI phase36 Windows belum dijalankan.",
+        "[p36-macos-cocoa] NOT_VERIFIED: Job CI phase36 macOS belum dijalankan.",
+        "[p36-physical-display-hardware] NOT_VERIFIED: Pengujian CI menggunakan Xvfb virtual/headless; uji display desktop fisik belum dijalankan."
+      ],
+      "evidenceFiles": []
+    },
+    "37": {
+      "phase": "37",
+      "name": "Mobile Framework",
+      "status": "NOT_VERIFIED",
+      "unitTestStatus": "NOT_VERIFIED",
+      "nativeVerificationStatus": "NOT_VERIFIED",
+      "criteria": [
+        {
+          "id": "p37-android-gradle-emulator",
+          "deskripsi": "Kompilasi APK dengan Android SDK (Gradle/D8) & eksekusi di Android Emulator",
+          "wajibNative": true,
+          "status": "NOT_VERIFIED",
+          "catatan": "Job CI phase37-42-android-sdk belum tersedia."
+        },
+        {
+          "id": "p37-ios-xcode-simulator",
+          "deskripsi": "Kompilasi .app Mach-O via xcodebuild & peluncuran pada iOS Simulator",
+          "wajibNative": true,
+          "status": "NOT_VERIFIED",
+          "catatan": "Job CI phase37-42-apple belum tersedia."
+        }
+      ],
+      "blockers": [
+        "[p37-android-gradle-emulator] NOT_VERIFIED: Job CI phase37-42-android-sdk belum tersedia.",
+        "[p37-ios-xcode-simulator] NOT_VERIFIED: Job CI phase37-42-apple belum tersedia."
+      ],
+      "evidenceFiles": []
+    },
+    "38": {
+      "phase": "38",
+      "name": "Native Device API",
+      "status": "NOT_VERIFIED",
+      "unitTestStatus": "NOT_VERIFIED",
+      "nativeVerificationStatus": "NOT_VERIFIED",
+      "criteria": [
+        {
+          "id": "p38-device-hardware",
+          "deskripsi": "Verifikasi kamera, GPS GNSS, IMU, BLE & biometrik TEE/Secure Enclave pada perangkat nyata",
+          "wajibNative": true,
+          "status": "NOT_VERIFIED",
+          "catatan": "Emulator/kontainer CI tidak memiliki sensor perangkat keras ponsel fisik."
+        }
+      ],
+      "blockers": [
+        "[p38-device-hardware] NOT_VERIFIED: Emulator/kontainer CI tidak memiliki sensor perangkat keras ponsel fisik."
+      ],
+      "evidenceFiles": []
+    },
+    "39": {
+      "phase": "39",
+      "name": "Mobile Networking",
+      "status": "NOT_VERIFIED",
+      "unitTestStatus": "NOT_VERIFIED",
+      "nativeVerificationStatus": "NOT_VERIFIED",
+      "criteria": [
+        {
+          "id": "p39-loopback-openssl-tls",
+          "deskripsi": "Loopback HTTPS OpenSSL X.509 (untrusted CA, expired, SAN mismatch, socket drop, retry, offline queue)",
+          "wajibNative": false,
+          "status": "NOT_VERIFIED",
+          "catatan": "Terpisah tegas sebagai uji TLS loopback OpenSSL, bukan jaringan seluler produksi."
+        },
+        {
+          "id": "p39-native-spki-cellular",
+          "deskripsi": "Pinning SPKI OkHttp/URLSession & BackgroundSession pada perangkat mobile nyata",
+          "wajibNative": true,
+          "status": "NOT_VERIFIED",
+          "catatan": "Uji OkHttp/URLSession native di perangkat mobile belum dijalankan."
+        }
+      ],
+      "blockers": [
+        "[p39-loopback-openssl-tls] NOT_VERIFIED: Terpisah tegas sebagai uji TLS loopback OpenSSL, bukan jaringan seluler produksi.",
+        "[p39-native-spki-cellular] NOT_VERIFIED: Uji OkHttp/URLSession native di perangkat mobile belum dijalankan."
+      ],
+      "evidenceFiles": []
+    },
+    "40": {
+      "phase": "40",
+      "name": "Mobile Application Distribution",
+      "status": "NOT_VERIFIED",
+      "unitTestStatus": "NOT_VERIFIED",
+      "nativeVerificationStatus": "NOT_VERIFIED",
+      "criteria": [
+        {
+          "id": "p40-android-dex-aab-apksigner",
+          "deskripsi": "Kompilasi real APK (classes.dex), real AAB (bundletool), verifikasi apksigner & install emulator",
+          "wajibNative": true,
+          "status": "NOT_VERIFIED",
+          "catatan": "Artefak saat ini hanya kontainer PKZIP struktural (tanpa classes.dex / .aab native / apksigner pass)."
+        },
+        {
+          "id": "p40-ios-xcarchive-macho-ipa",
+          "deskripsi": "Arsip .xcarchive berisi biner Mach-O .app & ekspor .ipa via xcodebuild",
+          "wajibNative": true,
+          "status": "NOT_VERIFIED",
+          "catatan": "Belum ada .app Mach-O maupun .ipa nyata (baru Info.plist struktural)."
+        }
+      ],
+      "blockers": [
+        "[p40-android-dex-aab-apksigner] NOT_VERIFIED: Artefak saat ini hanya kontainer PKZIP struktural (tanpa classes.dex / .aab native / apksigner pass).",
+        "[p40-ios-xcarchive-macho-ipa] NOT_VERIFIED: Belum ada .app Mach-O maupun .ipa nyata (baru Info.plist struktural)."
+      ],
+      "evidenceFiles": []
+    },
+    "41": {
+      "phase": "41",
+      "name": "Store Publishing & Digital Signing",
+      "status": "NOT_VERIFIED",
+      "unitTestStatus": "NOT_VERIFIED",
+      "nativeVerificationStatus": "NOT_VERIFIED",
+      "criteria": [
+        {
+          "id": "p41-ephemeral-signing-sandbox",
+          "deskripsi": "Penandatanganan native (apksigner/codesign) & validasi metadata unggah sandbox non-produksi",
+          "wajibNative": true,
+          "status": "NOT_VERIFIED",
+          "catatan": "Belum menjalankan signing native apksigner & codesign pada APK/IPA terkompilasi."
+        },
+        {
+          "id": "p41-no-auto-store-publish",
+          "deskripsi": "Kebijakan aman: tidak ada auto-publish ke Play Store / App Store produksi",
+          "wajibNative": false,
+          "status": "PASS",
+          "catatan": "Publikasi produksi tetap memerlukan approval manual eksplisit & kredensial toko."
+        }
+      ],
+      "blockers": [
+        "[p41-ephemeral-signing-sandbox] NOT_VERIFIED: Belum menjalankan signing native apksigner & codesign pada APK/IPA terkompilasi."
+      ],
+      "evidenceFiles": []
+    },
+    "42": {
+      "phase": "42",
+      "name": "OTA Updates & Secure Update System",
+      "status": "NOT_VERIFIED",
+      "unitTestStatus": "NOT_VERIFIED",
+      "nativeVerificationStatus": "NOT_VERIFIED",
+      "criteria": [
+        {
+          "id": "p42-ed25519-rotation-rollback",
+          "deskripsi": "Ed25519 signing, pencabutan kunci, rotasi multi-generasi, anti-replay, abort parsial & rollback atomik",
+          "wajibNative": false,
+          "status": "NOT_VERIFIED",
+          "catatan": "Diperiksa melalui suite regresi test:pembaruan-v42 & loop HTTP OTA."
+        },
+        {
+          "id": "p42-native-playcore-storekit",
+          "deskripsi": "Integrasi Play Core In-App Updates SDK, StoreKit iOS, & CDN HTTPS pada perangkat nyata",
+          "wajibNative": true,
+          "status": "NOT_VERIFIED",
+          "catatan": "Belum dieksekusi terhadap Play Core SDK, StoreKit, & CDN jarak jauh di perangkat fisik."
+        }
+      ],
+      "blockers": [
+        "[p42-ed25519-rotation-rollback] NOT_VERIFIED: Diperiksa melalui suite regresi test:pembaruan-v42 & loop HTTP OTA.",
+        "[p42-native-playcore-storekit] NOT_VERIFIED: Belum dieksekusi terhadap Play Core SDK, StoreKit, & CDN jarak jauh di perangkat fisik."
+      ],
+      "evidenceFiles": []
+    }
+  },
+  "counts": {
+    "totalPhases": 8,
+    "pass": 0,
+    "fail": 0,
+    "skipped": 0,
+    "notVerified": 8,
+    "blocked": 0
+  },
+  "overallStatus": "PARTIAL",
+  "certificationVerdict": "PARTIAL",
+  "gatePassed": false,
+  "exitCode": 1,
+  "blockers": [
+    "[Phase 23] Baru 0/6 target desktop terverifikasi native; 6 target masih NOT_VERIFIED.",
+    "[Phase 36] [p36-linux-xvfb-gtk3] NOT_VERIFIED: Job CI phase36 Linux Xvfb belum dijalankan.",
+    "[Phase 36] [p36-windows-win32] NOT_VERIFIED: Job CI phase36 Windows belum dijalankan.",
+    "[Phase 36] [p36-macos-cocoa] NOT_VERIFIED: Job CI phase36 macOS belum dijalankan.",
+    "[Phase 36] [p36-physical-display-hardware] NOT_VERIFIED: Pengujian CI menggunakan Xvfb virtual/headless; uji display desktop fisik belum dijalankan.",
+    "[Phase 37] [p37-android-gradle-emulator] NOT_VERIFIED: Job CI phase37-42-android-sdk belum tersedia.",
+    "[Phase 37] [p37-ios-xcode-simulator] NOT_VERIFIED: Job CI phase37-42-apple belum tersedia.",
+    "[Phase 38] [p38-device-hardware] NOT_VERIFIED: Emulator/kontainer CI tidak memiliki sensor perangkat keras ponsel fisik.",
+    "[Phase 39] [p39-loopback-openssl-tls] NOT_VERIFIED: Terpisah tegas sebagai uji TLS loopback OpenSSL, bukan jaringan seluler produksi.",
+    "[Phase 39] [p39-native-spki-cellular] NOT_VERIFIED: Uji OkHttp/URLSession native di perangkat mobile belum dijalankan.",
+    "[Phase 40] [p40-android-dex-aab-apksigner] NOT_VERIFIED: Artefak saat ini hanya kontainer PKZIP struktural (tanpa classes.dex / .aab native / apksigner pass).",
+    "[Phase 40] [p40-ios-xcarchive-macho-ipa] NOT_VERIFIED: Belum ada .app Mach-O maupun .ipa nyata (baru Info.plist struktural).",
+    "[Phase 41] [p41-ephemeral-signing-sandbox] NOT_VERIFIED: Belum menjalankan signing native apksigner & codesign pada APK/IPA terkompilasi.",
+    "[Phase 42] [p42-ed25519-rotation-rollback] NOT_VERIFIED: Diperiksa melalui suite regresi test:pembaruan-v42 & loop HTTP OTA.",
+    "[Phase 42] [p42-native-playcore-storekit] NOT_VERIFIED: Belum dieksekusi terhadap Play Core SDK, StoreKit, & CDN jarak jauh di perangkat fisik."
+  ],
+  "markdownReport": "# Laporan Gerbang Sertifikasi Terpusat NUSANTARA (Phase 23 & Phase 36–42)\n\n- **Verdict Sertifikasi:** `PARTIAL` (`overallStatus=PARTIAL`, `gatePassed=false`, `exitCode=1`)\n- **Waktu Evaluasi:** `2026-11-18T00:22:23.202Z`\n- **Commit SHA:** `unavailable-no-git-metadata` | **Workflow Run ID:** `local-run` | **Runner:** `linux-x64` (`linux-x64`)\n- **Ringkasan 8 Fase:** PASS=`0` | NOT_VERIFIED=`8` | SKIPPED=`0` | BLOCKED=`0` | FAIL=`0`\n\n| Fase | Nama | Unit/Loopback | Native/Hardware/SDK | Status Akhir |\n| :---: | :--- | :---: | :---: | :---: |\n| **23** | Build System & Desktop Distribution | `PASS` | `NOT_VERIFIED` | **NOT_VERIFIED** |\n| **36** | Desktop GUI Framework | `PASS` | `NOT_VERIFIED` | **NOT_VERIFIED** |\n| **37** | Mobile Framework | `NOT_VERIFIED` | `NOT_VERIFIED` | **NOT_VERIFIED** |\n| **38** | Native Device API | `NOT_VERIFIED` | `NOT_VERIFIED` | **NOT_VERIFIED** |\n| **39** | Mobile Networking | `NOT_VERIFIED` | `NOT_VERIFIED` | **NOT_VERIFIED** |\n| **40** | Mobile Application Distribution | `NOT_VERIFIED` | `NOT_VERIFIED` | **NOT_VERIFIED** |\n| **41** | Store Publishing & Digital Signing | `NOT_VERIFIED` | `NOT_VERIFIED` | **NOT_VERIFIED** |\n| **42** | OTA Updates & Secure Update System | `NOT_VERIFIED` | `NOT_VERIFIED` | **NOT_VERIFIED** |\n\n## Alasan Belum CERTIFIED / Blockers\n- [Phase 23] Baru 0/6 target desktop terverifikasi native; 6 target masih NOT_VERIFIED.\n- [Phase 36] [p36-linux-xvfb-gtk3] NOT_VERIFIED: Job CI phase36 Linux Xvfb belum dijalankan.\n- [Phase 36] [p36-windows-win32] NOT_VERIFIED: Job CI phase36 Windows belum dijalankan.\n- [Phase 36] [p36-macos-cocoa] NOT_VERIFIED: Job CI phase36 macOS belum dijalankan.\n- [Phase 36] [p36-physical-display-hardware] NOT_VERIFIED: Pengujian CI menggunakan Xvfb virtual/headless; uji display desktop fisik belum dijalankan.\n- [Phase 37] [p37-android-gradle-emulator] NOT_VERIFIED: Job CI phase37-42-android-sdk belum tersedia.\n- [Phase 37] [p37-ios-xcode-simulator] NOT_VERIFIED: Job CI phase37-42-apple belum tersedia.\n- [Phase 38] [p38-device-hardware] NOT_VERIFIED: Emulator/kontainer CI tidak memiliki sensor perangkat keras ponsel fisik.\n- [Phase 39] [p39-loopback-openssl-tls] NOT_VERIFIED: Terpisah tegas sebagai uji TLS loopback OpenSSL, bukan jaringan seluler produksi.\n- [Phase 39] [p39-native-spki-cellular] NOT_VERIFIED: Uji OkHttp/URLSession native di perangkat mobile belum dijalankan.\n- [Phase 40] [p40-android-dex-aab-apksigner] NOT_VERIFIED: Artefak saat ini hanya kontainer PKZIP struktural (tanpa classes.dex / .aab native / apksigner pass).\n- [Phase 40] [p40-ios-xcarchive-macho-ipa] NOT_VERIFIED: Belum ada .app Mach-O maupun .ipa nyata (baru Info.plist struktural).\n- [Phase 41] [p41-ephemeral-signing-sandbox] NOT_VERIFIED: Belum menjalankan signing native apksigner & codesign pada APK/IPA terkompilasi.\n- [Phase 42] [p42-ed25519-rotation-rollback] NOT_VERIFIED: Diperiksa melalui suite regresi test:pembaruan-v42 & loop HTTP OTA.\n- [Phase 42] [p42-native-playcore-storekit] NOT_VERIFIED: Belum dieksekusi terhadap Play Core SDK, StoreKit, & CDN jarak jauh di perangkat fisik.\n"
+}

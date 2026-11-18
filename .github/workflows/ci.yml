@@ -9,6 +9,7 @@ on:
     branches:
       - main
       - master
+  workflow_dispatch:
 
 # P0: Least-Privilege Permissions at workflow root
 permissions:
@@ -26,6 +27,7 @@ jobs:
   static-checks:
     name: NUSANTARA / Pemeriksaan Statis
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
@@ -42,17 +44,20 @@ jobs:
           npm -v
           npm ci
 
-      - name: Validasi Konfigurasi & Tipe Data (Lint / Typecheck)
+      - name: Validasi Konfigurasi, Tipe Data & Build Bundel (Lint / TSC / Build)
         run: |
           npm run lint
+          npx tsx --version
+          npm run build
 
   # ============================================================================
-  # 2. AUTOMATED TEST SUITE (PHASE 1 - 50)
+  # 2. AUTOMATED TEST SUITE (PHASE 1 - 50) & CROSS-PLATFORM DEMO TERPADU
   # ============================================================================
   test-suite:
     name: NUSANTARA / Pengujian Otomatis (${{ matrix.os }})
     needs: static-checks
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
@@ -116,11 +121,25 @@ jobs:
           npm run test:database-v29
           npm run test:database-browser-v29
 
-      - name: Jalankan Rangkaian Uji Lengkap (Phase 1–50)
-        run: npm test
+      - name: Jalankan Rangkaian Uji Lengkap (Phase 1–50) & Regresi Gerbang Sertifikasi
+        run: |
+          npm test
+          npm run test:cert-gate
 
-      - name: Jalankan Uji Integrasi Lintas Platform Terpadu (Phase 23 & 36–42)
-        run: npm run test:demo-terpadu
+      - name: Jalankan Uji Integrasi Lintas Platform Terpadu & Verifikasi Integritas Artefak
+        shell: bash
+        run: |
+          npm run test:demo-terpadu
+          npx tsx scripts/certification-gate.ts verify-artifacts --dir artifacts/demo-terpadu --min-artifacts 20
+
+      - name: Unggah Artefak Demo Terpadu & Checksum SHA256SUMS
+        if: runner.os == 'Linux' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-terpadu-artifacts
+          path: artifacts/demo-terpadu/
+          retention-days: 14
+          if-no-files-found: error
 
   # ============================================================================
   # 3. QUALITY GATE NUSANTARA
@@ -129,6 +148,7 @@ jobs:
     name: NUSANTARA / Gerbang Kualitas (Quality Gate)
     needs: [static-checks, test-suite]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
@@ -142,18 +162,22 @@ jobs:
       - name: Pasang Dependensi
         run: npm ci
 
-      - name: Verifikasi Standar Kualitas (Cakupan & Konsistensi)
+      - name: Verifikasi Standar Kualitas, CI/CD & Regresi Gerbang Sertifikasi
         run: |
-          npx tsx pengujian/testing/uji_testing.ts
+          npm run quality-gate
+          npm run test:cicd
+          npm run test:cert-gate
 
   # ============================================================================
   # 4. BUILD VALIDATION MATRIX (6 Target Desktop Resmi)
   # Kompatibilitas Fase 24 aliases: windows-x64, linux-x64, macos-x64, macos-arm64 (ref runner: macos-13)
+  # Catatan Runner: macos-x86_64 berjalan di macos-latest via Rosetta 2 karena macos-13 sudah retired.
   # ============================================================================
   build-matrix-validation:
     name: NUSANTARA / Validasi Build (${{ matrix.target }})
     needs: quality-gate
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
@@ -329,15 +353,28 @@ jobs:
           npm run test:linker-v45
           npm run test:build-v23
 
-      - name: Kompilasi, Validasi, Eksekusi & Buat Evidence JSON (${{ matrix.target }})
+      - name: Kompilasi, Validasi, Eksekusi & Buat Evidence JSON + Build Log (${{ matrix.target }})
         shell: bash
         run: |
           rm -rf artifacts/phase23
-          mkdir -p artifacts/phase23/evidence dist-native/reports
+          mkdir -p artifacts/phase23/evidence artifacts/phase23/logs dist-native/reports
+          LOG_FILE="artifacts/phase23/logs/${{ matrix.target }}.log"
+          {
+            echo "=== NUSANTARA MATRIX BUILD LOG (${{ matrix.target }}) ==="
+            echo "RunnerOS=${{ runner.os }} RunnerLabel=${{ matrix.os }} Triple=${{ matrix.triple }} IsNative=${{ matrix.is_native }}"
+            echo "HostPlatform=$(uname -s) HostArch=$(uname -m)"
+            echo "Compiler=$(clang --version | head -n 1)"
+            echo "Command=npx tsx scripts/phase23-certify.ts generate --target ${{ matrix.target }} --bundle-dir artifacts/phase23 --fail-on-missing-clang"
+          } > "$LOG_FILE"
+          set +e
           npx tsx scripts/phase23-certify.ts generate \
             --target "${{ matrix.target }}" \
             --bundle-dir artifacts/phase23 \
-            --fail-on-missing-clang
+            --fail-on-missing-clang 2>&1 | tee -a "$LOG_FILE"
+          GEN_EXIT=${PIPESTATUS[0]}
+          set -e
+          echo "BuildExitCode=$GEN_EXIT" >> "$LOG_FILE"
+          exit $GEN_EXIT
 
       - name: Tulis Evidence Target ke Step Summary
         if: always()
@@ -353,7 +390,7 @@ jobs:
             echo "Evidence JSON tidak terbuat." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - name: Unggah Evidence Target Phase 23.2
+      - name: Unggah Evidence Target Phase 23
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -361,6 +398,7 @@ jobs:
           path: |
             artifacts/phase23/evidence/${{ matrix.target }}.json
             artifacts/phase23/artifacts/${{ matrix.target }}
+            artifacts/phase23/logs/${{ matrix.target }}.log
           retention-days: 14
           if-no-files-found: warn
 
@@ -382,13 +420,14 @@ jobs:
           if-no-files-found: warn
 
   # ============================================================================
-  # 5. PHASE 23.2 SIX-TARGET CERTIFICATION AGGREGATION GATE
+  # 5. PHASE 23 SIX-TARGET CERTIFICATION AGGREGATION GATE
   # ============================================================================
   phase23-certification-gate:
     name: NUSANTARA / Gerbang Sertifikasi 6 Target (Phase 23.2)
     needs: [build-matrix-validation]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
@@ -444,26 +483,489 @@ jobs:
           if-no-files-found: warn
 
   # ============================================================================
-  # 6. CI SUMMARY & STEP SUMMARY GENERATION
+  # 6. PHASE 36 — DESKTOP GUI VALIDATION (Xvfb Linux + Desktop Matrix)
+  # ============================================================================
+  phase36-gui-matrix:
+    name: NUSANTARA / Validasi GUI Desktop (${{ matrix.target }})
+    needs: quality-gate
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux
+            os: ubuntu-latest
+          - target: windows
+            os: windows-latest
+          - target: macos
+            os: macos-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Pasang Lingkungan Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Pasang Dependensi
+        run: npm ci
+
+      - name: Pasang Xvfb & GTK+ 3.0 dan Uji Rendering Virtual Display (Linux)
+        if: matrix.target == 'linux'
+        shell: bash
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends xvfb libgtk-3-dev pkg-config xauth clang
+          mkdir -p artifacts/cert-evidence
+          xvfb-run -a npm run test:gui-v36
+          TMP_GUI=$(mktemp -d)
+          cat <<'EOF' > "$TMP_GUI/gtk_probe.c"
+          #include <gtk/gtk.h>
+          #include <stdio.h>
+          static gboolean close_cb(gpointer data) {
+            gtk_main_quit();
+            return G_SOURCE_REMOVE;
+          }
+          int main(int argc, char **argv) {
+            if (!gtk_init_check(&argc, &argv)) {
+              fprintf(stderr, "GTK_INIT_FAILED\n");
+              return 2;
+            }
+            GtkWidget *win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+            gtk_window_set_title(GTK_WINDOW(win), "NUSANTARA Phase36 Xvfb Probe");
+            gtk_window_set_default_size(GTK_WINDOW(win), 320, 200);
+            gtk_widget_show_all(win);
+            g_timeout_add(120, close_cb, NULL);
+            gtk_main();
+            puts("NUSANTARA_GTK3_XVFB_OK");
+            return 0;
+          }
+          EOF
+          clang "$TMP_GUI/gtk_probe.c" $(pkg-config --cflags --libs gtk+-3.0) -o "$TMP_GUI/gtk_probe"
+          OUT_GTK=$(xvfb-run -a "$TMP_GUI/gtk_probe")
+          echo "$OUT_GTK" | grep -Fx "NUSANTARA_GTK3_XVFB_OK"
+          rm -rf "$TMP_GUI"
+          GTK_VER=$(pkg-config --modversion gtk+-3.0 || echo "unknown")
+          cat <<EOF > artifacts/cert-evidence/phase36-linux.json
+          {
+            "schemaVersion": 1,
+            "jobId": "phase36-linux-xvfb",
+            "phase": "36",
+            "runner": "ubuntu-latest",
+            "os": "Linux",
+            "arch": "$(uname -m)",
+            "status": "PASS",
+            "unitTestStatus": "PASS",
+            "isNativeHardware": false,
+            "displayMode": "xvfb-virtual",
+            "toolchains": { "gtk3": "$GTK_VER", "xvfbRun": "installed" },
+            "details": {
+              "xvfbWindowLifecycleOk": true,
+              "gtk3ProbeOk": true,
+              "physicalMonitorVerified": false
+            },
+            "blockers": [
+              "Pengujian berjalan pada virtual framebuffer Xvfb headless; rendering monitor fisik desktop tetap NOT_VERIFIED."
+            ],
+            "generatedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+      - name: Uji GUI & Ketersediaan Sesi Win32 / WebView2 (Windows)
+        if: matrix.target == 'windows'
+        shell: bash
+        run: |
+          mkdir -p artifacts/cert-evidence
+          npm run test:gui-v36
+          HAS_WEBVIEW2=false
+          if find "/c/Program Files (x86)/Microsoft/EdgeWebView" -maxdepth 3 2>/dev/null | grep -qi "msedgewebview2.exe"; then
+            HAS_WEBVIEW2=true
+          fi
+          cat <<EOF > artifacts/cert-evidence/phase36-windows.json
+          {
+            "schemaVersion": 1,
+            "jobId": "phase36-windows",
+            "phase": "36",
+            "runner": "windows-latest",
+            "os": "Windows",
+            "arch": "$(uname -m)",
+            "status": "NOT_VERIFIED",
+            "unitTestStatus": "PASS",
+            "isNativeHardware": false,
+            "displayMode": "headless",
+            "details": {
+              "headlessSuitePass": true,
+              "webView2RuntimeFound": $HAS_WEBVIEW2,
+              "interactiveDesktopWindowTested": false
+            },
+            "blockers": [
+              "Runner CI Windows berjalan tanpa sesi desktop interaktif untuk verifikasi lifecycle jendela Win32/WebView2 secara fisik."
+            ],
+            "generatedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+      - name: Uji GUI & Ketersediaan Sesi Cocoa AppKit (macOS)
+        if: matrix.target == 'macos'
+        shell: bash
+        run: |
+          mkdir -p artifacts/cert-evidence
+          npm run test:gui-v36
+          SDK_PATH=$(xcrun --show-sdk-path 2>/dev/null || echo "")
+          cat <<EOF > artifacts/cert-evidence/phase36-macos.json
+          {
+            "schemaVersion": 1,
+            "jobId": "phase36-macos",
+            "phase": "36",
+            "runner": "macos-latest",
+            "os": "macOS",
+            "arch": "$(uname -m)",
+            "status": "NOT_VERIFIED",
+            "unitTestStatus": "PASS",
+            "isNativeHardware": false,
+            "displayMode": "headless",
+            "toolchains": { "macOsSdk": "$SDK_PATH" },
+            "details": {
+              "headlessSuitePass": true,
+              "cocoaWindowServerInteractive": false
+            },
+            "blockers": [
+              "Runner CI macOS tanpa sesi desktop GUI Aqua interaktif; verifikasi jendela Cocoa fisik berstatus NOT_VERIFIED."
+            ],
+            "generatedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+      - name: Unggah Evidence GUI Phase 36
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase36-gui-evidence-${{ matrix.target }}
+          path: artifacts/cert-evidence/phase36-${{ matrix.target }}.json
+          retention-days: 14
+          if-no-files-found: warn
+
+  # ============================================================================
+  # 7. PHASE 37–42 — ANDROID TOOLCHAIN (JDK 17, SDK, AAPT2, D8, APKSIGNER, KVM)
+  # ============================================================================
+  phase37-42-android-sdk:
+    name: NUSANTARA / Validasi Toolchain & SDK Android (Phase 37–42)
+    needs: quality-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Pasang Lingkungan Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Pasang JDK 17 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Pasang Android SDK Command-line Tools
+        uses: android-actions/setup-android@v3
+
+      - name: Pasang Dependensi Node & Android Build-Tools / Platform-Tools
+        run: |
+          npm ci
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platform-tools" "build-tools;35.0.0" "platforms;android-35"
+
+      - name: Audit Toolchain Android, Suite Mobile (37, 38, 40, 41) & Bukti Kejujuran
+        run: |
+          mkdir -p artifacts/cert-evidence
+          npm run test:mobile-v37
+          npm run test:native-api-v38
+          npm run test:distribusi-v40
+          npm run test:publikasi-v41
+
+          BT_DIR="$ANDROID_HOME/build-tools/35.0.0"
+          AAPT2_VER=$($BT_DIR/aapt2 version 2>&1 | head -n 1 || echo "")
+          APKSIGNER_VER=$($BT_DIR/apksigner version 2>&1 | head -n 1 || echo "")
+          ADB_VER=$(adb --version 2>&1 | head -n 1 || echo "")
+          JAVA_VER=$(java -version 2>&1 | head -n 1 || echo "")
+          KVM_OK=false
+          if [ -e /dev/kvm ]; then KVM_OK=true; fi
+
+          # Uji tanda tangan keystore uji ephemeral (bukan APK produksi) & deteksi ketiadaan proyek Gradle penuh
+          TMP_KS=$(mktemp -d)
+          keytool -genkeypair -v -keystore "$TMP_KS/ephemeral-test.jks" -storepass testpass123 \
+            -keypass testpass123 -alias nusa_test -keyalg RSA -keysize 2048 -validity 1 \
+            -dname "CN=Nusantara CI Ephemeral,O=Nusantara,C=ID" >/dev/null 2>&1
+          KS_OK=false
+          if [ -s "$TMP_KS/ephemeral-test.jks" ]; then KS_OK=true; fi
+          rm -rf "$TMP_KS"
+
+          cat <<EOF > artifacts/cert-evidence/phase37-42-android.json
+          {
+            "schemaVersion": 1,
+            "jobId": "phase37-42-android-sdk",
+            "phase": "37,38,40,41",
+            "runner": "ubuntu-latest",
+            "os": "Linux",
+            "arch": "$(uname -m)",
+            "status": "NOT_VERIFIED",
+            "unitTestStatus": "PASS",
+            "isNativeHardware": false,
+            "toolchains": {
+              "java": "$JAVA_VER",
+              "aapt2": "$AAPT2_VER",
+              "apksigner": "$APKSIGNER_VER",
+              "adb": "$ADB_VER"
+            },
+            "details": {
+              "sdkInstalled": true,
+              "ephemeralKeystoreGenerated": $KS_OK,
+              "kvmAvailable": $KVM_OK,
+              "apkCompiledWithDex": false,
+              "aabBuiltWithBundletool": false,
+              "apksignerVerified": false,
+              "emulatorBooted": false,
+              "physicalDeviceHardwareVerified": false,
+              "neverClaimStructuralAsNative": true
+            },
+            "blockers": [
+              "Proyek Gradle Android penuh, kompilasi classes.dex/bundletool .aab nyata, dan peluncuran Android Emulator KVM + sensor perangkat fisik belum terpenuhi (NOT_VERIFIED)."
+            ],
+            "generatedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+      - name: Unggah Evidence Android SDK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase37-42-android-evidence
+          path: artifacts/cert-evidence/phase37-42-android.json
+          retention-days: 14
+          if-no-files-found: warn
+
+  # ============================================================================
+  # 8. PHASE 37–42 — APPLE / XCODE / SIMULATOR AUDIT (macOS-latest)
+  # ============================================================================
+  phase37-42-apple:
+    name: NUSANTARA / Validasi Xcode & Apple Toolchain (Phase 37–42)
+    needs: quality-gate
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Pasang Lingkungan Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Pasang Dependensi & Audit Xcode / Simulator / Mach-O
+        run: |
+          npm ci
+          mkdir -p artifacts/cert-evidence
+          npm run test:mobile-v37
+          npm run test:native-api-v38
+          npm run test:distribusi-v40
+          npm run test:publikasi-v41
+
+          XCODE_VER=$(xcodebuild -version 2>&1 | tr '\n' ' ' | sed 's/  */ /g' || echo "")
+          SIM_COUNT=$(xcrun simctl list runtimes 2>/dev/null | grep -c "iOS" || echo "0")
+
+          cat <<EOF > artifacts/cert-evidence/phase37-42-apple.json
+          {
+            "schemaVersion": 1,
+            "jobId": "phase37-42-apple",
+            "phase": "37,38,40,41",
+            "runner": "macos-latest",
+            "os": "macOS",
+            "arch": "$(uname -m)",
+            "status": "NOT_VERIFIED",
+            "unitTestStatus": "PASS",
+            "isNativeHardware": false,
+            "toolchains": {
+              "xcodebuild": "$XCODE_VER",
+              "iosSimulatorRuntimesFound": "$SIM_COUNT"
+            },
+            "details": {
+              "machOCompiled": false,
+              "xcarchiveBuilt": false,
+              "ipaProduced": false,
+              "simulatorLaunched": false,
+              "adHocOrDevSigned": false,
+              "physicalDeviceHardwareVerified": false,
+              "neverClaimStructuralPlistAsIpa": true
+            },
+            "blockers": [
+              "Belum ada proyek Xcode .app Mach-O terkompilasi, peluncuran iOS Simulator, atau ekspor .ipa nyata (baru .xcarchive/Info.plist struktural)."
+            ],
+            "generatedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+      - name: Unggah Evidence Apple/Xcode
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase37-42-apple-evidence
+          path: artifacts/cert-evidence/phase37-42-apple.json
+          retention-days: 14
+          if-no-files-found: warn
+
+  # ============================================================================
+  # 9. PHASE 39 & 42 — TLS X.509 HANDSHAKE & OTA KEY ROTATION / ROLLBACK
+  # ============================================================================
+  phase39-42-tls-ota:
+    name: NUSANTARA / Validasi TLS X.509 & Regresi OTA (Phase 39 & 42)
+    needs: quality-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Pasang Lingkungan Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Pasang Dependensi & Uji Loopback HTTPS X.509 + OTA Ed25519
+        run: |
+          npm ci
+          mkdir -p artifacts/cert-evidence
+          OPENSSL_VER=$(openssl version)
+          echo "OpenSSL: $OPENSSL_VER"
+          npm run test:mobile-networking-v39
+          npm run test:pembaruan-v42
+          cat <<EOF > artifacts/cert-evidence/phase39-42-tls-ota.json
+          {
+            "schemaVersion": 1,
+            "jobId": "phase39-42-tls-ota",
+            "phase": "39,42",
+            "runner": "ubuntu-latest",
+            "os": "Linux",
+            "arch": "$(uname -m)",
+            "status": "PASS",
+            "unitTestStatus": "PASS",
+            "isNativeHardware": false,
+            "toolchains": { "openssl": "$OPENSSL_VER" },
+            "details": {
+              "tlsLoopbackStatus": "PASS",
+              "otaRegressionStatus": "PASS",
+              "loopbackTLSOnly": true,
+              "nativeSpkiPinningVerified": false,
+              "playCoreAndStoreKitVerified": false
+            },
+            "blockers": [
+              "Uji TLS X.509 berjalan pada server https loopback lokal; pinning SPKI OkHttp/URLSession & Play Core/StoreKit di perangkat nyata tetap NOT_VERIFIED."
+            ],
+            "generatedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+      - name: Unggah Evidence TLS & OTA
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase39-42-tls-ota-evidence
+          path: artifacts/cert-evidence/phase39-42-tls-ota.json
+          retention-days: 14
+          if-no-files-found: warn
+
+  # ============================================================================
+  # 10. CENTRALIZED CERTIFICATION GATE (PHASE 23 & PHASE 36–42)
+  # ============================================================================
+  unified-certification-gate:
+    name: NUSANTARA / Gerbang Sertifikasi Terpusat (Phase 23 & 36–42)
+    needs: [static-checks, test-suite, quality-gate, build-matrix-validation, phase23-certification-gate, phase36-gui-matrix, phase37-42-android-sdk, phase37-42-apple, phase39-42-tls-ota]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Pasang Lingkungan Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Pasang Dependensi
+        run: npm ci
+
+      - name: Unduh Seluruh Artefak & Evidence Sertifikasi
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded-evidence
+          merge-multiple: false
+
+      - name: Kumpulkan Evidence & Jalankan Gerbang Sertifikasi Terpusat Ketat
+        run: |
+          mkdir -p artifacts/phase23 artifacts/demo-terpadu artifacts/cert-evidence artifacts/certification
+          if [ -d downloaded-evidence/phase23-certification-report ]; then
+            cp -r downloaded-evidence/phase23-certification-report/* artifacts/phase23/ || true
+          fi
+          if [ -d downloaded-evidence/demo-terpadu-artifacts ]; then
+            cp -r downloaded-evidence/demo-terpadu-artifacts/* artifacts/demo-terpadu/ || true
+          fi
+          for d in downloaded-evidence/phase36-gui-evidence-* downloaded-evidence/phase37-42-* downloaded-evidence/phase39-42-*; do
+            if [ -d "$d" ]; then
+              cp -r "$d"/*.json artifacts/cert-evidence/ 2>/dev/null || true
+            fi
+          done
+          npx tsx scripts/certification-gate.ts evaluate \
+            --phase23-summary artifacts/phase23/certification-summary.json \
+            --demo-dir artifacts/demo-terpadu \
+            --evidence-dir artifacts/cert-evidence \
+            --json-out artifacts/certification/CERTIFICATION-GATE-REPORT.json \
+            --md-out artifacts/certification/CERTIFICATION-GATE-REPORT.md \
+            --step-summary
+
+      - name: Unggah Laporan Gerbang Sertifikasi Terpusat
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unified-certification-report
+          path: artifacts/certification/
+          retention-days: 30
+          if-no-files-found: warn
+
+  # ============================================================================
+  # 11. CI SUMMARY & STEP SUMMARY GENERATION
   # ============================================================================
   ci-summary:
     name: NUSANTARA / Ringkasan CI
-    needs: [static-checks, test-suite, quality-gate, build-matrix-validation, phase23-certification-gate]
+    needs: [static-checks, test-suite, quality-gate, build-matrix-validation, phase23-certification-gate, phase36-gui-matrix, phase37-42-android-sdk, phase37-42-apple, phase39-42-tls-ota, unified-certification-gate]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Buat Laporan Ringkasan CI Resmi
         run: |
-          echo "## 🇮🇩 NUSANTARA CI SUMMARY (v0.50.0 + Phase 23.10)" >> $GITHUB_STEP_SUMMARY
+          echo "## 🇮🇩 NUSANTARA CI SUMMARY (v0.50.0 + Phase 23.16)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Tahapan Alur Kerja | Status | Runner Host | Keterangan |" >> $GITHUB_STEP_SUMMARY
           echo "| :--- | :---: | :--- | :--- |" >> $GITHUB_STEP_SUMMARY
-          echo "| Pemeriksaan Statis (Lint/TSC) | ${{ needs.static-checks.result }} | ubuntu-latest | Validasi sintaks dan tipe TypeScript |" >> $GITHUB_STEP_SUMMARY
-          echo "| Rangkaian Uji Otomatis | ${{ needs.test-suite.result }} | Ubuntu, Windows, macOS | Seluruh unit, integrasi, stdlib & C runtime |" >> $GITHUB_STEP_SUMMARY
-          echo "| Gerbang Kualitas (Quality Gate) | ${{ needs.quality-gate.result }} | ubuntu-latest | Ambang batas kualitas dan regresi |" >> $GITHUB_STEP_SUMMARY
-          echo "| Matriks Build 6 Target Desktop | ${{ needs.build-matrix-validation.result }} | Multi-OS Matrix | Eksekusi per-target menghasilkan JSON evidence terpisah |" >> $GITHUB_STEP_SUMMARY
-          echo "| Gerbang Sertifikasi 6 Target (Phase 23.2) | ${{ needs.phase23-certification-gate.result == 'success' && 'CERTIFIED (6/6 PASS)' || 'PARTIAL / FAILED (Belum CERTIFIED)' }} | ubuntu-latest | Wajib 6/6 target PASS + SHA-256 & header biner sah |" >> $GITHUB_STEP_SUMMARY
-          echo "| Cakupan GUI, Mobile, Distribusi & OTA (Phase 36–42) | ${{ needs.test-suite.result }} | Multi-OS Matrix | \`test:gui-v36\`..\`test:pembaruan-v42\` + \`test:demo-terpadu\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Pemeriksaan Statis (Lint/TSC/Build) | ${{ needs.static-checks.result }} | ubuntu-latest | Validasi sintaks, tipe TypeScript & build Vite |" >> $GITHUB_STEP_SUMMARY
+          echo "| Rangkaian Uji Otomatis & Demo Terpadu | ${{ needs.test-suite.result }} | Ubuntu, Windows, macOS | Seluruh unit, integrasi, stdlib, C runtime & SHA256SUMS demo |" >> $GITHUB_STEP_SUMMARY
+          echo "| Gerbang Kualitas (Quality Gate) | ${{ needs.quality-gate.result }} | ubuntu-latest | Ambang batas kualitas, CI workflow & cert-gate regression |" >> $GITHUB_STEP_SUMMARY
+          echo "| Matriks Build 6 Target Desktop | ${{ needs.build-matrix-validation.result }} | Multi-OS Matrix | Kompilasi & log build per-target + JSON evidence |" >> $GITHUB_STEP_SUMMARY
+          echo "| Gerbang Sertifikasi 6 Target (Phase 23) | ${{ needs.phase23-certification-gate.result }} | ubuntu-latest | Wajib 6/6 target PASS + SHA-256 & header biner sah |" >> $GITHUB_STEP_SUMMARY
+          echo "| GUI Desktop Matrix (Phase 36) | ${{ needs.phase36-gui-matrix.result }} | Linux (Xvfb GTK3), Windows, macOS | Virtual Xvfb dipisahkan tegas dari layar fisik |" >> $GITHUB_STEP_SUMMARY
+          echo "| Android SDK Toolchain Audit (Phase 37–42) | ${{ needs.phase37-42-android-sdk.result }} | ubuntu-latest | JDK 17 + Android SDK + AAPT2/apksigner + uji struktural vs .dex |" >> $GITHUB_STEP_SUMMARY
+          echo "| Apple Xcode Toolchain Audit (Phase 37–42) | ${{ needs.phase37-42-apple.result }} | macos-latest | Xcode + Simulator + validasi kejujuran .xcarchive vs .ipa |" >> $GITHUB_STEP_SUMMARY
+          echo "| Loopback HTTPS TLS & OTA (Phase 39 & 42) | ${{ needs.phase39-42-tls-ota.result }} | ubuntu-latest | OpenSSL X.509 & rotasi/pencabutan kunci Ed25519 |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Gerbang Sertifikasi Terpusat (23 & 36–42)** | ${{ needs.unified-certification-gate.result == 'success' && 'CERTIFIED (ALL PASS)' || 'PARTIAL / FAILED / BLOCKED' }} | ubuntu-latest | Menolak PASS bila ada FAIL/SKIPPED/NOT_VERIFIED/BLOCKED |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ "${{ needs.quality-gate.result }}" = "skipped" ] || [ "${{ needs.build-matrix-validation.result }}" = "skipped" ]; then
             echo "### Diagnostik Prasyarat yang Dilewati (Skipped)" >> $GITHUB_STEP_SUMMARY
@@ -474,4 +976,3 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
           echo "**Status Release**: \`NOT PUBLISHED\` (CI Pipeline tidak mempublikasikan rilis publik)." >> $GITHUB_STEP_SUMMARY
-
