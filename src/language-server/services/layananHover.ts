@@ -224,7 +224,7 @@ export class LayananHover {
       if (stmt.jenis === JenisNodeAST.DEKLARASI_VARIABEL) {
         const v = stmt as NodeDeklarasiVariabel;
         if (v.nama === nama) {
-          return { nama: v.nama, tipe: v.tipeData, jenis: 'variabel', baris: v.posisi.awal.baris };
+          return { nama: v.nama, tipe: v.tipeData ?? 'inferensi', jenis: 'variabel', baris: v.posisi.awal.baris };
         }
       } else if (stmt.jenis === JenisNodeAST.DEKLARASI_TETAP) {
         const t = stmt as NodeDeklarasiTetap;
