@@ -57,6 +57,107 @@ jobs:
           npm run build
 
   # ============================================================================
+  # 1B. CLEAN INSTALL CI VALIDATION (TANPA CACHE NPM)
+  # ============================================================================
+  clean-install:
+    name: NUSANTARA / Clean Install CI
+    needs: static-checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Pasang Lingkungan Node.js (Tanpa Cache npm)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Jalankan Clean Install & Seluruh Suite Validasi
+        shell: bash
+        run: |
+          mkdir -p artifacts/clean-install
+          NODE_VER=$(node -v)
+          NPM_VER=$(npm -v)
+          OVERALL_EXIT=0
+
+          run_step() {
+            local key="$1"
+            shift
+            set +e
+            "$@"
+            local rc=$?
+            set -e
+            eval "EXIT_${key}=$rc"
+            if [ "$rc" -ne 0 ] && [ "$OVERALL_EXIT" -eq 0 ]; then
+              OVERALL_EXIT=$rc
+            fi
+          }
+
+          run_step NPM_CI npm ci
+          run_step LINT npm run lint
+          run_step BUILD npm run build
+          run_step TEST npm test
+          run_step CERT_GATE npm run test:cert-gate
+          run_step DEMO_TERPADU npm run test:demo-terpadu
+          run_step CICD npm run test:cicd
+          run_step QUALITY_GATE npm run quality-gate
+
+          MANIFEST_SHA=$(sha256sum artifacts/demo-terpadu/manifest.json 2>/dev/null | awk '{print $1}' || echo "")
+          SUMS_SHA=$(sha256sum artifacts/demo-terpadu/SHA256SUMS 2>/dev/null | awk '{print $1}' || echo "")
+
+          cat <<EOF > artifacts/clean-install/CLEAN-INSTALL-EVIDENCE.json
+          {
+            "schemaVersion": 1,
+            "jobId": "clean-install",
+            "runner": "ubuntu-latest (${{ runner.os }}/${{ runner.arch }})",
+            "nodeVersion": "$NODE_VER",
+            "npmVersion": "$NPM_VER",
+            "commitSha": "${{ github.sha }}",
+            "workflowRunId": "${{ github.run_id }}",
+            "exitCode": $OVERALL_EXIT,
+            "commands": {
+              "npm_ci": $EXIT_NPM_CI,
+              "npm_run_lint": $EXIT_LINT,
+              "npm_run_build": $EXIT_BUILD,
+              "npm_test": $EXIT_TEST,
+              "npm_run_test_cert_gate": $EXIT_CERT_GATE,
+              "npm_run_test_demo_terpadu": $EXIT_DEMO_TERPADU,
+              "npm_run_test_cicd": $EXIT_CICD,
+              "npm_run_quality_gate": $EXIT_QUALITY_GATE
+            },
+            "artifactReferences": [
+              {
+                "name": "clean-install-evidence",
+                "path": "artifacts/clean-install/CLEAN-INSTALL-EVIDENCE.json"
+              },
+              {
+                "name": "demo-terpadu-manifest",
+                "path": "artifacts/demo-terpadu/manifest.json",
+                "sha256": "$MANIFEST_SHA"
+              },
+              {
+                "name": "demo-terpadu-sha256sums",
+                "path": "artifacts/demo-terpadu/SHA256SUMS",
+                "sha256": "$SUMS_SHA"
+              }
+            ],
+            "generatedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+          cat artifacts/clean-install/CLEAN-INSTALL-EVIDENCE.json
+          exit "$OVERALL_EXIT"
+
+      - name: Unggah Bukti Clean Install CI
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clean-install-evidence
+          path: artifacts/clean-install/CLEAN-INSTALL-EVIDENCE.json
+          retention-days: 14
+          if-no-files-found: warn
+
+  # ============================================================================
   # 2. AUTOMATED TEST SUITE (PHASE 1 - 50) & CROSS-PLATFORM DEMO TERPADU
   # ============================================================================
   test-suite:
@@ -912,7 +1013,7 @@ jobs:
   # ============================================================================
   unified-certification-gate:
     name: NUSANTARA / Gerbang Sertifikasi Terpusat (Phase 23 & 36–42)
-    needs: [static-checks, test-suite, quality-gate, build-matrix-validation, phase23-certification-gate, phase36-gui-matrix, phase37-42-android-sdk, phase37-42-apple, phase39-42-tls-ota]
+    needs: [static-checks, clean-install, test-suite, quality-gate, build-matrix-validation, phase23-certification-gate, phase36-gui-matrix, phase37-42-android-sdk, phase37-42-apple, phase39-42-tls-ota]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -977,18 +1078,19 @@ jobs:
   # ============================================================================
   ci-summary:
     name: NUSANTARA / Ringkasan CI
-    needs: [static-checks, test-suite, quality-gate, build-matrix-validation, phase23-certification-gate, phase36-gui-matrix, phase37-42-android-sdk, phase37-42-apple, phase39-42-tls-ota, unified-certification-gate]
+    needs: [static-checks, clean-install, test-suite, quality-gate, build-matrix-validation, phase23-certification-gate, phase36-gui-matrix, phase37-42-android-sdk, phase37-42-apple, phase39-42-tls-ota, unified-certification-gate]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Buat Laporan Ringkasan CI Resmi
         run: |
-          echo "## 🇮🇩 NUSANTARA CI SUMMARY (v0.50.0 + Phase 23.16)" >> $GITHUB_STEP_SUMMARY
+          echo "## 🇮🇩 NUSANTARA CI SUMMARY (v0.50.0 + Phase 23.18)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Tahapan Alur Kerja | Status | Runner Host | Keterangan |" >> $GITHUB_STEP_SUMMARY
           echo "| :--- | :---: | :--- | :--- |" >> $GITHUB_STEP_SUMMARY
           echo "| Pemeriksaan Statis (Lint/TSC/Build) | ${{ needs.static-checks.result }} | ubuntu-latest | Validasi sintaks, tipe TypeScript & build Vite |" >> $GITHUB_STEP_SUMMARY
+          echo "| Clean Install CI (Uncached npm ci + Full Suite) | ${{ needs.clean-install.result }} | ubuntu-latest | npm ci bersih, lint, build, npm test, cert-gate, demo-terpadu, cicd, quality-gate |" >> $GITHUB_STEP_SUMMARY
           echo "| Rangkaian Uji Otomatis & Demo Terpadu | ${{ needs.test-suite.result }} | Ubuntu, Windows, macOS | Seluruh unit, integrasi, stdlib, C runtime & SHA256SUMS demo |" >> $GITHUB_STEP_SUMMARY
           echo "| Gerbang Kualitas (Quality Gate) | ${{ needs.quality-gate.result }} | ubuntu-latest | Ambang batas kualitas, CI workflow & cert-gate regression |" >> $GITHUB_STEP_SUMMARY
           echo "| Matriks Build 6 Target Desktop | ${{ needs.build-matrix-validation.result }} | Multi-OS Matrix | Kompilasi & log build per-target + JSON evidence |" >> $GITHUB_STEP_SUMMARY
