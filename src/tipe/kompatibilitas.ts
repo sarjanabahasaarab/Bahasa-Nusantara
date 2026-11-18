@@ -81,11 +81,8 @@ export function tentukanTipeOperasiBiner(
     }
   }
 
-  // 3. Pembagian (/): bilangan / bilangan menghasilkan bilangan, desimal menghasilkan desimal
+  // 3. Pembagian (/): selalu menghasilkan desimal (runtime: 7 / 2 = 3.5)
   if (operator === '/') {
-    if (tipeKiri === NamaTipe.BILANGAN && tipeKanan === NamaTipe.BILANGAN) {
-      return NamaTipe.BILANGAN;
-    }
     if (
       (tipeKiri === NamaTipe.BILANGAN || tipeKiri === NamaTipe.DESIMAL) &&
       (tipeKanan === NamaTipe.BILANGAN || tipeKanan === NamaTipe.DESIMAL)
