@@ -13,6 +13,7 @@ import {
 } from '../interpreter/nilai';
 import { GalatRuntime, JenisGalatRuntime } from '../interpreter/galat';
 import { InfoSimbolModul } from '../modul/jenisModul';
+import { muatModulNode } from './modulNode';
 
 /**
  * Modul Standar: kripto
@@ -74,34 +75,72 @@ export const simbolEksporKripto: Map<string, InfoSimbolModul> = new Map([
 ]);
 
 function hitungHashNode(algoritma: string, pesan: string): string {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const crypto = typeof window === 'undefined' ? require('crypto') : null;
-    if (crypto && crypto.createHash) {
-      return crypto.createHash(algoritma).update(pesan, 'utf-8').digest('hex');
-    }
-  } catch {
-    // Fallback jika di browser tanpa node crypto
+  const crypto = muatModulNode('node:crypto');
+  if (crypto && typeof crypto.createHash === 'function') {
+    return crypto.createHash(algoritma).update(pesan, 'utf-8').digest('hex');
   }
-  // Fallback sederhana SHA-256 implementasi manual jika crypto tidak ada
-  return fallbackSimulasiHash(algoritma, pesan);
+  throw new GalatRuntime(
+    JenisGalatRuntime.INTERNAL,
+    `Penyedia hash kriptografis '${algoritma}' tidak tersedia pada lingkungan ini.`
+  );
 }
 
-function fallbackSimulasiHash(algo: string, pesan: string): string {
-  // Simple deterministic 64-char hex hash fallback
-  let h1 = 0xdeadbeef;
-  let h2 = 0x41c6ce57;
-  for (let i = 0; i < pesan.length; i++) {
-    const ch = pesan.charCodeAt(i);
-    h1 = Math.imul(h1 ^ ch, 2654435761);
-    h2 = Math.imul(h2 ^ ch, 1597334677);
+function dapatkanCryptoWeb(): Crypto | null {
+  if (typeof globalThis !== 'undefined' && globalThis.crypto &&
+      typeof globalThis.crypto.getRandomValues === 'function') {
+    return globalThis.crypto;
   }
-  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-  const part1 = (h1 >>> 0).toString(16).padStart(8, '0');
-  const part2 = (h2 >>> 0).toString(16).padStart(8, '0');
-  const combined = (part1 + part2).repeat(algo === 'md5' ? 2 : 4);
-  return algo === 'md5' ? combined.slice(0, 32) : combined.slice(0, 64);
+  return null;
+}
+
+function buatGalatCSPRNG(): GalatRuntime {
+  return new GalatRuntime(
+    JenisGalatRuntime.INTERNAL,
+    'Sumber acak kriptografis yang aman tidak tersedia; operasi dibatalkan tanpa fallback pseudoacak.'
+  );
+}
+
+function byteAcakAman(panjang: number): Uint8Array {
+  const cryptoNode = muatModulNode('node:crypto');
+  if (cryptoNode && typeof cryptoNode.randomBytes === 'function') {
+    return new Uint8Array(cryptoNode.randomBytes(panjang));
+  }
+  const cryptoWeb = dapatkanCryptoWeb();
+  if (!cryptoWeb) throw buatGalatCSPRNG();
+
+  const hasil = new Uint8Array(panjang);
+  // Web Crypto membatasi satu panggilan getRandomValues hingga 65.536 byte.
+  for (let offset = 0; offset < panjang; offset += 65536) {
+    cryptoWeb.getRandomValues(hasil.subarray(offset, Math.min(offset + 65536, panjang)));
+  }
+  return hasil;
+}
+
+function bilanganAcakAman(min: number, max: number): number {
+  const cryptoNode = muatModulNode('node:crypto');
+  if (cryptoNode && typeof cryptoNode.randomInt === 'function') {
+    return cryptoNode.randomInt(min, max + 1);
+  }
+
+  const cryptoWeb = dapatkanCryptoWeb();
+  if (!cryptoWeb) throw buatGalatCSPRNG();
+  const rentang = max - min + 1;
+  if (rentang > 0x100000000) {
+    throw new GalatRuntime(
+      JenisGalatRuntime.ARGUMEN_TIDAK_VALID,
+      'Rentang bilanganAcak pada Web Crypto tidak boleh melebihi 2^32.'
+    );
+  }
+
+  // Rejection sampling menghindari bias modulo.
+  const batas = Math.floor(0x100000000 / rentang) * rentang;
+  const kata = new Uint32Array(1);
+  let kandidat: number;
+  do {
+    cryptoWeb.getRandomValues(kata);
+    kandidat = kata[0];
+  } while (kandidat >= batas);
+  return min + (kandidat % rentang);
 }
 
 export function buatEksporKripto(): Map<string, NilaiRuntime> {
@@ -147,28 +186,15 @@ export function buatEksporKripto(): Map<string, NilaiRuntime> {
           `Fungsi 'kripto.byteAcak' membutuhkan 1 argumen bertipe bilangan (jumlah byte).`
         );
       }
-      const len = Math.max(1, args[0].nilai);
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const crypto = typeof window === 'undefined' ? require('crypto') : null;
-        if (crypto && crypto.randomBytes) {
-          return buatTeks(crypto.randomBytes(len).toString('hex'));
-        }
-      } catch {
-        // fallback
+      const len = args[0].nilai;
+      if (!Number.isSafeInteger(len) || len < 1 || len > 0x7fffffff) {
+        throw new GalatRuntime(
+          JenisGalatRuntime.ARGUMEN_TIDAK_VALID,
+          'Panjang kripto.byteAcak harus berupa bilangan bulat aman antara 1 dan 2.147.483.647.'
+        );
       }
-      // Browser Web Crypto fallback
-      if (typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues) {
-        const arr = new Uint8Array(len);
-        window.crypto.getRandomValues(arr);
-        return buatTeks(Array.from(arr, b => b.toString(16).padStart(2, '0')).join(''));
-      }
-      // Pseudorandom hex
-      let res = '';
-      for (let i = 0; i < len; i++) {
-        res += Math.floor(Math.random() * 256).toString(16).padStart(2, '0');
-      }
-      return buatTeks(res);
+      const byte = byteAcakAman(len);
+      return buatTeks(Array.from(byte, b => b.toString(16).padStart(2, '0')).join(''));
     },
   };
   ekspor.set('byteAcak', fnByteAcak);
@@ -185,17 +211,14 @@ export function buatEksporKripto(): Map<string, NilaiRuntime> {
       }
       const min = Math.min(args[0].nilai, args[1].nilai);
       const max = Math.max(args[0].nilai, args[1].nilai);
-      const range = max - min + 1;
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const crypto = typeof window === 'undefined' ? require('crypto') : null;
-        if (crypto && crypto.randomInt) {
-          return buatBilangan(crypto.randomInt(min, max + 1));
-        }
-      } catch {
-        // fallback
+      if (!Number.isSafeInteger(min) || !Number.isSafeInteger(max) ||
+          max >= Number.MAX_SAFE_INTEGER || max - min + 1 <= 0) {
+        throw new GalatRuntime(
+          JenisGalatRuntime.ARGUMEN_TIDAK_VALID,
+          'Batas kripto.bilanganAcak harus berupa bilangan bulat aman dengan rentang valid.'
+        );
       }
-      return buatBilangan(min + Math.floor(Math.random() * range));
+      return buatBilangan(bilanganAcakAman(min, max));
     },
   };
   ekspor.set('bilanganAcak', fnBilanganAcak);
@@ -215,7 +238,7 @@ export function buatEksporKripto(): Map<string, NilaiRuntime> {
 
       try {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const crypto = typeof window === 'undefined' ? require('crypto') : null;
+        const crypto = muatModulNode('node:crypto');
         if (crypto && crypto.timingSafeEqual && Buffer) {
           const bufA = Buffer.from(a, 'utf-8');
           const bufB = Buffer.from(b, 'utf-8');
