@@ -1,0 +1,14 @@
+# ==============================================================================
+# NUSANTARA REGRESSION TEST: BUG-0006
+# Verifikasi: 'definisi' tanpa anotasi tipe dengan nilai awal non-literal
+# ==============================================================================
+
+definisi depan = "Halo"
+definisi sapaan = depan + " Dunia"
+definisi angka = [1, 2, 3]
+definisi hasil = kosong
+hasil = panjang(angka)
+
+pastikan_sama(sapaan, "Halo Dunia", "Gabungan teks boleh disimpan tanpa anotasi")
+pastikan_sama(angka[2], 3, "Daftar boleh disimpan tanpa anotasi")
+pastikan_sama(hasil, 3, "Variabel awal kosong boleh diisi nilai lain")
