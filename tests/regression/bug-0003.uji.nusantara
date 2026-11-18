@@ -3,22 +3,24 @@
 # Verifikasi: Rekursi mendalam dan perulangan akumulasi nilai
 # ==============================================================================
 
-fungsi faktorial(n) {
-    jika n <= 1 {
+fungsi faktorial(n : bilangan) : bilangan
+mulai
+    jika n <= 1 maka
         kembalikan 1
-    }
+    akhir
     kembalikan n * faktorial(n - 1)
-}
+selesai
 
-fungsi jumlahkan_deret(batas) {
+fungsi jumlahkan_deret(batas : bilangan) : bilangan
+mulai
     definisi total = 0
     definisi i = 1
-    selama i <= batas {
+    selama i <= batas lakukan
         total = total + i
         i = i + 1
-    }
+    akhir
     kembalikan total
-}
+selesai
 
 pastikan_sama(faktorial(1), 1, "Faktorial 1 harus 1")
 pastikan_sama(faktorial(5), 120, "Faktorial 5 harus 120")
