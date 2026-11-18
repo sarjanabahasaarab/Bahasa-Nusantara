@@ -117,7 +117,7 @@ function byteAcakAman(panjang: number, cryptoNode: any, cryptoWeb: Crypto | null
 function bilanganAcakAman(min: number, max: number, cryptoNode: any, cryptoWeb: Crypto | null): number {
   if (cryptoNode && typeof cryptoNode.randomInt === 'function') {
     const rentangNode = max - min + 1;
-    if (rentangNode >= 0x20000000000000) {
+    if (rentangNode >= 0x1000000000000) {
       throw new GalatRuntime(JenisGalatRuntime.ARGUMEN_TIDAK_VALID, 'Rentang bilanganAcak pada Node.js harus lebih kecil dari 2^48.');
     }
     return cryptoNode.randomInt(min, max + 1);
