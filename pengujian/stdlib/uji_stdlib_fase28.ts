@@ -42,6 +42,7 @@ import {
 import { Interpreter } from '../../src/interpreter/interpreter';
 import { PenulisOutputBuffer } from '../../src/interpreter/outputWriter';
 import { PembacaBerkasMemori } from '../../src/modul/pembacaBerkas';
+import { muatModulNode } from '../../src/stdlib/modulNode';
 
 let totalUji = 0;
 let ujiBerhasil = 0;
@@ -574,6 +575,19 @@ uji('kripto.sha256 dan kripto.md5 menghasilkan digest heksadesimal sah', () => {
 
   const hMd5: any = fnMd5.eksekusi([buatTeks('nusantara')]);
   samaDengan(hMd5.nilai.length, 32, 'MD5 harus 32 karakter heksadesimal');
+});
+
+uji('Loader modul Node ESM memuat node:crypto melalui API bawaan', () => {
+  const crypto = muatModulNode('node:crypto');
+  benar(!!crypto && typeof crypto.randomBytes === 'function' && typeof crypto.createHash === 'function');
+});
+
+uji('CSPRNG gagal tertutup saat penyedia kriptografi tidak tersedia', () => {
+  const k = buatEksporKripto({ cryptoNode: null, cryptoWeb: null });
+  const fnByte = k.get('byteAcak') as NilaiFungsiBawaan;
+  const fnAngka = k.get('bilanganAcak') as NilaiFungsiBawaan;
+  lemparGalat(() => fnByte.eksekusi([buatBilangan(8)]), 'tidak tersedia');
+  lemparGalat(() => fnAngka.eksekusi([buatBilangan(1), buatBilangan(9)]), 'tidak tersedia');
 });
 
 uji('kripto.byteAcak, kripto.bilanganAcak, dan kripto.bandingkanWaktuKonstan', () => {
