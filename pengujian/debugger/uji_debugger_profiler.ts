@@ -370,7 +370,7 @@ pastikan(
 const programGalat = `program UjiGalat
 mulai
     pembagi : bilangan = 0
-    hasil : bilangan = 100 / pembagi
+    hasil : desimal = 100 / pembagi
 selesai`;
 
 debuggerEngine.bersihkanBreakpoint();
