@@ -100,12 +100,10 @@ function buatGalatCSPRNG(): GalatRuntime {
   );
 }
 
-function byteAcakAman(panjang: number): Uint8Array {
-  const cryptoNode = muatModulNode('node:crypto');
+function byteAcakAman(panjang: number, cryptoNode: any, cryptoWeb: Crypto | null): Uint8Array {
   if (cryptoNode && typeof cryptoNode.randomBytes === 'function') {
     return new Uint8Array(cryptoNode.randomBytes(panjang));
   }
-  const cryptoWeb = dapatkanCryptoWeb();
   if (!cryptoWeb) throw buatGalatCSPRNG();
 
   const hasil = new Uint8Array(panjang);
@@ -116,13 +114,15 @@ function byteAcakAman(panjang: number): Uint8Array {
   return hasil;
 }
 
-function bilanganAcakAman(min: number, max: number): number {
-  const cryptoNode = muatModulNode('node:crypto');
+function bilanganAcakAman(min: number, max: number, cryptoNode: any, cryptoWeb: Crypto | null): number {
   if (cryptoNode && typeof cryptoNode.randomInt === 'function') {
+    const rentangNode = max - min + 1;
+    if (rentangNode >= 0x20000000000000) {
+      throw new GalatRuntime(JenisGalatRuntime.ARGUMEN_TIDAK_VALID, 'Rentang bilanganAcak pada Node.js harus lebih kecil dari 2^48.');
+    }
     return cryptoNode.randomInt(min, max + 1);
   }
 
-  const cryptoWeb = dapatkanCryptoWeb();
   if (!cryptoWeb) throw buatGalatCSPRNG();
   const rentang = max - min + 1;
   if (rentang > 0x100000000) {
@@ -143,8 +143,10 @@ function bilanganAcakAman(min: number, max: number): number {
   return min + (kandidat % rentang);
 }
 
-export function buatEksporKripto(): Map<string, NilaiRuntime> {
+export function buatEksporKripto(opsiPenyedia?: { cryptoNode?: any | null; cryptoWeb?: Crypto | null }): Map<string, NilaiRuntime> {
   const ekspor = new Map<string, NilaiRuntime>();
+  const cryptoNode = opsiPenyedia ? (opsiPenyedia.cryptoNode ?? null) : muatModulNode('node:crypto');
+  const cryptoWeb = opsiPenyedia ? (opsiPenyedia.cryptoWeb ?? null) : dapatkanCryptoWeb();
 
   const fnSha256: NilaiFungsiBawaan = {
     jenis: JenisNilaiRuntime.FUNGSI_BAWAAN,
@@ -193,7 +195,7 @@ export function buatEksporKripto(): Map<string, NilaiRuntime> {
           'Panjang kripto.byteAcak harus berupa bilangan bulat aman antara 1 dan 2.147.483.647.'
         );
       }
-      const byte = byteAcakAman(len);
+      const byte = byteAcakAman(len, cryptoNode, cryptoWeb);
       return buatTeks(Array.from(byte, b => b.toString(16).padStart(2, '0')).join(''));
     },
   };
@@ -218,7 +220,7 @@ export function buatEksporKripto(): Map<string, NilaiRuntime> {
           'Batas kripto.bilanganAcak harus berupa bilangan bulat aman dengan rentang valid.'
         );
       }
-      return buatBilangan(bilanganAcakAman(min, max));
+      return buatBilangan(bilanganAcakAman(min, max, cryptoNode, cryptoWeb));
     },
   };
   ekspor.set('bilanganAcak', fnBilanganAcak);
