@@ -182,25 +182,37 @@ async function jalankanSemuaUji(): Promise<void> {
   // [4] Android Build (APK & AAB Builders)
   // ---------------------------------------------------------------------------
   console.log('\n[4] Android Build (APK & AAB Builders)');
-  uji('4.1 Pembuatan APK Debug & Release dengan validasi artefak', () => {
+  const androidNativeBuildAvailable = (() => {
+    try {
+      execFileSync('gradle', ['--version'], { stdio: 'ignore', timeout: 5000 });
+      return Boolean(process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT);
+    } catch { return false; }
+  })();
+
+  uji('4.1 Build APK: native Gradle nyata atau penolakan fail-closed', () => {
     const hasilAPK = APKBuilder.bangunAPK(konfig, 'debug');
-    pastikan(hasilAPK.sukses, 'Build APK Debug harus sukses');
-    pastikan(Boolean(hasilAPK.artefak), 'Artefak APK harus dihasilkan');
+    if (!androidNativeBuildAvailable) {
+      pastikan(!hasilAPK.sukses && !hasilAPK.artefak, 'Tanpa Gradle/Android SDK, builder wajib menolak dan tidak membuat APK sintetis');
+      return;
+    }
+    pastikan(hasilAPK.sukses && Boolean(hasilAPK.artefak), 'APK harus dihasilkan Gradle native');
     samaDengan(hasilAPK.artefak?.platform, 'android', 'Platform harus android');
     samaDengan(hasilAPK.artefak?.format, 'apk', 'Format harus apk');
-    pastikan(hasilAPK.artefak!.ukuranBytes > 0, 'Ukuran berkas APK harus > 0');
+    pastikan(hasilAPK.artefak!.ukuranBytes > 0, 'Ukuran APK nyata harus > 0');
     samaDengan(hasilAPK.artefak!.sha256.length, 64, 'SHA-256 harus 64 karakter heksadesimal');
-
-    const validasiBiner = BuildValidator.validasiArtefak(hasilAPK.artefak!);
-    pastikan(validasiBiner.valid, 'Biner APK harus lolos validasi integritas');
+    pastikan(BuildValidator.validasiArtefak(hasilAPK.artefak!).valid, 'APK native harus lolos validasi integritas');
   });
 
-  uji('4.2 Pembuatan Android App Bundle (.aab) untuk Google Play', () => {
+  uji('4.2 Build AAB: bundletool Gradle nyata atau penolakan fail-closed', () => {
     const hasilAAB = AABBuilder.bangunAAB(konfig, true);
-    pastikan(hasilAAB.sukses, 'Build AAB harus sukses');
-    pastikan(Boolean(hasilAAB.artefak), 'Artefak AAB harus dihasilkan');
+    if (!androidNativeBuildAvailable) {
+      pastikan(!hasilAAB.sukses && !hasilAAB.artefak, 'Tanpa Gradle/Android SDK, builder wajib menolak dan tidak membuat AAB sintetis');
+      return;
+    }
+    pastikan(hasilAAB.sukses && Boolean(hasilAAB.artefak), 'AAB harus dihasilkan Gradle native');
     samaDengan(hasilAAB.artefak?.format, 'aab', 'Format harus aab');
-    pastikan(hasilAAB.artefak!.ukuranBytes > 0, 'Ukuran berkas AAB harus > 0');
+    pastikan(hasilAAB.artefak!.ukuranBytes > 0, 'Ukuran AAB nyata harus > 0');
+    pastikan(hasilAAB.artefak!.sha256.length === 64, 'AAB harus memiliki SHA-256 aktual');
   });
 
   // ---------------------------------------------------------------------------
