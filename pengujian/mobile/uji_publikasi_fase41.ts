@@ -820,6 +820,7 @@ async function jalankanSemuaPengujianFase41() {
     const gpJwtClient = new GooglePlayClient({
       applicationId: 'id.nusantara.test',
       packageName: 'id.nusantara.test',
+      serviceAccountEmail: 'ci-test@nusantara.invalid',
       defaultTrack: 'internal',
       autoCommitEdit: false,
     });
