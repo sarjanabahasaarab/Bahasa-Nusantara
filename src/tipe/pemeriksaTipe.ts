@@ -380,17 +380,27 @@ export class PemeriksaTipe {
         }
 
         const tipeNilai = this.periksaEkspresi(s.nilaiAwal);
-        if (!apakahKompatibel(s.tipeData, tipeNilai)) {
+        // APAPUN dari parser berarti "belum disimpulkan", bukan variabel dinamis.
+        // Inferensikan dari AST selama ekspresinya menghasilkan tipe konkret.
+        // Nilai kosong/unknown tetap APAPUN agar pola inisialisasi kosong lalu diisi
+        // dapat digunakan tanpa melemahkan inferensi ekspresi yang sudah diketahui.
+        const tipeDeklarasi =
+          s.tipeData === NamaTipe.APAPUN &&
+          tipeNilai !== NamaTipe.APAPUN &&
+          tipeNilai !== NamaTipe.KOSONG
+            ? tipeNilai
+            : (s.tipeData as NamaTipe);
+        if (!apakahKompatibel(tipeDeklarasi, tipeNilai)) {
           throw buatGalatKetidakcocokanTipe(
             `Deklarasi variabel '${s.nama}'`,
-            s.tipeData,
+            tipeDeklarasi,
             tipeNilai,
             s.nilaiAwal.posisi.awal
           );
         }
 
         this.lingkupSaatIni.definisikan(
-          { nama: s.nama, tipe: s.tipeData as NamaTipe, tetap: false },
+          { nama: s.nama, tipe: tipeDeklarasi, tetap: false },
           s.posisi.awal
         );
         break;
