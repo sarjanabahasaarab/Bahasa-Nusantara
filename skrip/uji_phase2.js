@@ -33,7 +33,8 @@ const invalid = read('pengujian/spesifikasi/program-tidak-valid.md');
 const indeks = read('dokumentasi/README.md');
 const nip1 = read('dokumentasi/nip/NIP-0001.md');
 
-const prinsip = konstitusi.split('\n').filter((line) => /^\d+\. \*\*/.test(line));
+const bagianPrinsip = konstitusi.split('## 2. 10 Prinsip Konstitusi Bahasa')[1]?.split('## 3. Struktur Program Resmi Awal')[0] ?? '';
+const prinsip = bagianPrinsip.split('\n').filter((line) => /^\d+\. \*\*/.test(line));
 const keywordRows = keyword.split('\n').filter((line) => /^\|\s*`[^`]+`\s*\|/.test(line));
 const keywordNames = keywordRows.map((line) => line.match(/^\|\s*`([^`]+)`/)?.[1]);
 const established = keywordRows.filter((line) => line.includes('**[DITETAPKAN]**'));
@@ -93,10 +94,10 @@ check('Contoh program konstitusi menggunakan struktur program dan blok resmi', (
 });
 check('Rencana uji NIP-0002 menunjuk berkas nyata dan skrip penerimaan Phase 2', () => {
   assert.match(nip, /pengujian\/spesifikasi\/program-valid\.nusantara/);
-  assert.match(nip, /pengujian\/spesifikasi\/kasus-tidak-valid\.md/);
+  assert.match(nip, /pengujian\/spesifikasi\/program-tidak-valid\.md/);
   assert.match(nip, /skrip\/uji_phase2\.js/);
-  assert.doesNotMatch(nip, /program-tidak-valid\.md/);
-  assert.equal((invalid.match(/^### Kasus \d+:/gm) || []).length, 15);
+  assert.doesNotMatch(nip, /pengujian\/spesifikasi\/kasus-tidak-valid\.md/);
+  assert.equal((invalid.match(/^## \d+\. Kasus:/gm) || []).length, 6);
   assert.ok(fs.existsSync(path.join(root, 'skrip/uji_phase2.js')));
 });
 check('Indeks dokumentasi memuat seluruh dokumen inti Phase 2', () => {
