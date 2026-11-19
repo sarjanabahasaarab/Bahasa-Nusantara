@@ -286,8 +286,10 @@ export class GooglePlayClient {
     track: GooglePlayTrack = 'internal',
     modeSimulasi: boolean = true
   ): Promise<HasilUploadPlay> {
-    if (!this.editIdAktif) {
-      const initEdit = await this.buatEdit(modeSimulasi);
+    // Mode simulasi boleh membuat edit lokal. Mode live harus memvalidasi file,
+    // ukuran, dan checksum terlebih dahulu sebelum membuat transaksi Google Play.
+    if (modeSimulasi && !this.editIdAktif) {
+      const initEdit = await this.buatEdit(true);
       if (!initEdit.sukses) {
         return {
           sukses: false,
@@ -297,7 +299,7 @@ export class GooglePlayClient {
           track,
           pesan: initEdit.pesan,
           waktuUpload: new Date().toISOString(),
-          modeSandbox: modeSimulasi,
+          modeSandbox: true,
         };
       }
     }
@@ -336,6 +338,22 @@ export class GooglePlayClient {
       }
       if (ukuranBytes > 0 && payloadBytes.length !== ukuranBytes) {
         throw new Error('Ukuran berkas AAB tidak cocok dengan metadata; upload dibatalkan.');
+      }
+      // Jangan membuat edit Google Play sampai artefak lokal lolos preflight penuh.
+      if (!this.editIdAktif) {
+        const initEdit = await this.buatEdit(false);
+        if (!initEdit.sukses) {
+          return {
+            sukses: false,
+            versionCode,
+            sha256,
+            ukuranBytes: payloadBytes.length,
+            track,
+            pesan: initEdit.pesan,
+            waktuUpload: new Date().toISOString(),
+            modeSandbox: false,
+          };
+        }
       }
       const authHdr = await this.pastikanHeaderOtorisasi();
 
