@@ -37,28 +37,27 @@ const contribution = read('KONTRIBUSI.md');
 const prTemplate = read('.github/PULL_REQUEST_TEMPLATE.md');
 
 check('Berkas lisensi utama memuat teks Apache License 2.0 lengkap', () => {
-  assert.match(license, /Apache License\\s+Version 2\\.0/);
-  for (let section = 1; section <= 9; section++) {
-    assert.match(license, new RegExp(`\\\\n\\\\s*${section}\\\\. `), `Bagian lisensi ${section} hilang`);
-  }
+  assert.match(license, /Apache License\s+Version 2\.0/);
+  const numberedSections = license.split('\n').filter((line) => /^\s*[1-9]\. /.test(line));
+  assert.equal(numberedSections.length, 9, 'Teks lisensi harus memuat sembilan bagian utama');
   assert.match(license, /END OF TERMS AND CONDITIONS/);
   assert.match(license, /APPENDIX: How to apply the Apache License/);
 });
 check('Panduan lisensi merujuk berkas legal utama dan menjelaskan kewajiban distribusi', () => {
-  assert.match(licenseGuide, /Apache License 2\\.0/);
+  assert.match(licenseGuide, /Apache License 2\.0/);
   assert.match(licenseGuide, /\\.\\.\\/LISENSI/);
   assert.match(licenseGuide, /Pemberitahuan Perubahan/);
   assert.match(licenseGuide, /Hibah Paten Timbal Balik/);
 });
 check('Kebijakan dependensi dan aset memisahkan lisensi proyek dari lisensi pihak ketiga', () => {
-  assert.match(licensePolicy, /Apache License 2\\.0/);
+  assert.match(licensePolicy, /Apache License 2\.0/);
   assert.match(licensePolicy, /MIT License/);
   assert.match(licensePolicy, /GPLv2, GPLv3, atau AGPL/);
   assert.match(licensePolicy, /provenance/);
-  assert.match(licensePolicy, /CC BY 4\\.0/);
+  assert.match(licensePolicy, /CC BY 4\.0/);
 });
 check('Kebijakan SemVer sesuai dengan gerbang publikasi workflow rilis', () => {
-  assert.match(releasePolicy, /MAJOR\\.MINOR\\.PATCH/);
+  assert.match(releasePolicy, /MAJOR\.MINOR\.PATCH/);
   assert.match(releasePolicy, /Tag Git Beranotasi/);
   assert.match(releasePolicy, /dry_run=false/);
   assert.match(releasePolicy, /confirm_release=true/);
@@ -66,7 +65,7 @@ check('Kebijakan SemVer sesuai dengan gerbang publikasi workflow rilis', () => {
   assert.match(releaseWorkflow, /confirm_release:/);
   assert.match(releaseWorkflow, /dry_run:/);
   assert.match(releaseWorkflow, /tags:/);
-  assert.match(releaseWorkflow, /github\\.event_name == 'workflow_dispatch'.*inputs\\.dry_run != true.*inputs\\.confirm_release == true/);
+  assert.match(releaseWorkflow, /github\.event_name == 'workflow_dispatch'.*inputs\.dry_run != true.*inputs\.confirm_release == true/);
 });
 check('Tata kelola mendefinisikan lima peran dan kewajiban tinjauan sejawat', () => {
   for (const role of ['Pengguna', 'Kontributor', 'Peninjau', 'Pemelihara', 'Pengelola Rilis']) {
@@ -93,7 +92,7 @@ check('Panduan kontribusi memakai main sebagai target yang tersedia dan menjalan
   assert.match(contribution, /bukan bukti bahwa fitur telah terimplementasi/);
 });
 check('Kebijakan keamanan tidak mengklaim secret scanning otomatis memblokir setiap komit', () => {
-  assert.doesNotMatch(security, /\\[EMAIL_ATAU_KANAL_KEAMANAN_PRIVAT\\]/);
+  assert.doesNotMatch(security, /\[EMAIL_ATAU_KANAL_KEAMANAN_PRIVAT\]/);
   assert.match(security, /Private Vulnerability Reporting/);
   assert.match(security, /status pengaktifannya belum dapat diverifikasi/i);
   assert.match(security, /push protection/);
@@ -101,7 +100,7 @@ check('Kebijakan keamanan tidak mengklaim secret scanning otomatis memblokir set
   assert.doesNotMatch(security, /Komit yang memuat rahasia akan ditolak oleh sistem/);
 });
 check('Kode etik tidak menyisakan placeholder kontak atau janji kerahasiaan yang tidak didukung', () => {
-  assert.doesNotMatch(conduct, /\\[EMAIL_ATAU_KANAL_PELAPORAN_RESMI\\]/);
+  assert.doesNotMatch(conduct, /\[EMAIL_ATAU_KANAL_PELAPORAN_RESMI\]/);
   assert.match(conduct, /belum ada alamat surel atau kanal privat proyek yang terverifikasi/i);
   assert.match(conduct, /jangan menuliskan data pribadi/i);
   assert.match(conduct, /kerahasiaan penuh sebelum kanal privat tersedia/i);
@@ -121,4 +120,4 @@ check('Templat kontribusi dan issue tracker tersedia serta mewajibkan pemeriksaa
   assert.match(prTemplate, /KODE-ETIK.md/);
 });
 
-console.log(`\\nPhase 3: ${checks.length}/${checks.length} pemeriksaan lulus.`);
+console.log(\`\nPhase 3: \${checks.length}/\${checks.length} pemeriksaan lulus.\`);
