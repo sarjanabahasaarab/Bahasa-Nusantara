@@ -1,80 +1,71 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ * NUSANTARA Phase 38 — Android adapter.
  *
- * NUSANTARA Programming Language - Phase 38
- * Adaptor Platform Android Native (Android Platform Adapter)
+ * Host-side TypeScript does not itself invoke Android framework APIs. Until a
+ * verified JNI/Capacitor/native bridge is attached, hardware operations fail closed
+ * instead of returning simulator URIs, invented sensor values, or fake keystore claims.
  */
-
 import { AdaptorPlatformNative } from './platform_adapter';
 import { AdaptorSimulatorMobile } from './simulator_adapter';
-import { HasilOperasiNative, buatHasilSukses } from '../core/result';
+import { HasilOperasiNative, buatHasilGagal, buatHasilSukses, KodeGalatNative } from '../core/result';
 import { PemeriksaHardwareHost } from '../core/hardware_probe';
-import { DetektorToolchainMobile } from '../../runtime/mobile_host';
 
 export class AdaptorAndroidMobile extends AdaptorSimulatorMobile implements AdaptorPlatformNative {
   public override readonly namaPlatform: 'android' | 'ios' | 'simulator' = 'android';
 
+  private belumTerhubung(fitur: string): HasilOperasiNative<any> {
+    return buatHasilGagal(
+      `API Android '${fitur}' belum terhubung ke implementasi Android Framework native; operasi tidak dijalankan dan tidak ada data simulasi yang dikembalikan.`,
+      KodeGalatNative.TIDAK_DIDUKUNG,
+      'tidak_didukung',
+      { platform: 'android', fitur, nativeBridgeRequired: true }
+    );
+  }
+
   public override async dapatkanInfoPerangkat(): Promise<HasilOperasiNative<any>> {
-    const res = await super.dapatkanInfoPerangkat();
     const probe = PemeriksaHardwareHost.periksaHost();
-    const tc = DetektorToolchainMobile.deteksi();
     const adbAktif = probe.perangkatADB.find((p) => p.status === 'device');
+    if (!adbAktif || !Number.isFinite(adbAktif.levelAPI)) {
+      return buatHasilGagal(
+        'Tidak ada perangkat Android/Emulator ADB yang benar-benar terhubung. Informasi perangkat tidak ditebak.',
+        KodeGalatNative.PERANGKAT_TIDAK_TERSEDIA,
+        'perangkat_tidak_tersedia',
+        { platform: 'android', perangkatADB: probe.perangkatADB.length }
+      );
+    }
     return buatHasilSukses({
-      ...res.data,
       platform: 'android',
-      levelAPI: adbAktif?.levelAPI ?? 34,
-      namaVersi: adbAktif ? `Android API ${adbAktif.levelAPI ?? 34}` : 'Android 14 (Upside Down Cake)',
-      model: adbAktif?.model || res.data.model,
-      arsitektur: 'arm64-v8a',
-      keystoreTersedia: true,
-      scopedStorageAktif: true,
-      perangkatFisikTerhubung: Boolean(adbAktif),
-      adbSerial: adbAktif?.serial || null,
-      androidSdkTersedia: tc.android.siapKompilasiNative,
-      sumberData: adbAktif ? 'ADB_DEVICE_REAL' : 'KONTRAK_ANDROID_TOOLCHAIN_TIDAK_TERHUBUNG',
-    }, 'Informasi perangkat Android berhasil diperoleh.');
+      levelAPI: adbAktif.levelAPI,
+      model: adbAktif.model,
+      adbSerial: adbAktif.serial,
+      perangkatFisikTerhubung: true,
+      sumberData: 'ADB_DEVICE_REAL',
+    }, 'Perangkat Android terdeteksi melalui ADB.');
   }
 
-  public override async ambilFoto(opsi?: { kamera?: 'depan' | 'belakang'; flash?: boolean; kualitas?: number }): Promise<HasilOperasiNative<any>> {
-    const probe = PemeriksaHardwareHost.periksaHost();
-    const adbAktif = probe.perangkatADB.find((p) => p.status === 'device');
-    return buatHasilSukses({
-      uri: `content://id.nusantara.app.fileprovider/cache/IMG_${Date.now()}.jpg`,
-      lebar: 1920,
-      tinggi: 1080,
-      format: 'image/jpeg',
-      kamera: opsi?.kamera || 'belakang',
-      kontrakAndroid: 'androidx.activity.result.contract.ActivityResultContracts.TakePicture',
-      perangkatFisikTerhubung: Boolean(adbAktif),
-      sumberData: adbAktif ? 'ADB_CAMERA_BRIDGE' : 'KONTRAK_ANDROID_TANPA_PERANGKAT',
-    }, 'Foto berhasil diambil melalui Android Camera Intent.');
-  }
-
-  public override async pilihMedia(opsi?: { tipe?: 'foto' | 'video' | 'semua'; maksPilihan?: number }): Promise<HasilOperasiNative<any>> {
-    const probe = PemeriksaHardwareHost.periksaHost();
-    const adbAktif = probe.perangkatADB.find((p) => p.status === 'device');
-    return buatHasilSukses({
-      item: [
-        {
-          uri: `content://media/picker/image/${Date.now()}`,
-          tipeMime: 'image/jpeg',
-          nama: 'foto_terpilih.jpg',
-        },
-      ],
-      jumlah: 1,
-      kontrakAndroid: 'androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia',
-      perangkatFisikTerhubung: Boolean(adbAktif),
-      sumberData: adbAktif ? 'ADB_MEDIA_PICKER_CONTRACT' : 'KONTRAK_ANDROID_TANPA_PERANGKAT',
-    }, 'Media berhasil dipilih via Android Photo Picker.');
-  }
-
-  public override async simpanAman(kunci: string, nilai: string): Promise<HasilOperasiNative<any>> {
-    const res = await super.simpanAman(kunci, nilai);
-    if (!res.sukses) return res;
-    return buatHasilSukses({
-      ...res.data,
-      penyimpanan: 'EncryptedSharedPreferences (Android Keystore MasterKey AES-256-GCM)',
-    }, 'Data sensitif berhasil disimpan di Android Keystore.');
-  }
+  public override async ambilFoto(_opsi?: { kamera?: 'depan' | 'belakang'; flash?: boolean; kualitas?: number }): Promise<HasilOperasiNative<any>> { return this.belumTerhubung('kamera.ambil'); }
+  public override async pilihMedia(_opsi?: { tipe?: 'foto' | 'video' | 'semua'; maksPilihan?: number }): Promise<HasilOperasiNative<any>> { return this.belumTerhubung('galeri.pilih'); }
+  public override async dapatkanLokasi(_opsi?: { akurasiTinggi?: boolean; timeoutMs?: number }): Promise<HasilOperasiNative<any>> { return this.belumTerhubung('lokasi.ambil'); }
+  public override async jadwalkanNotifikasi(_notif: { id: string; judul: string; pesan: string; tundaDetik?: number }): Promise<HasilOperasiNative<any>> { return this.belumTerhubung('notifikasi.jadwal'); }
+  public override async batalkanNotifikasi(_id: string): Promise<HasilOperasiNative<any>> { return this.belumTerhubung('notifikasi.batal'); }
+  public override async bacaSensor(_sensor: 'akselerometer' | 'giroskop' | 'magnetometer' | 'kedekatan' | 'cahaya'): Promise<HasilOperasiNative<any>> { return this.belumTerhubung('sensor.baca'); }
+  public override async pindaiBluetooth(_opsi?: { durasiMs?: number }): Promise<HasilOperasiNative<any>> { return this.belumTerhubung('bluetooth.pindai'); }
+  public override async dapatkanStatusBaterai(): Promise<HasilOperasiNative<any>> { return this.belumTerhubung('baterai.info'); }
+  public override async dapatkanStatusJaringan(): Promise<HasilOperasiNative<any>> { return this.belumTerhubung('jaringan.status'); }
+  public override async putarAudio(_urlAtauPath: string): Promise<HasilOperasiNative<any>> { return this.belumTerhubung('audio.putar'); }
+  public override async rekamAudio(_opsi?: { durasiMaksDetik?: number }): Promise<HasilOperasiNative<any>> { return this.belumTerhubung('audio.rekam'); }
+  public override async hentikanAudio(): Promise<HasilOperasiNative<any>> { return this.belumTerhubung('audio.hentikan'); }
+  public override async bacaBerkas(_jalur: string): Promise<HasilOperasiNative<any>> { return this.belumTerhubung('berkas.baca'); }
+  public override async tulisBerkas(_jalur: string, _konten: string): Promise<HasilOperasiNative<any>> { return this.belumTerhubung('berkas.tulis'); }
+  public override async hapusBerkas(_jalur: string): Promise<HasilOperasiNative<any>> { return this.belumTerhubung('berkas.hapus'); }
+  public override async salinTeks(_teks: string): Promise<HasilOperasiNative<any>> { return this.belumTerhubung('clipboard.salin'); }
+  public override async tempelTeks(): Promise<HasilOperasiNative<any>> { return this.belumTerhubung('clipboard.tempel'); }
+  public override async bagikan(_opsi: { judul?: string; teks?: string; url?: string; jalurBerkas?: string }): Promise<HasilOperasiNative<any>> { return this.belumTerhubung('share.bagikan'); }
+  public override async simpanAman(_kunci: string, _nilai: string): Promise<HasilOperasiNative<any>> { return this.belumTerhubung('keystore.simpan'); }
+  public override async ambilAman(_kunci: string): Promise<HasilOperasiNative<any>> { return this.belumTerhubung('keystore.ambil'); }
+  public override async hapusAman(_kunci: string): Promise<HasilOperasiNative<any>> { return this.belumTerhubung('keystore.hapus'); }
+  public override async getar(_durasiMs?: number): Promise<HasilOperasiNative<any>> { return this.belumTerhubung('haptik.getar'); }
+  public override async haptik(_pola?: string): Promise<HasilOperasiNative<any>> { return this.belumTerhubung('haptik.pola'); }
 }
