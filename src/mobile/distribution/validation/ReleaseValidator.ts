@@ -195,14 +195,17 @@ export class ReleaseValidator {
         wajib: true,
       });
     } else {
+      const pesanLingkungan = `Host saat ini adalah '${typeof process !== 'undefined' ? process.platform : 'browser'}'. Ekspor archive native iOS memerlukan macOS dengan Xcode.`;
       checklist.push({
         id: 'ios-environment',
         kategori: 'ios',
         judul: 'Lingkungan Host Kompilasi Xcode macOS',
-        status: 'peringatan',
-        pesan: `Host saat ini adalah '${typeof process !== 'undefined' ? process.platform : 'browser'}'. Ekspor archive native iOS memerlukan macOS dengan Xcode.`,
-        wajib: false,
+        status: konfig.lingkungan === 'production' ? 'gagal' : 'peringatan',
+        pesan: pesanLingkungan,
+        // Wajib untuk kesiapan rilis lintas platform: warning di staging tetap berarti iOS belum siap.
+        wajib: true,
       });
+      masalahIOS.push(pesanLingkungan);
     }
 
     // 2.4 iOS Code Signing Config
@@ -314,7 +317,8 @@ export class ReleaseValidator {
     const totalPeringatan = checklist.filter((c) => c.status === 'peringatan').length;
     const totalGagal = checklist.filter((c) => c.status === 'gagal').length;
 
-    const siapRilis = totalGagal === 0;
+    // Peringatan pada pemeriksaan wajib tidak boleh menghasilkan status SIAP DIRILIS.
+    const siapRilis = checklist.every((item) => !item.wajib || item.status === 'lulus');
 
     return {
       waktuPemeriksaan: new Date().toISOString(),
