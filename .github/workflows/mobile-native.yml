@@ -47,15 +47,15 @@ jobs:
           sdkmanager "platform-tools" "build-tools;35.0.0" "platforms;android-35" "emulator" "system-images;android-35;google_apis;x86_64"
           echo "$ANDROID_HOME/build-tools/35.0.0" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
-          echo "no" | avdmanager create avd --force --name nusantara-api35 --package "system-images;android-35;google_apis;x86_64" --device pixel_2
+          echo "no" | avdmanager create avd --force --name nusantara-api35 --package "system-images;android-35;google_apis;x86_64"
       - name: Build real APK and AAB with ephemeral release key
         shell: bash
         run: |
           set -euo pipefail
           KEYSTORE="$RUNNER_TEMP/nusantara-ephemeral.jks"
           STORE_PASS="$(openssl rand -hex 24)"
-          KEY_PASS="$(openssl rand -hex 24)"
-          keytool -genkeypair -noprompt -keystore "$KEYSTORE" -storepass "$STORE_PASS" -keypass "$KEY_PASS" -alias nusantara_ci -keyalg RSA -keysize 2048 -validity 2 -dname "CN=Nusantara CI,O=Nusantara,C=ID"
+          KEY_PASS="$STORE_PASS"
+          keytool -genkeypair -noprompt -storetype JKS -keystore "$KEYSTORE" -storepass "$STORE_PASS" -keypass "$KEY_PASS" -alias nusantara_ci -keyalg RSA -keysize 2048 -validity 2 -dname "CN=Nusantara CI,O=Nusantara,C=ID"
           export NUSANTARA_ANDROID_KEYSTORE="$KEYSTORE"
           export NUSANTARA_ANDROID_KEY_ALIAS=nusantara_ci
           export NUSANTARA_ANDROID_STORE_PASSWORD="$STORE_PASS"
