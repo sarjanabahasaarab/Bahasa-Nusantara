@@ -320,6 +320,15 @@ uji('inferensi tipe definisi non-literal tetap spesifik dan aman', () => {
   samaDengan(tolakDaftarKeBilangan, true, 'Variabel hasil literal daftar harus tetap bertipe daftar');
 });
 
+uji('anotasi eksplisit apapun tetap dinamis dan tidak dipersempit oleh inferensi', () => {
+  const output = jalankan(`
+    definisi nilai: apapun = "Halo"
+    nilai = 123
+    tampilkan(nilai)
+  `);
+  samaDengan(output[0], '123', 'Anotasi apapun eksplisit harus tetap menerima tipe lain');
+});
+
 uji('definisi kosong dapat diisi kemudian tanpa mengubah inferensi ekspresi konkret', () => {
   const sumber = `
     definisi angka = [1, 2, 3]
