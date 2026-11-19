@@ -34,6 +34,6 @@ Contoh:
 ## 3. Komponen Rilis Resmi
 
 Setiap rilis resmi NUSANTARA terdiri dari:
-1. **Tag Git Beranotasi (*Annotated Git Tag*):** Ditandai dengan prefiks `v` (misal: `v0.3.0`). **Tag tidak boleh dibuat secara otomatis oleh skrip** tanpa persetujuan eksplisit maintainer.
+1. **Tag Git Beranotasi (*Annotated Git Tag*):** Ditandai dengan prefiks `v` (misal: `v0.3.0`). Tag dibuat setelah persetujuan maintainer; workflow `.github/workflows/release.yml` memulai validasi/build ketika tag `v*.*.*` didorong. Dorongan tag saja tidak memublikasikan GitHub Release: job publikasi dibatasi untuk pemanggilan `workflow_dispatch` dengan `dry_run=false` dan `confirm_release=true`.
 2. **Catatan Perubahan (Changelog):** Rincian fitur baru, perbaikan, dan kredit kontributor yang dicatat di [PERUBAHAN.md](../PERUBAHAN.md).
 3. **GitHub Release:** Paket publikasi resmi di portal GitHub yang merangkum changelog dan menyediakan artefak yang dapat diunduh (pada fase biner).
