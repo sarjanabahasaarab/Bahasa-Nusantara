@@ -175,15 +175,15 @@ jobs:
           set -euo pipefail
           brew install xcodegen
           xcodegen generate --spec native/ios/project.yml --project native/ios/NusantaraMobile.xcodeproj
-          xcodebuild -project native/ios/NusantaraMobile.xcodeproj -scheme NusantaraMobile -sdk iphonesimulator -configuration Debug -derivedDataPath "$RUNNER_TEMP/nusantara-ios-derived" CODE_SIGNING_ALLOWED=NO build
+          SIM_UDID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for group in d["devices"].values() for x in group if x.get("isAvailable") and x["name"].startswith("iPhone")))')
+          xcrun simctl boot "$SIM_UDID" 2>/dev/null || true
+          xcrun simctl bootstatus "$SIM_UDID" -b
+          xcodebuild test -project native/ios/NusantaraMobile.xcodeproj -scheme NusantaraMobile -destination "platform=iOS Simulator,id=$SIM_UDID" -derivedDataPath "$RUNNER_TEMP/nusantara-ios-derived" CODE_SIGNING_ALLOWED=NO
           APP_PATH="$RUNNER_TEMP/nusantara-ios-derived/Build/Products/Debug-iphonesimulator/NUSANTARA.app"
           test -d "$APP_PATH"
           EXECUTABLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_PATH/Info.plist")
           test -s "$APP_PATH/$EXECUTABLE"
           file "$APP_PATH/$EXECUTABLE" | grep -E 'Mach-O'
-          SIM_UDID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for group in d["devices"].values() for x in group if x.get("isAvailable") and x["name"].startswith("iPhone")))')
-          xcrun simctl boot "$SIM_UDID" 2>/dev/null || true
-          xcrun simctl bootstatus "$SIM_UDID" -b
           xcrun simctl install "$SIM_UDID" "$APP_PATH"
           xcrun simctl launch "$SIM_UDID" id.nusantara.mobile
       - name: Upload iOS Simulator app
