@@ -6,6 +6,8 @@
  * No built-in/example release key is trusted. Production keys must be provisioned
  * from a separately controlled, authenticated release process.
  */
+import { HashValidator } from './HashValidator';
+
 export interface KunciPublikTepercaya {
   keyId: string;
   algoritma: 'Ed25519' | 'RSA-SHA256' | 'HMAC-SHA256';
@@ -35,6 +37,7 @@ export class TrustManager {
     if (!['Ed25519', 'RSA-SHA256'].includes(kunci.algoritma)) return false;
     if (!/^[a-fA-F0-9]{64}$/.test(kunci.kunciPublikHex || '')) return false;
     if (typeof kunci.kunciPublikPem !== 'string' || !kunci.kunciPublikPem.includes('-----BEGIN PUBLIC KEY-----')) return false;
+    if (HashValidator.hitungSHA256(kunci.kunciPublikPem) !== kunci.kunciPublikHex.toLowerCase()) return false;
     if (!kunci.deskripsi || !Number.isFinite(Date.parse(kunci.tanggalDibuat))) return false;
     if (kunci.kedaluwarsa && !Number.isFinite(Date.parse(kunci.kedaluwarsa))) return false;
     return true;
