@@ -154,6 +154,7 @@ async function jalankanSemuaPengujian() {
           jalurRelatif: 'assets/payload.dex',
           sha256: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
           ukuranByte: 1024,
+          konten: JSON.stringify({ nama: 'Tema Garuda Uji', mode: 'gelap' }),
         },
       ],
     };
@@ -259,16 +260,23 @@ async function jalankanSemuaPengujian() {
 
   // --- 6. Store Updates Bridges ---
   console.log('\n[KELOMPOK 6] Integrasi Toko Aplikasi (Google Play & Apple App Store)');
-  await uji('Google Play In-App Updates simulasi ketersediaan dan mode', () => {
+  await uji('Google Play hanya membandingkan versionCode yang diberikan dan tidak mengklaim Play Core berjalan', () => {
     const st = GooglePlayInAppUpdate.periksaKetersediaan('id.nusantara.demo', 100, 102);
-    tegas(st.tersedia === true, 'Pembaruan Play Store harus terdeteksi');
-    tegas(st.flexibleAllowed === true && st.immediateAllowed === true, 'Kedua mode harus diizinkan');
+    tegas(st.tersedia === true, 'Perbandingan versionCode yang diberikan harus benar');
+    tegas(st.flexibleAllowed === false && st.immediateAllowed === false, 'Mode update tidak boleh aktif tanpa Play Core native');
+    const flow = GooglePlayInAppUpdate.mulaiAlurUpdate('id.nusantara.demo', 'FLEXIBLE');
+    tegas(flow.sukses === false, 'Mulai update harus gagal tertutup tanpa Play Core bridge');
+    tegas(GooglePlayInAppUpdate.periksaKetersediaan('id.nusantara.demo', 100).tersedia === false, 'Tanpa versionCode remote, ketersediaan tidak boleh ditebak');
   });
 
-  await uji('Apple App Store Update bridge menghasilkan deep link resmi', () => {
+  await uji('Apple App Store tidak menebak versi remote dan hanya menyiapkan URL', () => {
     const st = AppleAppStoreUpdate.periksaKetersediaan('id.nusantara.demo', '1.0.0', '1.1.0');
-    tegas(st.tersedia === true, 'Pembaruan App Store harus terdeteksi');
+    tegas(st.tersedia === true, 'Perbandingan versi yang diberikan harus benar');
     tegas(st.appStoreUrl.startsWith('https://apps.apple.com/app/'), 'URL App Store resmi harus dihasilkan');
+    const unknown = AppleAppStoreUpdate.periksaKetersediaan('id.nusantara.demo', '1.0.0');
+    tegas(unknown.tersedia === false, 'Tanpa versi remote, status update tidak boleh ditebak');
+    const handoff = AppleAppStoreUpdate.arahkanKeAppStore('id.nusantara.demo');
+    tegas(handoff.sukses === true && handoff.dibuka === false, 'Pembuatan URL tidak boleh mengklaim App Store sudah dibuka');
   });
 
   // --- 7. UpdateManager Facade & Laporan ---
