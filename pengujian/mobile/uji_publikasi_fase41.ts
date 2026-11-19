@@ -901,8 +901,10 @@ async function jalankanSemuaPengujianFase41() {
         defaultTrack: 'internal',
         autoCommitEdit: false,
         endpointApi: `http://127.0.0.1:${errAddr.port}/play`,
+        bearerTokenAkses: 'loopback-error-test-token',
       });
-      await gpErr.buatEdit(false);
+      const editErr = await gpErr.buatEdit(false);
+      pastikan(editErr.sukses, 'Fixture HTTP 500 harus memiliki Edit aktif sebelum menguji kegagalan GET track');
       let threwStatus = false;
       try {
         await gpErr.dapatkanStatusTrack('internal', false);
