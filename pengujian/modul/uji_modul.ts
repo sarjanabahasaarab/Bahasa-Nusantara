@@ -552,7 +552,7 @@ uji('Menyajikan informasi modul, baris, dan kolom saat terjadi error pembagian d
   const fs = new PembacaBerkasMemori({
     '/proyek/matematika.nusantara': `modul matematika
 
-ekspor fungsi bagi(a : bilangan, b : bilangan) : bilangan
+ekspor fungsi bagi(a : bilangan, b : bilangan) : desimal
 mulai
     kembalikan a / b
 selesai`,
@@ -700,7 +700,7 @@ uji('Jejak tumpukan pemanggilan (Stack Trace) mempertahankan riwayat konteks mod
   const fs = new PembacaBerkasMemori({
     '/proyek/kalkulator.nusantara': `modul kalkulator
 
-ekspor fungsi hitung(x : bilangan, y : bilangan) : bilangan
+ekspor fungsi hitung(x : bilangan, y : bilangan) : desimal
 mulai
     kembalikan x / y
 selesai`,
