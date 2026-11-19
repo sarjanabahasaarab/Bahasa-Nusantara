@@ -296,12 +296,15 @@ uji('inferensi tipe definisi non-literal tetap spesifik dan aman', () => {
     definisi depan = "Halo"
     definisi sapaan = depan + " Dunia"
     definisi angka = [1, 2, 3]
+    definisi pecahan = 7 / 2
     tampilkan(sapaan)
     tampilkan(angka)
+    tampilkan(pecahan)
   `;
   const output = jalankan(sumber);
   samaDengan(output[0], 'Halo Dunia');
   samaDengan(output[1], '[1, 2, 3]');
+  samaDengan(output[2], '3.5', 'Inferensi pembagian bilangan harus menghasilkan desimal');
 
   let tolakTeksKeBilangan = false;
   try {
