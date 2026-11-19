@@ -713,15 +713,21 @@ exit 0
 
     const res = safeCP.spawnSync(ps.command, psArgs, {
       encoding: 'utf-8',
-      timeout: 30000,
+      // PowerShell cold-start dan .NET crypto provider pada runner ARM64 dapat
+      // memerlukan waktu lebih lama; timeout terlalu pendek memberi exit tanpa
+      // diagnostik dan membuat sandbox installer gagal secara nondeterministik.
+      timeout: 120000,
       shell: false,
     });
 
+    const diagnostic = res.error
+      ? (res.error.message || String(res.error))
+      : '';
     return {
       success: res.status === 0,
       exitCode: res.status,
       stdout: res.stdout || '',
-      stderr: res.stderr || '',
+      stderr: [res.stderr || '', diagnostic].filter(Boolean).join('\\n'),
       shellUsed: ps.command,
       shellVersion: ps.version,
     };
