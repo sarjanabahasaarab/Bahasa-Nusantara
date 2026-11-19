@@ -168,23 +168,35 @@ async function jalankanSemuaPengujian() {
 
   // --- 3. Digital Signature & Trust Manager ---
   console.log('\n[KELOMPOK 3] Tanda Tangan Digital & Trust Manager');
-  await uji('TrustManager memuat root keys dan menolak kunci tidak terdaftar', () => {
+  await uji('TrustManager tidak mempercayai root key placeholder dan menolak kunci tidak terdaftar', () => {
     const tm = TrustManager.dapatkanInstance();
-    tegas(tm.apakahKunciDipercaya('nusantara-root-release-2026') === true, 'Root key 2026 harus dipercaya');
+    tegas(tm.apakahKunciDipercaya('nusantara-root-release-2026') === false, 'Placeholder root key tidak boleh dipercaya otomatis');
     tegas(tm.apakahKunciDipercaya('kunci-penyerang-palsu') === false, 'Kunci tidak terdaftar harus ditolak');
   });
 
-  await uji('Pembuatan dan verifikasi Tanda Tangan Digital Kanonikal', () => {
-    const signed = SignatureVerifier.tandaTangani(validManifest, 'nusantara-root-release-2026');
+  await uji('Pembuatan dan verifikasi tanda tangan kanonikal memakai Ed25519 nyata', () => {
+    const keys = SignatureVerifier.buatPasanganKunciEd25519();
+    const keyId = 'phase42-canonical-test-key';
+    TrustManager.dapatkanInstance().daftarkanKunci({
+      keyId, algoritma: 'Ed25519', kunciPublikHex: keys.fingerprintHex,
+      kunciPublikPem: keys.kunciPublikPem, deskripsi: 'Ephemeral test key',
+      tanggalDibuat: new Date().toISOString(), aktif: true,
+    });
+    const signed = SignatureVerifier.tandaTangani(validManifest, keyId, keys.kunciPrivatPem, 'Ed25519');
     tegas(signed.tandaTangan !== undefined, 'Tanda tangan harus ditambahkan ke manifest');
-
     const verif = SignatureVerifier.verifikasi(signed);
-    tegas(verif.valid === true, `Verifikasi tanda tangan harus valid: ${verif.pesan}`);
+    tegas(verif.valid === true, `Verifikasi Ed25519 harus valid: ${verif.pesan}`);
   });
 
-  await uji('Deteksi Pemalsuan Manifest (Tamper Detection)', () => {
-    const signed = SignatureVerifier.tandaTangani(validManifest, 'nusantara-root-release-2026');
-    // Palsukan isi manifest setelah ditandatangani
+  await uji('Deteksi pemalsuan manifest setelah penandatanganan Ed25519', () => {
+    const keys = SignatureVerifier.buatPasanganKunciEd25519();
+    const keyId = 'phase42-tamper-test-key';
+    TrustManager.dapatkanInstance().daftarkanKunci({
+      keyId, algoritma: 'Ed25519', kunciPublikHex: keys.fingerprintHex,
+      kunciPublikPem: keys.kunciPublikPem, deskripsi: 'Ephemeral tamper test key',
+      tanggalDibuat: new Date().toISOString(), aktif: true,
+    });
+    const signed = SignatureVerifier.tandaTangani(validManifest, keyId, keys.kunciPrivatPem, 'Ed25519');
     const dipalsukan = { ...signed, releaseVersion: '0.99.0-hacked' };
     const verif = SignatureVerifier.verifikasi(dipalsukan);
     tegas(verif.valid === false, 'Manifest yang dimodifikasi setelah penandatanganan harus ditolak');
