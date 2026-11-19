@@ -503,6 +503,9 @@ async function jalankanSemuaPengujianFase41() {
     const kodeKoneksiIos = MobileCLI.jalankan(['store', 'koneksi', 'ios']);
     pastikan(kodeKoneksiIos === 1, 'CLI koneksi iOS harus menolak status terhubung tanpa respons App Store Connect nyata');
 
+    const kodePlayUpload = MobileCLI.jalankan(['store', 'android', 'upload']);
+    pastikan(kodePlayUpload === 1, 'CLI upload Android harus menolak klaim sukses sebelum terhubung ke GooglePlayClient');
+
     // nusantara mobile store android metadata, validasi, track
     const kodePlayMeta = MobileCLI.jalankan(['store', 'android', 'metadata']);
     pastikan(kodePlayMeta === 0, 'Perintah CLI "store android metadata" harus keluar kode 0');
@@ -519,7 +522,7 @@ async function jalankanSemuaPengujianFase41() {
 
     // nusantara mobile store android release production (dengan --setujui harus berhasil)
     const kodePlayProdDisetujui = MobileCLI.jalankan(['store', 'android', 'release', 'production', '--setujui']);
-    pastikan(kodePlayProdDisetujui === 0, 'Rilis production dengan --setujui harus berhasil disetujui');
+    pastikan(kodePlayProdDisetujui === 1, 'Persetujuan CLI saja tidak boleh mengklaim rilis production terkirim tanpa permintaan API Google Play');
 
     // nusantara mobile store ios metadata, validasi, testflight
     const kodeIosMeta = MobileCLI.jalankan(['store', 'ios', 'metadata']);
