@@ -48,7 +48,7 @@ export class AABBuilder {
       execFileSync(gradle, ['--no-daemon', '-p', projectDir, ':app:bundle' + variant, '-PapplicationId=' + konfig.aplikasi.id], { stdio: 'pipe', timeout: 12 * 60 * 1000, env: process.env });
       if (!fs.existsSync(output)) throw new Error('Gradle selesai tetapi AAB output tidak ditemukan: ' + output);
       const listing = execFileSync('unzip', ['-Z1', output], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).split(/\r?\n/);
-      if (!listing.includes('BundleConfig.pb') || !listing.some((x) => /^base\/dex\/classes(\\d+)?\\.dex$/.test(x)) || !listing.includes('base/manifest/AndroidManifest.xml')) {
+      if (!listing.includes('BundleConfig.pb') || !listing.some((x) => /^base\/dex\/classes(\d+)?\.dex$/.test(x)) || !listing.includes('base/manifest/AndroidManifest.xml')) {
         throw new Error('AAB tidak memiliki BundleConfig.pb, DEX, atau base manifest native.');
       }
       const bytes = fs.readFileSync(output);
