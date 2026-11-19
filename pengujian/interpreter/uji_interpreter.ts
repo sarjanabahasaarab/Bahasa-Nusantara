@@ -246,11 +246,24 @@ uji('Fungsi rekursif faktorial', () => {
 
 // 11. UJI PENANGANAN KESALAHAN RUNTIME
 console.log('\n--- Kelompok 11: Penanganan Kesalahan Runtime ---');
+uji('Pembagian bilangan bulat menghasilkan desimal sesuai nilai runtime', () => {
+  const output = jalankan(`definisi hasil: desimal = 7 / 2\ntampilkan(hasil)`);
+  samaDengan(output[0], '3.5', '7 / 2 harus menghasilkan 3.5');
+
+  let menolakBilangan = false;
+  try {
+    jalankan(`definisi hasil: bilangan = 7 / 2\ntampilkan(hasil)`);
+  } catch {
+    menolakBilangan = true;
+  }
+  samaDengan(menolakBilangan, true, 'Hasil pembagian tidak boleh ditetapkan sebagai bilangan bulat');
+});
+
 uji('Menangani pembagian dengan nol', () => {
   const sumber = `
   program BagiNol
   mulai
-      x : bilangan = 10 / 0
+      x : desimal = 10 / 0
   selesai`;
   let terjadiGalat = false;
   try {
@@ -276,6 +289,46 @@ uji('Menangani variabel belum didefinisikan', () => {
     samaDengan(e.jenis, JenisGalatRuntime.VARIABEL_TIDAK_DITEMUKAN);
   }
   samaDengan(terjadiGalat, true, 'Harus membangkitkan galat saat variabel tidak ditemukan');
+});
+
+uji('inferensi tipe definisi non-literal tetap spesifik dan aman', () => {
+  const sumber = `
+    definisi depan = "Halo"
+    definisi sapaan = depan + " Dunia"
+    definisi angka = [1, 2, 3]
+    tampilkan(sapaan)
+    tampilkan(angka)
+  `;
+  const output = jalankan(sumber);
+  samaDengan(output[0], 'Halo Dunia');
+  samaDengan(output[1], '[1, 2, 3]');
+
+  let tolakTeksKeBilangan = false;
+  try {
+    jalankan(`definisi depan = "Halo"\ndefinisi sapaan = depan + " Dunia"\nsapaan = 123`);
+  } catch {
+    tolakTeksKeBilangan = true;
+  }
+  samaDengan(tolakTeksKeBilangan, true, 'Variabel hasil gabungan teks harus tetap bertipe teks');
+
+  let tolakDaftarKeBilangan = false;
+  try {
+    jalankan(`definisi angka = [1, 2, 3]\nangka = 10`);
+  } catch {
+    tolakDaftarKeBilangan = true;
+  }
+  samaDengan(tolakDaftarKeBilangan, true, 'Variabel hasil literal daftar harus tetap bertipe daftar');
+});
+
+uji('definisi kosong dapat diisi kemudian tanpa mengubah inferensi ekspresi konkret', () => {
+  const sumber = `
+    definisi angka = [1, 2, 3]
+    definisi hasil = kosong
+    hasil = panjang(angka)
+    tampilkan(hasil)
+  `;
+  const output = jalankan(sumber);
+  samaDengan(output[0], '3');
 });
 
 // REKAPITULASI HASIL
