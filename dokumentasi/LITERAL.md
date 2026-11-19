@@ -44,6 +44,8 @@ Di dalam literal `teks`, karakter khusus wajib diawali oleh garis miring terbali
 4. **`\t` (Tabulasi Horizontal):** Menghasilkan jarak tab.
    - Contoh: `"Kolom 1\tKolom 2"`
 
+5. **`\\r` (Carriage Return):** Menghasilkan karakter CR sesuai spesifikasi token.
+
 ---
 
 ## 4. Status Terbuka: Sintaks Literal Karakter Tunggal
