@@ -278,6 +278,46 @@ uji('Menangani variabel belum didefinisikan', () => {
   samaDengan(terjadiGalat, true, 'Harus membangkitkan galat saat variabel tidak ditemukan');
 });
 
+uji('inferensi tipe definisi non-literal tetap spesifik dan aman', () => {
+  const sumber = `
+    definisi depan = "Halo"
+    definisi sapaan = depan + " Dunia"
+    definisi angka = [1, 2, 3]
+    tampilkan(sapaan)
+    tampilkan(angka)
+  `;
+  const output = jalankan(sumber);
+  samaDengan(output[0], 'Halo Dunia');
+  samaDengan(output[1], '[1, 2, 3]');
+
+  let tolakTeksKeBilangan = false;
+  try {
+    jalankan(`definisi depan = "Halo"\ndefinisi sapaan = depan + " Dunia"\nsapaan = 123`);
+  } catch {
+    tolakTeksKeBilangan = true;
+  }
+  samaDengan(tolakTeksKeBilangan, true, 'Variabel hasil gabungan teks harus tetap bertipe teks');
+
+  let tolakDaftarKeBilangan = false;
+  try {
+    jalankan(`definisi angka = [1, 2, 3]\nangka = 10`);
+  } catch {
+    tolakDaftarKeBilangan = true;
+  }
+  samaDengan(tolakDaftarKeBilangan, true, 'Variabel hasil literal daftar harus tetap bertipe daftar');
+});
+
+uji('definisi kosong dapat diisi kemudian tanpa mengubah inferensi ekspresi konkret', () => {
+  const sumber = `
+    definisi angka = [1, 2, 3]
+    definisi hasil = kosong
+    hasil = panjang(angka)
+    tampilkan(hasil)
+  `;
+  const output = jalankan(sumber);
+  samaDengan(output[0], '3');
+});
+
 // REKAPITULASI HASIL
 console.log('\n-----------------------------------------------------------------------------');
 const jumlahLulus = daftarHasil.filter(h => h.lulus).length;
