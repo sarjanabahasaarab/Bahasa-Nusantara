@@ -305,7 +305,7 @@ try {
       jobEvidences: jobs,
       testSuiteStatuses: { staticChecks: 'PASS', testSuite: 'PASS', qualityGate: 'PASS' },
     });
-    pastikan(lap.overallStatus === 'PARTIAL' && lap.certificationVerdict === 'PARTIAL', `Harus PARTIAL, dapat ${lap.overallStatus}`);
+    pastikan(lap.overallStatus === 'PARTIAL' && lap.certificationVerdict === 'PARTIAL', `Harus PARTIAL, dapat ${lap.overallStatus}; counts=${JSON.stringify(lap.counts)}; fase=${JSON.stringify(Object.fromEntries(Object.entries(lap.phases).map(([id, p]) => [id, p.status])))}; blockers=${lap.blockers.join(' | ')}`);
     pastikan(lap.gatePassed === false && lap.exitCode === 1, 'PARTIAL dilarang lulus gate!');
     pastikan(lap.phases['36'].status === 'NOT_VERIFIED', 'Xvfb virtual harus menjaga Phase 36 tidak mengklaim physical hardware PASS');
     pastikan(lap.phases['37'].status === 'NOT_VERIFIED' && lap.phases['40'].status === 'NOT_VERIFIED', 'APK struktural tidak boleh meluluskan Phase 37/40');
@@ -326,7 +326,7 @@ try {
       jobEvidences: buatJobEvidencesFullPass(),
       testSuiteStatuses: { staticChecks: 'PASS', testSuite: 'PASS', qualityGate: 'PASS', releaseTagPolicyBlocked: true },
     });
-    pastikan(lapBlocked.overallStatus === 'BLOCKED' && lapBlocked.exitCode === 1 && !lapBlocked.gatePassed, 'Status BLOCKED harus gagal');
+    pastikan(lapBlocked.overallStatus === 'BLOCKED' && lapBlocked.exitCode === 1 && !lapBlocked.gatePassed, `Status BLOCKED harus gagal; dapat ${lapBlocked.overallStatus}; counts=${JSON.stringify(lapBlocked.counts)}; fase=${JSON.stringify(Object.fromEntries(Object.entries(lapBlocked.phases).map(([id, p]) => [id, p.status])))}; blockers=${lapBlocked.blockers.join(' | ')}`);
   });
 
   uji('8. Evaluasi snapshot nyata di disk (artifacts/phase23 + artifacts/demo-terpadu) jujur berstatus PARTIAL', () => {
