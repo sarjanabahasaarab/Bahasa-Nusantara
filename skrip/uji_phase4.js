@@ -63,7 +63,7 @@ check('Urutan produksi ekspresi mengikuti presedensi operator', () => {
 });
 check('Blok kondisi dan perulangan mewajibkan akhir', () => {
   for (const rule of ['percabangan_jika','perulangan_untuk','perulangan_selama']) assert.match(grammar, new RegExp(rule + ' =[^;]*"akhir"', 's'));
-  assert.match(blocks, /Penutup.*akhir Wajib/);
+  assert.ok(blocks.includes('Penutup `akhir` Wajib'), 'Aturan blok harus menyatakan penutup akhir wajib');
 });
 check('Fungsi memakai parameter bertipe, blok, dan kembalikan', () => {
   assert.match(grammar, /deklarasi_fungsi\s*=.*blok_utama/s);
