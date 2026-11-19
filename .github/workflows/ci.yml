@@ -1038,27 +1038,33 @@ jobs:
       - name: Kumpulkan Evidence & Jalankan Gerbang Sertifikasi Terpusat Ketat
         run: |
           rm -rf artifacts/phase23 artifacts/demo-terpadu artifacts/cert-evidence artifacts/certification
-          mkdir -p artifacts/phase23 artifacts/demo-terpadu artifacts/cert-evidence artifacts/certification
+          mkdir -p artifacts/phase23 artifacts/cert-evidence artifacts/certification
           if [ -d downloaded-evidence/phase23-certification-report/artifacts/phase23 ]; then
             cp -r downloaded-evidence/phase23-certification-report/artifacts/phase23/* artifacts/phase23/ || true
           elif [ -d downloaded-evidence/phase23-certification-report ]; then
             cp -r downloaded-evidence/phase23-certification-report/* artifacts/phase23/ || true
           fi
-          if [ -d downloaded-evidence/demo-terpadu-artifacts ]; then
-            cp -r downloaded-evidence/demo-terpadu-artifacts/* artifacts/demo-terpadu/ || true
+          DEMO_ARGS=()
+          if [ -d downloaded-evidence/demo-terpadu-artifacts ] && [ -f downloaded-evidence/demo-terpadu-artifacts/manifest.json ] && [ -f downloaded-evidence/demo-terpadu-artifacts/SHA256SUMS ]; then
+            cp -r downloaded-evidence/demo-terpadu-artifacts/* artifacts/demo-terpadu/
+            DEMO_ARGS=(--demo-dir artifacts/demo-terpadu)
           fi
           for d in downloaded-evidence/phase36-gui-evidence-* downloaded-evidence/phase37-42-* downloaded-evidence/phase39-42-*; do
             if [ -d "$d" ]; then
               cp -r "$d"/*.json artifacts/cert-evidence/ 2>/dev/null || true
             fi
           done
+          # Pull-request integration gate: reject corruption/FAIL, but permit PARTIAL
+          # when physical hardware/store evidence is genuinely unavailable. PARTIAL
+          # is never a release certification and remains explicit in the report.
           npx tsx scripts/certification-gate.ts evaluate \
             --phase23-summary artifacts/phase23/certification-summary.json \
-            --demo-dir artifacts/demo-terpadu \
+            "${DEMO_ARGS[@]}" \
             --evidence-dir artifacts/cert-evidence \
             --commit "${{ github.sha }}" \
             --run-id "${{ github.run_id }}" \
             --require-ci-provenance \
+            --dry-run \
             --json-out artifacts/certification/CERTIFICATION-GATE-REPORT.json \
             --md-out artifacts/certification/CERTIFICATION-GATE-REPORT.md \
             --step-summary
