@@ -95,11 +95,15 @@ export class GooglePlayClient {
     }
   }
 
-  public buatAssertionJWTRS256(kunciPrivatPem: string, audience: string = 'https://oauth2.googleapis.com/token'): string {
+  public buatAssertionJWTRS256(
+    kunciPrivatPem: string,
+    audience: string = 'https://oauth2.googleapis.com/token',
+    serviceAccountEmail: string = this.konfig.serviceAccountEmail || ''
+  ): string {
     const nowSec = Math.floor(Date.now() / 1000);
     const header = { alg: 'RS256', typ: 'JWT' };
     const claim = {
-      iss: this.konfig.serviceAccountEmail || '',
+      iss: serviceAccountEmail,
       scope: 'https://www.googleapis.com/auth/androidpublisher',
       aud: audience,
       iat: nowSec,
@@ -138,7 +142,7 @@ export class GooglePlayClient {
       throw new Error('Autentikasi Google Play memerlukan client_email dan private_key Service Account yang valid.');
     }
 
-    const jwt = this.buatAssertionJWTRS256(privateKey);
+    const jwt = this.buatAssertionJWTRS256(privateKey, 'https://oauth2.googleapis.com/token', serviceAccountEmail);
     const form = new URLSearchParams({
       grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
       assertion: jwt,
@@ -180,15 +184,53 @@ export class GooglePlayClient {
       };
     }
 
-    return {
-      terhubung: true,
-      emailAkunLayanan: SecretProvider.samarkanEmail(cred.validasi.email),
-      packageName: this.konfig.packageName,
-      izinAkses: ['androidpublisher.releases', 'androidpublisher.listings'],
-      waktuPemeriksaan: new Date().toISOString(),
-      pesan: `Terhubung ke Google Play API untuk package '${this.konfig.packageName}'.`,
-      modeSandbox: false,
-    };
+    try {
+      const authHdr = await this.pastikanHeaderOtorisasi();
+      const editUrl = `${this.baseUrl}/${encodeURIComponent(this.konfig.packageName)}/edits`;
+      const createRes = await fetch(editUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHdr },
+        body: JSON.stringify({}),
+      });
+      const created = await createRes.json().catch(() => ({}));
+      if (!createRes.ok || typeof created.id !== 'string' || !created.id) {
+        return {
+          terhubung: false,
+          emailAkunLayanan: SecretProvider.samarkanEmail(cred.validasi.email),
+          packageName: this.konfig.packageName,
+          izinAkses: [],
+          waktuPemeriksaan: new Date().toISOString(),
+          pesan: `Autentikasi berhasil tetapi pemeriksaan Google Play Edits gagal (HTTP ${createRes.status}).`,
+          modeSandbox: false,
+        };
+      }
+
+      const cleanupRes = await fetch(`${editUrl}/${encodeURIComponent(created.id)}`, {
+        method: 'DELETE',
+        headers: { ...authHdr },
+      });
+      return {
+        terhubung: true,
+        emailAkunLayanan: SecretProvider.samarkanEmail(cred.validasi.email),
+        packageName: this.konfig.packageName,
+        izinAkses: ['androidpublisher.edits'],
+        waktuPemeriksaan: new Date().toISOString(),
+        pesan: cleanupRes.ok
+          ? `Koneksi dan izin Google Play API terverifikasi untuk package '${this.konfig.packageName}'.`
+          : `Koneksi Google Play terverifikasi; penghapusan edit uji gagal (HTTP ${cleanupRes.status}) dan perlu dibersihkan dari Console.`,
+        modeSandbox: false,
+      };
+    } catch (err: any) {
+      return {
+        terhubung: false,
+        emailAkunLayanan: SecretProvider.samarkanEmail(cred.validasi.email),
+        packageName: this.konfig.packageName,
+        izinAkses: [],
+        waktuPemeriksaan: new Date().toISOString(),
+        pesan: `Pemeriksaan koneksi Google Play gagal: ${err.message}`,
+        modeSandbox: false,
+      };
+    }
   }
 
   /**
