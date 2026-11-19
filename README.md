@@ -7,7 +7,7 @@
 [![CI/CD](https://github.com/sarjanabahasaarab/Bahasa-Nusantara/actions/workflows/ci.yml/badge.svg)](https://github.com/sarjanabahasaarab/Bahasa-Nusantara/actions/workflows/ci.yml)
 [![Lisensi](https://img.shields.io/badge/lisensi-Apache_2.0-blue.svg)](LISENSI)
 [![Tata Bahasa](https://img.shields.io/badge/grammar-EBNF_ISO--14977-purple.svg)](dokumentasi/GRAMMAR-EBNF.md)
-[![Testing](https://img.shields.io/badge/testing-50_langkah_terintegrasi-blue.svg)](pengujian/README.md)
+[![Testing](https://img.shields.io/badge/testing-51_langkah_terintegrasi-blue.svg)](pengujian/README.md)
 [![Nusantara OS](https://img.shields.io/badge/os_user_mode-ring0_ring3_process_isolation-blue.svg)](docs/os/01-arsitektur-kernel.md)
 [![Game SDK](https://img.shields.io/badge/game_sdk-2d%2F3d_ecs_physics_audio-blue.svg)](docs/game-sdk/01_pendahuluan_arsitektur.md)
 [![Actor Concurrency](https://img.shields.io/badge/concurrency-actor_model_&_structured_async-blue.svg)](docs/runtime/actor-model.md)
