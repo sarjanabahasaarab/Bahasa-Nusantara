@@ -96,8 +96,8 @@ public final class NativeNetworkSecurity: NSObject, URLSessionDelegate {
         return nil
     }
 
-    private static func sequence(_ bytes: [UInt8]) -> [UInt8] {
-        return tlv(0x30, bytes)
+    private static func sequence(_ bytes: [UInt8]) -> Data {
+        return Data(tlv(0x30, bytes))
     }
 
     private static func bitString(_ bytes: Data) -> [UInt8] {
