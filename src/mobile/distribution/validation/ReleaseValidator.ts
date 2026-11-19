@@ -135,6 +135,38 @@ export class ReleaseValidator {
       }
     }
 
+    // 1.5 Android Native Release Toolchain
+    const androidEnv = AndroidDistributionManager.periksaLingkungan();
+    const toolchainAndroidSiap = Boolean(
+      androidEnv.siapBuildNative &&
+      androidEnv.adaJdk &&
+      androidEnv.adaAapt2 &&
+      androidEnv.adaD8 &&
+      androidEnv.adaApksigner &&
+      androidEnv.adaZipalign
+    );
+    const detailToolchainAndroid = [
+      !androidEnv.androidHome ? 'ANDROID_HOME/ANDROID_SDK_ROOT tidak tersedia' : '',
+      !androidEnv.adaJdk ? 'JDK tidak tersedia' : '',
+      !androidEnv.adaAapt2 ? 'AAPT2 tidak tersedia' : '',
+      !androidEnv.adaD8 ? 'D8 tidak tersedia' : '',
+      !androidEnv.adaApksigner ? 'apksigner tidak tersedia' : '',
+      !androidEnv.adaZipalign ? 'zipalign tidak tersedia' : '',
+    ].filter(Boolean);
+    checklist.push({
+      id: 'android-native-toolchain',
+      kategori: 'android',
+      judul: 'Toolchain Android Native untuk APK/AAB rilis',
+      status: toolchainAndroidSiap ? 'lulus' : konfig.lingkungan === 'production' ? 'gagal' : 'peringatan',
+      pesan: toolchainAndroidSiap
+        ? 'Android SDK, JDK, AAPT2, D8, apksigner, dan zipalign terdeteksi.'
+        : `Build native Android belum dapat disertifikasi: ${detailToolchainAndroid.join('; ') || androidEnv.catatan.join('; ')}.`,
+      wajib: true,
+    });
+    if (!toolchainAndroidSiap) {
+      masalahAndroid.push(`Toolchain Android native belum lengkap: ${detailToolchainAndroid.join('; ') || 'pemeriksaan toolchain gagal'}.`);
+    }
+
     // ==========================================
     // 2. KATEGORI: IOS CHECKS
     // ==========================================
