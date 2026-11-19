@@ -498,10 +498,10 @@ async function jalankanSemuaPengujianFase41() {
 
     // nusantara mobile store koneksi android & ios
     const kodeKoneksiAndroid = MobileCLI.jalankan(['store', 'koneksi', 'android']);
-    pastikan(kodeKoneksiAndroid === 0, 'Perintah CLI "store koneksi android" harus keluar kode 0');
+    pastikan(kodeKoneksiAndroid === 1, 'CLI koneksi Android harus menolak status terhubung tanpa respons Google Play nyata');
 
     const kodeKoneksiIos = MobileCLI.jalankan(['store', 'koneksi', 'ios']);
-    pastikan(kodeKoneksiIos === 0, 'Perintah CLI "store koneksi ios" harus keluar kode 0');
+    pastikan(kodeKoneksiIos === 1, 'CLI koneksi iOS harus menolak status terhubung tanpa respons App Store Connect nyata');
 
     // nusantara mobile store android metadata, validasi, track
     const kodePlayMeta = MobileCLI.jalankan(['store', 'android', 'metadata']);
@@ -529,7 +529,7 @@ async function jalankanSemuaPengujianFase41() {
     pastikan(kodeIosVal === 0, 'Perintah CLI "store ios validasi" harus keluar kode 0');
 
     const kodeIosTf = MobileCLI.jalankan(['store', 'ios', 'testflight']);
-    pastikan(kodeIosTf === 0, 'Perintah CLI "store ios testflight" harus keluar kode 0');
+    pastikan(kodeIosTf === 1, 'CLI TestFlight harus tetap belum terkonfirmasi tanpa status build dari App Store Connect');
 
     // nusantara mobile store aset & release-notes
     const kodeAset = MobileCLI.jalankan(['store', 'aset']);
