@@ -33,7 +33,7 @@ public final class NativeNetworkSecurity {
             }
             byte[] digest;
             try {
-                digest = java.util.Base64.getDecoder().decode(pin.substring("sha256/".length()));
+                digest = android.util.Base64.decode(pin.substring("sha256/".length()), android.util.Base64.DEFAULT);
             } catch (IllegalArgumentException ex) {
                 throw new IllegalArgumentException("SPKI pin is not valid Base64.", ex);
             }
