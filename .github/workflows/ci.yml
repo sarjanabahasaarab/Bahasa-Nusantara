@@ -803,6 +803,8 @@ jobs:
           npm ci
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platform-tools" "build-tools;35.0.0" "platforms;android-35" "emulator" "system-images;android-35;google_apis;x86_64"
+          echo "$ANDROID_HOME/build-tools/35.0.0" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
           echo "no" | avdmanager create avd --force --name nusantara-ci-api35 --package "system-images;android-35;google_apis;x86_64" --device "pixel_2"
 
       - name: Build APK/AAB Native, Signing Ephemeral & Verifikasi DEX
