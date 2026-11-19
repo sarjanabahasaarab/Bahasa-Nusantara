@@ -98,14 +98,18 @@ export class AppStoreConnectClient {
     const nowSec = Math.floor(Date.now() / 1000);
     const expSec = nowSec + 20 * 60; // 20 menit
 
+    if (!cred.validasi.valid || !cred.keyId || !cred.issuerId) {
+      throw new Error('Issuer ID, Key ID, dan kunci App Store Connect yang valid wajib tersedia; nilai contoh tidak diizinkan.');
+    }
+
     const header = {
       alg: 'ES256',
-      kid: cred.keyId || '2X9R4HXF34',
+      kid: cred.keyId,
       typ: 'JWT',
     };
 
     const payload = {
-      iss: cred.issuerId || '57246542-96fe-1a63-e053-0824d011072a',
+      iss: cred.issuerId || '',
       exp: expSec,
       aud: 'appstoreconnect-v1',
       bid: this.konfig.bundleId,
@@ -159,8 +163,9 @@ export class AppStoreConnectClient {
     if (this.tokenJwtAktif && Date.now() < this.kadaluwarsaJwtMs - 60000) {
       return this.tokenJwtAktif;
     }
-    const key = kunciPrivatPem || this.konfig.kunciPrivatPem;
-    if (!key) {
+    const kredensial = CredentialManager.dapatkanInstance().ambilKredensialAppStoreConnect(this.konfig);
+    const key = kunciPrivatPem || this.konfig.kunciPrivatPem || kredensial.privateKey;
+    if (!key || !kredensial.validasi.valid) {
       throw new Error('Kunci privat P-256 (.p8) diperlukan untuk menandatangani token JWT ES256.');
     }
     const crypto = muatModulNode<any>('crypto');
@@ -288,16 +293,16 @@ export class AppStoreConnectClient {
       };
     }
 
-    // Eksekusi nyata di macOS
+    // Tidak ada klaim upload sukses tanpa menjalankan Apple Transporter/altool dan memverifikasi hasilnya.
     return {
-      sukses: true,
+      sukses: false,
       bundleId: this.konfig.bundleId,
       versi,
       buildNumber,
       ukuranBytes,
       sha256,
-      uploadTool: 'altool',
-      pesan: `Build v${versi} (#${buildNumber}) berhasil diunggah ke App Store Connect via xcrun altool.`,
+      uploadTool: 'transporter',
+      pesan: 'Upload iOS live belum dijalankan: integrasi Apple Transporter belum tersedia pada klien ini. Gunakan Transporter/Xcode secara eksplisit; status tidak boleh dilaporkan sukses.',
       waktuUpload: new Date().toISOString(),
       modeSandbox: false,
     };
@@ -311,9 +316,9 @@ export class AppStoreConnectClient {
     buildNumber: number
   ): Promise<{ status: StatusBuildASC; siapTestFlight: boolean; pesan: string }> {
     return {
-      status: 'ready_for_testflight',
-      siapTestFlight: true,
-      pesan: `Build v${versi} (#${buildNumber}) selesai diproses dan siap untuk TestFlight atau App Store Submission.`,
+      status: 'processing',
+      siapTestFlight: false,
+      pesan: `Status build v${versi} (#${buildNumber}) belum diperiksa melalui App Store Connect API; tidak boleh diasumsikan siap TestFlight.`,
     };
   }
 }
