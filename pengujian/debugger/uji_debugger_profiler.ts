@@ -370,7 +370,7 @@ pastikan(
 const programGalat = `program UjiGalat
 mulai
     pembagi : bilangan = 0
-    hasil : bilangan = 100 / pembagi
+    hasil : desimal = 100 / pembagi
 selesai`;
 
 debuggerEngine.bersihkanBreakpoint();
@@ -389,7 +389,7 @@ debuggerEngine.pasangPenanganJeda((s, alasan) => {
 debuggerEngine.jalankan(sesiGalat);
 pastikan(
   jejakGalat.tertangkap === true && sesiGalat.status === 'failed',
-  '6.3 Status sesi debug beralih ke failed saat terjadi unhandled runtime error'
+  `6.3 Status sesi debug harus failed setelah galat runtime; tertangkap=${jejakGalat.tertangkap}, status=${sesiGalat.status}, galat=${sesiGalat.galatTerakhir?.message ?? 'tidak ada'}`
 );
 
 // ============================================================================
