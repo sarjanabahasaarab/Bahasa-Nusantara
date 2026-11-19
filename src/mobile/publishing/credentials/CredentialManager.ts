@@ -116,9 +116,9 @@ export class CredentialManager {
     const keyId = konfig.keyId || SecretProvider.ambilDariEnv('APP_STORE_CONNECT_KEY_ID');
 
     const namaEnvPrivKey = konfig.privateKeyEnv || 'APP_STORE_CONNECT_PRIVATE_KEY';
-    let privateKey = SecretProvider.ambilDariEnv(namaEnvPrivKey);
+    let privateKey = konfig.kunciPrivatPem || SecretProvider.ambilDariEnv(namaEnvPrivKey);
 
-    let sumber: 'env' | 'berkas' | 'tidak_ada' = privateKey ? 'env' : 'tidak_ada';
+    let sumber: 'env' | 'berkas' | 'tidak_ada' = privateKey ? (konfig.kunciPrivatPem ? 'env' : 'env') : 'tidak_ada';
 
     if (!privateKey && konfig.privateKeyPath && !konfig.privateKeyPath.includes('\0')) {
       const isNode = typeof window === 'undefined' && typeof process !== 'undefined' && Boolean(process?.versions?.node);
