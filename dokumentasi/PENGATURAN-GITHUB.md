@@ -3,6 +3,8 @@
 Dokumen ini adalah instruksi panduan langkah demi langkah bagi administrator dan maintainer untuk mengonfigurasi repositori GitHub resmi bahasa **NUSANTARA**.
 
 > ⚠️ **Catatan Penting:** Pengaturan di bawah ini adalah **panduan konfigurasi manual** yang harus diterapkan oleh pemilik repositori pada antarmuka web GitHub. Membuat dokumen ini tidak secara otomatis mengaktifkan fitur-fitur tersebut di GitHub.
+>
+> **Hasil audit konfigurasi publik (20 November 2026):** cabang `main` dilaporkan tidak terlindungi (`protected: false`), daftar ruleset repositori kosong, dan cabang `develop` tidak ditemukan. Dengan demikian, perlindungan cabang dan aturan tata kelola di dokumen ini belum boleh dianggap aktif sampai administrator menerapkannya dan memverifikasi ulang pengaturan.
 
 ---
 
@@ -24,7 +26,7 @@ Dokumen ini adalah instruksi panduan langkah demi langkah bagi administrator dan
 
 ## 3. Perlindungan Cabang Utama (*Branch Protection Rules*)
 
-Untuk mencegah komit langsung yang dapat merusak kode di cabang `main` dan `develop`:
+Untuk mencegah komit langsung yang dapat merusak kode di cabang `main`:
 
 1. Di tab **Settings**, pilih menu sisi kiri **Branches**.
 2. Klik tombol **Add branch ruleset** atau **Add rule**.
@@ -33,9 +35,9 @@ Untuk mencegah komit langsung yang dapat merusak kode di cabang `main` dan `deve
    - Centang **Require a pull request before merging**.
    - Centang **Require approvals** (tetapkan minimal 1 persetujuan Reviewer).
    - Centang **Dismiss stale pull request approvals when new commits are pushed**.
-   - Centang **Require status checks to pass before merging** (pilih verifikasi CI `periksa_fondasi`).
-   - Centang **Do not allow bypassing the above settings** (berlaku untuk admin dan maintainer).
-5. Ulangi aturan serupa untuk cabang `develop`.
+   - Aktifkan **Require status checks to pass before merging** dan pilih nama pemeriksaan GitHub Actions yang benar-benar muncul pada PR. Nama pemeriksaan yang digunakan workflow saat audit ini antara lain `NUSANTARA / Pemeriksaan Statis`, `NUSANTARA / Clean Install CI`, `NUSANTARA / Pengujian Otomatis (ubuntu-latest)`, `NUSANTARA / Pengujian Otomatis (windows-latest)`, `NUSANTARA / Pengujian Otomatis (macos-latest)`, dan `NUSANTARA / Gerbang Kualitas (Quality Gate)`. `skrip/periksa_fondasi.js` adalah perintah skrip, bukan nama status check GitHub.
+   - Atur daftar bypass secara eksplisit dan batasi hanya untuk akun/role yang benar-benar memerlukan pengecualian; jangan menambahkan bypass luas tanpa alasan.
+5. Jangan membuat aturan untuk `develop` sebelum cabang tersebut benar-benar dibuat dan ditetapkan sebagai bagian dari model pengembangan.
 
 ---
 
