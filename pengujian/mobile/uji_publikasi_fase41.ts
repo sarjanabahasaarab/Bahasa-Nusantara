@@ -203,7 +203,18 @@ async function jalankanSemuaPengujianFase41() {
     pastikan(statusAsc.bundleId === 'id.nusantara.aplikasi', 'Bundle ID harus cocok');
     pastikan(statusAsc.modeSandbox, 'Tanpa kunci fisik, koneksi harus berjalan dalam mode sandbox aman');
 
-    const jwtData = client.buatTokenJWTHeaderPayload();
+    // Kredensial sementara hanya untuk menguji pembentukan klaim JWT secara lokal.
+    // Jangan memakai kredensial contoh sebagai akses ke layanan Apple sungguhan.
+    const ascTestKeyPair = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    const ascTestPrivateKey = ascTestKeyPair.privateKey.export({ type: 'pkcs8', format: 'pem' }) as string;
+    const jwtTestClient = new AppStoreConnectClient({
+      bundleId: 'id.nusantara.aplikasi',
+      defaultChannel: 'testflight',
+      issuerId: '00000000-0000-4000-8000-000000000041',
+      keyId: 'NUSANTARA1',
+      kunciPrivatPem: ascTestPrivateKey,
+    });
+    const jwtData = jwtTestClient.buatTokenJWTHeaderPayload();
     pastikan(jwtData.header.alg === 'ES256', 'Header JWT Apple harus menggunakan algoritma ES256');
     pastikan(jwtData.payload.aud === 'appstoreconnect-v1', 'Audience JWT harus appstoreconnect-v1');
 
@@ -226,7 +237,8 @@ async function jalankanSemuaPengujianFase41() {
       aktifkanEksternal: true,
     });
     pastikan(resBeta.sukses, 'Persiapan rilis beta TestFlight harus sukses');
-    pastikan(resBeta.infoBeta.statusProcessing === 'ready_for_testflight', 'Status processing TestFlight harus siap');
+    pastikan(resBeta.infoBeta.statusProcessing === 'processing', 'Build TestFlight harus tetap processing sampai status dikonfirmasi oleh API Apple');
+    pastikan(!resBeta.infoBeta.eksternalTersedia, 'Penguji eksternal tidak boleh diaktifkan sebelum status dan kepatuhan build dikonfirmasi Apple');
     pastikan(resBeta.infoBeta.grupPenguji.length >= 2, 'Grup penguji internal harus terdaftar');
     pastikan(Boolean(resBeta.infoBeta.tanggalKedaluwarsa), 'Tanggal kedaluwarsa 90 hari harus terhitung');
 
