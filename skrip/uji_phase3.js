@@ -45,7 +45,7 @@ check('Berkas lisensi utama memuat teks Apache License 2.0 lengkap', () => {
 });
 check('Panduan lisensi merujuk berkas legal utama dan menjelaskan kewajiban distribusi', () => {
   assert.match(licenseGuide, /Apache License 2\.0/);
-  assert.match(licenseGuide, /\\.\\.\\/LISENSI/);
+  assert.match(licenseGuide, /\.\.\/LISENSI/);
   assert.match(licenseGuide, /Pemberitahuan Perubahan/);
   assert.match(licenseGuide, /Hibah Paten Timbal Balik/);
 });
@@ -120,4 +120,4 @@ check('Templat kontribusi dan issue tracker tersedia serta mewajibkan pemeriksaa
   assert.match(prTemplate, /KODE-ETIK.md/);
 });
 
-console.log(\`\nPhase 3: \${checks.length}/\${checks.length} pemeriksaan lulus.\`);
+console.log('\nPhase 3: ' + checks.length + '/' + checks.length + ' pemeriksaan lulus.');
