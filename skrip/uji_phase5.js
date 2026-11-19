@@ -19,4 +19,4 @@ cek('Status milestone menyebut Phase 50',s.includes('Phase 50'));
 cek('Status milestone mengarahkan ke roadmap terkini',s.includes('bukan laporan status repositori terkini'));
 cek('Standar mengatur tautan lokal dan status akurat',t.includes('Tautan Lokal')&&t.includes('Status Pengembangan'));
 cek('Glosarium memuat sedikitnya 25 istilah',(g.match(/^\| \*\*/gm)||[]).length>=25);
-console.log('Phase 5: '+pass+'/12 lulus, '+fail+' gagal');if(fail)process.exitCode=1;
+console.log('Phase 5: '+pass+'/13 lulus, '+fail+' gagal');if(fail)process.exitCode=1;
