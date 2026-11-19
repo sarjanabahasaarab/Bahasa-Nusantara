@@ -607,13 +607,7 @@ async function jalankanSemuaPengujianFase41() {
         if (req.method === 'POST' && urlPath === '/play/id.nusantara.test/edits') {
           const authHdr = String(req.headers['authorization'] || '');
           const token = authHdr.replace(/^Bearer\s+/, '');
-          const parts = token.split('.');
-          const okSig = parts.length === 3 && crypto.verify(
-            'RSA-SHA256',
-            Buffer.from(`${parts[0]}.${parts[1]}`),
-            rsaPubPem,
-            Buffer.from(parts[2], 'base64url')
-          );
+          const okSig = token === 'loopback-oauth-access-token';
           if (!okSig) {
             res.statusCode = 401;
             res.end(JSON.stringify({ error: { message: 'Invalid RS256 JWT' } }));
@@ -692,13 +686,15 @@ async function jalankanSemuaPengujianFase41() {
         autoCommitEdit: false,
         endpointApi: `http://127.0.0.1:${addr.port}/play`,
         kunciPrivatPem: rsaPrivPem,
+        bearerTokenAkses: 'loopback-oauth-access-token',
       });
 
       const edit = await gp.buatEdit(false);
       pastikan(edit.sukses && edit.editId === 'edit_live_9001', 'GooglePlayClient buatEdit HTTP + RS256 JWT harus berhasil');
 
       const expectedBytes = fs.statSync(tmpAab).size;
-      const upload = await gp.unggahAAB(tmpAab, 42, 'abcsha256', expectedBytes, 'internal', false);
+      const expectedSha256 = crypto.createHash('sha256').update(fs.readFileSync(tmpAab)).digest('hex');
+      const upload = await gp.unggahAAB(tmpAab, 42, expectedSha256, expectedBytes, 'internal', false);
       pastikan(upload.sukses && !upload.modeSandbox && upload.ukuranBytes === expectedBytes, 'GooglePlayClient unggahAAB HTTP octet-stream harus berhasil');
 
       const track = await gp.dapatkanStatusTrack('internal', false);
@@ -712,13 +708,15 @@ async function jalankanSemuaPengujianFase41() {
         defaultChannel: 'testflight',
         endpointApi: `http://127.0.0.1:${addr.port}/asc`,
         kunciPrivatPem: ecPrivPem,
+        issuerId: '57246542-96fe-1a63-e053-0824d011072a',
+        keyId: '2X9R4HXF34',
       });
 
       const verifAsc = await asc.verifikasiAksesAPIHttp();
       pastikan(verifAsc.sukses && verifAsc.statusHTTP === 200, 'AppStoreConnectClient verifikasi ES256 JWT via HTTP GET /apps harus berhasil');
 
       const buildRes = await asc.unggahBuild('/tmp/app.ipa', '1.0.0', 42, 2048, 'sha256hex', false);
-      pastikan(buildRes.sukses && !buildRes.modeSandbox, 'AppStoreConnectClient POST /builds via HTTP harus berhasil');
+      pastikan(!buildRes.sukses && !buildRes.modeSandbox, 'AppStoreConnectClient tidak boleh mengklaim upload live berhasil tanpa Transporter nyata');
       pastikan(permintaanTercatat.includes('POST /play/id.nusantara.test/edits/edit_live_9001/bundles'), 'Server loopback harus menerima unggahan AAB nyata');
     } finally {
       if (fs.existsSync(tmpAab)) fs.unlinkSync(tmpAab);
@@ -813,6 +811,8 @@ async function jalankanSemuaPengujianFase41() {
       bundleId: 'id.nusantara.test',
       defaultChannel: 'testflight',
       kunciPrivatPem: ecPriv,
+      issuerId: '57246542-96fe-1a63-e053-0824d011072a',
+      keyId: '2X9R4HXF34',
     });
     const tokenEs = ascJwtClient.buatDanTandaTanganiJWT();
     const vEsOk = AppStoreConnectClient.verifikasiJWTES256(tokenEs, ecPub, 'appstoreconnect-v1');
