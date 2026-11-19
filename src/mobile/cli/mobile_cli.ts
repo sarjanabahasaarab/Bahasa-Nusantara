@@ -1045,16 +1045,6 @@ end`;
       }
 
       case 'koneksi':
-      case 'connection': {
-        const target = subArgs[0] || 'android';
-        console.log('======================================================');
-        console.log(`  NUSANTARA MOBILE - Uji Koneksi Toko (${target.toUpperCase()})`);
-        console.log('======================================================');
-        console.log('Status Koneksi  : BELUM DIVERIFIKASI');
-        console.log('Keterangan      : Pemeriksaan toko memerlukan alur async dan respons API nyata; CLI sinkron ini tidak boleh mengarang status terhubung.');
-        console.log('======================================================');
-        return 1;
-      }
 
       case 'connection': {
         const target = subArgs[0] || 'android';
