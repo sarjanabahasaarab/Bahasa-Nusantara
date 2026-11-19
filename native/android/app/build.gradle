@@ -1,0 +1,31 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'id.nusantara.mobile'
+    compileSdk 35
+    defaultConfig {
+        applicationId (project.findProperty('applicationId') ?: 'id.nusantara.mobile')
+        minSdk 24
+        targetSdk 35
+        versionCode 1
+        versionName '0.50.0'
+    }
+    signingConfigs {
+        release {
+            def ks = System.getenv('NUSANTARA_ANDROID_KEYSTORE')
+            if (ks) {
+                storeFile file(ks)
+                storePassword System.getenv('NUSANTARA_ANDROID_STORE_PASSWORD')
+                keyAlias System.getenv('NUSANTARA_ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('NUSANTARA_ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        debug { }
+        release {
+            if (System.getenv('NUSANTARA_ANDROID_KEYSTORE')) signingConfig signingConfigs.release
+            minifyEnabled false
+        }
+    }
+}
