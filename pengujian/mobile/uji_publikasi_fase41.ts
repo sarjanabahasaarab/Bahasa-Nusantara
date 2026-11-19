@@ -744,6 +744,32 @@ async function jalankanSemuaPengujianFase41() {
       gpHttpDitolak = true;
     }
     pastikan(gpHttpDitolak, 'GooglePlayClient wajib menolak endpoint HTTP eksternal tidak terenkripsi');
+    let gpHostDitolak = false;
+    try {
+      new GooglePlayClient({
+        applicationId: 'id.nusantara.test',
+        packageName: 'id.nusantara.test',
+        defaultTrack: 'internal',
+        autoCommitEdit: false,
+        endpointApi: 'https://androidpublisher.external.example/androidpublisher/v3/applications',
+      });
+    } catch {
+      gpHostDitolak = true;
+    }
+    pastikan(gpHostDitolak, 'GooglePlayClient wajib menolak host HTTPS eksternal yang bukan Google resmi');
+
+    let ascHostDitolak = false;
+    try {
+      new AppStoreConnectClient({
+        bundleId: 'id.nusantara.test',
+        defaultChannel: 'testflight',
+        endpointApi: 'https://api.appstoreconnect.attacker.example/v1',
+      });
+    } catch {
+      ascHostDitolak = true;
+    }
+    pastikan(ascHostDitolak, 'AppStoreConnectClient wajib menolak host HTTPS eksternal yang bukan Apple resmi');
+
 
     let ascCredDitolak = false;
     try {
