@@ -1,0 +1,46 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'id.nusantara.mobile'
+    compileSdk 35
+    defaultConfig {
+        applicationId (project.findProperty('applicationId') ?: 'id.nusantara.mobile')
+        minSdk 24
+        targetSdk 35
+        versionCode 1
+        versionName '0.50.0'
+    }
+    signingConfigs {
+        release {
+            def ks = System.getenv('NUSANTARA_ANDROID_KEYSTORE')
+            if (ks) {
+                storeFile file(ks)
+                storePassword System.getenv('NUSANTARA_ANDROID_STORE_PASSWORD')
+                keyAlias System.getenv('NUSANTARA_ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('NUSANTARA_ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        debug { }
+        release {
+            if (System.getenv('NUSANTARA_ANDROID_KEYSTORE')) signingConfig signingConfigs.release
+            minifyEnabled false
+        }
+    }
+}
+
+
+configurations.configureEach {
+    resolutionStrategy.eachDependency { details ->
+        if (details.requested.group == 'com.google.errorprone' && details.requested.name == 'error_prone_annotations') {
+            details.useVersion '2.18.0'
+            details.because 'Pin to a stable Maven Central release to avoid stale transitive 2.3.1 metadata in hosted Gradle caches.'
+        }
+    }
+}
+
+dependencies {
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    testImplementation 'junit:junit:4.13.2'
+}

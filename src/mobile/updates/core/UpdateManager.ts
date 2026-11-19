@@ -38,7 +38,7 @@ export class UpdateManager {
   private notificationManager: UpdateNotificationManager;
 
   private applicationId = 'id.nusantara.aplikasi';
-  private versiTerpasang = '0.41.0';
+  private versiTerpasang = '0.0.0';
   private revisiTerpasang = 0;
   private revisiPerVersi: Map<string, number> = new Map();
   private platform: PlatformMobile = 'android';

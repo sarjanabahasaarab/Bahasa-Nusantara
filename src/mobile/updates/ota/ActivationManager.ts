@@ -13,7 +13,7 @@ import { UpdateSecurityPolicy } from '../security/UpdateSecurityPolicy';
 export class ActivationManager {
   private static instance: ActivationManager;
   private resourceAktif: Map<string, string | Uint8Array> = new Map();
-  private versiAktif = '0.41.0';
+  private versiAktif = '0.0.0';
 
   private constructor() {
     this.inisialisasiResourceBawaan();
@@ -52,8 +52,27 @@ export class ActivationManager {
     platform = 'android'
   ): HasilAktivasiResource {
     const map = new Map<string, string | Uint8Array>();
+    if (!Array.isArray(resources) || resources.length === 0) {
+      return {
+        sukses: false,
+        versiAktif: this.versiAktif,
+        resourceDiaktifkan: [],
+        pesan: 'Daftar resource OTA kosong atau tidak valid.',
+        stempelWaktu: new Date().toISOString(),
+      };
+    }
     for (const r of resources) {
-      map.set(r.jalurRelatif || r.id, typeof r.konten !== 'undefined' ? r.konten : 'mock_konten_resource');
+      if (!r || typeof (r.jalurRelatif || r.id) !== 'string' ||
+          !(typeof r.konten === 'string' || r.konten instanceof Uint8Array)) {
+        return {
+          sukses: false,
+          versiAktif: this.versiAktif,
+          resourceDiaktifkan: [],
+          pesan: 'Resource OTA ditolak: payload aktual tidak tersedia. Konten placeholder/mock tidak diizinkan.',
+          stempelWaktu: new Date().toISOString(),
+        };
+      }
+      map.set(r.jalurRelatif || r.id, r.konten);
     }
     return this.aktifkanAtomik(versiBaru, map);
   }

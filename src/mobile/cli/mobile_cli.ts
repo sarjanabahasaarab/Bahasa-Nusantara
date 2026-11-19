@@ -577,7 +577,7 @@ end`;
         console.log(`[ Kategori: ${kat.toUpperCase()} ]`);
         for (const item of list) {
           const izinText = item.izin.length > 0 ? `(Izin: ${item.izin.join(', ')})` : '(Tanpa Izin)';
-          console.log(`  - ${item.nama.padEnd(24)} : [${item.status}] ${izinText}`);
+          console.log(`  - ${item.nama.padEnd(24)} : [metadata terdaftar] ${izinText}`);
         }
         console.log('');
       }
@@ -599,7 +599,7 @@ end`;
       console.log(`  Detail Native API: ${api.nama}`);
       console.log(`======================================================`);
       console.log(`Kategori        : ${api.kategori}`);
-      console.log(`Status          : ${api.status}`);
+      console.log(`Status          : Metadata terdaftar; implementasi native runtime belum diverifikasi`);
       console.log(`Platform        : ${api.platform.join(', ')}`);
       console.log(`Versi Min OS    : Android >= ${api.versiMinOS.android || '-'}, iOS >= ${api.versiMinOS.ios || '-'}`);
       console.log(`Izin Diperlukan : ${api.izin.length > 0 ? api.izin.join(', ') : 'Tidak ada'}`);
@@ -659,7 +659,7 @@ end`;
     console.log(`Perangkat ADB     : ${probe.perangkatADB.length > 0 ? probe.perangkatADB.map((p) => `${p.serial}(${p.status})`).join(', ') : '(tidak terhubung)'}`);
     console.log(`Mode Simulator    : ${info.apakahSimulator ? 'YA' : 'TIDAK (Perangkat Fisik)'}`);
     console.log(`\nKemampuan Perangkat Keras:`);
-    console.log(`  Kamera Depan/Belakang : ${kemampuan.kamera.tersedia ? 'Tersedia (Kontrak)' : 'Tidak'} | Host V4L2: ${probe.kameraV4L2.length}`);
+    console.log(`  Kamera Depan/Belakang : ${kemampuan.kamera.tersedia ? 'Terdeteksi' : 'Tidak terdeteksi'} | Host V4L2: ${probe.kameraV4L2.length}`);
     console.log(`  Akselerometer/Giroskop: ${kemampuan.sensor.akselerometer ? 'Tersedia (Kontrak)' : 'Tidak'}`);
     console.log(`  Geolokasi (GPS)       : ${kemampuan.konektivitas.gps ? 'Tersedia (Kontrak)' : 'Tidak'}`);
     console.log(`  Bluetooth / BLE       : ${kemampuan.konektivitas.bluetooth ? 'Tersedia (Kontrak)' : 'Tidak'} | Host HCI: ${probe.bluetoothHCI.length}`);
