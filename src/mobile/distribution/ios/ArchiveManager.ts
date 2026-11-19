@@ -140,24 +140,17 @@ export class ArchiveManager {
         jalurLokal: jalurArchive,
         ukuranBytes,
         sha256,
-        apakahDitandatangani: cekSigning.valid,
-        skemaSignature: 'Apple Code Signing (CMS/WWDR)',
+        apakahDitandatangani: false,
         waktuDibuat: new Date().toISOString(),
       };
 
-      // Evaluasi Kesiapan TestFlight & App Store
-      const siapTestFlight = Boolean(
-        konfig.ios.bundleId &&
-        konfig.aplikasi.versi &&
-        konfig.aplikasi.nomorBuild > 0 &&
-        daftarGalat.length === 0
-      );
-
-      const siapAppStore = Boolean(
-        siapTestFlight &&
-        konfig.metadataPublikasi?.kebijakanPrivasiUrl &&
-        konfig.metadataPublikasi?.dukunganUrl &&
-        konfig.metadataPublikasi?.kategoriAplikasi
+      // Ini hanya membuat direktori .xcarchive struktural + Info.plist.
+      // Tidak menjalankan xcodebuild, tidak menghasilkan .app/Mach-O, dan tidak melakukan codesign.
+      // Karena itu artefak ini tidak boleh dinyatakan siap TestFlight/App Store atau bertanda tangan.
+      const siapTestFlight = false;
+      const siapAppStore = false;
+      daftarPeringatan.push(
+        'Archive yang dibuat hanya struktur metadata (Info.plist/ExportOptions.plist); belum ada .app Mach-O, hasil xcodebuild, codesign, atau validasi App Store Connect.'
       );
 
       if (!konfig.metadataPublikasi?.kebijakanPrivasiUrl) {
