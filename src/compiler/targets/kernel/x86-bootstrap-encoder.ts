@@ -849,6 +849,31 @@ export class X86BootstrapEncoder {
     a.emit(0x48, 0x39, 0xde); // cmp rsi, rbx
     a.ja('sys_write_efault');
 
+    // Diagnostik sementara untuk memastikan pointer, panjang, dan isi buffer user
+    // yang benar-benar dibaca kernel saat syscall SYS_CONSOLE_WRITE.
+    a.emit(0x56); // push rsi (print_serial64 memakai RSI)
+    a.printLabel64('msg_debug_user_ptr', 'print_serial64');
+    a.emit(0x5e); // pop rsi
+    a.emit(0x57); // push rdi
+    a.call('print_hex64'); // RDI = pointer user
+    a.emit(0x5f); // pop rdi
+
+    a.emit(0x56);
+    a.printLabel64('msg_debug_user_len', 'print_serial64');
+    a.emit(0x5e);
+    a.emit(0x57);
+    a.emit(0x48, 0x89, 0xf7); // mov rdi, rsi (panjang)
+    a.call('print_hex64');
+    a.emit(0x5f);
+
+    a.emit(0x56);
+    a.printLabel64('msg_debug_user_qword', 'print_serial64');
+    a.emit(0x5e);
+    a.emit(0x57);
+    a.emit(0x48, 0x8b, 0x3f); // mov rdi, [rdi] (8 byte pertama buffer)
+    a.call('print_hex64');
+    a.emit(0x5f);
+
     // Tulis byte langsung dari buffer User Space [RDI .. RDI+RSI] ke UART COM1 (0x3F8)!
     a.emit(0x48, 0x89, 0xf1); // mov rcx, rsi (loop count)
     a.emit(0x48, 0x85, 0xc9); // test rcx, rcx
@@ -1167,6 +1192,9 @@ export class X86BootstrapEncoder {
     a.label('msg_user_fault_isolated');  a.emitCString(this.STAGE_15B_USER_FAULT_ISOLATED);
     a.label('msg_kernel_survived');      a.emitCString(this.STAGE_15C_KERNEL_SURVIVED_USER_FAULT);
     a.label('msg_usermode_test_pass');   a.emitCString(this.STAGE_16_USERMODE_TEST_PASS);
+    a.label('msg_debug_user_ptr');       a.emitCString('DBG_USER_PTR=0x');
+    a.label('msg_debug_user_len');       a.emitCString(' DBG_USER_LEN=0x');
+    a.label('msg_debug_user_qword');     a.emitCString(' DBG_USER_QWORD=0x');
 
     a.label('msg_panic_mb2');            a.emitCString('NUSANTARA_KERNEL_PANIC: INVALID_MULTIBOOT2_MAGIC\r\n');
     a.label('msg_panic_cpu');            a.emitCString('NUSANTARA_KERNEL_PANIC: LONG_MODE_UNSUPPORTED\r\n');
