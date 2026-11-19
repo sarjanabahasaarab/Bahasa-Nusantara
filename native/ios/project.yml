@@ -1,0 +1,22 @@
+name: NusantaraMobile
+options:
+  deploymentTarget:
+    iOS: '15.0'
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    CODE_SIGNING_ALLOWED: 'NO'
+targets:
+  NusantaraMobile:
+    type: application
+    platform: iOS
+    sources:
+      - path: NusantaraMobile
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: id.nusantara.mobile
+        PRODUCT_NAME: NUSANTARA
+        INFOPLIST_KEY_CFBundleDisplayName: NUSANTARA
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: '1,2'
