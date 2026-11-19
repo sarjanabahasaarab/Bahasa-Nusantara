@@ -32,3 +32,13 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: id.nusantara.mobile.tests
         GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  NusantaraMobile:
+    build:
+      targets:
+        NusantaraMobile: all
+        NusantaraMobileTests: [test]
+    test:
+      targets:
+        - NusantaraMobileTests
