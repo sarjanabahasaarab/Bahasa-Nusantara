@@ -14,9 +14,11 @@ Mengapa perubahan ini diperlukan? Masalah apa yang diselesaikan?
 
 ## Pengujian yang Dijalankan
 Jelaskan pengujian yang telah Anda lakukan secara lokal:
-- [ ] Menjalankan verifikasi dokumen: `node skrip/periksa_fondasi.js`
+- [ ] Menjalankan inventaris berkas: `node skrip/periksa_fondasi.js` (bukan pengganti pengujian semantik)
+- [ ] Menjalankan pemeriksaan tipe: `npm run lint`
+- [ ] Menjalankan seluruh suite: `npm test`
 - [ ] Menambahkan kasus uji baru di `pengujian/` (jika menambahkan fitur)
-- [ ] Memastikan tidak ada pengujian sebelumnya yang gagal
+- [ ] Memastikan tidak ada pengujian sebelumnya yang gagal pada commit PR
 
 ## Dokumentasi yang Diperbarui
 - [ ] Berkas di `dokumentasi/` telah diselaraskan dengan perubahan

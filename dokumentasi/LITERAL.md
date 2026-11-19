@@ -14,6 +14,7 @@ Status: **[DITETAPKAN] — Acuan Sintaksis Nilai Konstan (Phase 4)**
 | `bilangan` | Rangkaian angka desimal bulat tanpa pemisah | `0`, `42`, `1000` | Nilai bilangan bulat |
 | `desimal` | Angka dengan pemisah titik desimal tunggal | `12.5`, `3.14159`, `0.75` | Pecahan titik mengambang (*floating point*) |
 | `logika` | Kata kunci boolean khusus | `benar`, `salah` | Nilai kebenaran boolean |
+| `karakter` | Satu Unicode scalar value diapit tanda kutip tunggal | satu karakter di antara `'` dan `'` | Tepat satu scalar; bukan satu grapheme cluster yang dapat terdiri dari beberapa scalar |
 | `kosong` | Kata kunci penanda kekosongan | `kosong` | Representasi ketiadaan nilai (*null/void*) |
 
 ---
@@ -42,6 +43,8 @@ Di dalam literal `teks`, karakter khusus wajib diawali oleh garis miring terbali
    - Contoh: `"Halo\nDunia"`
 4. **`\t` (Tabulasi Horizontal):** Menghasilkan jarak tab.
    - Contoh: `"Kolom 1\tKolom 2"`
+
+5. **`\\r` (Carriage Return):** Menghasilkan karakter CR sesuai spesifikasi token.
 
 ---
 
