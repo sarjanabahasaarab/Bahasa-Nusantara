@@ -4,7 +4,7 @@
 
 [![Status](https://img.shields.io/badge/status-fase_50:_nusantara_os_process_isolation_&_user_mode-emerald.svg)](ROADMAP.md)
 [![Versi](https://img.shields.io/badge/versi-v0.50.0-emerald.svg)](PERUBAHAN.md)
-[![CI/CD](https://img.shields.io/badge/CI%2FCD-passing-brightgreen.svg)](.github/workflows/ci.yml)
+[![CI/CD](https://github.com/sarjanabahasaarab/Bahasa-Nusantara/actions/workflows/ci.yml/badge.svg)](https://github.com/sarjanabahasaarab/Bahasa-Nusantara/actions/workflows/ci.yml)
 [![Lisensi](https://img.shields.io/badge/lisensi-Apache_2.0-blue.svg)](LISENSI)
 [![Tata Bahasa](https://img.shields.io/badge/grammar-EBNF_ISO--14977-purple.svg)](dokumentasi/GRAMMAR-EBNF.md)
 [![Testing](https://img.shields.io/badge/testing-49_langkah_terintegrasi-blue.svg)](pengujian/README.md)
@@ -45,14 +45,14 @@ NUSANTARA bukan sekadar terjemahan sintaksis atau praprosesor teks atas bahasa a
 
 - **Status Saat Ini:** **🟠 Phase 50: Nusantara OS: Process Isolation & User Mode — PARTIAL (CI_READY) (Milestone v0.50.0)**.
 - **Total Fase Diaudit:** 50 Fase (Phase 1 s/d Phase 50).
-  - 🟢 **Selesai Penuh (40 Fase):** Phase 1–22, Phase 24–35, dan Phase 43–48 berstatus implementasi penuh dan lulus seluruh pengujian unit, integrasi, serta E2E (catatan: 3 skenario biner native LLVM/Linker/Actor pada Phase 44–46 ditandai *skipped* transparan di container tanpa `clang`/`llc`/`lld`).
-  - 🟠 **Selesai Sebagian / PARTIAL (10 Fase):** Phase 23 & 36–42 (implementasi inti & protokol nyata aktif dan teruji via loopback HTTP/WebSocket, kripto Ed25519/RS256/ES256, & PKZIP CRC-32; perangkat keras fisik, display server, Android SDK, Xcode, serta toko produksi memerlukan toolchain/kredensial eksternal) dan Phase 49–50 (93 pengujian OS kernel/usermode [42+23+28] lulus 100% dan artefak `artifacts/phase50/` tervalidasi; pembuatan ISO GRUB2 & eksekusi boot bare-metal QEMU siap di GitHub Actions karena container lokal tidak memiliki `qemu-system-x86_64`, `grub-mkrescue`, dan `xorriso`).
+  - 🟢 **Selesai Penuh (39 Fase):** Phase 1–2, Phase 4–22, Phase 24–35, dan Phase 43–48 berstatus implementasi penuh dan lulus seluruh pengujian unit, integrasi, serta E2E (catatan: 3 skenario biner native LLVM/Linker/Actor pada Phase 44–46 ditandai *skipped* transparan di container tanpa `clang`/`llc`/`lld`).
+  - 🟠 **Selesai Sebagian / PARTIAL (11 Fase):** Phase 3 (dokumen lisensi/tata kelola tersedia, tetapi branch protection `main` belum aktif, ruleset kosong, dan kanal pelaporan privat belum terverifikasi), Phase 23 & 36–42 (implementasi inti & protokol nyata aktif dan teruji via loopback HTTP/WebSocket, kripto Ed25519/RS256/ES256, & PKZIP CRC-32; perangkat keras fisik, display server, Android SDK, Xcode, serta toko produksi memerlukan toolchain/kredensial eksternal) dan Phase 49–50 (93 pengujian OS kernel/usermode [42+23+28] lulus 100% dan artefak `artifacts/phase50/` tervalidasi; pembuatan ISO GRUB2 & eksekusi boot bare-metal QEMU siap di GitHub Actions karena container lokal tidak memiliki `qemu-system-x86_64`, `grub-mkrescue`, dan `xorriso`).
 - **Rangkaian Pengujian (`npm test`):** 49 langkah pemeriksaan terintegrasi, terdiri dari inventaris fondasi, skrip penerimaan semantik Phase 1 (8 pemeriksaan), Phase 2 (9 pemeriksaan), Phase 3 (10 pemeriksaan), dan 45 suite TypeScript. Hasil aktual harus merujuk workflow GitHub Actions pada commit yang sedang diperiksa; suite tambahan fallback peramban SQLite (`npm run test:database-browser-v29`) dan Demo Terpadu (`npm run test:demo-terpadu`) dijalankan terpisah.
 - **Pemisahan Status Verifikasi Lingkungan:**
   - **SQLite Native (`node:sqlite`):** `26/26` lulus lokal pada Node.js 22 LTS Linux; tidak diam-diam fallback in-memory di Node.js.
   - **Regresi Lintas Platform, Matriks 6 Target & Gerbang Sertifikasi (Phase 23.1–23.10):** Linux lulus lokal; perbaikan simbol string LLVM IR `@.str.*`, linker probe nyata Windows ARM64, validasi installer `StandalonePackager` per-OS, host triple macOS Apple Silicon `arm64-apple-darwin`, verifikasi SHA-256 `.NET` bebas `Get-FileHash` & receipt JSON bebas UTF-8 BOM (`install.ps1`), perbaikan `package-lock.json` binding native lintas platform, dependensi C runtime Ubuntu (`libc6-dev`/`build-essential`), preflight sysroot lintas OS pada `NativeBuildPipeline`, agregator sertifikasi 6 target + QEMU user-mode ARM64, keselarasan `nusantara.toml`/`release.yml`/`versi.ts` (`0.50.0` & 6 target kanonik), serta gerbang sertifikasi 6/6 `CERTIFIED` pada `.github/workflows/ci.yml` dengan **Node.js 22 LTS** & `NUSANTARA_REQUIRE_CLANG=1` (runner Windows, macOS, dan Linux ARM64 menunggu eksekusi GitHub Actions).
-  - **Build ISO & Eksekusi QEMU:** Biner `kernel.elf`/`user-test.elf`/`user-fault-test.elf` tervalidasi ELF64/Multiboot2, namun ISO GRUB2 (`NOT_BUILT`) dan QEMU (`NOT EXECUTED`) menunggu runner Ubuntu di GitHub Actions.
-- **Audit Terakhir:** 16 November 2026.
+  - **Build ISO & Eksekusi QEMU:** Biner `kernel.elf`/`user-test.elf`/`user-fault-test.elf` tervalidasi ELF64/Multiboot2, namun ISO GRUB2 berhasil dibangun dan divalidasi, serta QEMU headless lulus 18 sentinel pada workflow OS CI commit yang diuji; pengujian perangkat keras fisik tetap belum dilakukan.
+- **Audit Terakhir:** 20 November 2026.
 - **Dokumentasi Roadmap Lengkap:** Silakan baca [ROADMAP.md](ROADMAP.md) untuk tabel detail status fase 1 hingga 50, catatan verifikasi faktual, dan garis besar Master Roadmap 150 Fase.
 
 ---
