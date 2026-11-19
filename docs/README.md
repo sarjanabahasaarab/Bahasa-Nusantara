@@ -2,7 +2,7 @@
 
 Selamat datang di pusat dokumentasi resmi **NUSANTARA**, bahasa pemrograman dengan sintaksis utama 100% Bahasa Indonesia untuk komputasi modern, terbuka, dan berkelanjutan.
 
-> ⚠️ **Status Kesiapan:** Proyek NUSANTARA saat ini berada pada **Phase 5 (Dokumentasi Awal & Buku Panduan - Milestone v0.5.0)**. Kompilator, lexer, dan interpreter belum tersedia secara biner; seluruh contoh kode dalam dokumentasi ini merupakan **rancangan sintaksis acuan** dan belum dapat dieksekusi sampai implementasi alat kompilasi tersedia (dimulai pada Phase 6: Lexer).
+> **Konteks Milestone:** Dokumen ini disusun pada Phase 5 (`v0.5.0`) sebagai fondasi panduan awal. Status repositori telah berkembang hingga Phase 50 (`v0.50.0`); lexer, parser, interpreter, dan komponen kompilator telah memiliki implementasi serta suite pengujian. Lihat [ROADMAP](../ROADMAP.md) untuk status fase terkini. Contoh pada setiap panduan harus dibaca sesuai status dan bukti pengujian fitur terkait.
 
 ---
 
