@@ -283,7 +283,7 @@ jobs:
   build-matrix-validation:
     name: NUSANTARA / Validasi Build (${{ matrix.target }})
     needs: quality-gate
-    runs-on: ${{ (matrix.target == 'windows-arm64' && vars.ENABLE_WINDOWS_ARM64_RUNNER != 'true' && !(github.event_name == 'workflow_dispatch' && inputs.enable_windows_arm64)) && 'windows-latest' || ((matrix.target == 'linux-arm64' && vars.DISABLE_LINUX_ARM64_RUNNER == 'true') && 'ubuntu-latest' || matrix.os) }}
+    runs-on: ${{ (matrix.target == 'linux-arm64' && vars.DISABLE_LINUX_ARM64_RUNNER == 'true') && 'ubuntu-latest' || matrix.os }}
     timeout-minutes: 35
     strategy:
       fail-fast: false
@@ -432,8 +432,8 @@ jobs:
               else
                 echo "[WARN] Windows SDK ARM64 library (Lib/*/um/arm64) tidak tersedia di runner ini."
               fi
-              if [ "${{ vars.ENABLE_WINDOWS_ARM64_RUNNER }}" = "true" ] && { [ -z "$ARM64_VC_LIB" ] || [ -z "$WIN_SDK_ARM64" ]; }; then
-                echo "[GALAT] Runner native windows-11-arm diaktifkan tetapi MSVC/WinSDK ARM64 tidak lengkap."
+              if [ -z "$ARM64_VC_LIB" ] || [ -z "$WIN_SDK_ARM64" ]; then
+                echo "[GALAT] Runner windows-11-arm harus menyediakan MSVC dan Windows SDK ARM64 untuk validasi native."
                 exit 1
               fi
             fi
@@ -791,7 +791,7 @@ jobs:
           java-version: '17'
 
       - name: Pasang Android SDK Command-line Tools
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Pasang Dependensi Node & Android Build-Tools / Platform-Tools
         run: |
