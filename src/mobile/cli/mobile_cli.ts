@@ -1111,8 +1111,8 @@ end`;
         }
 
         if (aksi === 'upload') {
-          console.log('[SUKSES] Berkas AAB berhasil diunggah ke Google Play edit session (Sandbox Mode).');
-          return 0;
+          console.error('[BELUM TERSEDIA] Perintah CLI upload belum terhubung ke GooglePlayClient. Tidak ada AAB yang dikirim ke Google Play.');
+          return 1;
         }
 
         if (aksi === 'release' || aksi === 'rilis') {
@@ -1128,12 +1128,12 @@ end`;
               console.log('======================================================');
               return 1;
             }
-            console.log('[SUKSES] Rilis Production berhasil diajukan dengan persetujuan eksplisit.');
-            return 0;
+            console.error('[BELUM DIKIRIM] Persetujuan eksplisit diterima, tetapi CLI belum menjalankan permintaan rilis ke Google Play Developer API. Tidak ada rilis production yang diajukan.');
+            return 1;
           }
 
-          console.log(`[SUKSES] Rilis Android untuk track '${trackTarget.toUpperCase()}' berhasil dipersiapkan.`);
-          return 0;
+          console.error(`[BELUM DIKIRIM] Track '${trackTarget.toUpperCase()}' belum dihubungkan ke API rilis Google Play. Tidak ada perubahan pada Play Console.`);
+          return 1;
         }
 
         console.log(`Sub-aksi android '${aksi}' tidak dikenal. Pilihan: metadata, validasi, track, upload, release.`);
