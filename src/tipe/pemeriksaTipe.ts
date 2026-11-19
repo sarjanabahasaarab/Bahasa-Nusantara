@@ -385,6 +385,7 @@ export class PemeriksaTipe {
         // Nilai kosong/unknown tetap APAPUN agar pola inisialisasi kosong lalu diisi
         // dapat digunakan tanpa melemahkan inferensi ekspresi yang sudah diketahui.
         const tipeDeklarasi =
+          !s.anotasiTipeEksplisit &&
           s.tipeData === NamaTipe.APAPUN &&
           tipeNilai !== NamaTipe.APAPUN &&
           tipeNilai !== NamaTipe.KOSONG
