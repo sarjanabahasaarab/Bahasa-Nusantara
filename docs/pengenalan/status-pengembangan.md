@@ -1,6 +1,6 @@
-# Status Pengembangan Saat Ini (Phase 5)
+# Status Pengembangan: Konteks Milestone Phase 5
 
-Dokumen ini menjelaskan status teknis repositori bahasa NUSANTARA pada tonggak rilis **Milestone v0.5.0**.
+Dokumen ini merekam konteks historis tonggak dokumentasi awal **Milestone v0.5.0**. Ini bukan laporan status repositori terkini; status aktual Phase 1–50 dipelihara di [ROADMAP.md](../../ROADMAP.md).
 
 ---
 
@@ -12,9 +12,9 @@ Dokumen ini menjelaskan status teknis repositori bahasa NUSANTARA pada tonggak r
 | **Konstitusi Bahasa** | **Selesai (v0.2.0)** | 10 Prinsip Konstitusi, 32 kata kunci, tipe data dasar, proposal NIP-0002. |
 | **Lisensi & Tata Kelola** | **Selesai (v0.3.0)** | Apache License 2.0, tata kelola 5 peran, alur NIP 7 tahap, template GitHub, kebijakan keamanan. |
 | **Spesifikasi Sintaks EBNF** | **Selesai (v0.4.0)** | Tata bahasa formal ISO/IEC 14977, presedensi 8 tingkat operator, 15 kasus uji negatif. |
-| **Dokumentasi Awal & Buku Panduan** | **Selesai (v0.5.0 — Fase Saat Ini)** | Buku panduan pemula, referensi terstruktur, panduan pengembang, glosarium teknis. |
-| **Kompilator Biner / Lexer / Parser** | **Belum Tersedia** | Dijadwalkan mulai Phase 6 (Lexer) dan Phase 7 (Parser). |
-| **Eksekusi Kode Nyata** | **Belum Tersedia** | Kode `.nusantara` saat ini berstatus rancangan acuan spesifikasi. |
+| **Dokumentasi Awal & Buku Panduan** | **Selesai (v0.5.0)** | Fondasi panduan pemula, referensi terstruktur, panduan pengembang, dan glosarium. |
+| **Lexer, Parser, Interpreter** | **Diimplementasikan pada fase berikutnya** | Implementasi dan pengujian tercatat pada Phase 6–8 di roadmap. |
+| **Toolchain dan kompilasi native** | **Berkembang pada fase berikutnya** | Cakupan dan batas platform mengikuti bukti pengujian fase terkait. |
 
 ---
 
@@ -25,13 +25,13 @@ Untuk menghindari kesalahpahaman:
 - **Rancangan Bahasa (*Language Design*):** Aturan tata bahasa, kata kunci, tipe data, dan contoh kode yang telah disahkan secara formal dalam dokumen spesifikasi.
 - **Implementasi Kompilator (*Compiler Implementation*):** Program komputer nyata yang memindai teks kode sumber, membangun pohon sintaksis (AST), dan menerjemahkannya menjadi kode mesin yang dapat dijalankan sistem operasi.
 
-Pada Phase 5, seluruh rancangan bahasa telah kokoh dan terverifikasi. Tahapan implementasi teknis akan dimulai secara murni pada fase berikutnya.
+Pada saat milestone Phase 5 disusun, dokumen menjadi acuan awal sebelum implementasi kompilator diperluas. Repositori saat ini sudah memiliki komponen implementasi pada fase-fase selanjutnya; keberhasilan tiap fitur tetap mengikuti bukti pengujian fase terkait.
 
 ---
 
-## 3. Langkah Berikutnya: Phase 6 (Lexer)
+## 3. Tonggak Berikutnya Setelah Milestone Phase 5
 
-Fase berikutnya adalah **Phase 6: Lexer (Penganalisis Leksikal)**, yang akan bertugas:
+Dalam urutan roadmap, pekerjaan setelah dokumentasi awal berlanjut ke **Phase 6: Lexer (Penganalisis Leksikal)**, yang bertugas:
 1. Membaca aliran karakter dari berkas sumber `.nusantara`.
 2. Mengubah karakter teks menjadi token leksikal (Kata Kunci, Pengidentifikasi, Literal, Operator, Pemisah).
 3. Melacak nomor baris dan kolom untuk pelaporan kesalahan presisi.
