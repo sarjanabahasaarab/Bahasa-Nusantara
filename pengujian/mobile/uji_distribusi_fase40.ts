@@ -227,7 +227,9 @@ async function jalankanSemuaUji(): Promise<void> {
     pastikan(hasilArchive.sukses, 'Persiapan archive iOS harus sukses');
     pastikan(Boolean(hasilArchive.artefak), 'Artefak archive harus ada');
     samaDengan(hasilArchive.artefak?.format, 'xcarchive', 'Format harus xcarchive');
-    pastikan(hasilArchive.siapTestFlight, 'Harus memenuhi kriteria kesiapan TestFlight');
+    pastikan(!hasilArchive.siapTestFlight, 'Archive struktural tanpa xcodebuild dan Mach-O tidak boleh diklaim siap TestFlight');
+    pastikan(!hasilArchive.siapAppStore, 'Archive struktural tidak boleh diklaim siap App Store');
+    pastikan(!hasilArchive.artefak!.apakahDitandatangani, 'Metadata signing tidak membuktikan archive benar-benar ditandatangani');
   });
 
   uji('5.4 Daftar checklist persiapan Apple App Store', () => {
@@ -361,7 +363,7 @@ async function jalankanSemuaUji(): Promise<void> {
     pastikan(statusAset === 0 || statusAset === 1, 'distribusi aset harus keluar status terdefinisi');
 
     const statusChecklist = MobileCLI.jalankan(['distribusi', 'rilis', 'checklist']);
-    samaDengan(statusChecklist, 0, 'distribusi rilis checklist harus keluar kode 0');
+    samaDengan(statusChecklist, 1, 'Checklist rilis staging harus mengembalikan kode 1 ketika toolchain/aset wajib belum terpenuhi');
   });
 
   // ---------------------------------------------------------------------------
