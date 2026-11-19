@@ -2,6 +2,8 @@
 
 Dokumen ini merekam konteks historis tonggak dokumentasi awal **Milestone v0.5.0**. Ini bukan laporan status repositori terkini; status aktual Phase 1–50 dipelihara di [ROADMAP.md](../../ROADMAP.md).
 
+Repositori kemudian berkembang hingga Phase 50, mencakup fondasi NusantaraOS dan pengujian user mode. Rincian implementasi dan batas verifikasi setiap fase tersedia pada roadmap; halaman ini tetap menjadi catatan konteks historis Phase 5.
+
 ---
 
 ## 1. Ringkasan Status
