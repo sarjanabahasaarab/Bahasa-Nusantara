@@ -811,6 +811,8 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts/cert-evidence
           TMP_KS="$RUNNER_TEMP/nusantara-ci-ephemeral.jks"
+          NUSA_STORE_PASS="$(openssl rand -hex 24)"
+          NUSA_KEY_PASS="$(openssl rand -hex 24)"
           keytool -genkeypair -noprompt -keystore "$TMP_KS" -storepass "$NUSA_STORE_PASS" -keypass "$NUSA_KEY_PASS" -alias nusa_ci -keyalg RSA -keysize 2048 -validity 2 -dname "CN=Nusantara CI,O=Nusantara,C=ID"
           export NUSANTARA_ANDROID_KEYSTORE="$TMP_KS"
           export NUSANTARA_ANDROID_KEY_ALIAS=nusa_ci
@@ -821,9 +823,16 @@ jobs:
           APK_RELEASE="native/android/app/build/outputs/apk/release/app-release.apk"
           AAB="native/android/app/build/outputs/bundle/release/app-release.aab"
           test -s "$APK_DEBUG" && test -s "$APK_RELEASE" && test -s "$AAB"
-          unzip -Z1 "$APK_DEBUG" | grep -Fx classes.dex
-          unzip -Z1 "$AAB" | grep -Fx BundleConfig.pb
-          unzip -Z1 "$AAB" | grep -E '^base/dex/classes([0-9]+)?\.dex
+          unzip -Z1 "$APK_DEBUG" | grep -Fx "classes.dex"
+          unzip -Z1 "$AAB" | grep -Fx "BundleConfig.pb"
+          unzip -Z1 "$AAB" | grep "base/dex/classes" | grep ".dex"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK_DEBUG"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK_RELEASE"
+          echo "APK_DEBUG=$APK_DEBUG" >> "$GITHUB_ENV"
+          echo "APK_RELEASE=$APK_RELEASE" >> "$GITHUB_ENV"
+          echo "AAB_NATIVE=$AAB" >> "$GITHUB_ENV"
+          echo "EPHEMERAL_SIGNING_VERIFIED=true" >> "$GITHUB_ENV"
+
       - name: Audit Toolchain Android, Suite Mobile (37, 38, 40, 41) & Bukti Kejujuran
         run: |
           mkdir -p artifacts/cert-evidence
