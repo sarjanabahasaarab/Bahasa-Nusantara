@@ -55,7 +55,7 @@ check('Inventaris 32 bentuk kata kunci dan pembagian statusnya konsisten', () =>
   assert.equal(new Set(keywordNames).size, 32);
   assert.equal(established.length, 21);
   assert.equal(proposed.length, 11);
-  assert.match(nip1, /`buat` \/ `baru`.*satu kelompok/);
+  assert.match(nip1, /`buat` dan `baru`.*satu kelompok/);
   assert.match(keyword, /`buat` dan `baru` merupakan dua bentuk alternatif/);
 });
 check('Taksonomi Phase 2 memuat 10 nama tipe dengan status yang eksplisit', () => {
@@ -106,4 +106,4 @@ check('Indeks dokumentasi memuat seluruh dokumen inti Phase 2', () => {
   }
 });
 
-console.log(`\\nPhase 2: ${checks.length}/${checks.length} pemeriksaan lulus.`);
+console.log(`\nPhase 2: ${checks.length}/${checks.length} pemeriksaan lulus.`);
