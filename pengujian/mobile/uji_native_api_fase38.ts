@@ -432,8 +432,9 @@ async function jalankanSemuaPengujianFase38(): Promise<void> {
     const adaptorAwal = dapatkanAdaptorPlatformAktif();
     try {
       tetapkanAdaptorPlatform(new AdaptorAndroidMobile());
+      pastikan(dapatkanAdaptorPlatformAktif().namaPlatform === 'android', 'Pergantian adaptor dinamis harus langsung berlaku');
       const resAndroid = await RegistriNativeAPI.dapatkanInstance().panggil('perangkat.info');
-      pastikan(resAndroid.sukses && resAndroid.data.platform === 'android', 'Pergantian adaptor dinamis harus langsung berlaku di Registri');
+      pastikan(!resAndroid.sukses && resAndroid.status === 'perangkat_tidak_tersedia', 'Tanpa ADB perangkat nyata, adapter Android harus gagal tertutup alih-alih memakai data simulator');
     } finally {
       tetapkanAdaptorPlatform(adaptorAwal);
     }
