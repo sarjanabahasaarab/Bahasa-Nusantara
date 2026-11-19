@@ -174,7 +174,7 @@ jobs:
         run: |
           set -euo pipefail
           brew install xcodegen
-          xcodegen generate --spec native/ios/project.yml --project native/ios/NusantaraMobile.xcodeproj
+          xcodegen generate --spec native/ios/project.yml --project native/ios
           SIM_UDID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for group in d["devices"].values() for x in group if x.get("isAvailable") and x["name"].startswith("iPhone")))')
           xcrun simctl boot "$SIM_UDID" 2>/dev/null || true
           xcrun simctl bootstatus "$SIM_UDID" -b
