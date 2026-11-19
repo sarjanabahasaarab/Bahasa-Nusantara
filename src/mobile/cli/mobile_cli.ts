@@ -659,7 +659,7 @@ end`;
     console.log(`Perangkat ADB     : ${probe.perangkatADB.length > 0 ? probe.perangkatADB.map((p) => `${p.serial}(${p.status})`).join(', ') : '(tidak terhubung)'}`);
     console.log(`Mode Simulator    : ${info.apakahSimulator ? 'YA' : 'TIDAK (Perangkat Fisik)'}`);
     console.log(`\nKemampuan Perangkat Keras:`);
-    console.log(`  Kamera Depan/Belakang : ${kemampuan.kamera.tersedia ? 'Tersedia (Kontrak)' : 'Tidak'} | Host V4L2: ${probe.kameraV4L2.length}`);
+    console.log(`  Kamera Depan/Belakang : ${kemampuan.kamera.tersedia ? 'Terdeteksi' : 'Tidak terdeteksi'} | Host V4L2: ${probe.kameraV4L2.length}`);
     console.log(`  Akselerometer/Giroskop: ${kemampuan.sensor.akselerometer ? 'Tersedia (Kontrak)' : 'Tidak'}`);
     console.log(`  Geolokasi (GPS)       : ${kemampuan.konektivitas.gps ? 'Tersedia (Kontrak)' : 'Tidak'}`);
     console.log(`  Bluetooth / BLE       : ${kemampuan.konektivitas.bluetooth ? 'Tersedia (Kontrak)' : 'Tidak'} | Host HCI: ${probe.bluetoothHCI.length}`);
