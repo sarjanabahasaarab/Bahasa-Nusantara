@@ -822,6 +822,24 @@ async function jalankanSemuaPengujianFase41() {
     const tokenEs = ascJwtClient.buatDanTandaTanganiJWT();
     const vEsOk = AppStoreConnectClient.verifikasiJWTES256(tokenEs, ecPub, 'appstoreconnect-v1');
     pastikan(vEsOk.valid, 'Verifikasi JWT ES256 sah wajib lulus');
+    const statusBuildBelumDiperiksa = await ascJwtClient.periksaStatusBuild('1.0.0', 42);
+    pastikan(
+      statusBuildBelumDiperiksa.status === 'processing' && !statusBuildBelumDiperiksa.siapTestFlight,
+      'Status build Apple tidak boleh dianggap siap TestFlight tanpa pemeriksaan API'
+    );
+
+    let placeholderAscDitolak = false;
+    try {
+      const ascTanpaKredensial = new AppStoreConnectClient({
+        bundleId: 'id.nusantara.test',
+        defaultChannel: 'testflight',
+      });
+      ascTanpaKredensial.buatDanTandaTanganiJWT();
+    } catch {
+      placeholderAscDitolak = true;
+    }
+    pastikan(placeholderAscDitolak, 'JWT App Store Connect wajib menolak Issuer ID/Key ID contoh atau kosong');
+
 
     const esParts = tokenEs.split('.');
     const tamperedPayload = Buffer.from(JSON.stringify({ iss: 'attacker', exp: Math.floor(Date.now() / 1000) + 999, aud: 'appstoreconnect-v1' })).toString('base64url');
