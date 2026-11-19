@@ -570,20 +570,25 @@ export class Parser {
           // Sintaks deklarasi variabel: definisi x = 10
           this.stream.next(); // lewati 'definisi'
           const namaTok = this.stream.next();
-          let tipeData = 'bilangan';
-          if (this.cocok(JenisToken.TITIK_DUA)) {
+          // Tanpa anotasi, gunakan APAPUN sebagai penanda inferensi sementara.
+          // Pemeriksa tipe akan menyimpulkan tipe ekspresi lengkap (termasuk operasi,
+          // pemanggilan fungsi, daftar, dan peta), bukan hanya literal sederhana.
+          let tipeData = 'apapun';
+          const adaAnotasiTipe = this.cocok(JenisToken.TITIK_DUA);
+          if (adaAnotasiTipe) {
             const tipeTok = this.harapkanNamaTipe();
             tipeData = tipeTok.nilai;
           }
           this.harapkan(JenisToken.OP_SAMA_DENGAN, "tanda '=' setelah nama variabel dalam definisi");
           const nilaiAwal = this.parseEkspresi();
-          if (nilaiAwal.jenis === JenisNodeAST.LITERAL) {
+          if (!adaAnotasiTipe && nilaiAwal.jenis === JenisNodeAST.LITERAL) {
             const lit = nilaiAwal as NodeLiteral;
             if (lit.tipeLiteral === 'bilangan') tipeData = 'bilangan';
             else if (lit.tipeLiteral === 'desimal') tipeData = 'desimal';
             else if (lit.tipeLiteral === 'teks') tipeData = 'teks';
             else if (lit.tipeLiteral === 'logika') tipeData = 'logika';
             else if (lit.tipeLiteral === 'karakter') tipeData = 'karakter';
+            // Literal kosong tetap APAPUN agar dapat diisi kemudian.
           }
           return {
             jenis: JenisNodeAST.DEKLARASI_VARIABEL,
