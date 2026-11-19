@@ -866,9 +866,9 @@ jobs:
               ],
               "generatedAt": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
           }
-          with open("artifacts/cert-evidence/phase37-42-android.json", "w", encoding="utf-8", newline="\\n") as output:
+          with open("artifacts/cert-evidence/phase37-42-android.json", "w", encoding="utf-8", newline="\n") as output:
               json.dump(payload, output, ensure_ascii=False, indent=2)
-              output.write("\\n")
+              output.write("\n")
           PY
 
       - name: Unggah Evidence Android SDK
