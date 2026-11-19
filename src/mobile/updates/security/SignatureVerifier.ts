@@ -89,6 +89,9 @@ export class SignatureVerifier {
     }
 
     const kunci = trustManager.dapatkanKunci(keyId)!;
+    if (kunci.algoritma !== algoritma) {
+      return { valid: false, keyId, algoritma, pesan: 'Algoritma manifest tidak cocok dengan algoritma kunci tepercaya.', alasan: 'KEY_ALGORITHM_MISMATCH' };
+    }
 
     // 2. Hitung digest kanonikal
     const kanonikal = this.kanonikalisasiManifest(manifest);
