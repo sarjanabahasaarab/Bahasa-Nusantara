@@ -8,9 +8,9 @@ Keamanan piranti lunak, perlindungan data pengembang, dan keandalan sistem kompu
 
 Jika Anda menemukan potensi kerentanan keamanan (*vulnerability*) pada kompilator, spesifikasi, atau pustaka standar NUSANTARA, kami meminta Anda untuk **melaporkannya secara bertanggung jawab dan privat**:
 
-- **Kanal Pelaporan Keamanan Privat:** Gunakan fitur **GitHub Private Vulnerability Reporting** pada tab *Security* repositori, atau hubungi kanal `[EMAIL_ATAU_KANAL_KEAMANAN_PRIVAT]`.
+- **Kanal Pelaporan Keamanan Privat:** Gunakan **GitHub Private Vulnerability Reporting** pada tab *Security* jika fitur tersebut tersedia dan aktif. Status pengaktifannya belum dapat diverifikasi pada audit ini. Jika fitur belum tersedia, jangan mengirim rincian eksploitasi melalui Issue publik; ajukan permintaan non-sensitif agar maintainer menyediakan kanal privat terlebih dahulu.
 - **Etika Pelaporan:** **JANGAN** membuat GitHub Issue publik, mencuit di media sosial, atau memublikasikan rincian eksploitasi sebelum tim maintainer mengonfirmasi dan menyiapkan perbaikan terkoordinasi (*coordinated disclosure*).
-- **Target Respon:** Tim maintainer berupaya memberikan respon awal dalam waktu 48 jam sejak laporan diterima.
+- **Target Respon:** Tim maintainer menargetkan respon awal dalam 48 jam. Ini adalah sasaran layanan, bukan jaminan waktu respon.
 
 ---
 
@@ -23,7 +23,7 @@ Jika Anda menemukan potensi kerentanan keamanan (*vulnerability*) pada kompilato
    - Kredensial basis data atau rahasia server
 2. **Tindakan Pencegahan:**
    - Gunakan berkas `.env.example` untuk variabel lingkungan umum dan pastikan berkas rahasia lokal terdaftar di `.gitignore`.
-   - Repositori dilengkapi dengan sistem pemindaian rahasia (*secret scanning*) otomatis. Komit yang memuat rahasia akan ditolak oleh sistem.
+   - **Secret scanning** dapat membuat peringatan ketika pola rahasia yang didukung terdeteksi. Penolakan push hanya terjadi jika fitur **push protection** diaktifkan dan pola rahasia tersebut didukung. Status secret scanning dan push protection repositori belum dapat diverifikasi pada audit ini; jangan mengklaim bahwa setiap komit yang mengandung rahasia pasti ditolak.
 
 ---
 
@@ -45,4 +45,4 @@ Jika Anda menemukan potensi kerentanan keamanan (*vulnerability*) pada kompilato
 
 ## 5. Konfigurasi Fitur Keamanan GitHub
 
-Fitur pelaporan keamanan privat (*Private Vulnerability Reporting*) dan *Dependabot alerts* wajib diaktifkan pada pengaturan tab **Security** repositori GitHub NUSANTARA sebelum proyek memasuki fase rilis publik aktif.
+Maintainer harus mengaktifkan dan memverifikasi **Private Vulnerability Reporting**, **Dependabot alerts**, **secret scanning**, dan bila tersedia **push protection** pada tab **Security**. Status aktual fitur-fitur tersebut belum dapat diverifikasi melalui akses audit ini; dokumen kebijakan tidak boleh dianggap sebagai bukti bahwa fitur telah aktif.
