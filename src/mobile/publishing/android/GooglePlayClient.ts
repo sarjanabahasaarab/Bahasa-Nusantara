@@ -99,12 +99,13 @@ export class GooglePlayClient {
     const nowSec = Math.floor(Date.now() / 1000);
     const header = { alg: 'RS256', typ: 'JWT' };
     const claim = {
-      iss: this.konfig.serviceAccountEmail || `${this.konfig.applicationId}@developer.gserviceaccount.com`,
+      iss: this.konfig.serviceAccountEmail || '',
       scope: 'https://www.googleapis.com/auth/androidpublisher',
       aud: audience,
       iat: nowSec,
       exp: nowSec + 3600,
     };
+    if (!claim.iss) throw new Error('Email Service Account Google wajib tersedia untuk JWT assertion.');
     const unsigned = `${encodeBase64Url(JSON.stringify(header))}.${encodeBase64Url(JSON.stringify(claim))}`;
     const crypto = muatModulNode<any>('crypto');
     if (crypto && typeof crypto.sign === 'function') {
@@ -115,14 +116,47 @@ export class GooglePlayClient {
   }
 
   private async pastikanHeaderOtorisasi(): Promise<Record<string, string>> {
-    if (this.tokenAksesOauth && Date.now() < this.kedaluwarsaToken) {
+    if (this.tokenAksesOauth && Date.now() < this.kedaluwarsaToken - 60000) {
       return { Authorization: `Bearer ${this.tokenAksesOauth}` };
     }
-    if (this.konfig.kunciPrivatPem) {
-      const jwt = this.buatAssertionJWTRS256(this.konfig.kunciPrivatPem);
-      return { Authorization: `Bearer ${jwt}` };
+
+    const kredensial = CredentialManager.dapatkanInstance().ambilServiceAccountGoogle(this.konfig);
+    let serviceAccountEmail = this.konfig.serviceAccountEmail;
+    let privateKey = this.konfig.kunciPrivatPem;
+
+    if (kredensial.ditemukan && kredensial.validasi.valid && kredensial.konten) {
+      try {
+        const json = JSON.parse(kredensial.konten);
+        serviceAccountEmail = serviceAccountEmail || json.client_email;
+        privateKey = privateKey || json.private_key;
+      } catch {
+        throw new Error('Berkas Service Account Google bukan JSON yang valid.');
+      }
     }
-    return {};
+
+    if (!serviceAccountEmail || !privateKey) {
+      throw new Error('Autentikasi Google Play memerlukan client_email dan private_key Service Account yang valid.');
+    }
+
+    const jwt = this.buatAssertionJWTRS256(privateKey);
+    const form = new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion: jwt,
+    });
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+      body: form.toString(),
+    });
+    const token = await response.json().catch(() => ({}));
+    if (!response.ok || typeof token.access_token !== 'string' || !token.access_token) {
+      throw new Error(`Pertukaran JWT ke OAuth2 Google gagal (HTTP ${response.status}).`);
+    }
+
+    this.tokenAksesOauth = token.access_token;
+    const masaBerlaku = Number(token.expires_in);
+    this.kedaluwarsaToken = Date.now() + (Number.isFinite(masaBerlaku) && masaBerlaku > 0 ? masaBerlaku : 3600) * 1000;
+    return { Authorization: `Bearer ${this.tokenAksesOauth}` };
   }
 
   /**
