@@ -34,8 +34,8 @@ const kompilator = read('kompilator/README.md');
 const runtime = read('runtime/README.md');
 
 check('Identitas resmi NUSANTARA dan ekstensi .nusantara ditetapkan', () => {
-  assert.match(nip, /Nama Resmi:\s*NUSANTARA/);
-  assert.match(nip, /Ekstensi Berkas Kode Sumber:\s*`.nusantara`/);
+  assert.match(nip, /\\*\\*Nama Resmi:\\*\\*\\s*NUSANTARA/);
+  assert.match(nip, /\\*\\*Ekstensi Berkas Kode Sumber:\\*\\*\\s*`.nusantara`/);
 });
 check('Prinsip desain tidak bertentangan dengan lisensi resmi Phase 3', () => {
   assert.match(prinsip, /lisensi resmi ditetapkan secara terpisah pada Phase 3/i);
@@ -43,7 +43,7 @@ check('Prinsip desain tidak bertentangan dengan lisensi resmi Phase 3', () => {
 });
 check('NIP-0001 memiliki metadata dan status penerimaan', () => {
   assert.match(nip, /NIP-0001/);
-  assert.match(nip, /Status:\s*Diterima/);
+  assert.match(nip, /\\*\\*Status:\\*\\*\\s*Diterima/);
   assert.match(nip, /Phase 1 \(Identitas & Fondasi\)/);
 });
 check('Jumlah kelompok kata kunci awal dijelaskan tanpa hitung ambigu', () => {
