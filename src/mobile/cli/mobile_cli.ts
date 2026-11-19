@@ -1045,29 +1045,15 @@ end`;
       }
 
       case 'koneksi':
-
       case 'connection': {
         const target = subArgs[0] || 'android';
         console.log('======================================================');
         console.log(`  NUSANTARA MOBILE - Uji Koneksi Toko (${target.toUpperCase()})`);
         console.log('======================================================');
-        if (target === 'android' || target === 'google') {
-          // Sync handler call
-          let hasil: any;
-          pub.ujiKoneksiAndroid().then((r) => { hasil = r; });
-          // Fallback sync display
-          console.log(`Target Platform : Android (Google Play Developer API)`);
-          console.log(`Status Koneksi  : SIAP (Sandbox / Live API Ready)`);
-          console.log(`Izin Akses      : androidpublisher.releases, androidpublisher.listings`);
-          console.log(`Mode Operasi    : SANDBOX / SIMULATOR AMAN`);
-        } else {
-          console.log(`Target Platform : iOS (App Store Connect API)`);
-          console.log(`Status Koneksi  : SIAP (Sandbox / Live API Ready)`);
-          console.log(`Masa Berlaku JWT: 1200 detik (20 menit)`);
-          console.log(`Mode Operasi    : SANDBOX / SIMULATOR AMAN`);
-        }
+        console.log('Status Koneksi  : BELUM DIVERIFIKASI');
+        console.log('Keterangan      : Pemeriksaan toko memerlukan alur async dan respons API nyata; CLI sinkron ini tidak boleh mengarang status terhubung.');
         console.log('======================================================');
-        return 0;
+        return 1;
       }
 
       case 'android': {
