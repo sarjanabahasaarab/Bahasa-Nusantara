@@ -58,6 +58,66 @@ function pastikan(kondisi: boolean, pesan: string): void {
   console.log(`  [✓ LULUS] ${pesan}`);
 }
 
+function crc32Zip(data: Buffer): number {
+  let crc = 0xffffffff;
+  for (const byte of data) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function buatZipAABFixture(entries: Array<[string, string]>): Buffer {
+  const localParts: Buffer[] = [];
+  const centralParts: Buffer[] = [];
+  let offset = 0;
+  for (const [name, text] of entries) {
+    const nameBytes = Buffer.from(name, 'utf8');
+    const body = Buffer.from(text, 'utf8');
+    const crc = crc32Zip(body);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0, 6);
+    local.writeUInt16LE(0, 8);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(body.length, 18);
+    local.writeUInt32LE(body.length, 22);
+    local.writeUInt16LE(nameBytes.length, 26);
+    local.writeUInt16LE(0, 28);
+    localParts.push(local, nameBytes, body);
+
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(0, 8);
+    central.writeUInt16LE(0, 10);
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(body.length, 20);
+    central.writeUInt32LE(body.length, 24);
+    central.writeUInt16LE(nameBytes.length, 28);
+    central.writeUInt16LE(0, 30);
+    central.writeUInt16LE(0, 32);
+    central.writeUInt16LE(0, 34);
+    central.writeUInt32LE(0, 38);
+    central.writeUInt32LE(offset, 42);
+    centralParts.push(central, nameBytes);
+    offset += local.length + nameBytes.length + body.length;
+  }
+  const centralDirectory = Buffer.concat(centralParts);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(0, 4);
+  eocd.writeUInt16LE(0, 6);
+  eocd.writeUInt16LE(entries.length, 8);
+  eocd.writeUInt16LE(entries.length, 10);
+  eocd.writeUInt32LE(centralDirectory.length, 12);
+  eocd.writeUInt32LE(offset, 16);
+  eocd.writeUInt16LE(0, 20);
+  return Buffer.concat([...localParts, centralDirectory, eocd]);
+}
+
 async function jalankanSemuaPengujianFase41() {
   console.log('======================================================================');
   console.log('PENGUJIAN FASE 41 — MOBILE APP STORE INTEGRATION & AUTOMATED RELEASE');
@@ -705,6 +765,14 @@ async function jalankanSemuaPengujianFase41() {
       const gagalAab = await gpPreflight.unggahAAB(tmpAab + '.missing', 41, '00'.repeat(32), 10, 'internal', false);
       pastikan(!gagalAab.sukses, 'AAB hilang harus ditolak saat preflight live');
       pastikan(!permintaanTercatat.includes('POST /play/id.nusantara.test/edits'), 'AAB yang gagal preflight tidak boleh membuat Google Play edit yatim');
+      const tmpFakeAab = tmpAab + '.fake';
+      fs.writeFileSync(tmpFakeAab, Buffer.from('PK\\x03\\x04AAB_TEST_PAYLOAD'));
+      const fakeBytes = fs.readFileSync(tmpFakeAab);
+      const fakeHash = crypto.createHash('sha256').update(fakeBytes).digest('hex');
+      const fakeUpload = await gpPreflight.unggahAAB(tmpFakeAab, 45, fakeHash, fakeBytes.length, 'internal', false);
+      pastikan(!fakeUpload.sukses, 'AAB ZIP palsu tanpa BundleConfig/DEX/manifest wajib ditolak');
+      pastikan(!permintaanTercatat.includes('POST /play/id.nusantara.test/edits'), 'AAB palsu tidak boleh membuat Google Play edit yatim');
+      fs.unlinkSync(tmpFakeAab);
 
       const gp = new GooglePlayClient({
         applicationId: 'id.nusantara.test',
