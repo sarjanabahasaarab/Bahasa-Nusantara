@@ -106,15 +106,18 @@ export class BuildValidator {
       if (stat.isDirectory()) {
         const infoPlist = path.join(artefak.jalurLokal, 'Info.plist');
         const adaInfo = fs.existsSync(infoPlist) && fs.statSync(infoPlist).size > 0;
-        const ok = adaInfo && formatHex;
+        const infoBytes = adaInfo ? fs.readFileSync(infoPlist) : Buffer.alloc(0);
+        const hashAktual = adaInfo ? crypto.createHash('sha256').update(infoBytes).digest('hex') : '';
+        const sha256Sah = formatHex && hashAktual.toLowerCase() === artefak.sha256.toLowerCase();
+        const ok = adaInfo && sha256Sah;
         return {
           valid: ok,
           adaBerkas: adaInfo,
-          ukuranBytes: adaInfo ? fs.statSync(infoPlist).size : 0,
-          sha256Sah: formatHex,
+          ukuranBytes: adaInfo ? infoBytes.length : 0,
+          sha256Sah,
           pesan: ok
-            ? `Direktori arsip '${artefak.namaBerkas}' sah (Info.plist terverifikasi).`
-            : `Direktori arsip '${artefak.namaBerkas}' tidak lengkap (Info.plist atau digest tidak sah).`,
+            ? `Direktori arsip struktural '${artefak.namaBerkas}' sah (Info.plist + SHA-256 terverifikasi; bukan bukti binary native).`
+            : `Direktori arsip '${artefak.namaBerkas}' tidak lengkap atau SHA-256 Info.plist tidak cocok.`,
         };
       }
 
