@@ -339,7 +339,11 @@ export class GooglePlayClient {
       }
       const authHdr = await this.pastikanHeaderOtorisasi();
 
-      const uploadUrl = `${this.baseUrl}/${encodeURIComponent(this.konfig.packageName)}/edits/${encodeURIComponent(this.editIdAktif!)}/bundles`;
+      const parsedBase = new URL(this.baseUrl);
+      const jalurUpload = `/applications/${encodeURIComponent(this.konfig.packageName)}/edits/${encodeURIComponent(this.editIdAktif!)}/bundles`;
+      const uploadUrl = parsedBase.hostname === 'androidpublisher.googleapis.com'
+        ? `https://androidpublisher.googleapis.com/upload/androidpublisher/v3${jalurUpload}?uploadType=media`
+        : `${this.baseUrl}/${encodeURIComponent(this.konfig.packageName)}/edits/${encodeURIComponent(this.editIdAktif!)}/bundles`;
       const uploadRes = await fetch(uploadUrl, {
         method: 'POST',
         headers: {
