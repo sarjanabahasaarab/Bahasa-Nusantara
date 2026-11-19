@@ -696,6 +696,11 @@ async function jalankanSemuaPengujianFase41() {
       const expectedSha256 = crypto.createHash('sha256').update(fs.readFileSync(tmpAab)).digest('hex');
       const upload = await gp.unggahAAB(tmpAab, 42, expectedSha256, expectedBytes, 'internal', false);
       pastikan(upload.sukses && !upload.modeSandbox && upload.ukuranBytes === expectedBytes, 'GooglePlayClient unggahAAB HTTP octet-stream harus berhasil');
+      const uploadHashSalah = await gp.unggahAAB(tmpAab, 43, '00'.repeat(32), expectedBytes, 'internal', false);
+      pastikan(!uploadHashSalah.sukses, 'GooglePlayClient wajib menolak AAB dengan SHA-256 yang tidak cocok');
+      const uploadBerkasHilang = await gp.unggahAAB(tmpAab + '.missing', 44, expectedSha256, expectedBytes, 'internal', false);
+      pastikan(!uploadBerkasHilang.sukses, 'GooglePlayClient wajib menolak path AAB yang tidak ditemukan');
+
 
       const track = await gp.dapatkanStatusTrack('internal', false);
       pastikan(track.versionCodes[0] === 42 && track.status === 'inProgress', 'GooglePlayClient GET track HTTP harus mencerminkan status server');
