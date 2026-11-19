@@ -960,6 +960,12 @@ jobs:
         run: |
           set -euo pipefail
           npm ci
+          npm run test:mobile-v37
+          npm run test:native-api-v38
+          npm run test:mobile-networking-v39
+          npm run test:distribusi-v40
+          npm run test:publikasi-v41
+          npm run test:pembaruan-v42
           brew install xcodegen
           xcodegen generate --spec native/ios/project.yml --project native/ios/NusantaraMobile.xcodeproj
           mkdir -p artifacts/cert-evidence
