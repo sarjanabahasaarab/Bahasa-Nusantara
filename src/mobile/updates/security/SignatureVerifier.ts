@@ -128,28 +128,21 @@ export class SignatureVerifier {
    */
   public static tandaTangani(
     manifest: ManifestPembaruan,
-    keyId = 'nusantara-root-release-2026',
-    kunciPrivatPemOrHex?: string,
-    algoritma: 'Ed25519' | 'RSA-SHA256' | 'HMAC-SHA256' = 'Ed25519'
+    keyId: string,
+    kunciPrivatPem: string,
+    algoritma: 'Ed25519' | 'RSA-SHA256' = 'Ed25519'
   ): ManifestPembaruan {
-    const tm = TrustManager.dapatkanInstance();
-    const kunci = tm.dapatkanKunci(keyId);
-    const privMaterial = kunciPrivatPemOrHex || (kunci ? kunci.kunciPublikHex : 'mock_priv_key');
-    const kanonikal = this.kanonikalisasiManifest(manifest);
-    const digest = HashValidator.hitungSHA256(kanonikal);
-    const nilaiTandaTangan = this.buatTandaTanganKripto(digest, privMaterial, algoritma);
-
-    const tandaTangan: TandaTanganManifest = {
-      algoritma,
-      keyId,
-      nilaiTandaTangan,
-      stempelWaktu: new Date().toISOString(),
-    };
-
-    return {
-      ...manifest,
-      tandaTangan,
-    };
+    if (!keyId || !kunciPrivatPem || !kunciPrivatPem.includes('-----BEGIN PRIVATE KEY-----')) {
+      throw new Error('Penandatanganan OTA memerlukan keyId dan private key PEM nyata; fallback/mock key dilarang.');
+    }
+    const trusted = TrustManager.dapatkanInstance().dapatkanKunci(keyId);
+    if (!trusted || trusted.algoritma !== algoritma) {
+      throw new Error('keyId tidak terdaftar atau algoritma tidak cocok dengan public key tepercaya.');
+    }
+    const digest = HashValidator.hitungSHA256(this.kanonikalisasiManifest(manifest));
+    const nilaiTandaTangan = this.buatTandaTanganKripto(digest, kunciPrivatPem, algoritma);
+    const tandaTangan: TandaTanganManifest = { algoritma, keyId, nilaiTandaTangan, stempelWaktu: new Date().toISOString() };
+    return { ...manifest, tandaTangan };
   }
 
   /**
@@ -158,32 +151,19 @@ export class SignatureVerifier {
    */
   private static buatTandaTanganKripto(
     digest: string,
-    kunciPrivatPemOrHex: string,
+    kunciPrivatPem: string,
     algoritma: string
   ): string {
-    const isPem = kunciPrivatPemOrHex.includes('-----BEGIN ');
-    if (isPem) {
-      const cryptoMod = muatModulNode<typeof import('node:crypto')>('crypto');
-      if (!cryptoMod || typeof cryptoMod.sign !== 'function') {
-        throw new Error(`Penandatanganan ${algoritma} PEM membutuhkan runtime Node.js crypto.`);
-      }
-      if (algoritma === 'Ed25519') {
-        return cryptoMod.sign(null, Buffer.from(digest, 'utf8'), kunciPrivatPemOrHex).toString('hex');
-      }
-      if (algoritma === 'RSA-SHA256') {
-        return cryptoMod.sign('RSA-SHA256', Buffer.from(digest, 'utf8'), kunciPrivatPemOrHex).toString('hex');
-      }
+    if (!kunciPrivatPem.includes('-----BEGIN PRIVATE KEY-----') && !kunciPrivatPem.includes('-----BEGIN RSA PRIVATE KEY-----')) {
+      throw new Error('Private key PEM diperlukan; HMAC dan hash-pinned legacy tidak aman untuk OTA.');
     }
-
-    if (algoritma === 'HMAC-SHA256') {
-      const cryptoMod = muatModulNode<typeof import('node:crypto')>('crypto');
-      if (cryptoMod && typeof cryptoMod.createHmac === 'function') {
-        return cryptoMod.createHmac('sha256', kunciPrivatPemOrHex).update(digest).digest('hex');
-      }
+    const cryptoMod = muatModulNode<typeof import('node:crypto')>('crypto');
+    if (!cryptoMod || typeof cryptoMod.sign !== 'function') {
+      throw new Error('Penandatanganan asimetris memerlukan runtime crypto yang didukung.');
     }
-
-    const gabungan = `${digest}:${kunciPrivatPemOrHex}:${algoritma}`;
-    return HashValidator.hitungSHA256(gabungan);
+    if (algoritma === 'Ed25519') return cryptoMod.sign(null, Buffer.from(digest, 'utf8'), kunciPrivatPem).toString('hex');
+    if (algoritma === 'RSA-SHA256') return cryptoMod.sign('RSA-SHA256', Buffer.from(digest, 'utf8'), kunciPrivatPem).toString('hex');
+    throw new Error('Algoritma tanda tangan tidak didukung. Gunakan Ed25519 atau RSA-SHA256.');
   }
 
   /**
@@ -192,55 +172,24 @@ export class SignatureVerifier {
   private static verifikasiTandaTanganKripto(
     digest: string,
     signatureHex: string,
-    kunciPublikHex: string,
+    _kunciPublikHex: string,
     algoritma: string,
     kunciPublikPem?: string
   ): { valid: boolean; mode: 'ASYMMETRIC_PEM_CRYPTO' | 'HMAC_CRYPTO' | 'PINNED_HEX_LEGACY' } {
-    if (kunciPublikPem && kunciPublikPem.includes('-----BEGIN ')) {
-      const cryptoMod = muatModulNode<typeof import('node:crypto')>('crypto');
-      if (!cryptoMod || typeof cryptoMod.verify !== 'function') {
-        return { valid: false, mode: 'ASYMMETRIC_PEM_CRYPTO' };
-      }
-      try {
-        const sigBuf = Buffer.from(signatureHex.trim(), 'hex');
-        if (sigBuf.length === 0) {
-          return { valid: false, mode: 'ASYMMETRIC_PEM_CRYPTO' };
-        }
-        if (algoritma === 'Ed25519') {
-          const ok = cryptoMod.verify(null, Buffer.from(digest, 'utf8'), kunciPublikPem, sigBuf);
-          return { valid: ok, mode: 'ASYMMETRIC_PEM_CRYPTO' };
-        }
-        if (algoritma === 'RSA-SHA256') {
-          const ok = cryptoMod.verify('RSA-SHA256', Buffer.from(digest, 'utf8'), kunciPublikPem, sigBuf);
-          return { valid: ok, mode: 'ASYMMETRIC_PEM_CRYPTO' };
-        }
-      } catch {
-        return { valid: false, mode: 'ASYMMETRIC_PEM_CRYPTO' };
-      }
+    if (!kunciPublikPem || !kunciPublikPem.includes('-----BEGIN PUBLIC KEY-----')) {
       return { valid: false, mode: 'ASYMMETRIC_PEM_CRYPTO' };
     }
-
-    if (algoritma === 'HMAC-SHA256') {
-      const cryptoMod = muatModulNode<typeof import('node:crypto')>('crypto');
-      if (cryptoMod && typeof cryptoMod.createHmac === 'function' && typeof cryptoMod.timingSafeEqual === 'function') {
-        try {
-          const expectedHex = cryptoMod.createHmac('sha256', kunciPublikHex).update(digest).digest('hex');
-          const a = Buffer.from(signatureHex.toLowerCase().trim(), 'utf8');
-          const b = Buffer.from(expectedHex.toLowerCase(), 'utf8');
-          return {
-            valid: a.length === b.length && cryptoMod.timingSafeEqual(a, b),
-            mode: 'HMAC_CRYPTO',
-          };
-        } catch {
-          return { valid: false, mode: 'HMAC_CRYPTO' };
-        }
-      }
+    const cryptoMod = muatModulNode<typeof import('node:crypto')>('crypto');
+    if (!cryptoMod || typeof cryptoMod.verify !== 'function') return { valid: false, mode: 'ASYMMETRIC_PEM_CRYPTO' };
+    try {
+      const sigBuf = Buffer.from(signatureHex.trim(), 'hex');
+      if (!sigBuf.length) return { valid: false, mode: 'ASYMMETRIC_PEM_CRYPTO' };
+      if (algoritma === 'Ed25519') return { valid: cryptoMod.verify(null, Buffer.from(digest, 'utf8'), kunciPublikPem, sigBuf), mode: 'ASYMMETRIC_PEM_CRYPTO' };
+      if (algoritma === 'RSA-SHA256') return { valid: cryptoMod.verify('RSA-SHA256', Buffer.from(digest, 'utf8'), kunciPublikPem, sigBuf), mode: 'ASYMMETRIC_PEM_CRYPTO' };
+      return { valid: false, mode: 'ASYMMETRIC_PEM_CRYPTO' };
+    } catch {
+      return { valid: false, mode: 'ASYMMETRIC_PEM_CRYPTO' };
     }
-
-    const expected = HashValidator.hitungSHA256(`${digest}:${kunciPublikHex}:${algoritma}`);
-    return {
-      valid: signatureHex.toLowerCase().trim() === expected.toLowerCase().trim(),
-      mode: 'PINNED_HEX_LEGACY',
-    };
   }
+}
 }
