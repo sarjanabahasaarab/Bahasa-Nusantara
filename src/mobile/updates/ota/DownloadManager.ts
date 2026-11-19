@@ -125,7 +125,7 @@ export class SecureDownloadManager {
             clearTimeout(timer);
           }
         }
-        return this.buatMockAtauAmbilKonten(resource);
+        throw new Error(`URL resource '${resource.id}' wajib diisi; konten mock/fallback tidak diizinkan pada unduhan OTA.`);
       } catch (err) {
         galatTerakhir = err;
       }
@@ -134,39 +134,7 @@ export class SecureDownloadManager {
     throw new Error(`Gagal mengunduh resource '${resource.id}' setelah ${maksCoba} percobaan: ${galatTerakhir?.message || 'Network timeout'}`);
   }
 
-  private buatMockAtauAmbilKonten(resource: ItemResourceOTA): string {
-    if (resource.tipe === 'theme') {
-      return JSON.stringify({
-        id: resource.id,
-        nama: 'Tema Nusantara Modern',
-        warnaPrimer: '#0284c7',
-        warnaAksen: '#10b981',
-        warnaLatar: '#0f172a',
-      });
-    }
 
-    if (resource.tipe === 'localization') {
-      return JSON.stringify({
-        id: resource.id,
-        locale: 'id',
-        terjemahan: {
-          sambutan: 'Selamat datang di Nusantara Mobile',
-          pembaruanTersedia: 'Versi baru tersedia!',
-        },
-      });
-    }
-
-    if (resource.tipe === 'config') {
-      return JSON.stringify({
-        versiConfig: '1.2.0',
-        fiturBaruAktif: true,
-        endpointAPI: 'https://api.nusantara.dev/v2',
-      });
-    }
-
-    // Default konten teks aman
-    return `/* Resource OTA Nusantara: ${resource.id} (${resource.tipe}) */\n`;
-  }
 }
 
 export { SecureDownloadManager as DownloadManager };
