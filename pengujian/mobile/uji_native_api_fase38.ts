@@ -177,7 +177,7 @@ async function jalankanSemuaPengujianFase38(): Promise<void> {
     const info = await android.dapatkanInfoPerangkat();
     if (info.sukses) {
       pastikan(Number.isFinite(info.data.levelAPI), 'Level API harus berasal dari perangkat ADB nyata');
-      pastikan(info.data.sumberData === 'ADB_DEVICE_REAL', 'Sumber info harus ADB nyata');
+      pastikan(['ADB_DEVICE_REAL', 'ADB_EMULATOR'].includes(info.data.sumberData), 'Sumber info harus perangkat/emulator ADB nyata');
     } else {
       pastikan(info.status === 'perangkat_tidak_tersedia', 'Tanpa perangkat ADB, status harus perangkat_tidak_tersedia');
     }
@@ -435,7 +435,8 @@ async function jalankanSemuaPengujianFase38(): Promise<void> {
       pastikan(dapatkanAdaptorPlatformAktif().namaPlatform === 'android', 'Pergantian adaptor dinamis harus langsung berlaku');
       const resAndroid = await RegistriNativeAPI.dapatkanInstance().panggil('perangkat.info');
       if (resAndroid.sukses) {
-        pastikan(resAndroid.data.sumberData === 'ADB_DEVICE_REAL' && Number.isFinite(resAndroid.data.levelAPI), 'Info Android sukses hanya dari perangkat ADB nyata');
+        pastikan(['ADB_DEVICE_REAL', 'ADB_EMULATOR'].includes(resAndroid.data.sumberData) && Number.isFinite(resAndroid.data.levelAPI), 'Info Android sukses hanya dari target ADB nyata dan harus membedakan emulator');
+        pastikan(resAndroid.data.perangkatFisikTerhubung === (resAndroid.data.sumberData === 'ADB_DEVICE_REAL'), 'Emulator tidak boleh dilabeli perangkat fisik');
       } else {
         pastikan(resAndroid.status === 'perangkat_tidak_tersedia', 'Tanpa perangkat ADB, adapter Android harus gagal tertutup alih-alih memakai data simulator');
       }
