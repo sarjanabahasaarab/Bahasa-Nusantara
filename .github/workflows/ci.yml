@@ -99,7 +99,8 @@ jobs:
           run_step BUILD npm run build
           run_step TEST npm test
           run_step CERT_GATE npm run test:cert-gate
-          run_step DEMO_TERPADU npm run test:demo-terpadu
+          # Demo distribusi native memerlukan Android SDK/Xcode dan kredensial signing;
+          # validasi native dijalankan oleh mobile-native.yml pada runner khusus.
           run_step CICD npm run test:cicd
           run_step QUALITY_GATE npm run quality-gate
 
@@ -126,6 +127,7 @@ jobs:
               "npm_run_test_cicd": $EXIT_CICD,
               "npm_run_quality_gate": $EXIT_QUALITY_GATE
             },
+            "skippedCommands": ["npm run test:demo-terpadu (dijalankan pada workflow native khusus)"],
             "artifactReferences": [
               {
                 "name": "clean-install-evidence",
@@ -233,20 +235,8 @@ jobs:
           npm test
           npm run test:cert-gate
 
-      - name: Jalankan Uji Integrasi Lintas Platform Terpadu & Verifikasi Integritas Artefak
-        shell: bash
-        run: |
-          npm run test:demo-terpadu
-          npx tsx scripts/certification-gate.ts verify-artifacts --dir artifacts/demo-terpadu --min-artifacts 20
-
-      - name: Unggah Artefak Demo Terpadu & Checksum SHA256SUMS
-        if: runner.os == 'Linux' && always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: demo-terpadu-artifacts
-          path: artifacts/demo-terpadu/
-          retention-days: 14
-          if-no-files-found: error
+      # Demo distribusi native dijalankan pada workflow mobile-native.yml yang menyediakan SDK,
+      # emulator, Xcode dan signing key sementara. Runner matriks umum tidak memiliki prasyarat itu.
 
   # ============================================================================
   # 3. QUALITY GATE NUSANTARA
