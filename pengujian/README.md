@@ -1,7 +1,7 @@
 # Kerangka Kerja & Sistem Pengujian Otomatis NUSANTARA
 
 > **Dokumentasi Resmi Rangkaian Pengujian Mutu (Quality Gate) Bahasa Pemrograman NUSANTARA**  
-> **Versi Rilis:** `v0.50.0` | **Status:** 46 Perintah Uji (`npm test`) Terintegrasi (0 Gagal)
+> **Versi Rilis:** `v0.50.0` | **Status:** 47 langkah pemeriksaan (`npm test`) terintegrasi; hasil harus dibaca dari CI pada commit yang diuji
 
 Direktori `pengujian/` menampung seluruh kerangka pengujian mutu komprehensif bahasa pemrograman NUSANTARA, mulai dari verifikasi dokumen fondasi, analisis leksikal, parsing AST, evaluasi semantik & tipe, interpreter runtime, toolchain, framework web & desktop, ekosistem mobile, intermediate representation (NIR), LLVM backend, linker lanjutan, sistem konkurensi (Actor Model), Game SDK, hingga kernel dan user mode NusantaraOS (Phase 1 s/d Phase 50).
 
@@ -13,11 +13,11 @@ Sesuai audit teknis resmi dan transparan, berikut rincian metrik pengujian repos
 
 | Metrik | Jumlah Aktual | Penjelasan Operasional |
 |---|:---:|---|
-| **Skrip Perintah Pengujian** | **46 Skrip (`npm test`)** | Terdiri dari 1 skrip audit fondasi (`skrip/periksa_fondasi.js`) dan 45 skrip suite TypeScript dalam `npm test`, ditambah 2 skrip terpisah (`test:database-browser-v29` dan `test:demo-terpadu`). |
+| **Langkah Pemeriksaan Terintegrasi** | **47 langkah (`npm test`)** | Terdiri dari 2 skrip Node.js fondasi (`skrip/periksa_fondasi.js` dan `skrip/uji_phase1.js`) serta 45 suite TypeScript, ditambah 2 skrip terpisah (`test:database-browser-v29` dan `test:demo-terpadu`). |
 | **Suite Pengujian TypeScript** | **45 Suite (+2 Terpisah)** | 45 suite aktif dalam `npm test`; fallback peramban SQLite (`test:database-browser-v29`) dan Demo Terpadu Lintas Platform (`test:demo-terpadu`) dijalankan via skrip khusus. |
-| **Pemeriksaan Dokumen Fondasi** | **167 Berkas** | Pemeriksaan keberadaan, kelengkapan isi, format lisensi, dan tata kelola pada Phase 1–5 oleh `skrip/periksa_fondasi.js`. |
-| **Kasus Pengujian TypeScript (Test Cases)** | **1.387 Kasus** | Total skenario pada 45 suite `npm test` (**1.381 LULUS**, **0 GAGAL**, **3 SKIPPED** & **3 BELUM DIVERIFIKASI** secara transparan karena host Linux tanpa `clang`/`llc`/`lld`/`pwsh`), ditambah **3/3 kasus** fallback peramban dan **7/7 kasus** Demo Terpadu E2E. |
-| **Total Pemeriksaan Gabungan** | **1.554 Pemeriksaan** | **167 pemeriksaan dokumen fondasi + 1.387 kasus uji TypeScript dalam `npm test` = 1.554 pemeriksaan** (total **1.564** termasuk fallback peramban `3/3` & Demo Terpadu E2E `7/7`). |
+| **Inventaris Dokumen Fondasi** | **167 Jalur Berkas** | `skrip/periksa_fondasi.js` memeriksa keberadaan jalur berkas wajib. Ini bukan pemeriksaan isi atau bukti fitur telah teruji. Pemeriksaan semantik khusus Phase 1 dijalankan terpisah. |
+| **Kasus Pengujian Otomatis** | **1.395 Kasus** | 8 pemeriksaan semantik Phase 1 (`skrip/uji_phase1.js`) ditambah 1.387 skenario pada 45 suite TypeScript. Angka kelulusan harus diambil dari workflow terbaru, bukan angka historis di dokumen. Fallback peramban (3 kasus) dan Demo Terpadu (7 kasus) dijalankan terpisah. |
+| **Total Pemeriksaan Gabungan** | **1.562 Pemeriksaan** | **167 pemeriksaan keberadaan jalur + 8 pemeriksaan semantik Phase 1 + 1.387 kasus TypeScript = 1.562** (total 1.572 jika menambahkan 3 fallback peramban dan 7 Demo Terpadu). |
 
 ---
 
@@ -39,10 +39,11 @@ Setiap fitur dan subsistem diklasifikasikan secara jujur dan transparan berdasar
 
 | No | Target Fase | Modul & Nama Pengujian | Perintah Eksekusi | Kasus Uji | Status | Klasifikasi Validasi |
 |:---:|:---:|---|---|:---:|:---:|---|
-| 1 | Phase 1–5 | Verifikasi Integritas Fondasi & Tata Bahasa | `node skrip/periksa_fondasi.js` | 167 berkas | LULUS | INTEGRATION TEST PASSED |
+| 1 | Inventaris Phase 1–50 | Pemeriksaan keberadaan berkas wajib | `node skrip/periksa_fondasi.js` | 167 jalur | DITEMUKAN / GAGAL | INVENTARIS SAJA |
+| 2 | Phase 1 | Identitas, NIP-0001, prinsip, arsitektur & contoh dasar | `npm run test:phase1` | 8 pemeriksaan | Menunggu CI | ACCEPTANCE TEST |
 | 2 | Phase 6 | Lexer & Tokenizer UTF-8 | `npx tsx pengujian/lexer/uji_lexer.ts` | 21 uji | LULUS | UNIT TEST PASSED |
-| 3 | Phase 7 | Parser & Pohon Sintaksis Abstrak (AST) | `npx tsx pengujian/parser/uji_parser.ts` | 11 uji | LULUS | UNIT TEST PASSED |
-| 4 | Phase 8 | Interpreter & Evaluator Runtime | `npx tsx pengujian/interpreter/uji_interpreter.ts` | 15 uji | LULUS | INTEGRATION TEST PASSED |
+| 4 | Phase 7 | Parser & Pohon Sintaksis Abstrak (AST) | `npx tsx pengujian/parser/uji_parser.ts` | 11 uji | LULUS | UNIT TEST PASSED |
+| 5 | Phase 8 | Interpreter & Evaluator Runtime | `npx tsx pengujian/interpreter/uji_interpreter.ts` | 15 uji | LULUS | INTEGRATION TEST PASSED |
 | 5 | Phase 9 | Pemeriksa Tipe Statis & Immutability | `npx tsx pengujian/tipe/uji_tipe.ts` | 13 uji | LULUS | UNIT TEST PASSED |
 | 6 | Phase 10 | Operator 8 Tingkat & Evaluasi Short-Circuit | `npx tsx pengujian/operator/uji_operator.ts` | 21 uji | LULUS | UNIT TEST PASSED |
 | 7 | Phase 11 | Percabangan Kondisional (`jika..maka..akhir`) | `npx tsx pengujian/percabangan/uji_percabangan.ts` | 24 uji | LULUS | INTEGRATION TEST PASSED |
