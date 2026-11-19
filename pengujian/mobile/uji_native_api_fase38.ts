@@ -95,18 +95,19 @@ async function jalankanSemuaPengujianFase38(): Promise<void> {
   // 2. Device Capability Manager
   console.log('\n[2] Pengelola Kemampuan Perangkat (Device Capability Manager)');
 
-  await uji('2.1 Deteksi Fitur Hardware & OS', () => {
+  await uji('2.1 Deteksi kemampuan perangkat berbasis bukti host, bukan nilai default', () => {
     const manager = PengelolaKemampuanPerangkat.dapatkanInstance();
-    const kemampuan = manager.dapatkanKemampuan();
+    const kemampuan = manager.dapatkanKemampuan(true);
+    const probe = PemeriksaHardwareHost.periksaHost();
 
-    pastikan(kemampuan.kamera.tersedia === true, 'Kamera harus terdeteksi');
-    pastikan(kemampuan.sensor.akselerometer === true, 'Akselerometer harus terdeteksi');
-    pastikan(kemampuan.konektivitas.wifi === true, 'WiFi harus terdeteksi');
-    pastikan(kemampuan.keamanan.penyimpananAman === true, 'Secure storage harus terdeteksi');
+    pastikan(kemampuan.kamera.tersedia === (probe.kameraV4L2.length > 0 || Boolean(probe.perangkatADB.find((p) => p.status === 'device' && !/emulator|sdk_gphone|generic|goldfish|ranchu/i.test(`${p.model || ''} ${p.serial}`)))), 'Kamera hanya tersedia jika host/perangkat fisik terdeteksi');
+    pastikan(kemampuan.sensor.akselerometer === false, 'Sensor tidak boleh dinyatakan tersedia tanpa enumerasi native');
+    pastikan(kemampuan.konektivitas.wifi === (probe.jaringan.terhubung && probe.jaringan.tipeDominan === 'wifi'), 'WiFi harus mengikuti interface OS yang terdeteksi');
+    pastikan(kemampuan.keamanan.penyimpananAman === false, 'Secure storage memerlukan bridge Keystore/Keychain nyata');
     pastikan(kemampuan.sistem.arsitektur.length > 0, 'Arsitektur CPU harus terdeteksi');
 
-    pastikan(manager.apakahMendukung('kamera.tersedia'), 'apakahMendukung kamera.tersedia');
-    pastikan(manager.apakahMendukung('sensor.akselerometer'), 'apakahMendukung sensor.akselerometer');
+    pastikan(manager.apakahMendukung('kamera.tersedia') === kemampuan.kamera.tersedia, 'apakahMendukung harus konsisten dengan hasil probe');
+    pastikan(!manager.apakahMendukung('sensor.akselerometer'), 'Sensor yang belum terdeteksi harus false');
     pastikan(!manager.apakahMendukung('fitur_fiktif.tidak_ada'), 'Fitur fiktif harus bernilai false');
   });
 
