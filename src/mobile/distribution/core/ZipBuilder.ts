@@ -7,6 +7,8 @@
  * Digunakan agar artefak .apk dan .aab memiliki struktur ZIP sah yang dapat dibaca alat standar.
  */
 
+import { muatModulNode } from '../../../gui/platform/node_bridge';
+
 export interface EntriZip {
   nama: string;
   konten: string | Uint8Array;
@@ -235,11 +237,41 @@ export class ZipBuilder {
       const lhExtraLen = view.getUint16(localHdrOffset + 28, true);
       const dataStart = localHdrOffset + 30 + lhNameLen + lhExtraLen;
       const dataEnd = dataStart + compSize;
-      if (dataEnd > cdOffset || metode !== 0 || compSize !== uncompSize) {
-        return { valid: false, daftarEntri: [], galat: `Rentang data atau metode kompresi tidak sah untuk '${safeName}'.` };
+      if (dataEnd > cdOffset || uncompSize > 1024 * 1024 * 1024) {
+        return { valid: false, daftarEntri: [], galat: `Rentang data atau ukuran hasil dekompresi tidak sah untuk '${safeName}'.` };
+      }
+      const namaLokal = zipBytes.subarray(localHdrOffset + 30, localHdrOffset + 30 + lhNameLen);
+      let namaLokalTeks = '';
+      try { namaLokalTeks = decoder.decode(namaLokal); } catch {
+        return { valid: false, daftarEntri: [], galat: `Nama local header tidak sah untuk '${safeName}'.` };
+      }
+      if (namaLokalTeks !== rawName) {
+        return { valid: false, daftarEntri: [], galat: `Nama local header dan central directory tidak cocok untuk '${safeName}'.` };
       }
 
-      const payload = zipBytes.subarray(dataStart, dataEnd);
+      const compressed = zipBytes.subarray(dataStart, dataEnd);
+      let payload: Uint8Array;
+      if (metode === 0) {
+        if (compSize !== uncompSize) return { valid: false, daftarEntri: [], galat: `Ukuran STORE tidak konsisten untuk '${safeName}'.` };
+        payload = compressed;
+      } else if (metode === 8) {
+        const zlib = muatModulNode<any>('zlib');
+        if (!zlib || typeof zlib.inflateRawSync !== 'function') {
+          return { valid: false, daftarEntri: [], galat: 'Dukungan DEFLATE memerlukan Node.js zlib runtime.' };
+        }
+        try {
+          const inflated = zlib.inflateRawSync(Buffer.from(compressed), { maxOutputLength: Math.max(1, uncompSize + 1) });
+          if (inflated.length !== uncompSize) {
+            return { valid: false, daftarEntri: [], galat: `Ukuran hasil DEFLATE tidak cocok untuk '${safeName}'.` };
+          }
+          payload = new Uint8Array(inflated);
+        } catch (err: any) {
+          return { valid: false, daftarEntri: [], galat: `DEFLATE gagal diverifikasi untuk '${safeName}': ${err.message}` };
+        }
+      } else {
+        return { valid: false, daftarEntri: [], galat: `Metode kompresi ZIP ${metode} tidak didukung untuk '${safeName}'.` };
+      }
+
       const actualCrc = hitungCRC32(payload);
       if (actualCrc !== crcExpected) {
         return {
