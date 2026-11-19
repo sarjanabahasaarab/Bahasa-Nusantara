@@ -667,7 +667,11 @@ async function jalankanSemuaPengujianFase41() {
 
     const permintaanTercatat: string[] = [];
     const tmpAab = path.join(os.tmpdir(), `nusantara-p41-test-${Date.now()}.aab`);
-    fs.writeFileSync(tmpAab, Buffer.from('PK\x03\x04AAB_TEST_PAYLOAD'));
+    fs.writeFileSync(tmpAab, buatZipAABFixture([
+      ['BundleConfig.pb', 'fixture-bundle-config'],
+      ['base/manifest/AndroidManifest.xml', 'fixture-binary-manifest'],
+      ['base/dex/classes.dex', 'fixture-dex-bytecode'],
+    ]));
 
     const server = http.createServer((req, res) => {
       const urlPath = (req.url || '/').split('?')[0];
