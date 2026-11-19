@@ -151,8 +151,14 @@ export class QEMURunner {
       }
     }
 
-    let bootMedia = options.isoPath || options.kernelPath;
-    let isCDROM = options.mode === 'cdrom' || options.kernelPath.endsWith('.iso') || !!options.isoPath;
+    // Gunakan ISO eksplisit hanya jika benar-benar ada. Opsi isoPath yang menunjuk
+    // berkas belum dibuat tidak boleh memaksa QEMU melakukan boot dari media kosong;
+    // dalam kasus itu, lanjutkan jalur pembentukan ISO otomatis dari kernel ELF.
+    const requestedIsoPath = options.isoPath && safeFS.existsSync(options.isoPath)
+      ? options.isoPath
+      : undefined;
+    let bootMedia = requestedIsoPath || options.kernelPath;
+    let isCDROM = options.mode === 'cdrom' || options.kernelPath.endsWith('.iso') || Boolean(requestedIsoPath);
 
     // Jika diberikan berkas .elf dan mode bukan 'kernel', gunakan CD-ROM ISO via GRUB
     if (!isCDROM && options.mode !== 'kernel') {
