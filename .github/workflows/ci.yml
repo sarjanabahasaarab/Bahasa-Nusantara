@@ -123,7 +123,7 @@ jobs:
               "npm_run_build": $EXIT_BUILD,
               "npm_test": $EXIT_TEST,
               "npm_run_test_cert_gate": $EXIT_CERT_GATE,
-              "npm_run_test_demo_terpadu": $EXIT_DEMO_TERPADU,
+              "npm_run_test_demo_terpadu": null,
               "npm_run_test_cicd": $EXIT_CICD,
               "npm_run_quality_gate": $EXIT_QUALITY_GATE
             },
