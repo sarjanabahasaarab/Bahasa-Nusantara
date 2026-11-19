@@ -35,14 +35,16 @@ export class AdaptorAndroidMobile extends AdaptorSimulatorMobile implements Adap
         { platform: 'android', perangkatADB: probe.perangkatADB.length }
       );
     }
+    const emulator = /emulator|sdk_gphone|generic|goldfish|ranchu/i.test(`${adbAktif.model || ''} ${adbAktif.serial}`);
     return buatHasilSukses({
       platform: 'android',
       levelAPI: adbAktif.levelAPI,
       model: adbAktif.model,
       adbSerial: adbAktif.serial,
-      perangkatFisikTerhubung: true,
-      sumberData: 'ADB_DEVICE_REAL',
-    }, 'Perangkat Android terdeteksi melalui ADB.');
+      perangkatFisikTerhubung: !emulator,
+      apakahSimulator: emulator,
+      sumberData: emulator ? 'ADB_EMULATOR' : 'ADB_DEVICE_REAL',
+    }, emulator ? 'Android Emulator terdeteksi melalui ADB; bukan perangkat fisik.' : 'Perangkat Android terdeteksi melalui ADB.');
   }
 
   public override async ambilFoto(_opsi?: { kamera?: 'depan' | 'belakang'; flash?: boolean; kualitas?: number }): Promise<HasilOperasiNative<any>> { return this.belumTerhubung('kamera.ambil'); }
