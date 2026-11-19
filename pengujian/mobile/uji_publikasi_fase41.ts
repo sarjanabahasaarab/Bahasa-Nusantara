@@ -691,6 +691,18 @@ async function jalankanSemuaPengujianFase41() {
     const addr = server.address() as any;
 
     try {
+      const gpPreflight = new GooglePlayClient({
+        applicationId: 'id.nusantara.test',
+        packageName: 'id.nusantara.test',
+        defaultTrack: 'internal',
+        autoCommitEdit: false,
+        endpointApi: `http://127.0.0.1:${addr.port}/play`,
+        bearerTokenAkses: 'loopback-oauth-access-token',
+      });
+      const gagalAab = await gpPreflight.unggahAAB(tmpAab + '.missing', 41, '00'.repeat(32), 10, 'internal', false);
+      pastikan(!gagalAab.sukses, 'AAB hilang harus ditolak saat preflight live');
+      pastikan(!permintaanTercatat.includes('POST /play/id.nusantara.test/edits'), 'AAB yang gagal preflight tidak boleh membuat Google Play edit yatim');
+
       const gp = new GooglePlayClient({
         applicationId: 'id.nusantara.test',
         packageName: 'id.nusantara.test',
@@ -702,7 +714,7 @@ async function jalankanSemuaPengujianFase41() {
       });
 
       const edit = await gp.buatEdit(false);
-      pastikan(edit.sukses && edit.editId === 'edit_live_9001', 'GooglePlayClient buatEdit HTTP + RS256 JWT harus berhasil');
+      pastikan(edit.sukses && edit.editId === 'edit_live_9001', 'GooglePlayClient buatEdit HTTP dengan Bearer OAuth eksplisit harus berhasil');
 
       const expectedBytes = fs.statSync(tmpAab).size;
       const expectedSha256 = crypto.createHash('sha256').update(fs.readFileSync(tmpAab)).digest('hex');
