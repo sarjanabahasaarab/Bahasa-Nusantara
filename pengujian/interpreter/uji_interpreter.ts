@@ -246,11 +246,24 @@ uji('Fungsi rekursif faktorial', () => {
 
 // 11. UJI PENANGANAN KESALAHAN RUNTIME
 console.log('\n--- Kelompok 11: Penanganan Kesalahan Runtime ---');
+uji('Pembagian bilangan bulat menghasilkan desimal sesuai nilai runtime', () => {
+  const output = jalankan(`definisi hasil: desimal = 7 / 2\ntampilkan(hasil)`);
+  samaDengan(output[0], '3.5', '7 / 2 harus menghasilkan 3.5');
+
+  let menolakBilangan = false;
+  try {
+    jalankan(`definisi hasil: bilangan = 7 / 2\ntampilkan(hasil)`);
+  } catch {
+    menolakBilangan = true;
+  }
+  samaDengan(menolakBilangan, true, 'Hasil pembagian tidak boleh ditetapkan sebagai bilangan bulat');
+});
+
 uji('Menangani pembagian dengan nol', () => {
   const sumber = `
   program BagiNol
   mulai
-      x : bilangan = 10 / 0
+      x : desimal = 10 / 0
   selesai`;
   let terjadiGalat = false;
   try {
