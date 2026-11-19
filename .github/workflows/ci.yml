@@ -979,6 +979,7 @@ jobs:
 
           XCODE_VER=$(xcodebuild -version 2>&1 | tr '\n' ' ' | sed 's/  */ /g')
           SIM_COUNT=$(xcrun simctl list runtimes 2>/dev/null | grep -c "iOS" || echo "0")
+          export XCODE_VER SIM_COUNT
           python3 - <<'PY'
           import datetime, json, os, platform
           payload = {
