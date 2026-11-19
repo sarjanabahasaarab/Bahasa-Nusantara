@@ -1198,17 +1198,16 @@ end`;
           console.log('======================================================');
           console.log('  NUSANTARA MOBILE - Status Distribusi TestFlight Beta');
           console.log('======================================================');
-          console.log('Status Processing : READY FOR TESTFLIGHT');
-          console.log('Grup Penguji Aktif: Internal QA, Komunitas Pengembang Nusantara');
-          console.log('Masa Berlaku Build: 90 Hari (Standar TestFlight Apple)');
-          console.log('Email Umpan Balik : support@nusantara.dev');
+          console.log('Status Processing : BELUM DIKONFIRMASI APP STORE CONNECT');
+          console.log('Grup Penguji Aktif: Tidak ada grup yang diaktifkan oleh perintah lokal ini');
+          console.log('Keterangan        : Status build harus dibaca dari App Store Connect API.');
           console.log('======================================================');
-          return 0;
+          return 1;
         }
 
         if (aksi === 'upload') {
-          console.log('[SUKSES] Archive iOS divalidasi dan siap diunggah ke TestFlight / App Store.');
-          return 0;
+          console.error('[BELUM TERSEDIA] Upload IPA ke App Store Connect belum diimplementasikan. Gunakan Xcode Organizer/Transporter sampai integrasi resmi tersedia.');
+          return 1;
         }
 
         console.log(`Sub-aksi ios '${aksi}' tidak dikenal. Pilihan: metadata, validasi, testflight, upload.`);
