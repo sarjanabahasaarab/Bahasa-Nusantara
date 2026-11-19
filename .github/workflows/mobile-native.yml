@@ -60,7 +60,7 @@ jobs:
           export NUSANTARA_ANDROID_KEY_ALIAS=nusantara_ci
           export NUSANTARA_ANDROID_STORE_PASSWORD="$STORE_PASS"
           export NUSANTARA_ANDROID_KEY_PASSWORD="$KEY_PASS"
-          gradle --no-daemon -p native/android :app:assembleDebug :app:assembleRelease :app:bundleRelease
+          gradle --no-daemon -p native/android :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:bundleRelease
           APK_DEBUG="native/android/app/build/outputs/apk/debug/app-debug.apk"
           APK_RELEASE="native/android/app/build/outputs/apk/release/app-release.apk"
           AAB="native/android/app/build/outputs/bundle/release/app-release.aab"
