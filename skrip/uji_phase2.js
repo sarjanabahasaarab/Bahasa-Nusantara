@@ -96,7 +96,7 @@ check('Rencana uji NIP-0002 menunjuk berkas nyata dan skrip penerimaan Phase 2',
   assert.match(nip, /pengujian\/spesifikasi\/program-valid\.nusantara/);
   assert.match(nip, /pengujian\/spesifikasi\/program-tidak-valid\.md/);
   assert.match(nip, /skrip\/uji_phase2\.js/);
-  assert.doesNotMatch(nip, /pengujian\/spesifikasi\/kasus-tidak-valid\.md/);
+  assert.match(nip, /kasus-tidak-valid\.md.*Phase 4/);
   assert.equal((invalid.match(/^## \d+\. Kasus:/gm) || []).length, 6);
   assert.ok(fs.existsSync(path.join(root, 'skrip/uji_phase2.js')));
 });
