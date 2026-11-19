@@ -512,6 +512,11 @@ print('ZIP_OK')`,
       pastikan(arc.sukses && Boolean(arc.artefak), 'Persiapan .xcarchive harus sukses');
       const cekDir = BuildValidator.validasiArtefak(arc.artefak!);
       pastikan(cekDir.valid && cekDir.adaBerkas, 'BuildValidator wajib mendukung direktori .xcarchive berisi Info.plist');
+      const infoPlistPath = path.join(arc.artefak!.jalurLokal, 'Info.plist');
+      fs.appendFileSync(infoPlistPath, '\n<!-- tamper -->');
+      const cekDirTamper = BuildValidator.validasiArtefak(arc.artefak!);
+      pastikan(!cekDirTamper.valid && !cekDirTamper.sha256Sah, 'BuildValidator wajib mendeteksi perubahan Info.plist setelah digest dibuat');
+
     } finally {
       fs.rmSync(tmpIos, { recursive: true, force: true });
     }
