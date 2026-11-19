@@ -5,7 +5,7 @@ Dokumen ini menyajikan 10 contoh program acuan dalam berkas `.nusantara` lengkap
 ---
 
 ## 1. Halo Dunia
-- **Status:** **[SESUAI SPESIFIKASI] — Belum Didukung Implementasi Kompiler**
+- **Status:** **[CONTOH SPESIFIKASI] — Implementasi diverifikasi pada fase lexer/parser terkait**
 - **Penjelasan:** Program minimal penanda eksekusi instruksi keluaran standar.
 
 ```nusantara
@@ -19,7 +19,7 @@ selesai
 ---
 
 ## 2. Deklarasi Variabel & Tipe Data
-- **Status:** **[SESUAI SPESIFIKASI] — Belum Didukung Implementasi Kompiler**
+- **Status:** **[CONTOH SPESIFIKASI] — Implementasi diverifikasi pada fase lexer/parser terkait**
 - **Penjelasan:** Deklarasi nilai dengan anotasi tipe statis eksplisit.
 
 ```nusantara
@@ -39,7 +39,7 @@ selesai
 ---
 
 ## 3. Penugasan Ulang & Konstanta `tetap`
-- **Status:** **[SESUAI SPESIFIKASI] — Belum Didukung Implementasi Kompiler**
+- **Status:** **[CONTOH SPESIFIKASI] — Implementasi diverifikasi pada fase lexer/parser terkait**
 - **Penjelasan:** Membedakan mutabilitas wadah data dinamis vs konstanta kekal.
 
 ```nusantara
@@ -57,7 +57,7 @@ selesai
 ---
 
 ## 4. Operasi Matematika & Presedensi
-- **Status:** **[SESUAI SPESIFIKASI] — Belum Didukung Implementasi Kompiler**
+- **Status:** **[CONTOH SPESIFIKASI] — Implementasi diverifikasi pada fase lexer/parser terkait**
 - **Penjelasan:** Kalkulasi aritmetika terstruktur mematuhi urutan perkalian sebelum penjumlahan.
 
 ```nusantara
@@ -76,7 +76,7 @@ selesai
 ---
 
 ## 5. Percabangan Kondisional
-- **Status:** **[SESUAI SPESIFIKASI] — Belum Didukung Implementasi Kompiler**
+- **Status:** **[CONTOH SPESIFIKASI] — Implementasi diverifikasi pada fase lexer/parser terkait**
 - **Penjelasan:** Percabangan biner menggunakan batas blok `jika` ... `maka` ... `selain` ... `akhir`.
 
 ```nusantara
@@ -96,7 +96,7 @@ selesai
 ---
 
 ## 6. Perulangan Iteratif (`untuk` & `selama`)
-- **Status:** **[SESUAI SPESIFIKASI] — Belum Didukung Implementasi Kompiler**
+- **Status:** **[CONTOH SPESIFIKASI] — Implementasi diverifikasi pada fase lexer/parser terkait**
 - **Penjelasan:** Perulangan berpenghitung rentang inklusif dan perulangan berbasis kondisi.
 
 ```nusantara
@@ -119,7 +119,7 @@ selesai
 ---
 
 ## 7. Definisi & Pemanggilan Fungsi
-- **Status:** **[SESUAI SPESIFIKASI] — Belum Didukung Implementasi Kompiler**
+- **Status:** **[CONTOH SPESIFIKASI] — Implementasi diverifikasi pada fase lexer/parser terkait**
 - **Penjelasan:** Subrutin modular dengan parameter beranotasi tipe dan nilai kembali.
 
 ```nusantara
@@ -140,7 +140,7 @@ selesai
 ---
 
 ## 8. Struktur Data Koleksi `daftar`
-- **Status:** **[RANCANGAN] — Belum Didukung Implementasi Kompiler**
+- **Status:** **[DI LUAR GRAMMAR PHASE 4] — Sintaks koleksi dibakukan pada Phase 14**
 - **Penjelasan:** Usulan koleksi urutan terindeks (*list/array*).
 
 ```nusantara
@@ -156,7 +156,7 @@ selesai
 ---
 
 ## 9. Struktur Data Asosiatif `peta`
-- **Status:** **[RANCANGAN] — Belum Didukung Implementasi Kompiler**
+- **Status:** **[DI LUAR GRAMMAR PHASE 4] — Sintaks koleksi dibakukan pada Phase 14**
 - **Penjelasan:** Usulan pasangan kunci dan nilai (*dictionary/hash map*).
 
 ```nusantara
@@ -172,7 +172,7 @@ selesai
 ---
 
 ## 10. Program Gabungan Lengkap
-- **Status:** **[SESUAI SPESIFIKASI] — Belum Didukung Implementasi Kompiler**
+- **Status:** **[CONTOH SPESIFIKASI] — Implementasi diverifikasi pada fase lexer/parser terkait**
 - **Penjelasan:** Integrasi fungsi, perulangan, percabangan, dan konstanta dalam satu program.
 
 ```nusantara
