@@ -50,14 +50,18 @@ Repositori memelihara dua berkas alur kerja utama dengan pemisahan tugas yang te
 
 ## 3. Matriks Platform & Runner Support
 
-Build matrix mencakup 4 platform target utama:
+Build matrix mencakup 6 target arsitektur. Setiap target harus menghasilkan artefak dan evidence yang dapat diverifikasi:
 
-| Target Platform | Runner Host GitHub | Format Artefak | Pemeriksaan Smoke Test |
+| Target Platform | Runner Host GitHub | Mode Eksekusi | Format Artefak / Smoke Test |
 | :--- | :--- | :--- | :--- |
-| **`windows-x64`** | `windows-latest` | `.zip` | Executable `.cmd`, `install.bat`, validasi ZIP |
-| **`linux-x64`** | `ubuntu-latest` | `.tar.gz`, `.zip` | Shell launcher, `install.sh`, SHA256SUMS |
-| **`macos-x64`** | `macos-13` (Intel) | `.tar.gz`, `.zip` | Validasi UStar TAR & ZIP portable |
-| **`macos-arm64`** | `macos-latest` (Apple Silicon) | `.tar.gz`, `.zip` | Validasi arsitektur ARM64 |
+| **`windows-x86_64`** | `windows-latest` | Native x64 | `.zip`, launcher `.cmd`, `install.bat`, validasi SHA-256 |
+| **`windows-arm64`** | `windows-11-arm` | Native ARM64 | `.zip`, validasi biner ARM64 dan eksekusi native |
+| **`linux-x86_64`** | `ubuntu-latest` | Native x64 | `.tar.gz`, `.zip`, shell launcher, `install.sh`, SHA256SUMS |
+| **`linux-arm64`** | `ubuntu-24.04-arm` | Native ARM64 | `.tar.gz`, `.zip`, validasi biner dan eksekusi native |
+| **`macos-x86_64`** | `macos-latest` (Apple Silicon) | Rosetta 2 x86_64 | `.tar.gz`, `.zip`, validasi arsitektur dan eksekusi |
+| **`macos-arm64`** | `macos-latest` (Apple Silicon) | Native ARM64 | `.tar.gz`, `.zip`, validasi arsitektur dan eksekusi |
+
+Runner Windows ARM64 menggunakan label `windows-11-arm`; runner ini hanya digunakan untuk repositori publik. Target yang tidak dapat dieksekusi native tidak boleh dilaporkan sebagai PASS.
 
 ---
 
