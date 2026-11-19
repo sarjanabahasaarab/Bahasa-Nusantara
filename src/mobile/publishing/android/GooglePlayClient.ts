@@ -275,16 +275,27 @@ export class GooglePlayClient {
     }
 
     try {
-      const authHdr = await this.pastikanHeaderOtorisasi();
-      let payloadBytes: Uint8Array = new TextEncoder().encode(
-        JSON.stringify({ packageName: this.konfig.packageName, versionCode, sha256 })
-      );
-      if (apakahNodeRuntime() && jalurAab) {
-        const fs = muatModulNode<any>('fs');
-        if (fs && fs.existsSync(jalurAab)) {
-          payloadBytes = new Uint8Array(fs.readFileSync(jalurAab));
-        }
+      if (!apakahNodeRuntime() || !jalurAab) {
+        throw new Error('Upload AAB live hanya boleh memakai berkas .aab lokal yang dapat dibaca; payload metadata pengganti dilarang.');
       }
+      const fs = muatModulNode<any>('fs');
+      const crypto = muatModulNode<any>('crypto');
+      if (!fs || typeof fs.existsSync !== 'function' || !fs.existsSync(jalurAab)) {
+        throw new Error('Berkas AAB tidak ditemukan atau tidak dapat dibaca.');
+      }
+      if (!crypto || typeof crypto.createHash !== 'function') {
+        throw new Error('Node.js crypto diperlukan untuk memverifikasi SHA-256 AAB sebelum upload.');
+      }
+      const berkasAab = fs.readFileSync(jalurAab);
+      const payloadBytes = new Uint8Array(berkasAab);
+      const hashAktual = crypto.createHash('sha256').update(berkasAab).digest('hex');
+      if (hashAktual.toLowerCase() !== String(sha256).toLowerCase()) {
+        throw new Error('SHA-256 berkas AAB tidak cocok dengan nilai yang diberikan; upload dibatalkan.');
+      }
+      if (ukuranBytes > 0 && payloadBytes.length !== ukuranBytes) {
+        throw new Error('Ukuran berkas AAB tidak cocok dengan metadata; upload dibatalkan.');
+      }
+      const authHdr = await this.pastikanHeaderOtorisasi();
 
       const uploadUrl = `${this.baseUrl}/${encodeURIComponent(this.konfig.packageName)}/edits/${encodeURIComponent(this.editIdAktif!)}/bundles`;
       const uploadRes = await fetch(uploadUrl, {
