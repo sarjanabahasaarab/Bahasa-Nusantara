@@ -4,6 +4,7 @@ import java.net.IDN;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import okhttp3.CertificatePinner;
+import okio.ByteString;
 import okhttp3.OkHttpClient;
 
 /**
@@ -33,7 +34,9 @@ public final class NativeNetworkSecurity {
             }
             byte[] digest;
             try {
-                digest = android.util.Base64.decode(pin.substring("sha256/".length()), android.util.Base64.DEFAULT);
+                ByteString decoded = ByteString.decodeBase64(pin.substring("sha256/".length()));
+                if (decoded == null) throw new IllegalArgumentException("SPKI pin is not valid Base64.");
+                digest = decoded.toByteArray();
             } catch (IllegalArgumentException ex) {
                 throw new IllegalArgumentException("SPKI pin is not valid Base64.", ex);
             }
