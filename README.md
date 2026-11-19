@@ -2,7 +2,7 @@
 
 > **Bahasa Pemrograman 100% Bahasa Indonesia untuk Komputasi Modern, Terbuka, dan Berkelanjutan.**
 
-[![Status](https://img.shields.io/badge/status-fase_50:_nusantara_os_process_isolation_&_user_mode-emerald.svg)](ROADMAP.md)
+[![Status](https://img.shields.io/badge/status-phase_50_partial-orange.svg)](ROADMAP.md)
 [![Versi](https://img.shields.io/badge/versi-v0.50.0-emerald.svg)](PERUBAHAN.md)
 [![CI/CD](https://github.com/sarjanabahasaarab/Bahasa-Nusantara/actions/workflows/ci.yml/badge.svg)](https://github.com/sarjanabahasaarab/Bahasa-Nusantara/actions/workflows/ci.yml)
 [![Lisensi](https://img.shields.io/badge/lisensi-Apache_2.0-blue.svg)](LISENSI)
