@@ -29,7 +29,9 @@ export class AABBuilder {
     const projectDir = process.env.NUSANTARA_ANDROID_PROJECT_DIR || path.join(root, 'native', 'android');
     const gradle = process.env.GRADLE_BIN || 'gradle';
     const variant = apakahRelease ? 'Release' : 'Debug';
-    const output = path.join(projectDir, 'app', 'build', 'outputs', 'bundle', apakahRelease ? 'release' : 'debug', 'app-' + (apakahRelease ? 'release' : 'debug') + '.aab');
+    const gradleOutput = path.join(projectDir, 'app', 'build', 'outputs', 'bundle', apakahRelease ? 'release' : 'debug', 'app-' + (apakahRelease ? 'release' : 'debug') + '.aab');
+    const outputDir = konfig.android.outputDir ? path.resolve(konfig.android.outputDir) : path.dirname(gradleOutput);
+    const output = path.join(outputDir, path.basename(gradleOutput));
     try {
       if (!fs.existsSync(path.join(projectDir, 'settings.gradle'))) throw new Error('Proyek Android Gradle native tidak ditemukan: ' + projectDir);
       if (apakahRelease) {
@@ -46,7 +48,11 @@ export class AABBuilder {
         }
       }
       execFileSync(gradle, ['--no-daemon', '-p', projectDir, ':app:bundle' + variant, '-PapplicationId=' + konfig.aplikasi.id], { stdio: 'pipe', timeout: 12 * 60 * 1000, env: process.env });
-      if (!fs.existsSync(output)) throw new Error('Gradle selesai tetapi AAB output tidak ditemukan: ' + output);
+      if (!fs.existsSync(gradleOutput)) throw new Error('Gradle selesai tetapi AAB output tidak ditemukan: ' + gradleOutput);
+      if (path.resolve(gradleOutput) !== path.resolve(output)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+        fs.copyFileSync(gradleOutput, output);
+      }
       const listing = execFileSync('unzip', ['-Z1', output], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).split(/\r?\n/);
       if (!listing.includes('BundleConfig.pb') || !listing.some((x) => /^base\/dex\/classes(\d+)?\.dex$/.test(x)) || !listing.includes('base/manifest/AndroidManifest.xml')) {
         throw new Error('AAB tidak memiliki BundleConfig.pb, DEX, atau base manifest native.');
