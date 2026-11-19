@@ -263,7 +263,7 @@ uji('Menangani pembagian dengan nol', () => {
   const sumber = `
   program BagiNol
   mulai
-      x : bilangan = 10 / 0
+      x : desimal = 10 / 0
   selesai`;
   let terjadiGalat = false;
   try {
