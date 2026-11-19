@@ -31,7 +31,9 @@ export class APKBuilder {
     const projectDir = process.env.NUSANTARA_ANDROID_PROJECT_DIR || path.join(root, 'native', 'android');
     const gradle = process.env.GRADLE_BIN || 'gradle';
     const variant = tipe === 'release' ? 'Release' : 'Debug';
-    const output = path.join(projectDir, 'app', 'build', 'outputs', 'apk', tipe, 'app-' + tipe + '.apk');
+    const gradleOutput = path.join(projectDir, 'app', 'build', 'outputs', 'apk', tipe, 'app-' + tipe + '.apk');
+    const outputDir = konfig.android.outputDir ? path.resolve(konfig.android.outputDir) : path.dirname(gradleOutput);
+    const output = path.join(outputDir, path.basename(gradleOutput));
 
     try {
       if (!fs.existsSync(path.join(projectDir, 'settings.gradle')) || !fs.existsSync(path.join(projectDir, 'app', 'build.gradle'))) {
@@ -50,7 +52,11 @@ export class APKBuilder {
         process.env.NUSANTARA_ANDROID_KEY_PASSWORD = keyPassword;
       }
       execFileSync(gradle, ['--no-daemon', '-p', projectDir, ':app:assemble' + variant, '-PapplicationId=' + konfig.aplikasi.id], { stdio: 'pipe', timeout: 12 * 60 * 1000, env: process.env });
-      if (!fs.existsSync(output)) throw new Error('Gradle selesai tetapi APK output tidak ditemukan: ' + output);
+      if (!fs.existsSync(gradleOutput)) throw new Error('Gradle selesai tetapi APK output tidak ditemukan: ' + gradleOutput);
+      if (path.resolve(gradleOutput) !== path.resolve(output)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+        fs.copyFileSync(gradleOutput, output);
+      }
       const listing = execFileSync('unzip', ['-Z1', output], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
       if (!listing.split(/\r?\n/).includes('classes.dex') || !listing.split(/\r?\n/).includes('AndroidManifest.xml')) {
         throw new Error('APK bukan paket Android native yang valid: classes.dex atau AndroidManifest.xml tidak ditemukan.');
