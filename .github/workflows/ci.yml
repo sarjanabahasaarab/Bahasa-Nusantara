@@ -824,43 +824,52 @@ jobs:
           if [ -s "$TMP_KS/ephemeral-test.jks" ]; then KS_OK=true; fi
           rm -rf "$TMP_KS"
 
-          cat <<EOF > artifacts/cert-evidence/phase37-42-android.json
-          {
-            "schemaVersion": 1,
-            "jobId": "phase37-42-android-sdk",
-            "phase": "37,38,40,41",
-            "runner": "ubuntu-latest",
-            "os": "Linux",
-            "arch": "$(uname -m)",
-            "status": "NOT_VERIFIED",
-            "unitTestStatus": "PASS",
-            "commitSha": "${{ github.sha }}",
-            "workflowRunId": "${{ github.run_id }}",
-            "evidenceScope": "ci-workflow",
-            "isNativeHardware": false,
-            "toolchains": {
-              "java": "$JAVA_VER",
-              "aapt2": "$AAPT2_VER",
-              "apksigner": "$APKSIGNER_VER",
-              "adb": "$ADB_VER"
-            },
-            "details": {
-              "sdkInstalled": true,
-              "ephemeralKeystoreGenerated": $KS_OK,
-              "kvmAvailable": $KVM_OK,
-              "apkCompiledWithDex": false,
-              "aabBuiltWithBundletool": false,
-              "apksignerVerified": false,
-              "emulatorBooted": false,
-              "physicalDeviceHardwareVerified": false,
-              "neverClaimStructuralAsNative": true
-            },
-            "blockers": [
-              "Proyek Gradle Android penuh, kompilasi classes.dex/bundletool .aab nyata, dan peluncuran Android Emulator KVM + sensor perangkat fisik belum terpenuhi (NOT_VERIFIED)."
-            ],
-            "generatedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          export JAVA_VER AAPT2_VER APKSIGNER_VER ADB_VER KS_OK KVM_OK
+          python3 - <<'PY'
+          import datetime
+          import json
+          import os
+          import platform
+
+          payload = {
+              "schemaVersion": 1,
+              "jobId": "phase37-42-android-sdk",
+              "phase": "37,38,40,41",
+              "runner": "ubuntu-latest",
+              "os": "Linux",
+              "arch": platform.machine(),
+              "status": "NOT_VERIFIED",
+              "unitTestStatus": "PASS",
+              "commitSha": os.environ["GITHUB_SHA"],
+              "workflowRunId": os.environ["GITHUB_RUN_ID"],
+              "evidenceScope": "ci-workflow",
+              "isNativeHardware": False,
+              "toolchains": {
+                  "java": os.environ.get("JAVA_VER", ""),
+                  "aapt2": os.environ.get("AAPT2_VER", ""),
+                  "apksigner": os.environ.get("APKSIGNER_VER", ""),
+                  "adb": os.environ.get("ADB_VER", ""),
+              },
+              "details": {
+                  "sdkInstalled": True,
+                  "ephemeralKeystoreGenerated": os.environ.get("KS_OK") == "true",
+                  "kvmAvailable": os.environ.get("KVM_OK") == "true",
+                  "apkCompiledWithDex": False,
+                  "aabBuiltWithBundletool": False,
+                  "apksignerVerified": False,
+                  "emulatorBooted": False,
+                  "physicalDeviceHardwareVerified": False,
+                  "neverClaimStructuralAsNative": True,
+              },
+              "blockers": [
+                  "Proyek Gradle Android penuh, kompilasi classes.dex/bundletool .aab nyata, dan peluncuran Android Emulator KVM + sensor perangkat fisik belum terpenuhi (NOT_VERIFIED)."
+              ],
+              "generatedAt": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
           }
-          EOF
+          with open("artifacts/cert-evidence/phase37-42-android.json", "w", encoding="utf-8", newline="\\n") as output:
+              json.dump(payload, output, ensure_ascii=False, indent=2)
+              output.write("\\n")
+          PY
 
       - name: Unggah Evidence Android SDK
         if: always()
