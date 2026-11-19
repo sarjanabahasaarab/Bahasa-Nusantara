@@ -71,16 +71,32 @@ export class AppStoreConnectClient {
       };
     }
 
-    return {
-      terhubung: true,
-      issuerId: SecretProvider.samarkan(cred.issuerId, 4, 4),
-      keyId: SecretProvider.samarkan(cred.keyId, 2, 2),
-      bundleId: this.konfig.bundleId,
-      masaBerlakuTokenDetik: 1200, // 20 menit standar Apple JWT
-      waktuPemeriksaan: new Date().toISOString(),
-      pesan: `Terhubung ke App Store Connect API untuk Bundle ID '${this.konfig.bundleId}'.`,
-      modeSandbox: false,
-    };
+    try {
+      const hasilHttp = await this.verifikasiAksesAPIHttp(cred.privateKey);
+      return {
+        terhubung: hasilHttp.sukses,
+        issuerId: SecretProvider.samarkan(cred.issuerId, 4, 4),
+        keyId: SecretProvider.samarkan(cred.keyId, 2, 2),
+        bundleId: this.konfig.bundleId,
+        masaBerlakuTokenDetik: hasilHttp.sukses ? 1200 : 0,
+        waktuPemeriksaan: new Date().toISOString(),
+        pesan: hasilHttp.sukses
+          ? `Koneksi App Store Connect API berhasil untuk Bundle ID '${this.konfig.bundleId}'.`
+          : `Kredensial valid tetapi koneksi App Store Connect gagal: ${hasilHttp.pesan}`,
+        modeSandbox: false,
+      };
+    } catch (err: any) {
+      return {
+        terhubung: false,
+        issuerId: SecretProvider.samarkan(cred.issuerId, 4, 4),
+        keyId: SecretProvider.samarkan(cred.keyId, 2, 2),
+        bundleId: this.konfig.bundleId,
+        masaBerlakuTokenDetik: 0,
+        waktuPemeriksaan: new Date().toISOString(),
+        pesan: `Kredensial tersedia tetapi koneksi App Store Connect belum berhasil: ${err.message}`,
+        modeSandbox: false,
+      };
+    }
   }
 
   /**
