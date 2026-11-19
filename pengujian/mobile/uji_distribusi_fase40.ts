@@ -290,6 +290,14 @@ async function jalankanSemuaUji(): Promise<void> {
 
 
 
+    const cekAndroidToolchain = val.checklist.find((item) => item.id === 'android-native-toolchain');
+    pastikan(Boolean(cekAndroidToolchain?.wajib), 'SDK/JDK/AAPT2/D8/apksigner/zipalign harus menjadi prasyarat rilis Android');
+    const androidEnv = AndroidDistributionManager.periksaLingkungan();
+    const toolchainAndroidSiap = Boolean(androidEnv.siapBuildNative && androidEnv.adaAapt2 && androidEnv.adaD8 && androidEnv.adaApksigner && androidEnv.adaZipalign);
+    if (!toolchainAndroidSiap) {
+      pastikan(cekAndroidToolchain?.status !== 'lulus', 'Host tanpa toolchain native Android lengkap tidak boleh dinyatakan siap');
+      pastikan(!val.siapRilis, 'Rilis tidak boleh siap ketika toolchain native Android belum lengkap');
+    }
     const cekAsetWajib = val.checklist.find((item) => item.id === 'release-required-assets');
     pastikan(Boolean(cekAsetWajib?.wajib), 'Ikon aplikasi dan splash screen harus menjadi prasyarat rilis');
     if (cekAsetWajib && cekAsetWajib.status !== 'lulus') {
