@@ -18,6 +18,7 @@ import { CodeSigningManager } from '../ios/CodeSigningManager';
 import { IOSDistributionManager } from '../ios/IOSBuildManager';
 import { AndroidDistributionManager } from '../android/AndroidBuildManager';
 import { VersionManager } from '../core/VersionManager';
+import { AssetValidator } from '../assets/AssetValidator';
 
 export class ReleaseValidator {
   public static periksaKesiapanRilis(konfig: KonfigurasiDistribusiLengkap): LaporanValidasiRilis {
@@ -237,7 +238,31 @@ export class ReleaseValidator {
     }
 
     // ==========================================
-    // 3. KATEGORI: KEAMANAN & SEMVER
+    // 3. KATEGORI: ASET RILIS WAJIB
+    // ==========================================
+    const hasilAset = AssetValidator.validasiAsetProyek(konfig);
+    const masalahAset = [
+      ...hasilAset.daftarGalat,
+      ...hasilAset.asetHilang.map((jalur) => `Aset wajib tidak ditemukan: ${jalur}`),
+    ];
+    const asetLengkap = masalahAset.length === 0;
+    checklist.push({
+      id: 'release-required-assets',
+      kategori: 'aset',
+      judul: 'Ikon aplikasi dan splash screen',
+      status: asetLengkap ? 'lulus' : konfig.lingkungan === 'production' ? 'gagal' : 'peringatan',
+      pesan: asetLengkap
+        ? `Aset utama tersedia; ${hasilAset.asetLulus} aset berhasil diperiksa.`
+        : masalahAset.join('; '),
+      wajib: true,
+    });
+    if (!asetLengkap) {
+      masalahAndroid.push(...masalahAset);
+      masalahIOS.push(...masalahAset);
+    }
+
+    // ==========================================
+    // 4. KATEGORI: KEAMANAN & SEMVER
     // ==========================================
     const semverCheck = VersionManager.periksaSemver(konfig.aplikasi.versi);
     if (semverCheck.valid) {
