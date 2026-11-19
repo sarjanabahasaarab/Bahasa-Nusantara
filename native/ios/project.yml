@@ -16,6 +16,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: id.nusantara.mobile
         PRODUCT_NAME: NUSANTARA
+        PRODUCT_MODULE_NAME: NusantaraMobile
         INFOPLIST_KEY_CFBundleDisplayName: NUSANTARA
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         GENERATE_INFOPLIST_FILE: YES
