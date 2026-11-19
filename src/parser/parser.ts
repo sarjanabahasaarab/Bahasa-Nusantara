@@ -594,7 +594,7 @@ export class Parser {
             jenis: JenisNodeAST.DEKLARASI_VARIABEL,
             nama: namaTok.nilai,
             tipeData,
-            anotasiTipeEksplisit: adaAnotasiTipe,
+            ...(adaAnotasiTipe ? { anotasiTipeEksplisit: true } : {}),
             nilaiAwal,
             posisi: { awal: idAwal.posisi.awal, akhir: nilaiAwal.posisi.akhir },
           };
