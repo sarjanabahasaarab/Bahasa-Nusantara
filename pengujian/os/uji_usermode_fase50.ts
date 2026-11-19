@@ -579,7 +579,20 @@ async function main(): Promise<void> {
     pastikan(foundOutDxEaxF4, 'Port 0xF4 wajib menggunakan 32-bit OUT DX, EAX (0xEF) selaras iosize=0x04');
   });
 
-  await uji('11.6 QEMUSentinelValidator meluluskan log 18/18 berurutan dengan exit code 1', () => {
+  await uji('11.6 SYS_CONSOLE_WRITE menyalin pointer buffer RDI ke RBX sebelum membaca byte user', () => {
+    const code = X86BootstrapEncoder.generateBootstrapBinary().codeBytes;
+    const pola = [0x48, 0x89, 0xfb, 0x8a, 0x03, 0x88, 0xc4, 0x51];
+    let ditemukan = false;
+    for (let i = 0; i <= code.length - pola.length; i++) {
+      if (pola.every((byte, j) => code[i + j] === byte)) {
+        ditemukan = true;
+        break;
+      }
+    }
+    pastikan(ditemukan, 'Handler SYS_CONSOLE_WRITE harus menyalin RDI (pointer) ke RBX, bukan RSI (panjang)');
+  });
+
+  await uji('11.7 QEMUSentinelValidator meluluskan log 18/18 berurutan dengan exit code 1', () => {
     const validLog = QEMUSentinelValidator.OFFICIAL_SENTINELS.join('\r\n') + '\r\n';
     const report = QEMUSentinelValidator.validate({
       serialLog: validLog,
@@ -597,7 +610,7 @@ async function main(): Promise<void> {
     pastikan(report.kernelFinalStatus === 'PASS', 'kernelFinalStatus harus PASS');
   });
 
-  await uji('11.7 QEMUSentinelValidator menolak log duplikat, out-of-order, early-exit, panic, timeout, dan log palsu', () => {
+  await uji('11.8 QEMUSentinelValidator menolak log duplikat, out-of-order, early-exit, panic, timeout, dan log palsu', () => {
     const all = QEMUSentinelValidator.OFFICIAL_SENTINELS;
 
     // 1. Duplikasi sentinel
