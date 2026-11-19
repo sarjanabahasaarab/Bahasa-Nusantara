@@ -41,7 +41,12 @@ export class GooglePlayClient {
     if (parsed.username || parsed.password) {
       throw new Error('URL endpoint Google Play API tidak boleh memuat kredensial tertanam.');
     }
-    const isLoopback = ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname.toLowerCase());
+    const hostname = parsed.hostname.toLowerCase();
+    const isLoopback = ['localhost', '127.0.0.1', '::1'].includes(hostname);
+    const isOfficialHost = hostname === 'androidpublisher.googleapis.com';
+    if (!isOfficialHost && !isLoopback) {
+      throw new Error('Endpoint Google Play API hanya boleh menggunakan host resmi androidpublisher.googleapis.com atau loopback lokal untuk pengujian.');
+    }
     if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLoopback)) {
       throw new Error(`Endpoint Google Play API wajib menggunakan HTTPS (atau HTTP loopback pengujian), ditemukan: '${rawUrl}'`);
     }
