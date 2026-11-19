@@ -278,6 +278,14 @@ async function jalankanSemuaUji(): Promise<void> {
     const val = ReleaseValidator.periksaKesiapanRilis(konfig);
     pastikan(val.totalPemeriksaan >= 8, 'Harus ada minimal 8 item pemeriksaan rilis');
     pastikan(val.totalLulus > 0, 'Harus ada pemeriksaan yang lulus');
+    const cekIosEnvironment = val.checklist.find((item) => item.id === 'ios-environment');
+    pastikan(Boolean(cekIosEnvironment?.wajib), 'Toolchain iOS harus menjadi prasyarat wajib rilis lintas platform');
+    if (process.platform !== 'darwin') {
+      pastikan(cekIosEnvironment?.status !== 'lulus', 'Host non-macOS tidak boleh dinyatakan siap untuk native iOS');
+      pastikan(!val.ringkasanIOS.siap, 'Ringkasan iOS harus belum siap tanpa macOS dan Xcode');
+      pastikan(!val.siapRilis, 'Rilis lintas platform tidak boleh dinyatakan siap tanpa toolchain iOS');
+    }
+
 
     const teksLaporan = ReleaseValidator.formatLaporanTeks(val);
     pastikan(teksLaporan.includes('HASIL VALIDASI KESIAPAN RILIS MOBILE'), 'Harus memuat header teks laporan');
