@@ -29,7 +29,7 @@ const keyword = read('dokumentasi/KEYWORD.md');
 const tipe = read('dokumentasi/TIPE-DATA.md');
 const nip = read('dokumentasi/nip/NIP-0002.md');
 const valid = read('pengujian/spesifikasi/program-valid.nusantara');
-const invalid = read('pengujian/spesifikasi/kasus-tidak-valid.md');
+const invalid = read('pengujian/spesifikasi/program-tidak-valid.md');
 const indeks = read('dokumentasi/README.md');
 const nip1 = read('dokumentasi/nip/NIP-0001.md');
 
