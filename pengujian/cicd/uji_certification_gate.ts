@@ -300,12 +300,16 @@ try {
     jobs[0].isNativeHardware = false;
 
     const lap = evaluasiGerbangSertifikasi({
+      // Fixture ini menguji status fase, bukan validasi provenance; samakan metadata
+      // dengan evidence sintetis agar tidak memakai GITHUB_SHA/GITHUB_RUN_ID runner.
+      commitSha: 'deadbeef1234',
+      workflowRunId: '999',
       phase23Summary: buatPhase23PassSummary(),
       demoBundleDir: demoDir,
       jobEvidences: jobs,
       testSuiteStatuses: { staticChecks: 'PASS', testSuite: 'PASS', qualityGate: 'PASS' },
     });
-    pastikan(lap.overallStatus === 'PARTIAL' && lap.certificationVerdict === 'PARTIAL', `Harus PARTIAL, dapat ${lap.overallStatus}`);
+    pastikan(lap.overallStatus === 'PARTIAL' && lap.certificationVerdict === 'PARTIAL', `Harus PARTIAL, dapat ${lap.overallStatus}; counts=${JSON.stringify(lap.counts)}; fase=${JSON.stringify(Object.fromEntries(Object.entries(lap.phases).map(([id, p]) => [id, p.status])))}; blockers=${lap.blockers.join(' | ')}`);
     pastikan(lap.gatePassed === false && lap.exitCode === 1, 'PARTIAL dilarang lulus gate!');
     pastikan(lap.phases['36'].status === 'NOT_VERIFIED', 'Xvfb virtual harus menjaga Phase 36 tidak mengklaim physical hardware PASS');
     pastikan(lap.phases['37'].status === 'NOT_VERIFIED' && lap.phases['40'].status === 'NOT_VERIFIED', 'APK struktural tidak boleh meluluskan Phase 37/40');
@@ -313,6 +317,8 @@ try {
 
   uji('7. FAIL dan BLOCKED langsung menggagalkan gate', () => {
     const lapFail = evaluasiGerbangSertifikasi({
+      commitSha: 'deadbeef1234',
+      workflowRunId: '999',
       phase23Summary: buatPhase23PassSummary(),
       jobEvidences: buatJobEvidencesFullPass().map((j) =>
         j.jobId === 'phase39-42-tls-ota' ? { ...j, status: 'FAIL' } : j
@@ -322,11 +328,13 @@ try {
     pastikan(lapFail.overallStatus === 'FAIL' && lapFail.exitCode === 1 && !lapFail.gatePassed, 'Status FAIL harus gagal');
 
     const lapBlocked = evaluasiGerbangSertifikasi({
+      commitSha: 'deadbeef1234',
+      workflowRunId: '999',
       phase23Summary: buatPhase23PassSummary(),
       jobEvidences: buatJobEvidencesFullPass(),
       testSuiteStatuses: { staticChecks: 'PASS', testSuite: 'PASS', qualityGate: 'PASS', releaseTagPolicyBlocked: true },
     });
-    pastikan(lapBlocked.overallStatus === 'BLOCKED' && lapBlocked.exitCode === 1 && !lapBlocked.gatePassed, 'Status BLOCKED harus gagal');
+    pastikan(lapBlocked.overallStatus === 'BLOCKED' && lapBlocked.exitCode === 1 && !lapBlocked.gatePassed, `Status BLOCKED harus gagal; dapat ${lapBlocked.overallStatus}; counts=${JSON.stringify(lapBlocked.counts)}; fase=${JSON.stringify(Object.fromEntries(Object.entries(lapBlocked.phases).map(([id, p]) => [id, p.status])))}; blockers=${lapBlocked.blockers.join(' | ')}`);
   });
 
   uji('8. Evaluasi snapshot nyata di disk (artifacts/phase23 + artifacts/demo-terpadu) jujur berstatus PARTIAL', () => {
