@@ -114,23 +114,11 @@ export class ArchiveManager {
         (fs as any).writeFileSync(exportOptionsPath, exportOptionsXml, 'utf-8');
       }
 
-      let ukuranBytes = (infoPlistKonten.length + exportOptionsXml.length);
-      let sha256 = '';
-
-      if (typeof Buffer !== 'undefined') {
-        const dummyPayload = Buffer.from(infoPlistKonten + exportOptionsXml, 'utf-8');
-        ukuranBytes = dummyPayload.length;
-        try {
-          if (typeof (crypto as any)?.createHash === 'function') {
-            sha256 = (crypto as any).createHash('sha256').update(dummyPayload).digest('hex');
-          }
-        } catch {}
-      }
-
-      if (!sha256) {
-        sha256 = Array.from(new TextEncoder().encode(namaBerkas + Date.now()))
-          .map(b => b.toString(16).padStart(2, '0')).join('').padEnd(64, '0').slice(0, 64);
-      }
+      // Digest hanya merepresentasikan Info.plist yang benar-benar tersimpan,
+      // bukan keseluruhan direktori .xcarchive atau binary aplikasi.
+      const infoPlistBytes = Buffer.from(infoPlistKonten, 'utf-8');
+      const ukuranBytes = infoPlistBytes.length;
+      const sha256 = crypto.createHash('sha256').update(infoPlistBytes).digest('hex');
 
       const artefak: ArtefakHasilDistribusi = {
         platform: 'ios',
