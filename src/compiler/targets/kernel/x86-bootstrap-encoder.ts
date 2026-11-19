@@ -853,7 +853,7 @@ export class X86BootstrapEncoder {
     a.emit(0x48, 0x89, 0xf1); // mov rcx, rsi (loop count)
     a.emit(0x48, 0x85, 0xc9); // test rcx, rcx
     a.je('sys_write_done');
-    a.emit(0x48, 0x89, 0xf3); // mov rbx, rdi
+    a.emit(0x48, 0x89, 0xfb); // mov rbx, rdi
     a.label('sys_write_loop');
     a.emit(0x8a, 0x03); // mov al, [rbx]
     a.emit(0x88, 0xc4); // mov ah, al
