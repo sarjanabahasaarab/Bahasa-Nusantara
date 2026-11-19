@@ -232,6 +232,21 @@ export class AppStoreConnectClient {
   ): Promise<HasilUploadASC> {
     const isMac = typeof process !== 'undefined' && process.platform === 'darwin';
 
+    if (!modeSimulasi) {
+      return {
+        sukses: false,
+        bundleId: this.konfig.bundleId,
+        versi,
+        buildNumber,
+        ukuranBytes,
+        sha256,
+        uploadTool: 'transporter',
+        pesan: 'Upload live ditolak karena klien belum menjalankan Apple Transporter/Xcode secara nyata. Endpoint REST /builds bukan mekanisme upload binary IPA/xcarchive.',
+        waktuUpload: new Date().toISOString(),
+        modeSandbox: false,
+      };
+    }
+
     if (!modeSimulasi && this.konfig.endpointApi) {
       try {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
