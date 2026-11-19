@@ -24,7 +24,7 @@ Dokumen ini mendefinisikan tata bahasa bebas konteks (*context-free grammar*) re
 
 ```ebnf
 (* Unit Kompilasi Utama *)
-berkas_nusantara = { baris_kosong | komentar }, [ program_utama ], { deklarasi_fungsi } ;
+berkas_nusantara = { baris_kosong | komentar }, { deklarasi_fungsi, { baris_kosong | komentar } }, program_utama, { baris_kosong | komentar } ;
 
 program_utama = "program", spasi, pengidentifikasi, pemisah_baris,
                 blok_utama ;
@@ -173,6 +173,7 @@ ekspresi_dasar = literal
 
 ```ebnf
 literal = literal_teks
+        | literal_karakter
         | literal_bilangan
         | literal_desimal
         | literal_logika
@@ -182,6 +183,7 @@ literal_logika = "benar" | "salah" ;
 literal_kosong = "kosong" ;
 
 literal_teks = '"', { karakter_teks | urutan_lolos }, '"' ;
+literal_karakter = "'", karakter_unicode_tunggal, "'" ;
 literal_bilangan = digit, { digit } ;
 literal_desimal = digit, { digit }, ".", digit, { digit } ;
 
@@ -193,8 +195,15 @@ digit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
 ## 10. Komentar & Leksikal Dasar
 
 ```ebnf
-komentar = "//", { bukan_baris_baru }, pemisah_baris ;
+komentar = "//", { bukan_baris_baru } ;
 spasi = { " " | "\t" } ;
 pemisah_baris = "\n" | "\r\n" ;
 baris_kosong = [ spasi ], pemisah_baris ;
+
+pengidentifikasi = ( huruf | "_" ), { huruf | digit | "_" } ;
+huruf = ? satu huruf ASCII A-Z atau a-z ? ;
+bukan_baris_baru = ? setiap karakter selain LF dan CR ? ;
+karakter_teks = ? setiap karakter Unicode kecuali tanda kutip ganda, garis miring terbalik, LF, dan CR ? ;
+karakter_unicode_tunggal = ? tepat satu Unicode scalar value selain tanda kutip tunggal, garis miring terbalik, LF, dan CR ? ;
+urutan_lolos = ? salah satu urutan escape yang ditetapkan pada dokumentasi/TOKEN.md ? ;
 ```
