@@ -559,7 +559,7 @@ selesai`,
     '/proyek/utama.nusantara': `program Utama
 gunakan matematika
 mulai
-    hasil : bilangan = matematika.bagi(10, 0)
+    hasil : desimal = matematika.bagi(10, 0)
 selesai`,
   });
   const buffer = new PenulisOutputBuffer();
@@ -707,7 +707,7 @@ selesai`,
     '/proyek/layanan.nusantara': `modul layanan
 gunakan kalkulator
 
-ekspor fungsi proses(a : bilangan) : bilangan
+ekspor fungsi proses(a : bilangan) : desimal
 mulai
     kembalikan kalkulator.hitung(a, 0)
 selesai`,
