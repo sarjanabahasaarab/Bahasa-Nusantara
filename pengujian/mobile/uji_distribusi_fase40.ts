@@ -287,6 +287,12 @@ async function jalankanSemuaUji(): Promise<void> {
     }
 
 
+
+    const cekAsetWajib = val.checklist.find((item) => item.id === 'release-required-assets');
+    pastikan(Boolean(cekAsetWajib?.wajib), 'Ikon aplikasi dan splash screen harus menjadi prasyarat rilis');
+    if (cekAsetWajib && cekAsetWajib.status !== 'lulus') {
+      pastikan(!val.siapRilis, 'Aset aplikasi yang hilang tidak boleh menghasilkan status SIAP DIRILIS');
+    }
     const teksLaporan = ReleaseValidator.formatLaporanTeks(val);
     pastikan(teksLaporan.includes('HASIL VALIDASI KESIAPAN RILIS MOBILE'), 'Harus memuat header teks laporan');
   });
