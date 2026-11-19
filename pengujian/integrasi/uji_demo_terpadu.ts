@@ -532,6 +532,8 @@ async function jalankanDemoTerpadu(): Promise<void> {
         pastikan(ed.sukses && up.sukses && cm.sukses, 'Siklus edit -> upload AAB -> commit Google Play loopback harus sukses');
 
         const asc = new AppStoreConnectClient({
+          issuerId: '00000000-0000-4000-8000-000000000041',
+          keyId: 'NUSANTARA1',
           bundleId: 'id.nusantara.crossdemo',
           defaultChannel: 'testflight',
           endpointApi: `http://127.0.0.1:${storePort}/asc`,
