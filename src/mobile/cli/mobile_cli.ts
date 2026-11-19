@@ -1050,23 +1050,10 @@ end`;
         console.log('======================================================');
         console.log(`  NUSANTARA MOBILE - Uji Koneksi Toko (${target.toUpperCase()})`);
         console.log('======================================================');
-        if (target === 'android' || target === 'google') {
-          // Sync handler call
-          let hasil: any;
-          pub.ujiKoneksiAndroid().then((r) => { hasil = r; });
-          // Fallback sync display
-          console.log(`Target Platform : Android (Google Play Developer API)`);
-          console.log(`Status Koneksi  : SIAP (Sandbox / Live API Ready)`);
-          console.log(`Izin Akses      : androidpublisher.releases, androidpublisher.listings`);
-          console.log(`Mode Operasi    : SANDBOX / SIMULATOR AMAN`);
-        } else {
-          console.log(`Target Platform : iOS (App Store Connect API)`);
-          console.log(`Status Koneksi  : SIAP (Sandbox / Live API Ready)`);
-          console.log(`Masa Berlaku JWT: 1200 detik (20 menit)`);
-          console.log(`Mode Operasi    : SANDBOX / SIMULATOR AMAN`);
-        }
+        console.log('Status Koneksi  : BELUM DIVERIFIKASI');
+        console.log('Keterangan      : Pemeriksaan toko memerlukan alur async dan respons API nyata; CLI sinkron ini tidak boleh mengarang status terhubung.');
         console.log('======================================================');
-        return 0;
+        return 1;
       }
 
       case 'android': {
@@ -1124,8 +1111,8 @@ end`;
         }
 
         if (aksi === 'upload') {
-          console.log('[SUKSES] Berkas AAB berhasil diunggah ke Google Play edit session (Sandbox Mode).');
-          return 0;
+          console.error('[BELUM TERSEDIA] Perintah CLI upload belum terhubung ke GooglePlayClient. Tidak ada AAB yang dikirim ke Google Play.');
+          return 1;
         }
 
         if (aksi === 'release' || aksi === 'rilis') {
@@ -1141,12 +1128,12 @@ end`;
               console.log('======================================================');
               return 1;
             }
-            console.log('[SUKSES] Rilis Production berhasil diajukan dengan persetujuan eksplisit.');
-            return 0;
+            console.error('[BELUM DIKIRIM] Persetujuan eksplisit diterima, tetapi CLI belum menjalankan permintaan rilis ke Google Play Developer API. Tidak ada rilis production yang diajukan.');
+            return 1;
           }
 
-          console.log(`[SUKSES] Rilis Android untuk track '${trackTarget.toUpperCase()}' berhasil dipersiapkan.`);
-          return 0;
+          console.error(`[BELUM DIKIRIM] Track '${trackTarget.toUpperCase()}' belum dihubungkan ke API rilis Google Play. Tidak ada perubahan pada Play Console.`);
+          return 1;
         }
 
         console.log(`Sub-aksi android '${aksi}' tidak dikenal. Pilihan: metadata, validasi, track, upload, release.`);
@@ -1198,17 +1185,16 @@ end`;
           console.log('======================================================');
           console.log('  NUSANTARA MOBILE - Status Distribusi TestFlight Beta');
           console.log('======================================================');
-          console.log('Status Processing : READY FOR TESTFLIGHT');
-          console.log('Grup Penguji Aktif: Internal QA, Komunitas Pengembang Nusantara');
-          console.log('Masa Berlaku Build: 90 Hari (Standar TestFlight Apple)');
-          console.log('Email Umpan Balik : support@nusantara.dev');
+          console.log('Status Processing : BELUM DIKONFIRMASI APP STORE CONNECT');
+          console.log('Grup Penguji Aktif: Tidak ada grup yang diaktifkan oleh perintah lokal ini');
+          console.log('Keterangan        : Status build harus dibaca dari App Store Connect API.');
           console.log('======================================================');
-          return 0;
+          return 1;
         }
 
         if (aksi === 'upload') {
-          console.log('[SUKSES] Archive iOS divalidasi dan siap diunggah ke TestFlight / App Store.');
-          return 0;
+          console.error('[BELUM TERSEDIA] Upload IPA ke App Store Connect belum diimplementasikan. Gunakan Xcode Organizer/Transporter sampai integrasi resmi tersedia.');
+          return 1;
         }
 
         console.log(`Sub-aksi ios '${aksi}' tidak dikenal. Pilihan: metadata, validasi, testflight, upload.`);

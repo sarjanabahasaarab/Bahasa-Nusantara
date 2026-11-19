@@ -227,7 +227,9 @@ async function jalankanSemuaUji(): Promise<void> {
     pastikan(hasilArchive.sukses, 'Persiapan archive iOS harus sukses');
     pastikan(Boolean(hasilArchive.artefak), 'Artefak archive harus ada');
     samaDengan(hasilArchive.artefak?.format, 'xcarchive', 'Format harus xcarchive');
-    pastikan(hasilArchive.siapTestFlight, 'Harus memenuhi kriteria kesiapan TestFlight');
+    pastikan(!hasilArchive.siapTestFlight, 'Archive struktural tanpa xcodebuild dan Mach-O tidak boleh diklaim siap TestFlight');
+    pastikan(!hasilArchive.siapAppStore, 'Archive struktural tidak boleh diklaim siap App Store');
+    pastikan(!hasilArchive.artefak!.apakahDitandatangani, 'Metadata signing tidak membuktikan archive benar-benar ditandatangani');
   });
 
   uji('5.4 Daftar checklist persiapan Apple App Store', () => {
@@ -278,7 +280,29 @@ async function jalankanSemuaUji(): Promise<void> {
     const val = ReleaseValidator.periksaKesiapanRilis(konfig);
     pastikan(val.totalPemeriksaan >= 8, 'Harus ada minimal 8 item pemeriksaan rilis');
     pastikan(val.totalLulus > 0, 'Harus ada pemeriksaan yang lulus');
+    const cekIosEnvironment = val.checklist.find((item) => item.id === 'ios-environment');
+    pastikan(Boolean(cekIosEnvironment?.wajib), 'Toolchain iOS harus menjadi prasyarat wajib rilis lintas platform');
+    if (process.platform !== 'darwin') {
+      pastikan(cekIosEnvironment?.status !== 'lulus', 'Host non-macOS tidak boleh dinyatakan siap untuk native iOS');
+      pastikan(!val.ringkasanIOS.siap, 'Ringkasan iOS harus belum siap tanpa macOS dan Xcode');
+      pastikan(!val.siapRilis, 'Rilis lintas platform tidak boleh dinyatakan siap tanpa toolchain iOS');
+    }
 
+
+
+    const cekAndroidToolchain = val.checklist.find((item) => item.id === 'android-native-toolchain');
+    pastikan(Boolean(cekAndroidToolchain?.wajib), 'SDK/JDK/AAPT2/D8/apksigner/zipalign harus menjadi prasyarat rilis Android');
+    const androidEnv = AndroidDistributionManager.periksaLingkungan();
+    const toolchainAndroidSiap = Boolean(androidEnv.siapBuildNative && androidEnv.adaAapt2 && androidEnv.adaD8 && androidEnv.adaApksigner && androidEnv.adaZipalign);
+    if (!toolchainAndroidSiap) {
+      pastikan(cekAndroidToolchain?.status !== 'lulus', 'Host tanpa toolchain native Android lengkap tidak boleh dinyatakan siap');
+      pastikan(!val.siapRilis, 'Rilis tidak boleh siap ketika toolchain native Android belum lengkap');
+    }
+    const cekAsetWajib = val.checklist.find((item) => item.id === 'release-required-assets');
+    pastikan(Boolean(cekAsetWajib?.wajib), 'Ikon aplikasi dan splash screen harus menjadi prasyarat rilis');
+    if (cekAsetWajib && cekAsetWajib.status !== 'lulus') {
+      pastikan(!val.siapRilis, 'Aset aplikasi yang hilang tidak boleh menghasilkan status SIAP DIRILIS');
+    }
     const teksLaporan = ReleaseValidator.formatLaporanTeks(val);
     pastikan(teksLaporan.includes('HASIL VALIDASI KESIAPAN RILIS MOBILE'), 'Harus memuat header teks laporan');
   });
@@ -347,7 +371,7 @@ async function jalankanSemuaUji(): Promise<void> {
     pastikan(statusAset === 0 || statusAset === 1, 'distribusi aset harus keluar status terdefinisi');
 
     const statusChecklist = MobileCLI.jalankan(['distribusi', 'rilis', 'checklist']);
-    samaDengan(statusChecklist, 0, 'distribusi rilis checklist harus keluar kode 0');
+    samaDengan(statusChecklist, 1, 'Checklist rilis staging harus mengembalikan kode 1 ketika toolchain/aset wajib belum terpenuhi');
   });
 
   // ---------------------------------------------------------------------------
@@ -496,6 +520,11 @@ print('ZIP_OK')`,
       pastikan(arc.sukses && Boolean(arc.artefak), 'Persiapan .xcarchive harus sukses');
       const cekDir = BuildValidator.validasiArtefak(arc.artefak!);
       pastikan(cekDir.valid && cekDir.adaBerkas, 'BuildValidator wajib mendukung direktori .xcarchive berisi Info.plist');
+      const infoPlistPath = path.join(arc.artefak!.jalurLokal, 'Info.plist');
+      fs.appendFileSync(infoPlistPath, '\n<!-- tamper -->');
+      const cekDirTamper = BuildValidator.validasiArtefak(arc.artefak!);
+      pastikan(!cekDirTamper.valid && !cekDirTamper.sha256Sah, 'BuildValidator wajib mendeteksi perubahan Info.plist setelah digest dibuat');
+
     } finally {
       fs.rmSync(tmpIos, { recursive: true, force: true });
     }

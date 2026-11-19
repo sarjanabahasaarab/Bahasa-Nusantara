@@ -203,7 +203,18 @@ async function jalankanSemuaPengujianFase41() {
     pastikan(statusAsc.bundleId === 'id.nusantara.aplikasi', 'Bundle ID harus cocok');
     pastikan(statusAsc.modeSandbox, 'Tanpa kunci fisik, koneksi harus berjalan dalam mode sandbox aman');
 
-    const jwtData = client.buatTokenJWTHeaderPayload();
+    // Kredensial sementara hanya untuk menguji pembentukan klaim JWT secara lokal.
+    // Jangan memakai kredensial contoh sebagai akses ke layanan Apple sungguhan.
+    const ascTestKeyPair = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    const ascTestPrivateKey = ascTestKeyPair.privateKey.export({ type: 'pkcs8', format: 'pem' }) as string;
+    const jwtTestClient = new AppStoreConnectClient({
+      bundleId: 'id.nusantara.aplikasi',
+      defaultChannel: 'testflight',
+      issuerId: '00000000-0000-4000-8000-000000000041',
+      keyId: 'NUSANTARA1',
+      kunciPrivatPem: ascTestPrivateKey,
+    });
+    const jwtData = jwtTestClient.buatTokenJWTHeaderPayload();
     pastikan(jwtData.header.alg === 'ES256', 'Header JWT Apple harus menggunakan algoritma ES256');
     pastikan(jwtData.payload.aud === 'appstoreconnect-v1', 'Audience JWT harus appstoreconnect-v1');
 
@@ -226,7 +237,8 @@ async function jalankanSemuaPengujianFase41() {
       aktifkanEksternal: true,
     });
     pastikan(resBeta.sukses, 'Persiapan rilis beta TestFlight harus sukses');
-    pastikan(resBeta.infoBeta.statusProcessing === 'ready_for_testflight', 'Status processing TestFlight harus siap');
+    pastikan(resBeta.infoBeta.statusProcessing === 'processing', 'Build TestFlight harus tetap processing sampai status dikonfirmasi oleh API Apple');
+    pastikan(!resBeta.infoBeta.eksternalTersedia, 'Penguji eksternal tidak boleh diaktifkan sebelum status dan kepatuhan build dikonfirmasi Apple');
     pastikan(resBeta.infoBeta.grupPenguji.length >= 2, 'Grup penguji internal harus terdaftar');
     pastikan(Boolean(resBeta.infoBeta.tanggalKedaluwarsa), 'Tanggal kedaluwarsa 90 hari harus terhitung');
 
@@ -486,10 +498,13 @@ async function jalankanSemuaPengujianFase41() {
 
     // nusantara mobile store koneksi android & ios
     const kodeKoneksiAndroid = MobileCLI.jalankan(['store', 'koneksi', 'android']);
-    pastikan(kodeKoneksiAndroid === 0, 'Perintah CLI "store koneksi android" harus keluar kode 0');
+    pastikan(kodeKoneksiAndroid === 1, 'CLI koneksi Android harus menolak status terhubung tanpa respons Google Play nyata');
 
     const kodeKoneksiIos = MobileCLI.jalankan(['store', 'koneksi', 'ios']);
-    pastikan(kodeKoneksiIos === 0, 'Perintah CLI "store koneksi ios" harus keluar kode 0');
+    pastikan(kodeKoneksiIos === 1, 'CLI koneksi iOS harus menolak status terhubung tanpa respons App Store Connect nyata');
+
+    const kodePlayUpload = MobileCLI.jalankan(['store', 'android', 'upload']);
+    pastikan(kodePlayUpload === 1, 'CLI upload Android harus menolak klaim sukses sebelum terhubung ke GooglePlayClient');
 
     // nusantara mobile store android metadata, validasi, track
     const kodePlayMeta = MobileCLI.jalankan(['store', 'android', 'metadata']);
@@ -507,7 +522,7 @@ async function jalankanSemuaPengujianFase41() {
 
     // nusantara mobile store android release production (dengan --setujui harus berhasil)
     const kodePlayProdDisetujui = MobileCLI.jalankan(['store', 'android', 'release', 'production', '--setujui']);
-    pastikan(kodePlayProdDisetujui === 0, 'Rilis production dengan --setujui harus berhasil disetujui');
+    pastikan(kodePlayProdDisetujui === 1, 'Persetujuan CLI saja tidak boleh mengklaim rilis production terkirim tanpa permintaan API Google Play');
 
     // nusantara mobile store ios metadata, validasi, testflight
     const kodeIosMeta = MobileCLI.jalankan(['store', 'ios', 'metadata']);
@@ -517,7 +532,7 @@ async function jalankanSemuaPengujianFase41() {
     pastikan(kodeIosVal === 0, 'Perintah CLI "store ios validasi" harus keluar kode 0');
 
     const kodeIosTf = MobileCLI.jalankan(['store', 'ios', 'testflight']);
-    pastikan(kodeIosTf === 0, 'Perintah CLI "store ios testflight" harus keluar kode 0');
+    pastikan(kodeIosTf === 1, 'CLI TestFlight harus tetap belum terkonfirmasi tanpa status build dari App Store Connect');
 
     // nusantara mobile store aset & release-notes
     const kodeAset = MobileCLI.jalankan(['store', 'aset']);
@@ -607,13 +622,7 @@ async function jalankanSemuaPengujianFase41() {
         if (req.method === 'POST' && urlPath === '/play/id.nusantara.test/edits') {
           const authHdr = String(req.headers['authorization'] || '');
           const token = authHdr.replace(/^Bearer\s+/, '');
-          const parts = token.split('.');
-          const okSig = parts.length === 3 && crypto.verify(
-            'RSA-SHA256',
-            Buffer.from(`${parts[0]}.${parts[1]}`),
-            rsaPubPem,
-            Buffer.from(parts[2], 'base64url')
-          );
+          const okSig = token === 'loopback-oauth-access-token';
           if (!okSig) {
             res.statusCode = 401;
             res.end(JSON.stringify({ error: { message: 'Invalid RS256 JWT' } }));
@@ -685,6 +694,18 @@ async function jalankanSemuaPengujianFase41() {
     const addr = server.address() as any;
 
     try {
+      const gpPreflight = new GooglePlayClient({
+        applicationId: 'id.nusantara.test',
+        packageName: 'id.nusantara.test',
+        defaultTrack: 'internal',
+        autoCommitEdit: false,
+        endpointApi: `http://127.0.0.1:${addr.port}/play`,
+        bearerTokenAkses: 'loopback-oauth-access-token',
+      });
+      const gagalAab = await gpPreflight.unggahAAB(tmpAab + '.missing', 41, '00'.repeat(32), 10, 'internal', false);
+      pastikan(!gagalAab.sukses, 'AAB hilang harus ditolak saat preflight live');
+      pastikan(!permintaanTercatat.includes('POST /play/id.nusantara.test/edits'), 'AAB yang gagal preflight tidak boleh membuat Google Play edit yatim');
+
       const gp = new GooglePlayClient({
         applicationId: 'id.nusantara.test',
         packageName: 'id.nusantara.test',
@@ -692,14 +713,21 @@ async function jalankanSemuaPengujianFase41() {
         autoCommitEdit: false,
         endpointApi: `http://127.0.0.1:${addr.port}/play`,
         kunciPrivatPem: rsaPrivPem,
+        bearerTokenAkses: 'loopback-oauth-access-token',
       });
 
       const edit = await gp.buatEdit(false);
-      pastikan(edit.sukses && edit.editId === 'edit_live_9001', 'GooglePlayClient buatEdit HTTP + RS256 JWT harus berhasil');
+      pastikan(edit.sukses && edit.editId === 'edit_live_9001', 'GooglePlayClient buatEdit HTTP dengan Bearer OAuth eksplisit harus berhasil');
 
       const expectedBytes = fs.statSync(tmpAab).size;
-      const upload = await gp.unggahAAB(tmpAab, 42, 'abcsha256', expectedBytes, 'internal', false);
+      const expectedSha256 = crypto.createHash('sha256').update(fs.readFileSync(tmpAab)).digest('hex');
+      const upload = await gp.unggahAAB(tmpAab, 42, expectedSha256, expectedBytes, 'internal', false);
       pastikan(upload.sukses && !upload.modeSandbox && upload.ukuranBytes === expectedBytes, 'GooglePlayClient unggahAAB HTTP octet-stream harus berhasil');
+      const uploadHashSalah = await gp.unggahAAB(tmpAab, 43, '00'.repeat(32), expectedBytes, 'internal', false);
+      pastikan(!uploadHashSalah.sukses, 'GooglePlayClient wajib menolak AAB dengan SHA-256 yang tidak cocok');
+      const uploadBerkasHilang = await gp.unggahAAB(tmpAab + '.missing', 44, expectedSha256, expectedBytes, 'internal', false);
+      pastikan(!uploadBerkasHilang.sukses, 'GooglePlayClient wajib menolak path AAB yang tidak ditemukan');
+
 
       const track = await gp.dapatkanStatusTrack('internal', false);
       pastikan(track.versionCodes[0] === 42 && track.status === 'inProgress', 'GooglePlayClient GET track HTTP harus mencerminkan status server');
@@ -712,13 +740,15 @@ async function jalankanSemuaPengujianFase41() {
         defaultChannel: 'testflight',
         endpointApi: `http://127.0.0.1:${addr.port}/asc`,
         kunciPrivatPem: ecPrivPem,
+        issuerId: '57246542-96fe-1a63-e053-0824d011072a',
+        keyId: '2X9R4HXF34',
       });
 
       const verifAsc = await asc.verifikasiAksesAPIHttp();
       pastikan(verifAsc.sukses && verifAsc.statusHTTP === 200, 'AppStoreConnectClient verifikasi ES256 JWT via HTTP GET /apps harus berhasil');
 
       const buildRes = await asc.unggahBuild('/tmp/app.ipa', '1.0.0', 42, 2048, 'sha256hex', false);
-      pastikan(buildRes.sukses && !buildRes.modeSandbox, 'AppStoreConnectClient POST /builds via HTTP harus berhasil');
+      pastikan(!buildRes.sukses && !buildRes.modeSandbox, 'AppStoreConnectClient tidak boleh mengklaim upload live berhasil tanpa Transporter nyata');
       pastikan(permintaanTercatat.includes('POST /play/id.nusantara.test/edits/edit_live_9001/bundles'), 'Server loopback harus menerima unggahan AAB nyata');
     } finally {
       if (fs.existsSync(tmpAab)) fs.unlinkSync(tmpAab);
@@ -744,6 +774,32 @@ async function jalankanSemuaPengujianFase41() {
       gpHttpDitolak = true;
     }
     pastikan(gpHttpDitolak, 'GooglePlayClient wajib menolak endpoint HTTP eksternal tidak terenkripsi');
+    let gpHostDitolak = false;
+    try {
+      new GooglePlayClient({
+        applicationId: 'id.nusantara.test',
+        packageName: 'id.nusantara.test',
+        defaultTrack: 'internal',
+        autoCommitEdit: false,
+        endpointApi: 'https://androidpublisher.external.example/androidpublisher/v3/applications',
+      });
+    } catch {
+      gpHostDitolak = true;
+    }
+    pastikan(gpHostDitolak, 'GooglePlayClient wajib menolak host HTTPS eksternal yang bukan Google resmi');
+
+    let ascHostDitolak = false;
+    try {
+      new AppStoreConnectClient({
+        bundleId: 'id.nusantara.test',
+        defaultChannel: 'testflight',
+        endpointApi: 'https://api.appstoreconnect.attacker.example/v1',
+      });
+    } catch {
+      ascHostDitolak = true;
+    }
+    pastikan(ascHostDitolak, 'AppStoreConnectClient wajib menolak host HTTPS eksternal yang bukan Apple resmi');
+
 
     let ascCredDitolak = false;
     try {
@@ -764,6 +820,7 @@ async function jalankanSemuaPengujianFase41() {
     const gpJwtClient = new GooglePlayClient({
       applicationId: 'id.nusantara.test',
       packageName: 'id.nusantara.test',
+      serviceAccountEmail: 'ci-test@nusantara.invalid',
       defaultTrack: 'internal',
       autoCommitEdit: false,
     });
@@ -787,10 +844,30 @@ async function jalankanSemuaPengujianFase41() {
       bundleId: 'id.nusantara.test',
       defaultChannel: 'testflight',
       kunciPrivatPem: ecPriv,
+      issuerId: '57246542-96fe-1a63-e053-0824d011072a',
+      keyId: '2X9R4HXF34',
     });
     const tokenEs = ascJwtClient.buatDanTandaTanganiJWT();
     const vEsOk = AppStoreConnectClient.verifikasiJWTES256(tokenEs, ecPub, 'appstoreconnect-v1');
     pastikan(vEsOk.valid, 'Verifikasi JWT ES256 sah wajib lulus');
+    const statusBuildBelumDiperiksa = await ascJwtClient.periksaStatusBuild('1.0.0', 42);
+    pastikan(
+      statusBuildBelumDiperiksa.status === 'processing' && !statusBuildBelumDiperiksa.siapTestFlight,
+      'Status build Apple tidak boleh dianggap siap TestFlight tanpa pemeriksaan API'
+    );
+
+    let placeholderAscDitolak = false;
+    try {
+      const ascTanpaKredensial = new AppStoreConnectClient({
+        bundleId: 'id.nusantara.test',
+        defaultChannel: 'testflight',
+      });
+      ascTanpaKredensial.buatDanTandaTanganiJWT();
+    } catch {
+      placeholderAscDitolak = true;
+    }
+    pastikan(placeholderAscDitolak, 'JWT App Store Connect wajib menolak Issuer ID/Key ID contoh atau kosong');
+
 
     const esParts = tokenEs.split('.');
     const tamperedPayload = Buffer.from(JSON.stringify({ iss: 'attacker', exp: Math.floor(Date.now() / 1000) + 999, aud: 'appstoreconnect-v1' })).toString('base64url');
@@ -824,8 +901,10 @@ async function jalankanSemuaPengujianFase41() {
         defaultTrack: 'internal',
         autoCommitEdit: false,
         endpointApi: `http://127.0.0.1:${errAddr.port}/play`,
+        bearerTokenAkses: 'loopback-error-test-token',
       });
-      await gpErr.buatEdit(false);
+      const editErr = await gpErr.buatEdit(false);
+      pastikan(editErr.sukses, 'Fixture HTTP 500 harus memiliki Edit aktif sebelum menguji kegagalan GET track');
       let threwStatus = false;
       try {
         await gpErr.dapatkanStatusTrack('internal', false);
@@ -836,6 +915,11 @@ async function jalankanSemuaPengujianFase41() {
     } finally {
       await new Promise<void>((r) => errSrv.close(() => r()));
     }
+
+    // CLI sinkron tidak boleh mengarang status koneksi, status TestFlight, atau upload IPA.
+    pastikan(MobileCLI.jalankan(['store', 'koneksi', 'android']) === 1, 'CLI koneksi Google Play harus tetap belum diverifikasi tanpa respons API nyata');
+    pastikan(MobileCLI.jalankan(['store', 'ios', 'testflight']) === 1, 'CLI TestFlight harus menolak klaim siap tanpa konfirmasi App Store Connect');
+    pastikan(MobileCLI.jalankan(['store', 'ios', 'upload']) === 1, 'CLI upload IPA harus menolak klaim sukses sebelum integrasi Transporter tersedia');
 
     const logRedacted = SecretProvider.bersihkanLogDariRahasia('GET /cb?token=secret123&ok=1');
     pastikan(!logRedacted.includes('secret123'), 'SecretProvider.bersihkanLogDariRahasia wajib menyensor token query string');

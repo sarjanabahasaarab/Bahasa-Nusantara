@@ -39,7 +39,12 @@ export class AppStoreConnectClient {
     if (parsed.username || parsed.password) {
       throw new Error('URL endpoint App Store Connect API tidak boleh memuat kredensial tertanam.');
     }
-    const isLoopback = ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname.toLowerCase());
+    const hostname = parsed.hostname.toLowerCase();
+    const isLoopback = ['localhost', '127.0.0.1', '::1'].includes(hostname);
+    const isOfficialHost = hostname === 'api.appstoreconnect.apple.com';
+    if (!isOfficialHost && !isLoopback) {
+      throw new Error('Endpoint App Store Connect API hanya boleh menggunakan host resmi api.appstoreconnect.apple.com atau loopback lokal untuk pengujian.');
+    }
     if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLoopback)) {
       throw new Error(`Endpoint App Store Connect API wajib menggunakan HTTPS (atau HTTP loopback pengujian), ditemukan: '${rawUrl}'`);
     }
@@ -66,16 +71,32 @@ export class AppStoreConnectClient {
       };
     }
 
-    return {
-      terhubung: true,
-      issuerId: SecretProvider.samarkan(cred.issuerId, 4, 4),
-      keyId: SecretProvider.samarkan(cred.keyId, 2, 2),
-      bundleId: this.konfig.bundleId,
-      masaBerlakuTokenDetik: 1200, // 20 menit standar Apple JWT
-      waktuPemeriksaan: new Date().toISOString(),
-      pesan: `Terhubung ke App Store Connect API untuk Bundle ID '${this.konfig.bundleId}'.`,
-      modeSandbox: false,
-    };
+    try {
+      const hasilHttp = await this.verifikasiAksesAPIHttp(cred.privateKey);
+      return {
+        terhubung: hasilHttp.sukses,
+        issuerId: SecretProvider.samarkan(cred.issuerId, 4, 4),
+        keyId: SecretProvider.samarkan(cred.keyId, 2, 2),
+        bundleId: this.konfig.bundleId,
+        masaBerlakuTokenDetik: hasilHttp.sukses ? 1200 : 0,
+        waktuPemeriksaan: new Date().toISOString(),
+        pesan: hasilHttp.sukses
+          ? `Koneksi App Store Connect API berhasil untuk Bundle ID '${this.konfig.bundleId}'.`
+          : `Kredensial valid tetapi koneksi App Store Connect gagal: ${hasilHttp.pesan}`,
+        modeSandbox: false,
+      };
+    } catch (err: any) {
+      return {
+        terhubung: false,
+        issuerId: SecretProvider.samarkan(cred.issuerId, 4, 4),
+        keyId: SecretProvider.samarkan(cred.keyId, 2, 2),
+        bundleId: this.konfig.bundleId,
+        masaBerlakuTokenDetik: 0,
+        waktuPemeriksaan: new Date().toISOString(),
+        pesan: `Kredensial tersedia tetapi koneksi App Store Connect belum berhasil: ${err.message}`,
+        modeSandbox: false,
+      };
+    }
   }
 
   /**
@@ -93,14 +114,18 @@ export class AppStoreConnectClient {
     const nowSec = Math.floor(Date.now() / 1000);
     const expSec = nowSec + 20 * 60; // 20 menit
 
+    if (!cred.validasi.valid || !cred.keyId || !cred.issuerId) {
+      throw new Error('Issuer ID, Key ID, dan kunci App Store Connect yang valid wajib tersedia; nilai contoh tidak diizinkan.');
+    }
+
     const header = {
       alg: 'ES256',
-      kid: cred.keyId || '2X9R4HXF34',
+      kid: cred.keyId,
       typ: 'JWT',
     };
 
     const payload = {
-      iss: cred.issuerId || '57246542-96fe-1a63-e053-0824d011072a',
+      iss: cred.issuerId || '',
       exp: expSec,
       aud: 'appstoreconnect-v1',
       bid: this.konfig.bundleId,
@@ -154,8 +179,9 @@ export class AppStoreConnectClient {
     if (this.tokenJwtAktif && Date.now() < this.kadaluwarsaJwtMs - 60000) {
       return this.tokenJwtAktif;
     }
-    const key = kunciPrivatPem || this.konfig.kunciPrivatPem;
-    if (!key) {
+    const kredensial = CredentialManager.dapatkanInstance().ambilKredensialAppStoreConnect(this.konfig);
+    const key = kunciPrivatPem || this.konfig.kunciPrivatPem || kredensial.privateKey;
+    if (!key || !kredensial.validasi.valid) {
       throw new Error('Kunci privat P-256 (.p8) diperlukan untuk menandatangani token JWT ES256.');
     }
     const crypto = muatModulNode<any>('crypto');
@@ -205,6 +231,21 @@ export class AppStoreConnectClient {
     modeSimulasi: boolean = true
   ): Promise<HasilUploadASC> {
     const isMac = typeof process !== 'undefined' && process.platform === 'darwin';
+
+    if (!modeSimulasi) {
+      return {
+        sukses: false,
+        bundleId: this.konfig.bundleId,
+        versi,
+        buildNumber,
+        ukuranBytes,
+        sha256,
+        uploadTool: 'transporter',
+        pesan: 'Upload live ditolak karena klien belum menjalankan Apple Transporter/Xcode secara nyata. Endpoint REST /builds bukan mekanisme upload binary IPA/xcarchive.',
+        waktuUpload: new Date().toISOString(),
+        modeSandbox: false,
+      };
+    }
 
     if (!modeSimulasi && this.konfig.endpointApi) {
       try {
@@ -283,16 +324,16 @@ export class AppStoreConnectClient {
       };
     }
 
-    // Eksekusi nyata di macOS
+    // Tidak ada klaim upload sukses tanpa menjalankan Apple Transporter/altool dan memverifikasi hasilnya.
     return {
-      sukses: true,
+      sukses: false,
       bundleId: this.konfig.bundleId,
       versi,
       buildNumber,
       ukuranBytes,
       sha256,
-      uploadTool: 'altool',
-      pesan: `Build v${versi} (#${buildNumber}) berhasil diunggah ke App Store Connect via xcrun altool.`,
+      uploadTool: 'transporter',
+      pesan: 'Upload iOS live belum dijalankan: integrasi Apple Transporter belum tersedia pada klien ini. Gunakan Transporter/Xcode secara eksplisit; status tidak boleh dilaporkan sukses.',
       waktuUpload: new Date().toISOString(),
       modeSandbox: false,
     };
@@ -306,9 +347,9 @@ export class AppStoreConnectClient {
     buildNumber: number
   ): Promise<{ status: StatusBuildASC; siapTestFlight: boolean; pesan: string }> {
     return {
-      status: 'ready_for_testflight',
-      siapTestFlight: true,
-      pesan: `Build v${versi} (#${buildNumber}) selesai diproses dan siap untuk TestFlight atau App Store Submission.`,
+      status: 'processing',
+      siapTestFlight: false,
+      pesan: `Status build v${versi} (#${buildNumber}) belum diperiksa melalui App Store Connect API; tidak boleh diasumsikan siap TestFlight.`,
     };
   }
 }

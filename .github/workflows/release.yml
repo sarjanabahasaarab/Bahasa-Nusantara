@@ -201,7 +201,7 @@ jobs:
   build-release-artifacts:
     name: NUSANTARA / Bangun Artefak Rilis (${{ matrix.target }})
     needs: verify-certification-gate
-    runs-on: ${{ (matrix.target == 'windows-arm64' && vars.ENABLE_WINDOWS_ARM64_RUNNER != 'true') && 'windows-latest' || ((matrix.target == 'linux-arm64' && vars.DISABLE_LINUX_ARM64_RUNNER == 'true') && 'ubuntu-latest' || matrix.os) }}
+    runs-on: ${{ (matrix.target == 'linux-arm64' && vars.DISABLE_LINUX_ARM64_RUNNER == 'true') && 'ubuntu-latest' || matrix.os }}
     timeout-minutes: 30
     strategy:
       fail-fast: false

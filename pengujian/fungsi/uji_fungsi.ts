@@ -237,7 +237,7 @@ uji('Menolak tipe argumen yang tidak kompatibel', () => {
 
 uji('Menolak jumlah argumen yang kurang dari parameter', () => {
   const sumber = `
-  fungsi bagi(a : bilangan, b : bilangan) : bilangan
+  fungsi bagi(a : bilangan, b : bilangan) : desimal
   mulai
       kembalikan a / b
   selesai

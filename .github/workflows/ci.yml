@@ -283,7 +283,7 @@ jobs:
   build-matrix-validation:
     name: NUSANTARA / Validasi Build (${{ matrix.target }})
     needs: quality-gate
-    runs-on: ${{ (matrix.target == 'windows-arm64' && vars.ENABLE_WINDOWS_ARM64_RUNNER != 'true' && !(github.event_name == 'workflow_dispatch' && inputs.enable_windows_arm64)) && 'windows-latest' || ((matrix.target == 'linux-arm64' && vars.DISABLE_LINUX_ARM64_RUNNER == 'true') && 'ubuntu-latest' || matrix.os) }}
+    runs-on: ${{ (matrix.target == 'linux-arm64' && vars.DISABLE_LINUX_ARM64_RUNNER == 'true') && 'ubuntu-latest' || matrix.os }}
     timeout-minutes: 35
     strategy:
       fail-fast: false
@@ -432,8 +432,8 @@ jobs:
               else
                 echo "[WARN] Windows SDK ARM64 library (Lib/*/um/arm64) tidak tersedia di runner ini."
               fi
-              if [ "${{ vars.ENABLE_WINDOWS_ARM64_RUNNER }}" = "true" ] && { [ -z "$ARM64_VC_LIB" ] || [ -z "$WIN_SDK_ARM64" ]; }; then
-                echo "[GALAT] Runner native windows-11-arm diaktifkan tetapi MSVC/WinSDK ARM64 tidak lengkap."
+              if [ -z "$ARM64_VC_LIB" ] || [ -z "$WIN_SDK_ARM64" ]; then
+                echo "[GALAT] Runner windows-11-arm harus menyediakan MSVC dan Windows SDK ARM64 untuk validasi native."
                 exit 1
               fi
             fi
@@ -791,7 +791,7 @@ jobs:
           java-version: '17'
 
       - name: Pasang Android SDK Command-line Tools
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Pasang Dependensi Node & Android Build-Tools / Platform-Tools
         run: |
@@ -824,43 +824,52 @@ jobs:
           if [ -s "$TMP_KS/ephemeral-test.jks" ]; then KS_OK=true; fi
           rm -rf "$TMP_KS"
 
-          cat <<EOF > artifacts/cert-evidence/phase37-42-android.json
-          {
-            "schemaVersion": 1,
-            "jobId": "phase37-42-android-sdk",
-            "phase": "37,38,40,41",
-            "runner": "ubuntu-latest",
-            "os": "Linux",
-            "arch": "$(uname -m)",
-            "status": "NOT_VERIFIED",
-            "unitTestStatus": "PASS",
-            "commitSha": "${{ github.sha }}",
-            "workflowRunId": "${{ github.run_id }}",
-            "evidenceScope": "ci-workflow",
-            "isNativeHardware": false,
-            "toolchains": {
-              "java": "$JAVA_VER",
-              "aapt2": "$AAPT2_VER",
-              "apksigner": "$APKSIGNER_VER",
-              "adb": "$ADB_VER"
-            },
-            "details": {
-              "sdkInstalled": true,
-              "ephemeralKeystoreGenerated": $KS_OK,
-              "kvmAvailable": $KVM_OK,
-              "apkCompiledWithDex": false,
-              "aabBuiltWithBundletool": false,
-              "apksignerVerified": false,
-              "emulatorBooted": false,
-              "physicalDeviceHardwareVerified": false,
-              "neverClaimStructuralAsNative": true
-            },
-            "blockers": [
-              "Proyek Gradle Android penuh, kompilasi classes.dex/bundletool .aab nyata, dan peluncuran Android Emulator KVM + sensor perangkat fisik belum terpenuhi (NOT_VERIFIED)."
-            ],
-            "generatedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          export JAVA_VER AAPT2_VER APKSIGNER_VER ADB_VER KS_OK KVM_OK
+          python3 - <<'PY'
+          import datetime
+          import json
+          import os
+          import platform
+
+          payload = {
+              "schemaVersion": 1,
+              "jobId": "phase37-42-android-sdk",
+              "phase": "37,38,40,41",
+              "runner": "ubuntu-latest",
+              "os": "Linux",
+              "arch": platform.machine(),
+              "status": "NOT_VERIFIED",
+              "unitTestStatus": "PASS",
+              "commitSha": os.environ["GITHUB_SHA"],
+              "workflowRunId": os.environ["GITHUB_RUN_ID"],
+              "evidenceScope": "ci-workflow",
+              "isNativeHardware": False,
+              "toolchains": {
+                  "java": os.environ.get("JAVA_VER", ""),
+                  "aapt2": os.environ.get("AAPT2_VER", ""),
+                  "apksigner": os.environ.get("APKSIGNER_VER", ""),
+                  "adb": os.environ.get("ADB_VER", ""),
+              },
+              "details": {
+                  "sdkInstalled": True,
+                  "ephemeralKeystoreGenerated": os.environ.get("KS_OK") == "true",
+                  "kvmAvailable": os.environ.get("KVM_OK") == "true",
+                  "apkCompiledWithDex": False,
+                  "aabBuiltWithBundletool": False,
+                  "apksignerVerified": False,
+                  "emulatorBooted": False,
+                  "physicalDeviceHardwareVerified": False,
+                  "neverClaimStructuralAsNative": True,
+              },
+              "blockers": [
+                  "Proyek Gradle Android penuh, kompilasi classes.dex/bundletool .aab nyata, dan peluncuran Android Emulator KVM + sensor perangkat fisik belum terpenuhi (NOT_VERIFIED)."
+              ],
+              "generatedAt": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
           }
-          EOF
+          with open("artifacts/cert-evidence/phase37-42-android.json", "w", encoding="utf-8", newline="\n") as output:
+              json.dump(payload, output, ensure_ascii=False, indent=2)
+              output.write("\n")
+          PY
 
       - name: Unggah Evidence Android SDK
         if: always()

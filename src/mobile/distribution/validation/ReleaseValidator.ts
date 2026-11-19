@@ -18,6 +18,7 @@ import { CodeSigningManager } from '../ios/CodeSigningManager';
 import { IOSDistributionManager } from '../ios/IOSBuildManager';
 import { AndroidDistributionManager } from '../android/AndroidBuildManager';
 import { VersionManager } from '../core/VersionManager';
+import { AssetValidator } from '../assets/AssetValidator';
 
 export class ReleaseValidator {
   public static periksaKesiapanRilis(konfig: KonfigurasiDistribusiLengkap): LaporanValidasiRilis {
@@ -134,6 +135,38 @@ export class ReleaseValidator {
       }
     }
 
+    // 1.5 Android Native Release Toolchain
+    const androidEnv = AndroidDistributionManager.periksaLingkungan();
+    const toolchainAndroidSiap = Boolean(
+      androidEnv.siapBuildNative &&
+      androidEnv.adaJdk &&
+      androidEnv.adaAapt2 &&
+      androidEnv.adaD8 &&
+      androidEnv.adaApksigner &&
+      androidEnv.adaZipalign
+    );
+    const detailToolchainAndroid = [
+      !androidEnv.androidHome ? 'ANDROID_HOME/ANDROID_SDK_ROOT tidak tersedia' : '',
+      !androidEnv.adaJdk ? 'JDK tidak tersedia' : '',
+      !androidEnv.adaAapt2 ? 'AAPT2 tidak tersedia' : '',
+      !androidEnv.adaD8 ? 'D8 tidak tersedia' : '',
+      !androidEnv.adaApksigner ? 'apksigner tidak tersedia' : '',
+      !androidEnv.adaZipalign ? 'zipalign tidak tersedia' : '',
+    ].filter(Boolean);
+    checklist.push({
+      id: 'android-native-toolchain',
+      kategori: 'android',
+      judul: 'Toolchain Android Native untuk APK/AAB rilis',
+      status: toolchainAndroidSiap ? 'lulus' : konfig.lingkungan === 'production' ? 'gagal' : 'peringatan',
+      pesan: toolchainAndroidSiap
+        ? 'Android SDK, JDK, AAPT2, D8, apksigner, dan zipalign terdeteksi.'
+        : `Build native Android belum dapat disertifikasi: ${detailToolchainAndroid.join('; ') || androidEnv.catatan.join('; ')}.`,
+      wajib: true,
+    });
+    if (!toolchainAndroidSiap) {
+      masalahAndroid.push(`Toolchain Android native belum lengkap: ${detailToolchainAndroid.join('; ') || 'pemeriksaan toolchain gagal'}.`);
+    }
+
     // ==========================================
     // 2. KATEGORI: IOS CHECKS
     // ==========================================
@@ -195,14 +228,17 @@ export class ReleaseValidator {
         wajib: true,
       });
     } else {
+      const pesanLingkungan = `Host saat ini adalah '${typeof process !== 'undefined' ? process.platform : 'browser'}'. Ekspor archive native iOS memerlukan macOS dengan Xcode.`;
       checklist.push({
         id: 'ios-environment',
         kategori: 'ios',
         judul: 'Lingkungan Host Kompilasi Xcode macOS',
-        status: 'peringatan',
-        pesan: `Host saat ini adalah '${typeof process !== 'undefined' ? process.platform : 'browser'}'. Ekspor archive native iOS memerlukan macOS dengan Xcode.`,
-        wajib: false,
+        status: konfig.lingkungan === 'production' ? 'gagal' : 'peringatan',
+        pesan: pesanLingkungan,
+        // Wajib untuk kesiapan rilis lintas platform: warning di staging tetap berarti iOS belum siap.
+        wajib: true,
       });
+      masalahIOS.push(pesanLingkungan);
     }
 
     // 2.4 iOS Code Signing Config
@@ -234,7 +270,31 @@ export class ReleaseValidator {
     }
 
     // ==========================================
-    // 3. KATEGORI: KEAMANAN & SEMVER
+    // 3. KATEGORI: ASET RILIS WAJIB
+    // ==========================================
+    const hasilAset = AssetValidator.validasiAsetProyek(konfig);
+    const masalahAset = [
+      ...hasilAset.daftarGalat,
+      ...hasilAset.asetHilang.map((jalur) => `Aset wajib tidak ditemukan: ${jalur}`),
+    ];
+    const asetLengkap = masalahAset.length === 0;
+    checklist.push({
+      id: 'release-required-assets',
+      kategori: 'aset',
+      judul: 'Ikon aplikasi dan splash screen',
+      status: asetLengkap ? 'lulus' : konfig.lingkungan === 'production' ? 'gagal' : 'peringatan',
+      pesan: asetLengkap
+        ? `Aset utama tersedia; ${hasilAset.asetLulus} aset berhasil diperiksa.`
+        : masalahAset.join('; '),
+      wajib: true,
+    });
+    if (!asetLengkap) {
+      masalahAndroid.push(...masalahAset);
+      masalahIOS.push(...masalahAset);
+    }
+
+    // ==========================================
+    // 4. KATEGORI: KEAMANAN & SEMVER
     // ==========================================
     const semverCheck = VersionManager.periksaSemver(konfig.aplikasi.versi);
     if (semverCheck.valid) {
@@ -314,7 +374,8 @@ export class ReleaseValidator {
     const totalPeringatan = checklist.filter((c) => c.status === 'peringatan').length;
     const totalGagal = checklist.filter((c) => c.status === 'gagal').length;
 
-    const siapRilis = totalGagal === 0;
+    // Peringatan pada pemeriksaan wajib tidak boleh menghasilkan status SIAP DIRILIS.
+    const siapRilis = checklist.every((item) => !item.wajib || item.status === 'lulus');
 
     return {
       waktuPemeriksaan: new Date().toISOString(),

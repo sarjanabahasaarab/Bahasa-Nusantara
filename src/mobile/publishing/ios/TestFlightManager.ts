@@ -37,11 +37,12 @@ export class TestFlightManager {
     const infoBeta: InformasiBetaTestFlight = {
       buildVersion: opsi.buildVersion,
       buildNumber: opsi.buildNumber,
-      statusProcessing: 'ready_for_testflight',
+      statusProcessing: 'processing',
       catatanBeta: opsi.catatanBeta,
       emailKontakUmpanBalik: opsi.emailKontak || 'support@nusantara.dev',
       grupPenguji: opsi.grupPenguji || ['Internal QA', 'Komunitas Pengembang Nusantara'],
-      eksternalTersedia: Boolean(opsi.aktifkanEksternal),
+      // Flag permintaan bukan bukti bahwa Apple telah menyetujui build untuk pengujian eksternal.
+      eksternalTersedia: false,
       tanggalKedaluwarsa: tanggalExp.toISOString().split('T')[0],
     };
 
@@ -50,7 +51,7 @@ export class TestFlightManager {
     return {
       sukses: true,
       infoBeta,
-      pesan: `Build TestFlight v${opsi.buildVersion} (#${opsi.buildNumber}) siap didistribusikan ke ${infoBeta.grupPenguji.length} grup penguji.`,
+      pesan: `Konfigurasi beta v${opsi.buildVersion} (#${opsi.buildNumber}) disimpan. Distribusi tetap menunggu pemrosesan dan konfirmasi App Store Connect.`,
     };
   }
 

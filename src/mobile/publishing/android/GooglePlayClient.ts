@@ -41,7 +41,12 @@ export class GooglePlayClient {
     if (parsed.username || parsed.password) {
       throw new Error('URL endpoint Google Play API tidak boleh memuat kredensial tertanam.');
     }
-    const isLoopback = ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname.toLowerCase());
+    const hostname = parsed.hostname.toLowerCase();
+    const isLoopback = ['localhost', '127.0.0.1', '::1'].includes(hostname);
+    const isOfficialHost = hostname === 'androidpublisher.googleapis.com';
+    if (!isOfficialHost && !isLoopback) {
+      throw new Error('Endpoint Google Play API hanya boleh menggunakan host resmi androidpublisher.googleapis.com atau loopback lokal untuk pengujian.');
+    }
     if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLoopback)) {
       throw new Error(`Endpoint Google Play API wajib menggunakan HTTPS (atau HTTP loopback pengujian), ditemukan: '${rawUrl}'`);
     }
@@ -90,16 +95,21 @@ export class GooglePlayClient {
     }
   }
 
-  public buatAssertionJWTRS256(kunciPrivatPem: string, audience: string = 'https://oauth2.googleapis.com/token'): string {
+  public buatAssertionJWTRS256(
+    kunciPrivatPem: string,
+    audience: string = 'https://oauth2.googleapis.com/token',
+    serviceAccountEmail: string = this.konfig.serviceAccountEmail || ''
+  ): string {
     const nowSec = Math.floor(Date.now() / 1000);
     const header = { alg: 'RS256', typ: 'JWT' };
     const claim = {
-      iss: this.konfig.serviceAccountEmail || `${this.konfig.applicationId}@developer.gserviceaccount.com`,
+      iss: serviceAccountEmail,
       scope: 'https://www.googleapis.com/auth/androidpublisher',
       aud: audience,
       iat: nowSec,
       exp: nowSec + 3600,
     };
+    if (!claim.iss) throw new Error('Email Service Account Google wajib tersedia untuk JWT assertion.');
     const unsigned = `${encodeBase64Url(JSON.stringify(header))}.${encodeBase64Url(JSON.stringify(claim))}`;
     const crypto = muatModulNode<any>('crypto');
     if (crypto && typeof crypto.sign === 'function') {
@@ -110,14 +120,47 @@ export class GooglePlayClient {
   }
 
   private async pastikanHeaderOtorisasi(): Promise<Record<string, string>> {
-    if (this.tokenAksesOauth && Date.now() < this.kedaluwarsaToken) {
+    if (this.tokenAksesOauth && Date.now() < this.kedaluwarsaToken - 60000) {
       return { Authorization: `Bearer ${this.tokenAksesOauth}` };
     }
-    if (this.konfig.kunciPrivatPem) {
-      const jwt = this.buatAssertionJWTRS256(this.konfig.kunciPrivatPem);
-      return { Authorization: `Bearer ${jwt}` };
+
+    const kredensial = CredentialManager.dapatkanInstance().ambilServiceAccountGoogle(this.konfig);
+    let serviceAccountEmail = this.konfig.serviceAccountEmail;
+    let privateKey = this.konfig.kunciPrivatPem;
+
+    if (kredensial.ditemukan && kredensial.validasi.valid && kredensial.konten) {
+      try {
+        const json = JSON.parse(kredensial.konten);
+        serviceAccountEmail = serviceAccountEmail || json.client_email;
+        privateKey = privateKey || json.private_key;
+      } catch {
+        throw new Error('Berkas Service Account Google bukan JSON yang valid.');
+      }
     }
-    return {};
+
+    if (!serviceAccountEmail || !privateKey) {
+      throw new Error('Autentikasi Google Play memerlukan client_email dan private_key Service Account yang valid.');
+    }
+
+    const jwt = this.buatAssertionJWTRS256(privateKey, 'https://oauth2.googleapis.com/token', serviceAccountEmail);
+    const form = new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion: jwt,
+    });
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+      body: form.toString(),
+    });
+    const token = await response.json().catch(() => ({}));
+    if (!response.ok || typeof token.access_token !== 'string' || !token.access_token) {
+      throw new Error(`Pertukaran JWT ke OAuth2 Google gagal (HTTP ${response.status}).`);
+    }
+
+    this.tokenAksesOauth = token.access_token;
+    const masaBerlaku = Number(token.expires_in);
+    this.kedaluwarsaToken = Date.now() + (Number.isFinite(masaBerlaku) && masaBerlaku > 0 ? masaBerlaku : 3600) * 1000;
+    return { Authorization: `Bearer ${this.tokenAksesOauth}` };
   }
 
   /**
@@ -141,15 +184,53 @@ export class GooglePlayClient {
       };
     }
 
-    return {
-      terhubung: true,
-      emailAkunLayanan: SecretProvider.samarkanEmail(cred.validasi.email),
-      packageName: this.konfig.packageName,
-      izinAkses: ['androidpublisher.releases', 'androidpublisher.listings'],
-      waktuPemeriksaan: new Date().toISOString(),
-      pesan: `Terhubung ke Google Play API untuk package '${this.konfig.packageName}'.`,
-      modeSandbox: false,
-    };
+    try {
+      const authHdr = await this.pastikanHeaderOtorisasi();
+      const editUrl = `${this.baseUrl}/${encodeURIComponent(this.konfig.packageName)}/edits`;
+      const createRes = await fetch(editUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHdr },
+        body: JSON.stringify({}),
+      });
+      const created = await createRes.json().catch(() => ({}));
+      if (!createRes.ok || typeof created.id !== 'string' || !created.id) {
+        return {
+          terhubung: false,
+          emailAkunLayanan: SecretProvider.samarkanEmail(cred.validasi.email),
+          packageName: this.konfig.packageName,
+          izinAkses: [],
+          waktuPemeriksaan: new Date().toISOString(),
+          pesan: `Autentikasi berhasil tetapi pemeriksaan Google Play Edits gagal (HTTP ${createRes.status}).`,
+          modeSandbox: false,
+        };
+      }
+
+      const cleanupRes = await fetch(`${editUrl}/${encodeURIComponent(created.id)}`, {
+        method: 'DELETE',
+        headers: { ...authHdr },
+      });
+      return {
+        terhubung: true,
+        emailAkunLayanan: SecretProvider.samarkanEmail(cred.validasi.email),
+        packageName: this.konfig.packageName,
+        izinAkses: ['androidpublisher.edits'],
+        waktuPemeriksaan: new Date().toISOString(),
+        pesan: cleanupRes.ok
+          ? `Koneksi dan izin Google Play API terverifikasi untuk package '${this.konfig.packageName}'.`
+          : `Koneksi Google Play terverifikasi; penghapusan edit uji gagal (HTTP ${cleanupRes.status}) dan perlu dibersihkan dari Console.`,
+        modeSandbox: false,
+      };
+    } catch (err: any) {
+      return {
+        terhubung: false,
+        emailAkunLayanan: SecretProvider.samarkanEmail(cred.validasi.email),
+        packageName: this.konfig.packageName,
+        izinAkses: [],
+        waktuPemeriksaan: new Date().toISOString(),
+        pesan: `Pemeriksaan koneksi Google Play gagal: ${err.message}`,
+        modeSandbox: false,
+      };
+    }
   }
 
   /**
@@ -205,8 +286,10 @@ export class GooglePlayClient {
     track: GooglePlayTrack = 'internal',
     modeSimulasi: boolean = true
   ): Promise<HasilUploadPlay> {
-    if (!this.editIdAktif) {
-      const initEdit = await this.buatEdit(modeSimulasi);
+    // Mode simulasi boleh membuat edit lokal. Mode live harus memvalidasi file,
+    // ukuran, dan checksum terlebih dahulu sebelum membuat transaksi Google Play.
+    if (modeSimulasi && !this.editIdAktif) {
+      const initEdit = await this.buatEdit(true);
       if (!initEdit.sukses) {
         return {
           sukses: false,
@@ -216,7 +299,7 @@ export class GooglePlayClient {
           track,
           pesan: initEdit.pesan,
           waktuUpload: new Date().toISOString(),
-          modeSandbox: modeSimulasi,
+          modeSandbox: true,
         };
       }
     }
@@ -236,18 +319,49 @@ export class GooglePlayClient {
     }
 
     try {
-      const authHdr = await this.pastikanHeaderOtorisasi();
-      let payloadBytes: Uint8Array = new TextEncoder().encode(
-        JSON.stringify({ packageName: this.konfig.packageName, versionCode, sha256 })
-      );
-      if (apakahNodeRuntime() && jalurAab) {
-        const fs = muatModulNode<any>('fs');
-        if (fs && fs.existsSync(jalurAab)) {
-          payloadBytes = new Uint8Array(fs.readFileSync(jalurAab));
+      if (!apakahNodeRuntime() || !jalurAab) {
+        throw new Error('Upload AAB live hanya boleh memakai berkas .aab lokal yang dapat dibaca; payload metadata pengganti dilarang.');
+      }
+      const fs = muatModulNode<any>('fs');
+      const crypto = muatModulNode<any>('crypto');
+      if (!fs || typeof fs.existsSync !== 'function' || !fs.existsSync(jalurAab)) {
+        throw new Error('Berkas AAB tidak ditemukan atau tidak dapat dibaca.');
+      }
+      if (!crypto || typeof crypto.createHash !== 'function') {
+        throw new Error('Node.js crypto diperlukan untuk memverifikasi SHA-256 AAB sebelum upload.');
+      }
+      const berkasAab = fs.readFileSync(jalurAab);
+      const payloadBytes = new Uint8Array(berkasAab);
+      const hashAktual = crypto.createHash('sha256').update(berkasAab).digest('hex');
+      if (hashAktual.toLowerCase() !== String(sha256).toLowerCase()) {
+        throw new Error('SHA-256 berkas AAB tidak cocok dengan nilai yang diberikan; upload dibatalkan.');
+      }
+      if (ukuranBytes > 0 && payloadBytes.length !== ukuranBytes) {
+        throw new Error('Ukuran berkas AAB tidak cocok dengan metadata; upload dibatalkan.');
+      }
+      // Jangan membuat edit Google Play sampai artefak lokal lolos preflight penuh.
+      if (!this.editIdAktif) {
+        const initEdit = await this.buatEdit(false);
+        if (!initEdit.sukses) {
+          return {
+            sukses: false,
+            versionCode,
+            sha256,
+            ukuranBytes: payloadBytes.length,
+            track,
+            pesan: initEdit.pesan,
+            waktuUpload: new Date().toISOString(),
+            modeSandbox: false,
+          };
         }
       }
+      const authHdr = await this.pastikanHeaderOtorisasi();
 
-      const uploadUrl = `${this.baseUrl}/${encodeURIComponent(this.konfig.packageName)}/edits/${encodeURIComponent(this.editIdAktif!)}/bundles`;
+      const parsedBase = new URL(this.baseUrl);
+      const jalurUpload = `/applications/${encodeURIComponent(this.konfig.packageName)}/edits/${encodeURIComponent(this.editIdAktif!)}/bundles`;
+      const uploadUrl = parsedBase.hostname === 'androidpublisher.googleapis.com'
+        ? `https://androidpublisher.googleapis.com/upload/androidpublisher/v3${jalurUpload}?uploadType=media`
+        : `${this.baseUrl}/${encodeURIComponent(this.konfig.packageName)}/edits/${encodeURIComponent(this.editIdAktif!)}/bundles`;
       const uploadRes = await fetch(uploadUrl, {
         method: 'POST',
         headers: {

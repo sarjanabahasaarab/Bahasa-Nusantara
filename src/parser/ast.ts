@@ -169,6 +169,8 @@ export interface NodeDeklarasiVariabel extends NodeAST {
   jenis: JenisNodeAST.DEKLARASI_VARIABEL;
   nama: string;
   tipeData: string;
+  /** True bila tipe ditulis eksplisit oleh pengguna (termasuk 'apapun'). */
+  anotasiTipeEksplisit?: boolean;
   nilaiAwal: EkspresiAST;
 }
 

@@ -457,6 +457,16 @@ async function jalankanDemoTerpadu(): Promise<void> {
           statusValidasi: 'VERIFIED_STRUCTURAL_PLIST_ONLY',
           nativeBinary: false,
           catatan: 'Direktori .xcarchive struktural (Info.plist saja, TANPA biner Mach-O dan BUKAN .ipa); kompilasi .ipa memerlukan macOS + Xcode.',
+        },
+        {
+          nama: 'ExportOptions.plist',
+          sumberAbsolut: path.join(path.dirname(iosArc.artefak!.jalurLokal), 'ExportOptions.plist'),
+          jalurRelatifTujuan: 'mobile/ios/ExportOptions.plist',
+          jenisArtefak: 'structural-ios-export-options',
+          kategoriBuild: 'structural',
+          statusValidasi: 'VERIFIED_STRUCTURAL_EXPORT_OPTIONS_ONLY',
+          nativeBinary: false,
+          catatan: 'Konfigurasi ekspor Xcode untuk dokumentasi; bukan bukti xcodebuild, code signing, atau ekspor IPA berhasil.',
         }
       );
 
@@ -476,8 +486,7 @@ async function jalankanDemoTerpadu(): Promise<void> {
           res.setHeader('Content-Type', 'application/json');
           const token = String(req.headers.authorization || '').replace(/^Bearer\s+/, '');
           if (u.startsWith('/play/')) {
-            const v = GooglePlayClient.verifikasiAssertionJWTRS256(token, rsaPub);
-            if (!v.valid) { res.statusCode = 401; res.end('{}'); return; }
+            if (token !== 'loopback-demo-access-token') { res.statusCode = 401; res.end('{}'); return; }
             if (req.method === 'POST' && u === '/play/id.nusantara.crossdemo/edits') { res.end(JSON.stringify({ id: 'edit_demo_1' })); return; }
             if (req.method === 'POST' && u.endsWith('/bundles')) { res.end(JSON.stringify({ versionCode: 10 })); return; }
             if (req.method === 'PUT' && u.endsWith('/tracks/internal')) { res.end(JSON.stringify({ track: 'internal' })); return; }
@@ -501,15 +510,30 @@ async function jalankanDemoTerpadu(): Promise<void> {
           packageName: 'id.nusantara.crossdemo',
           defaultTrack: 'internal',
           endpointApi: `http://127.0.0.1:${storePort}/play`,
+          // Token dummy eksplisit hanya untuk menguji REST loopback; bukan kredensial produksi.
+          bearerTokenAkses: 'loopback-demo-access-token',
           kunciPrivatPem: rsaPriv,
           autoCommitEdit: false,
         });
+        const assertionUji = gp.buatAssertionJWTRS256(
+          rsaPriv,
+          'https://oauth2.googleapis.com/token',
+          'demo-service-account@nusantara.invalid'
+        );
+        const verifikasiAssertion = GooglePlayClient.verifikasiAssertionJWTRS256(
+          assertionUji,
+          rsaPub,
+          'https://oauth2.googleapis.com/token'
+        );
+        pastikan(verifikasiAssertion.valid, 'JWT assertion RS256 harus lolos verifikasi kriptografis sebelum uji REST loopback');
         const ed = await gp.buatEdit(false);
         const up = await gp.unggahAAB(aabPathForUpload, 10, aab.artefak!.sha256, fs.statSync(aabPathForUpload).size, 'internal', false);
         const cm = await gp.commitEdit(false);
         pastikan(ed.sukses && up.sukses && cm.sukses, 'Siklus edit -> upload AAB -> commit Google Play loopback harus sukses');
 
         const asc = new AppStoreConnectClient({
+          issuerId: '00000000-0000-4000-8000-000000000041',
+          keyId: 'NUSANTARA1',
           bundleId: 'id.nusantara.crossdemo',
           defaultChannel: 'testflight',
           endpointApi: `http://127.0.0.1:${storePort}/asc`,
