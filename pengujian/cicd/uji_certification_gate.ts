@@ -300,6 +300,10 @@ try {
     jobs[0].isNativeHardware = false;
 
     const lap = evaluasiGerbangSertifikasi({
+      // Fixture ini menguji status fase, bukan validasi provenance; samakan metadata
+      // dengan evidence sintetis agar tidak memakai GITHUB_SHA/GITHUB_RUN_ID runner.
+      commitSha: 'deadbeef1234',
+      workflowRunId: '999',
       phase23Summary: buatPhase23PassSummary(),
       demoBundleDir: demoDir,
       jobEvidences: jobs,
@@ -313,6 +317,8 @@ try {
 
   uji('7. FAIL dan BLOCKED langsung menggagalkan gate', () => {
     const lapFail = evaluasiGerbangSertifikasi({
+      commitSha: 'deadbeef1234',
+      workflowRunId: '999',
       phase23Summary: buatPhase23PassSummary(),
       jobEvidences: buatJobEvidencesFullPass().map((j) =>
         j.jobId === 'phase39-42-tls-ota' ? { ...j, status: 'FAIL' } : j
@@ -322,6 +328,8 @@ try {
     pastikan(lapFail.overallStatus === 'FAIL' && lapFail.exitCode === 1 && !lapFail.gatePassed, 'Status FAIL harus gagal');
 
     const lapBlocked = evaluasiGerbangSertifikasi({
+      commitSha: 'deadbeef1234',
+      workflowRunId: '999',
       phase23Summary: buatPhase23PassSummary(),
       jobEvidences: buatJobEvidencesFullPass(),
       testSuiteStatuses: { staticChecks: 'PASS', testSuite: 'PASS', qualityGate: 'PASS', releaseTagPolicyBlocked: true },
