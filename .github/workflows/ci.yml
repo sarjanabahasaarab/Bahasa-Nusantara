@@ -911,7 +911,8 @@ jobs:
                   "aabBuiltWithBundletool": True,
                   "apksignerVerified": True,
                   "emulatorBooted": os.environ.get("APK_INSTALLED_AND_LAUNCHED") == "true",
-                  "physicalDeviceHardwareVerified": False,\n                  "ephemeralKeystoreSigned": os.environ.get("EPHEMERAL_SIGNING_VERIFIED") == "true",
+                  "physicalDeviceHardwareVerified": False,
+                  "ephemeralKeystoreSigned": os.environ.get("EPHEMERAL_SIGNING_VERIFIED") == "true",
                   "neverClaimStructuralAsNative": True,
               },
               "blockers": [
