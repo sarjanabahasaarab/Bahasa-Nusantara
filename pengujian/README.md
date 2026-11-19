@@ -1,7 +1,7 @@
 # Kerangka Kerja & Sistem Pengujian Otomatis NUSANTARA
 
 > **Dokumentasi Resmi Rangkaian Pengujian Mutu (Quality Gate) Bahasa Pemrograman NUSANTARA**  
-> **Versi Rilis:** `v0.50.0` | **Status:** 48 langkah pemeriksaan (`npm test`) terintegrasi; hasil harus dibaca dari CI pada commit yang diuji
+> **Versi Rilis:** `v0.50.0` | **Status:** 49 langkah pemeriksaan (`npm test`) terintegrasi; hasil harus dibaca dari CI pada commit yang diuji
 
 Direktori `pengujian/` menampung seluruh kerangka pengujian mutu komprehensif bahasa pemrograman NUSANTARA, mulai dari verifikasi dokumen fondasi, analisis leksikal, parsing AST, evaluasi semantik & tipe, interpreter runtime, toolchain, framework web & desktop, ekosistem mobile, intermediate representation (NIR), LLVM backend, linker lanjutan, sistem konkurensi (Actor Model), Game SDK, hingga kernel dan user mode NusantaraOS (Phase 1 s/d Phase 50).
 
