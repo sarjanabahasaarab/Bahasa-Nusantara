@@ -898,6 +898,11 @@ async function jalankanSemuaPengujianFase41() {
       await new Promise<void>((r) => errSrv.close(() => r()));
     }
 
+    // CLI sinkron tidak boleh mengarang status koneksi, status TestFlight, atau upload IPA.
+    pastikan(MobileCLI.jalankan(['store', 'koneksi', 'android']) === 1, 'CLI koneksi Google Play harus tetap belum diverifikasi tanpa respons API nyata');
+    pastikan(MobileCLI.jalankan(['store', 'ios', 'testflight']) === 1, 'CLI TestFlight harus menolak klaim siap tanpa konfirmasi App Store Connect');
+    pastikan(MobileCLI.jalankan(['store', 'ios', 'upload']) === 1, 'CLI upload IPA harus menolak klaim sukses sebelum integrasi Transporter tersedia');
+
     const logRedacted = SecretProvider.bersihkanLogDariRahasia('GET /cb?token=secret123&ok=1');
     pastikan(!logRedacted.includes('secret123'), 'SecretProvider.bersihkanLogDariRahasia wajib menyensor token query string');
   }
