@@ -171,28 +171,25 @@ async function jalankanSemuaPengujianFase38(): Promise<void> {
     pastikan(lok.sukses && lok.data.latitude !== undefined, 'Koordinat lokasi simulator valid');
   });
 
-  await uji('5.2 Eksekusi Adaptor Android Mobile', async () => {
+  await uji('5.2 Adaptor Android tidak memalsukan perangkat, foto, atau data kamera', async () => {
     const android = new AdaptorAndroidMobile();
     const info = await android.dapatkanInfoPerangkat();
-    pastikan(info.sukses, 'Info perangkat Android sukses');
-    pastikan(info.data.platform === 'android', 'Platform harus android');
-    pastikan(info.data.levelAPI === 34, 'Level API Android 34');
-
+    if (info.sukses) {
+      pastikan(Number.isFinite(info.data.levelAPI), 'Level API harus berasal dari perangkat ADB nyata');
+      pastikan(info.data.sumberData === 'ADB_DEVICE_REAL', 'Sumber info harus ADB nyata');
+    } else {
+      pastikan(info.status === 'perangkat_tidak_tersedia', 'Tanpa perangkat ADB, status harus perangkat_tidak_tersedia');
+    }
     const foto = await android.ambilFoto();
-    pastikan(foto.sukses, 'Ambil foto Android sukses');
-    pastikan(foto.data.kontrakAndroid.includes('TakePicture'), 'Menggunakan kontrak TakePicture');
+    pastikan(!foto.sukses && foto.status === 'tidak_didukung', 'Kamera harus gagal tertutup sampai bridge CameraX/Intent nyata tersedia');
   });
 
-  await uji('5.3 Eksekusi Adaptor iOS Mobile', async () => {
+  await uji('5.3 Adaptor iOS tidak mengklaim API perangkat sebelum Swift bridge tersedia', async () => {
     const ios = new AdaptorIOSMobile();
     const info = await ios.dapatkanInfoPerangkat();
-    pastikan(info.sukses, 'Info perangkat iOS sukses');
-    pastikan(info.data.platform === 'ios', 'Platform harus ios');
-    pastikan(info.data.frameworks.includes('AVFoundation'), 'Framework iOS AVFoundation');
-
+    pastikan(!info.sukses && info.status === 'tidak_didukung', 'Info iOS harus menolak klaim dari host Xcode tanpa bridge aplikasi');
     const foto = await ios.ambilFoto();
-    pastikan(foto.sukses, 'Ambil foto iOS sukses');
-    pastikan(foto.data.format === 'image/heic', 'Format foto iOS HEIC');
+    pastikan(!foto.sukses && foto.status === 'tidak_didukung', 'Kamera iOS harus gagal tertutup sampai AVFoundation bridge terhubung');
   });
 
   // 6. Pengujian Layanan API Sensor, Audio, Berkas, dan Keamanan
