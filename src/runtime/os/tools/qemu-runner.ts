@@ -173,7 +173,7 @@ export class QEMURunner {
           safeFS.mkdirSync(grubDir, { recursive: true });
           safeFS.writeFileSync(
             safePath.join(isoDir, 'boot', 'kernel.elf'),
-            safeFS.readFileSync(options.kernelPath)
+            safeFS.readFileBufferSync(options.kernelPath)
           );
           safeFS.writeFileSync(
             safePath.join(grubDir, 'grub.cfg'),
