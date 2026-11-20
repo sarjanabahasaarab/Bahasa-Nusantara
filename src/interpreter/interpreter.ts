@@ -101,6 +101,7 @@ export interface KaitProfiler {
 
 export interface OpsiInterpreter {
   maksimalIterasiPerulangan?: number;
+  batasWaktuEksekusiMs?: number;
   pemuatModul?: PemuatModul;
   resolverModul?: ResolverModul;
   pembacaBerkas?: PembacaBerkas;
@@ -123,6 +124,8 @@ export class Interpreter {
   private readonly outputWriter: OutputWriter;
   private readonly tumpukanPanggilan: BingkaiTumpukan[] = [];
   private readonly maksimalIterasiPerulangan: number;
+  private readonly batasWaktuEksekusiMs?: number;
+  private deadlineEksekusi?: number;
   private pemuatModul: PemuatModul;
   private direktoriBasis?: string;
   private modulAktifSaatIni?: { nama: string; jalurBerkas?: string };
@@ -132,6 +135,12 @@ export class Interpreter {
   constructor(outputWriter?: OutputWriter, opsi?: OpsiInterpreter) {
     this.outputWriter = outputWriter || new PenulisOutputKonsol();
     this.maksimalIterasiPerulangan = opsi?.maksimalIterasiPerulangan ?? 1_000_000;
+    this.batasWaktuEksekusiMs =
+      typeof opsi?.batasWaktuEksekusiMs === 'number' &&
+      Number.isFinite(opsi.batasWaktuEksekusiMs) &&
+      opsi.batasWaktuEksekusiMs > 0
+        ? opsi.batasWaktuEksekusiMs
+        : undefined;
     this.direktoriBasis = opsi?.direktoriBasis;
     this.kaitDebug = opsi?.kaitDebug;
     this.profiler = opsi?.profiler;
@@ -412,7 +421,12 @@ export class Interpreter {
    */
   public interpretasikan(program: NodeProgram, direktoriBasis?: string): void {
     const basis = direktoriBasis || this.direktoriBasis;
+    this.deadlineEksekusi =
+      this.batasWaktuEksekusiMs !== undefined
+        ? Date.now() + this.batasWaktuEksekusiMs
+        : undefined;
     try {
+      this.pastikanBelumMelewatiBatasWaktu();
       this.tumpukanPanggilan.push({ namaKonteks: `program ${program.namaProgram}` });
 
       // 0. Proses impor modul jika ada pada program utama
@@ -467,6 +481,7 @@ export class Interpreter {
       throw e;
     } finally {
       this.tumpukanPanggilan.pop();
+      this.deadlineEksekusi = undefined;
     }
   }
 
@@ -513,7 +528,16 @@ export class Interpreter {
 
   // ==========================================================================
   // EKSEKUSI PERNYATAAN (STATEMENTS)
+  private pastikanBelumMelewatiBatasWaktu(): void {
+    if (this.deadlineEksekusi !== undefined && Date.now() >= this.deadlineEksekusi) {
+      throw new Error(
+        `Batas waktu eksekusi pengujian terlampaui (${this.batasWaktuEksekusiMs}ms).`
+      );
+    }
+  }
+
   private eksekusiPernyataan(stmt: PernyataanAST): void {
+    this.pastikanBelumMelewatiBatasWaktu();
     if (this.kaitDebug?.sebelumPernyataan) {
       this.kaitDebug.sebelumPernyataan(stmt, this.buatKonteksDebug());
     }
@@ -732,6 +756,7 @@ export class Interpreter {
   // ==========================================================================
 
   public evaluasiEkspresi(expr: EkspresiAST): NilaiRuntime {
+    this.pastikanBelumMelewatiBatasWaktu();
     switch (expr.jenis) {
       case JenisNodeAST.LITERAL: {
         const l = expr as NodeLiteral;
