@@ -235,6 +235,16 @@ export function evaluasiOperasiBiner(
  * Membandingkan kesetaraan nilai runtime secara rekursif (deep equality).
  */
 export function apakahNilaiSama(kiri: NilaiRuntime, kanan: NilaiRuntime): boolean {
+  return apakahNilaiSamaInternal(kiri, kanan, new WeakMap<object, WeakSet<object>>());
+}
+
+function apakahNilaiSamaInternal(
+  kiri: NilaiRuntime,
+  kanan: NilaiRuntime,
+  pasanganAktif: WeakMap<object, WeakSet<object>>
+): boolean {
+  if (kiri === kanan) return true;
+
   if (kiri.jenis !== kanan.jenis) {
     if (
       (kiri.jenis === JenisNilaiRuntime.BILANGAN || kiri.jenis === JenisNilaiRuntime.DESIMAL) &&
@@ -245,9 +255,7 @@ export function apakahNilaiSama(kiri: NilaiRuntime, kanan: NilaiRuntime): boolea
     return false;
   }
 
-  if (kiri.jenis === JenisNilaiRuntime.KOSONG) {
-    return true;
-  }
+  if (kiri.jenis === JenisNilaiRuntime.KOSONG) return true;
 
   if (
     kiri.jenis === JenisNilaiRuntime.TEKS ||
@@ -262,10 +270,15 @@ export function apakahNilaiSama(kiri: NilaiRuntime, kanan: NilaiRuntime): boolea
   if (kiri.jenis === JenisNilaiRuntime.DAFTAR) {
     const kDaftar = kanan as NilaiDaftar;
     if (kiri.elemen.length !== kDaftar.elemen.length) return false;
+    let pasanganKanan = pasanganAktif.get(kiri);
+    if (pasanganKanan?.has(kanan)) return true;
+    if (!pasanganKanan) {
+      pasanganKanan = new WeakSet<object>();
+      pasanganAktif.set(kiri, pasanganKanan);
+    }
+    pasanganKanan.add(kanan);
     for (let i = 0; i < kiri.elemen.length; i++) {
-      if (!apakahNilaiSama(kiri.elemen[i], kDaftar.elemen[i])) {
-        return false;
-      }
+      if (!apakahNilaiSamaInternal(kiri.elemen[i], kDaftar.elemen[i], pasanganAktif)) return false;
     }
     return true;
   }
@@ -273,12 +286,19 @@ export function apakahNilaiSama(kiri: NilaiRuntime, kanan: NilaiRuntime): boolea
   if (kiri.jenis === JenisNilaiRuntime.PETA) {
     const kPeta = kanan as NilaiPeta;
     if (kiri.nilai.size !== kPeta.nilai.size) return false;
+    let pasanganKanan = pasanganAktif.get(kiri);
+    if (pasanganKanan?.has(kanan)) return true;
+    if (!pasanganKanan) {
+      pasanganKanan = new WeakSet<object>();
+      pasanganAktif.set(kiri, pasanganKanan);
+    }
+    pasanganKanan.add(kanan);
     for (const [k, v] of kiri.nilai.entries()) {
       if (!kPeta.nilai.has(k)) return false;
-      if (!apakahNilaiSama(v, kPeta.nilai.get(k)!)) return false;
+      if (!apakahNilaiSamaInternal(v, kPeta.nilai.get(k)!, pasanganAktif)) return false;
     }
     return true;
   }
 
-  return kiri === kanan;
+  return false;
 }
