@@ -76,6 +76,16 @@ uji('Mengamankan nilai konfigurasi formatter dari indentasi ekstrem dan panjang 
 });
 
 
+uji('Kata program dan mulai di komentar atau string tidak memicu pembungkus program palsu', () => {
+  const masukan = `// program Komentar mulai
+tampilkan("program Teks mulai")`;
+  const hasil = formatKode(masukan);
+  pastikan(hasil.includes('// program Komentar mulai'), 'Komentar yang memuat kata kunci tetap dipertahankan');
+  pastikan(hasil.includes('tampilkan("program Teks mulai")'), 'Literal teks tetap utuh');
+  pastikan(!hasil.includes('program Komentar\\nmulai'), 'Komentar tidak dianggap sebagai deklarasi program');
+  pastikan(!hasil.includes('program Teks\\nmulai'), 'Literal teks tidak dianggap sebagai deklarasi program');
+});
+
 uji('Memformat deklarasi variabel, tetap, dan operator spacing', () => {
   const masukan = `variabel  x:bilangan=10+20*3
 tetap   PI:desimal=3.14159`;
