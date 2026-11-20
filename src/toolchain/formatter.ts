@@ -76,7 +76,38 @@ export class FormatterNUSANTARA {
 
   constructor(kodeSumber: string, konfigurasi?: Partial<KonfigurasiFormat>) {
     this.kodeSumberAsli = kodeSumber;
-    this.konfigurasi = { ...KONFIGURASI_FORMAT_DEFAULT, ...konfigurasi };
+    const gabungan = { ...KONFIGURASI_FORMAT_DEFAULT, ...konfigurasi };
+
+    // Konfigurasi dapat berasal dari file proyek atau pemanggil API.
+    // Sanitasi nilai runtime agar indentasi ekstrem/negatif tidak membuat
+    // String.repeat melempar RangeError atau menghabiskan memori.
+    const indentasi = Number.isFinite(gabungan.indentasi)
+      ? Math.min(8, Math.max(1, Math.floor(gabungan.indentasi)))
+      : KONFIGURASI_FORMAT_DEFAULT.indentasi;
+    const panjangBaris = Number.isFinite(gabungan.panjangBaris)
+      ? Math.min(240, Math.max(40, Math.floor(gabungan.panjangBaris)))
+      : KONFIGURASI_FORMAT_DEFAULT.panjangBaris;
+
+    this.konfigurasi = {
+      indentasi,
+      panjangBaris,
+      spasiOperator:
+        typeof gabungan.spasiOperator === 'boolean'
+          ? gabungan.spasiOperator
+          : KONFIGURASI_FORMAT_DEFAULT.spasiOperator,
+      spasiKoma:
+        typeof gabungan.spasiKoma === 'boolean'
+          ? gabungan.spasiKoma
+          : KONFIGURASI_FORMAT_DEFAULT.spasiKoma,
+      spasiSebelumTitikDua:
+        typeof gabungan.spasiSebelumTitikDua === 'boolean'
+          ? gabungan.spasiSebelumTitikDua
+          : KONFIGURASI_FORMAT_DEFAULT.spasiSebelumTitikDua,
+      karakterBarisBaru:
+        gabungan.karakterBarisBaru === '\r\n' || gabungan.karakterBarisBaru === '\n'
+          ? gabungan.karakterBarisBaru
+          : KONFIGURASI_FORMAT_DEFAULT.karakterBarisBaru,
+    };
   }
 
   /**
