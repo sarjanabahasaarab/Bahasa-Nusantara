@@ -84,9 +84,10 @@ export class FormatterNUSANTARA {
     // Konfigurasi dapat berasal dari file proyek atau pemanggil API.
     // Sanitasi nilai runtime agar indentasi ekstrem/negatif tidak membuat
     // String.repeat melempar RangeError atau menghabiskan memori.
-    const indentasi = Number.isFinite(gabungan.indentasi)
-      ? Math.min(8, Math.max(1, Math.floor(gabungan.indentasi)))
-      : KONFIGURASI_FORMAT_DEFAULT.indentasi;
+    const indentasi =
+      Number.isFinite(gabungan.indentasi) && gabungan.indentasi >= 1 && gabungan.indentasi <= 8
+        ? Math.floor(gabungan.indentasi)
+        : KONFIGURASI_FORMAT_DEFAULT.indentasi;
     const panjangBaris = Number.isFinite(gabungan.panjangBaris)
       ? Math.min(240, Math.max(40, Math.floor(gabungan.panjangBaris)))
       : KONFIGURASI_FORMAT_DEFAULT.panjangBaris;
