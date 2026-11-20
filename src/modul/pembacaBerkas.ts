@@ -16,6 +16,7 @@ export interface PembacaBerkas {
   direktoriDari(jalur: string): string;
   gabungJalur(...bagian: string[]): string;
   normalisasiJalur(jalur: string): string;
+  jalurNyata?(jalur: string): string;
 }
 
 /**
@@ -289,5 +290,17 @@ export class PembacaBerkasNode implements PembacaBerkas {
   public normalisasiJalur(jalur: string): string {
     if (!this.path) return jalur;
     return this.path.normalize(jalur);
+  }
+
+  /**
+   * Mengembalikan jalur fisik setelah resolusi symbolic link.
+   * Digunakan sandbox untuk mencegah symlink di dalam proyek mengarah keluar.
+   */
+  public jalurNyata(jalur: string): string {
+    if (!this.fs?.realpathSync) {
+      throw new Error('Resolusi jalur fisik tidak tersedia pada lingkungan ini.');
+    }
+    const realpath = this.fs.realpathSync.native || this.fs.realpathSync;
+    return realpath.call(this.fs.realpathSync, jalur);
   }
 }
