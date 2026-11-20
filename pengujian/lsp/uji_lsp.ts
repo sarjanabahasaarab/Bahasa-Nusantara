@@ -755,7 +755,7 @@ selesai`,
       let ditolak = false;
       try {
         new PembacaBingkaiLSP().prosesPotongan(
-          'Content-Length: 2\\r\\nContent-Length: 2\\r\\n\\r\\n{}'
+          'Content-Length: 2\r\nContent-Length: 2\r\n\r\n{}'
         );
       } catch {
         ditolak = true;
