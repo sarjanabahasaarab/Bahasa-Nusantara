@@ -176,7 +176,8 @@ export class Parser {
       }
     } catch (e: any) {
       if (e instanceof GalatParser) {
-        this.daftarGalat.push(e);
+        // Galat yang dilempar harapkan() sudah dicatat; jangan menggandakan objek yang sama.
+        if (!this.daftarGalat.includes(e)) this.daftarGalat.push(e);
       } else {
         throw e;
       }
