@@ -83,6 +83,16 @@ async function jalankanPengujianLSP(): Promise<void> {
       tegaskan(resInit.result.serverInfo.version === '0.20.0', 'Versi server harus v0.20.0');
     });
 
+    const resInitUlang: any = await server.tanganiPesan({
+      jsonrpc: '2.0',
+      id: 3,
+      method: 'initialize',
+      params: { processId: null, rootUri: null, capabilities: {} },
+    });
+    uji('Server menolak initialize kedua kali dengan InvalidRequest', () => {
+      tegaskan(resInitUlang.error?.code === KodeGalatJSONRPC.InvalidRequest, 'Initialize ganda harus ditolak');
+    });
+
     // 2. Notifikasi Initialized
     await server.tanganiPesan({
       jsonrpc: '2.0',
@@ -102,6 +112,19 @@ async function jalankanPengujianLSP(): Promise<void> {
     });
     uji('Server merespons shutdown dengan hasil null', () => {
       tegaskan(resShutdown.result === null, 'Hasil shutdown harus null sesuai spesifikasi LSP');
+    });
+
+    const resSetelahShutdown: any = await server.tanganiPesan({
+      jsonrpc: '2.0',
+      id: 4,
+      method: 'textDocument/completion',
+      params: { textDocument: { uri: 'file:///setelah-shutdown.nusantara' }, position: { line: 0, character: 0 } },
+    });
+    uji('Server menolak permintaan baru setelah shutdown', () => {
+      tegaskan(
+        resSetelahShutdown.error?.code === KodeGalatJSONRPC.InvalidRequest,
+        'Permintaan setelah shutdown harus ditolak'
+      );
     });
 
     // 4. Notifikasi Exit
@@ -690,7 +713,19 @@ selesai`,
       tegaskan((pesanEkstrak[0] as any).result === 'sukses', 'Result harus cocok');
     });
 
-    // 3. Error Recovery pada Permintaan Tidak Dikenal
+    // 3. ID nol tidak boleh berubah menjadi null pada respons permintaan tidak valid.
+    const serverIdNol = new ServerBahasaNUSANTARA();
+    const resIdNol: any = await serverIdNol.tanganiPesan({
+      jsonrpc: '1.0',
+      id: 0,
+      method: 'uji',
+    } as any);
+    uji('Mempertahankan request ID numerik nol pada respons InvalidRequest', () => {
+      tegaskan(resIdNol.id === 0, 'ID 0 harus dipertahankan, bukan diganti null');
+      tegaskan(resIdNol.error.code === KodeGalatJSONRPC.InvalidRequest, 'Versi JSON-RPC salah harus ditolak');
+    });
+
+    // 4. Error Recovery pada Permintaan Tidak Dikenal
     const server = new ServerBahasaNUSANTARA();
     const resTakDikenal: any = await server.tanganiPesan({
       jsonrpc: '2.0',
