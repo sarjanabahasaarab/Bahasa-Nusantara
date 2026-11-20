@@ -33,7 +33,7 @@ Bahasa pemrograman NUSANTARA dilahirkan sebagai ikhtiar rekayasa perangkat lunak
 9. **Kemandirian Sistem Operasi (*Cross-Platform by Design*):**
    Spesifikasi bahasa tidak boleh bergantung pada satu sistem operasi tertentu (misalnya Windows, Linux, atau macOS saja). Bahasa harus dirancang mandiri secara arsitektur.
 10. **Keterbukaan & Kolaborasi Terbuka:**
-    Pengembangan bahasa dikelola secara terbuka di GitHub di bawah lisensi perangkat lunak bebas (MIT License) untuk kemaslahatan masyarakat luas.
+    Pengembangan bahasa dikelola secara terbuka dan kolaboratif di GitHub. Ketentuan lisensi mengikuti lisensi resmi proyek yang tercantum dalam berkas `LISENSI` (Apache License 2.0); konstitusi ini tidak menetapkan lisensi yang berbeda.
 
 ---
 

@@ -1,6 +1,6 @@
 # Arsitektur Kompilator & Saluran Pipa Bahasa NUSANTARA
 
-Dokumen ini menjelaskan rancangan rekayasa saluran pipa (*compilation pipeline*) yang akan dibangun secara bertahap mulai dari Fase 6 hingga Fase 25.
+Dokumen ini menetapkan cetak biru saluran pipa kompilator NUSANTARA. Implementasinya dilakukan bertahap sesuai peta jalan resmi; nomor fase di bawah merujuk pada milestone implementasi yang berlaku saat ini.
 
 Pada **Phase 1**, arsitektur ini ditetapkan sebagai cetak biru resmi tanpa implementasi kompilator tiruan (*no mock compiler*).
 
@@ -37,22 +37,22 @@ Pada **Phase 1**, arsitektur ini ditetapkan sebagai cetak biru resmi tanpa imple
                   │ AST Teranotasi
                   ▼
         ┌──────────────────┐
-        │   5. IR          │  (Fase 21)
+        │   5. IR          │  (Phase 43: NIR)
         │   Intermed. Repr │
         └─────────┬────────┘
                   │ Tiga Alamat Kode / SSA Form
                   ▼
         ┌──────────────────┐
-        │   6. OPTIMIZER   │  (Fase 24)
+        │   6. OPTIMIZER   │  (optimasi bertahap)
         │   Optimasi Kode  │
         └─────────┬────────┘
                   │ IR Teroptimasi
                   ▼
         ┌──────────────────┐
-        │   7. BACKEND     │  (Fase 22 & 23)
+        │   7. BACKEND     │  (Phase 44: LLVM)
         │   LLVM / Mesin   │
         └─────────┬────────┘
-                  │ Assembler & Linker
+                  │ Assembler & Linker (Phase 45)
                   ▼
 [ Berkas Biner Eksekusi Asli (Native Binary / .exe / ELF) ]
 ```
@@ -89,7 +89,7 @@ Pada **Phase 1**, arsitektur ini ditetapkan sebagai cetak biru resmi tanpa imple
   - Memastikan konstanta bertanda `tetap` tidak dapat diubah kembali (*immutable*).
 
 ### Tahap 5: Representasi Perantara (Intermediate Representation / IR)
-- Menghasilkan representasi instruksi independen dari arsitektur perangkat keras (*architecture-neutral*).
+- Menghasilkan representasi instruksi independen dari arsitektur perangkat keras (*architecture-neutral*); implementasi NUSANTARA Intermediate Representation (NIR) berada pada Phase 43.
 - Menggunakan format *Static Single Assignment* (SSA) untuk memudahkan algoritma optimasi.
 
 ### Tahap 6: Pengoptimal (Optimizer)
@@ -99,8 +99,8 @@ Pada **Phase 1**, arsitektur ini ditetapkan sebagai cetak biru resmi tanpa imple
   - *Inline Expansion* (memperluas fungsi pendek untuk meniadakan beban *call stack*).
 
 ### Tahap 7: Pembangkit Kode (Backend)
-- Menerjemahkan IR menjadi instruksi mesin melalui antarmuka LLVM atau generator kode mesin langsung.
-- Mengaitkan pustaka runtime untuk alokasi memori dan operasi I/O.
+- Menerjemahkan IR menjadi instruksi mesin melalui backend LLVM (Phase 44) atau backend lain yang tervalidasi.
+- Mengaitkan pustaka runtime untuk alokasi memori dan operasi I/O; resolusi simbol, relokasi, dan pengemasan executable ditangani pada tahap linker (Phase 45).
 - Menghasilkan biner mandiri (*standalone executable*) berkinerja tinggi.
 
 ---

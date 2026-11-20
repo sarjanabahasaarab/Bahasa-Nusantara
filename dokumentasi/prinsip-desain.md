@@ -25,7 +25,7 @@ Membaca kode sumber `.nusantara` terasa alami seperti membaca teks formal yang l
 Kemudahan bacaan tidak boleh mengorbankan ketepatan teknis. NUSANTARA dirancang dengan dukungan abstraksi tingkat tinggi (fungsi orde tinggi, tipe data generik, pemrograman berorientasi objek, konkurensi) tanpa kehilangan ketelitian komputasi.
 
 ### 5. Terbuka Seutuhnya (*Open Source*)
-Seluruh spesifikasi, kode kompilator, pustaka standar, dan perkakas ekosistem dilisensikan di bawah lisensi terbuka bebas (MIT License) tanpa penguncian hak milik tertutup (*vendor lock-in*).
+Seluruh spesifikasi, kode kompilator, pustaka standar, dan perkakas ekosistem harus terbuka serta dapat diaudit tanpa penguncian hak milik tertutup (*vendor lock-in*). Jenis dan ketentuan lisensi resmi ditetapkan secara terpisah pada Phase 3; dokumen fondasi ini tidak menetapkan nama lisensi.
 
 ### 6. Berorientasi Komunitas
 Arah perkembangan bahasa ditentukan secara transparan melalui mekanisme **NIP (Nusantara Improvement Proposal)**. Setiap anggota masyarakat memiliki hak untuk mengusulkan dan meninjau rancangan bahasa.

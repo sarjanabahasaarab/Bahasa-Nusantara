@@ -30,12 +30,10 @@ Tindakan-tindakan berikut dilarang di seluruh kanal resmi proyek (Issue, Pull Re
 
 Apabila Anda mengalami, menyaksikan, atau mencurigai adanya pelanggaran terhadap Kode Etik ini, mohon laporkan secara privat untuk menjaga kerahasiaan dan objektivitas:
 
-- **Kanal Pelaporan Pelanggaran:** `[EMAIL_ATAU_KANAL_PELAPORAN_RESMI]`
+- **Kanal Pelaporan Privat:** Belum ada alamat surel atau kanal privat proyek yang terverifikasi pada audit 20 November 2026. Jangan menuliskan data pribadi atau rincian sensitif pada Issue/PR publik. Untuk meminta kanal privat, buat permintaan umum tanpa rincian sensitif agar maintainer dapat memberikan jalur pelaporan yang aman. Konten yang melanggar kebijakan GitHub juga dapat dilaporkan melalui mekanisme pelaporan konten GitHub.
 - **Tim Penangan:** Tim Pemelihara Utama (*Core Maintainers*) NUSANTARA.
 
-*(Catatan: Kanal pelaporan privat akan dikonfigurasi melalui pengaturan organisasi GitHub sebelum tim menerima pengaduan publik. Jangan menggunakan kontak pribadi tanpa mandat resmi).*
-
-Seluruh laporan akan diperiksa dengan asas keadilan, praduga tak bersalah, dan kerahasiaan penuh pelapor.
+Laporan ditangani dengan asas keadilan dan praduga tak bersalah. Pembatasan akses dan kerahasiaan mengikuti kemampuan kanal pelaporan yang benar-benar digunakan; proyek tidak menjanjikan kerahasiaan penuh sebelum kanal privat tersedia.
 
 ---
 
