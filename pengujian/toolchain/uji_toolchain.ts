@@ -347,6 +347,32 @@ selesai`,
   pastikan(hasilProyek.totalBerkasDiperiksa >= 1, 'Menemukan berkas .nusantara');
 });
 
+uji('Pemindaian proyek mengabaikan symbolic link dan mengurutkan hasil secara deterministik', () => {
+  class PembacaDenganTautan extends PembacaBerkasMemori {
+    public jalurNyata(jalur: string): string {
+      return jalur === '/proyek/tautan' ? '/proyek' : jalur;
+    }
+
+    public apakahSymbolicLink(jalur: string): boolean {
+      return jalur === '/proyek/tautan';
+    }
+  }
+
+  const fs = new PembacaDenganTautan({
+    '/proyek/z.nusantara': 'program Z mulai selesai',
+    '/proyek/a.nusantara': 'program A mulai selesai',
+    '/proyek/src/index.nusantara': 'program Index mulai selesai',
+    '/proyek/tautan/rahasia.nusantara': 'program Rahasia mulai selesai',
+  });
+  const pemeriksa = new PemeriksaProyek(fs);
+  const hasil = pemeriksa.temukanBerkasNusantara('/proyek');
+
+  pastikanSama(hasil.length, 3, 'Berkas di dalam symbolic link tidak boleh ikut dipindai');
+  pastikanSama(hasil[0], '/proyek/a.nusantara', 'Hasil pemindaian harus diurutkan stabil');
+  pastikanSama(hasil[1], '/proyek/src/index.nusantara', 'Berkas dalam direktori proyek tetap ditemukan');
+  pastikanSama(hasil[2], '/proyek/z.nusantara', 'Berkas terakhir tetap ditemukan');
+});
+
 uji('Mendeteksi manifest rusak pada pemeriksaan proyek', () => {
   const fs = new PembacaBerkasMemori({
     '/proyek/nusantara.toml': `[nusantara]\nversi = "bukan_semver"`, // tanpa nama
