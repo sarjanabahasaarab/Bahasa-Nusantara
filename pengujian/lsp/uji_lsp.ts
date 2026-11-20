@@ -175,6 +175,30 @@ async function jalankanPengujianLSP(): Promise<void> {
       tegaskan(dokBaru?.astCache === undefined, 'Cache AST harus diinvaliasi');
     });
 
+    const dokVersiSama = manajer.perbaruiDokumen(uri, 2, [{ text: 'konten versi duplikat' }]);
+    uji('Menolak pembaruan dengan versi yang sama (duplicate version guard)', () => {
+      tegaskan(dokVersiSama?.konten.includes('"halo"') === true, 'Isi tidak boleh berubah pada versi duplikat');
+    });
+
+    const uriMulti = 'file:///proyek/multi-edit.nusantara';
+    manajer.bukaDokumen(uriMulti, 'nusantara', 1, 'alpha\\nbeta\\n');
+    const hasilMulti = manajer.perbaruiDokumen(uriMulti, 2, [
+      { range: { start: { line: 0, character: 0 }, end: { line: 0, character: 5 } }, text: 'A' },
+      { range: { start: { line: 1, character: 0 }, end: { line: 1, character: 4 } }, text: 'B' },
+    ]);
+    uji('Menerapkan beberapa perubahan inkremental dengan offset dokumen terkini', () => {
+      tegaskan(hasilMulti?.konten === 'A\\nB\\n', 'Perubahan kedua harus memakai offset setelah perubahan pertama');
+    });
+
+    const uriCRLF = 'file:///proyek/crlf.nusantara';
+    const dokCRLF = manajer.bukaDokumen(uriCRLF, 'nusantara', 1, 'ab\\r\\ncd');
+    uji('Membatasi posisi karakter LSP ke akhir baris sebelum CRLF', () => {
+      tegaskan(
+        manajer.posisiKeIndeks(dokCRLF, { line: 0, character: 99 }) === 2,
+        'Karakter di luar baris tidak boleh menyeberang ke pemisah CRLF'
+      );
+    });
+
     // Penolakan Update Stale (versi lebih rendah)
     manajer.perbaruiDokumen(uri, 1, [{ text: 'konten basi' }]);
     uji('Menolak pembaruan dengan versi dokumen yang lebih rendah (stale version guard)', () => {
