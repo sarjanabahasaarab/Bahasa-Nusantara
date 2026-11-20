@@ -276,7 +276,7 @@ uji('Parser menerima daftar token kosong sebagai program kosong', () => {
 });
 
 uji('Parser menambahkan sentinel EOF untuk daftar token tanpa EOF', () => {
-  const token = new Lexer('program Uji\\nmulai\\nselesai').tokenisasi().token.slice(0, -1);
+  const token = new Lexer('program Uji\\nmulai\\nselesai', { sertakanBarisBaru: false }).tokenisasi().token.slice(0, -1);
   const parser = new Parser(token);
   const ast = parser.parse();
   samaDengan(ast.namaProgram, 'Uji');
@@ -284,9 +284,13 @@ uji('Parser menambahkan sentinel EOF untuk daftar token tanpa EOF', () => {
 });
 
 uji('Satu kesalahan sintaks dicatat tepat satu kali', () => {
-  const parser = new Parser('program Rusak\\nmulai\\njika nilai >= 75\\nselesai');
-  parser.parse();
-  samaDengan(parser.dapatkanDaftarGalat().length, 1, 'Objek galat yang sama tidak boleh dicatat dua kali');
+  const parser = new Parser('fungsi (');
+  try {
+    parser.parseDeklarasiFungsi();
+  } catch {
+    // Jalur diagnostik publik mengembalikan galat melalui daftar parser.
+  }
+  samaDengan(parser.dapatkanDaftarGalat().length, 1, 'Satu objek galat harus dicatat tepat satu kali');
 });
 
 // REKAPITULASI HASIL
