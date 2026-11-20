@@ -316,6 +316,28 @@ async function jalankanPengujianTestingFramework(): Promise<void> {
     tegaskan(berkasHasil.daftarGalat[0].pesan.includes('Perhitungan keliru'), 'Pesan galat harus sesuai');
   });
 
+  uji('PelariUji menghentikan program uji tak berujung sesuai timeout kooperatif', async () => {
+    const memori = new PembacaBerkasMemori({
+      'tests/tak-berujung.uji.nusantara': `
+        program UjiTimeout
+        mulai
+          variabel hitung: bilangan = 0
+          selama benar lakukan
+            hitung = hitung + 1
+          akhir
+        selesai
+      `,
+    });
+    const runner = new PelariUji({ pembaca: memori, timeoutMs: 30 });
+    const ringkasan = await runner.jalankan('tests/tak-berujung.uji.nusantara');
+    tegaskan(ringkasan.gagal === 1, 'Timeout harus dihitung sebagai kegagalan uji');
+    tegaskan(ringkasan.galat === 0, 'Timeout bukan galat internal runner');
+    tegaskan(
+      ringkasan.berkas![0].daftarHasil[0].pesan?.includes('Batas waktu eksekusi'),
+      'Pesan timeout harus dilaporkan secara eksplisit'
+    );
+  });
+
   uji('4.3 PelariUji mengisolasi variabel antar berkas uji', () => {
     const memori = new PembacaBerkasMemori({
       'tests/satu.uji.nusantara': `
