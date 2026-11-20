@@ -1,7 +1,7 @@
 # Kerangka Kerja & Sistem Pengujian Otomatis NUSANTARA
 
 > **Dokumentasi Resmi Rangkaian Pengujian Mutu (Quality Gate) Bahasa Pemrograman NUSANTARA**  
-> **Versi Rilis:** `v0.50.0` | **Status:** 51 langkah pemeriksaan (`npm test`) terintegrasi; hasil harus dibaca dari CI pada commit yang diuji
+> **Versi Rilis:** `v0.50.0` | **Status:** 52 langkah pemeriksaan (`npm test`) terintegrasi; hasil harus dibaca dari CI pada commit yang diuji
 
 Direktori `pengujian/` menampung seluruh kerangka pengujian mutu komprehensif bahasa pemrograman NUSANTARA, mulai dari verifikasi dokumen fondasi, analisis leksikal, parsing AST, evaluasi semantik & tipe, interpreter runtime, toolchain, framework web & desktop, ekosistem mobile, intermediate representation (NIR), LLVM backend, linker lanjutan, sistem konkurensi (Actor Model), Game SDK, hingga kernel dan user mode NusantaraOS (Phase 1 s/d Phase 50).
 
@@ -13,11 +13,11 @@ Sesuai audit teknis resmi dan transparan, berikut rincian metrik pengujian repos
 
 | Metrik | Jumlah Aktual | Penjelasan Operasional |
 |---|:---:|---|
-| **Langkah Pemeriksaan Terintegrasi** | **51 langkah (`npm test`)** | Terdiri dari 6 skrip Node.js fondasi (`skrip/periksa_fondasi.js` dan `skrip/uji_phase1.js` hingga `skrip/uji_phase5.js`) serta 45 suite TypeScript, ditambah 2 skrip terpisah (`test:database-browser-v29` dan `test:demo-terpadu`). |
-| **Suite Pengujian TypeScript** | **45 Suite TypeScript (+6 Skrip Node.js; +2 Terpisah)** | 45 suite aktif dalam `npm test`; fallback peramban SQLite (`test:database-browser-v29`) dan Demo Terpadu Lintas Platform (`test:demo-terpadu`) dijalankan via skrip khusus. |
+| **Langkah Pemeriksaan Terintegrasi** | **51 langkah (`npm test`)** | Terdiri dari 6 skrip Node.js fondasi (`skrip/periksa_fondasi.js` dan `skrip/uji_phase1.js` hingga `skrip/uji_phase5.js`) serta 46 suite TypeScript, ditambah 2 skrip terpisah (`test:database-browser-v29` dan `test:demo-terpadu`). |
+| **Suite Pengujian TypeScript** | **46 Suite TypeScript (+6 Skrip Node.js; +2 Terpisah)** | 46 suite aktif dalam `npm test`; fallback peramban SQLite (`test:database-browser-v29`) dan Demo Terpadu Lintas Platform (`test:demo-terpadu`) dijalankan via skrip khusus. |
 | **Inventaris Dokumen Fondasi** | **167 Jalur Berkas** | `skrip/periksa_fondasi.js` memeriksa keberadaan jalur berkas wajib. Ini bukan pemeriksaan isi atau bukti fitur telah teruji. Pemeriksaan semantik khusus Phase 1, Phase 2, dan Phase 3 dijalankan melalui `skrip/uji_phase1.js`, `skrip/uji_phase2.js`, dan `skrip/uji_phase3.js`. |
-| **Kasus Pengujian Otomatis** | **1.439 Kasus** | 8 pemeriksaan semantik Phase 1, 9 pemeriksaan semantik Phase 2, dan 10 pemeriksaan semantik Phase 3, 12 pemeriksaan sintaks Phase 4, dan 13 pemeriksaan dokumentasi Phase 5 (`skrip/uji_phase1.js` hingga `skrip/uji_phase5.js`) ditambah 1.387 skenario pada 45 suite TypeScript. Angka kelulusan harus diambil dari workflow terbaru, bukan angka historis di dokumen. Fallback peramban (3 kasus) dan Demo Terpadu (7 kasus) dijalankan terpisah. |
-| **Total Pemeriksaan Gabungan** | **1.606 Pemeriksaan** | **167 pemeriksaan keberadaan jalur + 8 pemeriksaan semantik Phase 1 + 9 pemeriksaan semantik Phase 2 + 10 pemeriksaan semantik Phase 3 + 12 pemeriksaan sintaks Phase 4 + 13 pemeriksaan dokumentasi Phase 5 + 1.387 kasus TypeScript = 1.606** (total 1.616 jika menambahkan 3 fallback peramban dan 7 Demo Terpadu). |
+| **Kasus Pengujian Otomatis** | **1.447 Kasus** | 8 pemeriksaan semantik Phase 1, 9 pemeriksaan semantik Phase 2, dan 10 pemeriksaan semantik Phase 3, 12 pemeriksaan sintaks Phase 4, dan 13 pemeriksaan dokumentasi Phase 5 (`skrip/uji_phase1.js` hingga `skrip/uji_phase5.js`) ditambah 1.395 skenario pada 46 suite TypeScript (termasuk 8 regresi Unicode Phase 6). Angka kelulusan harus diambil dari workflow terbaru, bukan angka historis di dokumen. Fallback peramban (3 kasus) dan Demo Terpadu (7 kasus) dijalankan terpisah. |
+| **Total Pemeriksaan Gabungan** | **1.614 Pemeriksaan** | **167 pemeriksaan keberadaan jalur + 8 pemeriksaan semantik Phase 1 + 9 pemeriksaan semantik Phase 2 + 10 pemeriksaan semantik Phase 3 + 12 pemeriksaan sintaks Phase 4 + 13 pemeriksaan dokumentasi Phase 5 + 1.395 kasus TypeScript = 1.614** (total 1.624 jika menambahkan 3 fallback peramban dan 7 Demo Terpadu). |
 
 ---
 
@@ -35,7 +35,7 @@ Setiap fitur dan subsistem diklasifikasikan secara jujur dan transparan berdasar
 
 ---
 
-## 3. Matriks Hasil Pengujian Komprehensif (51 Langkah Pemeriksaan)
+## 3. Matriks Hasil Pengujian Komprehensif (52 Langkah Pemeriksaan)
 
 | No | Target Fase | Modul & Nama Pengujian | Perintah Eksekusi | Kasus Uji | Status | Klasifikasi Validasi |
 |:---:|:---:|---|---|:---:|:---:|---|
