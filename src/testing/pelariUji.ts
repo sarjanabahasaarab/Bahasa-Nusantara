@@ -560,6 +560,7 @@ export class PelariUji {
       resolverModul: resolver,
       pemuatModul: pemuat,
       direktoriBasis: direktoriBerkas,
+      batasWaktuEksekusiMs: this.opsi.timeoutMs || 5000,
     });
 
     const namaUji = programAST.namaProgram || namaBerkas.replace(/\.(uji|test)\.nusantara$/, '');
