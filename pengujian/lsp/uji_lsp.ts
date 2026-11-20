@@ -19,21 +19,24 @@ import { NusantaraCLI } from '../../src/paket/cli';
 let totalUji = 0;
 let ujiBerhasil = 0;
 let ujiGagal = 0;
+const tugasUjiAsinkron: Promise<void>[] = [];
 
 function uji(nama: string, fn: () => void | Promise<void>): void {
   totalUji++;
   try {
     const res = fn();
     if (res instanceof Promise) {
-      res
-        .then(() => {
-          ujiBerhasil++;
-          console.log(`  ✓ ${nama}`);
-        })
-        .catch(err => {
-          ujiGagal++;
-          console.error(`  ✗ ${nama}: ${err.message || err}`);
-        });
+      tugasUjiAsinkron.push(
+        res
+          .then(() => {
+            ujiBerhasil++;
+            console.log(`  ✓ ${nama}`);
+          })
+          .catch(err => {
+            ujiGagal++;
+            console.error(`  ✗ ${nama}: ${err?.message || String(err)}`);
+          })
+      );
     } else {
       ujiBerhasil++;
       console.log(`  ✓ ${nama}`);
@@ -810,6 +813,9 @@ selesai`,
       tegaskan(outputCLI.includes('bahasa-server') || outputCLI.includes('lsp'), 'Harus mendokumentasikan bahasa-server / lsp');
     });
   }
+
+  // Pastikan semua callback uji asinkron selesai sebelum rekapitulasi.
+  await Promise.all(tugasUjiAsinkron);
 
   console.log('\n======================================================');
   console.log(`TOTAL UJI: ${totalUji} | BERHASIL: ${ujiBerhasil} | GAGAL: ${ujiGagal}`);
