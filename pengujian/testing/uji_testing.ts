@@ -382,7 +382,8 @@ async function jalankanPengujianTestingFramework(): Promise<void> {
     const runner = new PelariUji({ pembaca: memori });
     const ringkasan = runner.jalankanSinkron(['tests/sintaks_rusak.uji.nusantara']);
 
-    tegaskan(ringkasan.gagal === 1, 'Harus mencatat sebagai berkas gagal');
+    tegaskan(ringkasan.galat === 1, 'Galat sintaks harus dicatat pada kolom galat, bukan assertion gagal');
+    tegaskan(ringkasan.status === 'GAGAL', 'Berkas dengan galat sintaks harus menggagalkan proses uji');
     tegaskan(ringkasan.berkas![0].daftarGalat.length > 0, 'Harus mencatat diagnostik sintaks');
   });
 
