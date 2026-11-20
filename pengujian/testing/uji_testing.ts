@@ -225,6 +225,32 @@ async function jalankanPengujianTestingFramework(): Promise<void> {
     tegaskan(hasil.some(b => b.includes('compat.test.nusantara')), 'Harus menemukan *.test.nusantara');
   });
 
+  uji('PenemuUji mengabaikan berkas uji di bawah symbolic link', () => {
+    class PembacaDenganTautan extends PembacaBerkasMemori {
+      public apakahSymbolicLink(jalur: string): boolean {
+        return jalur === '/proyek/tautan';
+      }
+    }
+    const memori = new PembacaDenganTautan({
+      '/proyek/tests/aman.uji.nusantara': 'pastikan_benar(benar)',
+      '/proyek/tautan/rahasia.uji.nusantara': 'pastikan_benar(benar)',
+    });
+    const hasil = new PenemuUji(memori).temukanBerkasUji('/proyek');
+    tegaskan(hasil.includes('tests/aman.uji.nusantara'), 'Berkas di dalam proyek harus ditemukan');
+    tegaskan(!hasil.some(j => j.includes('rahasia')), 'Berkas di bawah symbolic link harus diabaikan');
+  });
+
+  uji('PenemuUji mempertahankan path absolut untuk target proyek Node', () => {
+    const memori = new PembacaBerkasMemori({
+      '/tmp/proyek/tests/absolut.uji.nusantara': 'pastikan_benar(benar)',
+    });
+    const hasil = new PenemuUji(memori).temukanBerkasUji('/tmp/proyek');
+    tegaskan(
+      hasil.includes('/tmp/proyek/tests/absolut.uji.nusantara'),
+      'Path absolut tidak boleh diubah menjadi path relatif yang salah'
+    );
+  });
+
   uji('3.2 PenemuUji mengabaikan direktori terlarang (node_modules, dist, .git)', () => {
     const memori = new PembacaBerkasMemori({
       'node_modules/paket/uji.uji.nusantara': 'pastikan(benar)',
