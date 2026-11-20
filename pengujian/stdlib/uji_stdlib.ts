@@ -440,7 +440,7 @@ uji('Sandbox menolak seluruh jalur absolut dan relatif di luar direktori proyek'
     'di luar direktori sandbox'
   );
   lemparGalat(
-    () => sandbox.validasiDanSelesaikanJalur('folder/\\0rahasia.txt'),
+    () => sandbox.validasiDanSelesaikanJalur('folder/\0rahasia.txt'),
     'null'
   );
 
