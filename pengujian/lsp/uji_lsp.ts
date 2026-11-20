@@ -6,6 +6,8 @@
 import {
   ServerBahasaNUSANTARA,
   ManajerDokumen,
+  jalurBerkasKeUri,
+  uriKeJalurBerkas,
   PembacaBingkaiLSP,
   formatPesanBingkaiLSP,
   KodeGalatJSONRPC,
@@ -147,6 +149,16 @@ async function jalankanPengujianLSP(): Promise<void> {
   {
     const manajer = new ManajerDokumen();
     const uri = 'file:///proyek/utama.nusantara';
+
+    uji('Konversi file URI meng-encode spasi, tanda pagar, dan tanda tanya dengan benar', () => {
+      const jalur = '/proyek/folder dengan #tag?/utama.nusantara';
+      const uriAman = jalurBerkasKeUri(jalur);
+      tegaskan(
+        uriAman === 'file:///proyek/folder%20dengan%20%23tag%3F/utama.nusantara',
+        'Karakter khusus harus di-encode sebagai segmen path URI'
+      );
+      tegaskan(uriKeJalurBerkas(uriAman) === jalur, 'Konversi URI harus dapat dibalik');
+    });
 
     // Buka Dokumen
     const dok = manajer.bukaDokumen(uri, 'nusantara', 1, 'program Demo\nmulai\n    tampilkan(1)\nselesai');
