@@ -132,16 +132,16 @@ export class PemeriksaTipe {
   }
 
   /**
-   * Reinicia o estado transitório antes de analisar outro programa.
+   * Mengatur ulang keadaan sementara sebelum menganalisis program lain.
    * Modul yang sudah terdaftar tetap tersedia; simbol lokal dan fungsi
-   * importadas/declaradas pertencem somente à análise atual.
+   * impor/deklarasi hanya berlaku untuk analisis saat ini.
    */
   private mulaiUlangKeadaanAnalisis(): void {
     this.lingkupSaatIni = new LingkupTipe();
     for (const namaModul of this.tabelModul.keys()) {
       this.lingkupSaatIni.definisikan({
-        nome: namaModul,
-        tipo: NamaTipe.MODULO,
+        nama: namaModul,
+        tipe: NamaTipe.MODUL,
         tetap: true,
       });
     }
