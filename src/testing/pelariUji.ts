@@ -49,6 +49,12 @@ export class PelariUji {
         ...opsi,
       };
     }
+
+    const timeoutMs = this.opsi.timeoutMs;
+    this.opsi.timeoutMs =
+      typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0
+        ? Math.min(60_000, Math.max(1, Math.floor(timeoutMs)))
+        : 5000;
   }
 
   /**
