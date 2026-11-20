@@ -15,6 +15,7 @@ import { Parser } from '../../parser/parser';
 import { DokumenTeks, ManajerDokumen, jalurBerkasKeUri } from '../documents/manajerDokumen';
 import { LokasiLSP, PosisiLSP, RentangLSP } from '../protocol/types';
 import { PembacaBerkas } from '../../modul/pembacaBerkas';
+import { ResolverModul } from '../../modul/resolverModul';
 
 /**
  * Layanan Go-to-Definition (Lompat ke Definisi) Bahasa NUSANTARA.
@@ -232,47 +233,48 @@ export class LayananDefinisi {
    * Menyelesaikan resolusi jalur berkas modul relatif terhadap berkas pemanggil atau direktori kerja.
    */
   private selesaikanJalurBerkasModul(namaModul: string, jalurPemanggil: string): string | null {
-    let namaBerkas = namaModul;
-    if (!namaBerkas.endsWith('.nusantara')) {
-      namaBerkas += '.nusantara';
-    }
+    if (!this.pembacaBerkas) return null;
 
-    // Jalur direktori pemanggil
-    const segmen = jalurPemanggil.split(/[/\\]/);
-    segmen.pop();
-    const dirPemanggil = segmen.join('/') || '.';
+    const pembaca = this.pembacaBerkas;
+    const direktoriPemanggil = pembaca.direktoriDari(jalurPemanggil) || this.direktoriKerja || '.';
+    const akarWorkspace = this.direktoriKerja || direktoriPemanggil;
 
-    const kandidatJalur = [
-      `${dirPemanggil}/${namaBerkas}`,
-      `${dirPemanggil}/modul/${namaBerkas}`,
-      `/${namaBerkas}`,
-      `/src/${namaBerkas}`,
-      `/${namaModul}/${namaBerkas}`,
-    ];
+    try {
+      // Gunakan resolver modul resmi agar jalur import tidak dapat keluar
+      // dari root workspace melalui ../, jalur absolut, atau prefix sibling.
+      const resolver = new ResolverModul(pembaca, {
+        direktoriAkarProyek: akarWorkspace,
+      });
+      const jalurTarget = resolver.selesaikan(namaModul, direktoriPemanggil);
 
-    if (this.direktoriKerja) {
-      kandidatJalur.unshift(`${this.direktoriKerja}/${namaBerkas}`);
-      kandidatJalur.unshift(`${this.direktoriKerja}/src/${namaBerkas}`);
-    }
-
-    for (const jalur of kandidatJalur) {
-      const uri = jalurBerkasKeUri(jalur);
-      if (this.manajerDokumen.ambilDokumen(uri)) {
-        return jalur;
+      // Resolver memeriksa batas leksikal. Tambahkan pemeriksaan realpath
+      // untuk mencegah symbolic link di dalam workspace mengarah ke luar.
+      if (
+        pembaca.jalurNyata &&
+        pembaca.apakahAda(akarWorkspace) &&
+        pembaca.apakahAda(jalurTarget)
+      ) {
+        const akarNyata = pembaca
+          .normalisasiJalur(pembaca.jalurNyata(akarWorkspace))
+          .replace(/\\/g, '/');
+        const targetNyata = pembaca
+          .normalisasiJalur(pembaca.jalurNyata(jalurTarget))
+          .replace(/\\/g, '/');
+        const akarBanding = /^[a-zA-Z]:\\//.test(akarNyata) ? akarNyata.toLowerCase() : akarNyata;
+        const targetBanding = /^[a-zA-Z]:\\//.test(targetNyata) ? targetNyata.toLowerCase() : targetNyata;
+        const masihDiDalam =
+          targetBanding === akarBanding ||
+          targetBanding.startsWith(akarBanding.endsWith('/') ? akarBanding : `${akarBanding}/`);
+        if (!masihDiDalam) return null;
       }
-      if (this.pembacaBerkas) {
-        const adaBerkas = typeof this.pembacaBerkas.apakahAda === 'function'
-          ? this.pembacaBerkas.apakahAda(jalur)
-          : (this.pembacaBerkas as any).ada(jalur);
-        if (adaBerkas) {
-          return jalur;
-        }
-      }
-    }
 
-    return null;
+      return jalurTarget;
+    } catch {
+      // Import yang tidak ditemukan atau melewati batas workspace tidak
+      // boleh membuat LSP membaca berkas di luar proyek.
+      return null;
+    }
   }
-
   private cariVariabelDiDaftar(
     daftar: PernyataanAST[],
     nama: string
