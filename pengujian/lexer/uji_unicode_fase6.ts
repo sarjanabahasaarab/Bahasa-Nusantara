@@ -48,7 +48,7 @@ uji('Literal karakter dengan lebih dari satu scalar ditolak', () => {
 });
 
 uji('Urutan escape belum diizinkan pada literal karakter', () => {
-  const { token, galat } = new Lexer("'\\\\n'").tokenisasi();
+  const { token, galat } = new Lexer(String.fromCharCode(39, 92, 110, 39)).tokenisasi();
   assert.equal(token[0].jenis, JenisToken.ILEGAL);
   assert.equal(galat.length, 1);
 });
