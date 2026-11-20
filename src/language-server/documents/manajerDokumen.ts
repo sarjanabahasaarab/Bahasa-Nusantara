@@ -28,29 +28,50 @@ export interface DokumenTeks {
  * Mengubah URI (file://...) menjadi jalur sistem berkas absolut.
  */
 export function uriKeJalurBerkas(uri: string): string {
-  if (uri.startsWith('file://')) {
-    let jalur = decodeURIComponent(uri.replace(/^file:\/\//, ''));
-    // Windows file URI: file:///C:/path -> C:/path
+  if (!uri.startsWith('file://')) return uri;
+
+  try {
+    const parsed = new URL(uri);
+    let jalur = decodeURIComponent(parsed.pathname);
+
+    // URI UNC memakai hostname sebagai server: file://server/share/path.
+    if (parsed.hostname && parsed.hostname !== 'localhost') {
+      jalur = `//${parsed.hostname}${jalur}`;
+    }
+
+    // Windows file URI: file:///C:/path -> C:/path.
     if (/^\/[a-zA-Z]:/.test(jalur)) {
       jalur = jalur.substring(1);
     }
     return jalur;
+  } catch {
+    // URI cacat tidak boleh menjatuhkan Language Server.
+    return uri;
   }
-  return uri;
 }
 
 /**
  * Mengubah jalur berkas menjadi URI skema file://.
  */
 export function jalurBerkasKeUri(jalur: string): string {
-  if (jalur.startsWith('file://')) {
-    return jalur;
+  if (jalur.startsWith('file://')) return jalur;
+
+  const bersih = jalur.replace(/\\/g, '/');
+
+  // UNC path: //server/share/path -> file://server/share/path.
+  if (bersih.startsWith('//')) {
+    const bagian = bersih.slice(2).split('/');
+    const server = bagian.shift() || '';
+    const sisa = bagian.map(segmen => encodeURIComponent(segmen)).join('/');
+    return `file://${server}/${sisa}`;
   }
-  let bersih = jalur.replace(/\\/g, '/');
-  if (!bersih.startsWith('/')) {
-    bersih = '/' + bersih;
-  }
-  return 'file://' + encodeURI(bersih);
+
+  const absolut = bersih.startsWith('/') ? bersih : `/${bersih}`;
+  const segmen = absolut.split('/').map((bagian, indeks) => {
+    if (indeks === 0) return '';
+    return encodeURIComponent(bagian).replace(/%3A/gi, ':');
+  });
+  return `file://${segmen.join('/')}`;
 }
 
 /**
