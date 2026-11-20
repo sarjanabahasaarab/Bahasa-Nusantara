@@ -6,6 +6,7 @@
 import {
   ServerBahasaNUSANTARA,
   ManajerDokumen,
+  LayananDefinisi,
   jalurBerkasKeUri,
   uriKeJalurBerkas,
   PembacaBingkaiLSP,
@@ -17,6 +18,7 @@ import {
 } from '../../src/language-server';
 import { PembacaBerkasMemori } from '../../src/modul';
 import { NusantaraCLI } from '../../src/paket/cli';
+import { Parser } from '../../src/parser/parser';
 
 let totalUji = 0;
 let ujiBerhasil = 0;
@@ -653,6 +655,33 @@ selesai`,
       tegaskan(resDefNotFound.result === null, 'Harus mengembalikan null secara aman');
     });
   })();
+
+  uji('Go-to-definition menolak import yang keluar dari root workspace', () => {
+    const sumber = `program Utama
+gunakan "../../rahasia" sebagai rahasia
+mulai
+    rahasia.bocor()
+selesai`;
+    const fsMemori = new PembacaBerkasMemori({
+      '/proyek/utama.nusantara': sumber,
+      '/rahasia.nusantara': 'modul rahasia\\nekspor fungsi bocor() : kosong\\nmulai\\nselesai',
+    });
+    const manajer = new ManajerDokumen();
+    const dokumen = manajer.bukaDokumen(
+      'file:///proyek/utama.nusantara',
+      'nusantara',
+      1,
+      sumber
+    );
+    const program = new Parser(sumber).parse();
+    const layanan = new LayananDefinisi(manajer, fsMemori, '/proyek');
+    const lokasi = layanan.dapatkanDefinisi(
+      dokumen,
+      { line: 3, character: 14 },
+      program
+    );
+    tegaskan(lokasi === null, 'Import di luar workspace tidak boleh dibuka oleh go-to-definition');
+  });
 
   // --- KELOMPOK 7: SIMBOL DOKUMEN & WORKSPACE (SYMBOLS) ---
   console.log('\n--- Kelompok 7: Simbol Dokumen & Workspace (Symbols) ---');
