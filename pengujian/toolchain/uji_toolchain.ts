@@ -14,6 +14,8 @@ import { NusantaraCLI } from '../../src/paket/cli';
 let totalUji = 0;
 let ujiBerhasil = 0;
 let ujiGagal = 0;
+let totalKasusUji = 0;
+let kasusUjiGagal = 0;
 
 function pastikan(kondisi: boolean, pesan: string): void {
   totalUji++;
@@ -40,10 +42,14 @@ function pastikanSama<T>(aktual: T, ekspektasi: T, pesan: string): void {
 }
 
 function uji(nama: string, fn: () => void): void {
+  totalKasusUji++;
   try {
     fn();
+    console.log(`  ✓ KASUS: ${nama}`);
   } catch (err: any) {
-    // Error sudah dicatat di pastikan/pastikanSama
+    kasusUjiGagal++;
+    console.error(`  ✗ KASUS GAGAL: ${nama}`);
+    console.error(`    Alasan: ${err?.message || String(err)}`);
   }
 }
 
@@ -435,10 +441,11 @@ uji('CLI nusantara versi menampilkan target v0.19.0', () => {
 // REKAPITULASI HASIL PENGUJIAN
 // -----------------------------------------------------------------------------
 console.log('\n======================================================');
-console.log(`TOTAL UJI: ${totalUji} | BERHASIL: ${ujiBerhasil} | GAGAL: ${ujiGagal}`);
+console.log(`TOTAL KASUS: ${totalKasusUji} | KASUS GAGAL: ${kasusUjiGagal}`);
+console.log(`TOTAL ASSERTION: ${totalUji} | BERHASIL: ${ujiBerhasil} | GAGAL: ${ujiGagal}`);
 console.log('======================================================');
 
-if (ujiGagal > 0) {
+if (ujiGagal > 0 || kasusUjiGagal > 0) {
   console.error('\n[GAGAL] Sebagian pengujian Phase 19 belum memenuhi syarat.');
   process.exit(1);
 } else {
