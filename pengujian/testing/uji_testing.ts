@@ -464,6 +464,14 @@ async function jalankanPengujianTestingFramework(): Promise<void> {
     tegaskan(hasil.pemeriksaan.some(p => p.nama.includes('Pustaka Standar')), 'Pemeriksaan Stdlib harus ada');
   });
 
+  uji('GerbangKualitas menerapkan ambang cakupan khusus yang dikonfigurasi', () => {
+    const gerbang = new GerbangKualitas({ ambangBatasCakupan: 99 });
+    const hasil = gerbang.jalankanSinkron();
+    const pemeriksaanCakupan = hasil.pemeriksaan.find(p => p.nama.includes('Ambang Batas Cakupan'));
+    tegaskan(pemeriksaanCakupan?.status === 'GAGAL', 'Cakupan aktual di bawah 99% harus menggagalkan pemeriksaan');
+    tegaskan(hasil.ambangBatasCakupan === 99, 'Ambang khusus harus tercatat dalam laporan');
+  });
+
   uji('8.2 NusantaraCLI menangani perintah nusantara versi dengan v0.21.0', () => {
     let luaran = '';
     const cli = new NusantaraCLI(new PembacaBerkasMemori(), {
