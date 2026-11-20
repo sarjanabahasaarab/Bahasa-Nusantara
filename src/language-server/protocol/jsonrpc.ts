@@ -92,7 +92,7 @@ export class PembacaBingkaiLSP {
     const daftarPesan: PesanJSONRPC[] = [];
 
     while (true) {
-      const indeksHeaderAkhir = this.bufferTeks.indexOf('\\r\\n\\r\\n');
+      const indeksHeaderAkhir = this.bufferTeks.indexOf('\r\n\r\n');
       if (indeksHeaderAkhir === -1) {
         if (this.hitungByte(this.bufferTeks) > this.batasMaksimumHeaderByte) {
           this.bersihkan();
@@ -109,15 +109,15 @@ export class PembacaBingkaiLSP {
 
       const barisHeader = this.bufferTeks.substring(0, indeksHeaderAkhir);
       const daftarPanjang = barisHeader
-        .split('\\r\\n')
-        .filter(baris => /^Content-Length\\s*:/i.test(baris));
+        .split('\r\n')
+        .filter(baris => /^Content-Length\s*:/i.test(baris));
 
       if (daftarPanjang.length !== 1) {
         this.bersihkan();
         throw new Error('Bingkai LSP harus memiliki tepat satu header Content-Length.');
       }
 
-      const cocokPanjang = daftarPanjang[0].match(/^Content-Length:\\s*(\\d+)\\s*$/i);
+      const cocokPanjang = daftarPanjang[0].match(/^Content-Length:\s*(\d+)\s*$/i);
       if (!cocokPanjang) {
         this.bersihkan();
         throw new Error('Nilai header Content-Length tidak valid.');
