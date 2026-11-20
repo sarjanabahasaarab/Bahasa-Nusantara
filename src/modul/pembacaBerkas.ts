@@ -17,6 +17,7 @@ export interface PembacaBerkas {
   gabungJalur(...bagian: string[]): string;
   normalisasiJalur(jalur: string): string;
   jalurNyata?(jalur: string): string;
+  apakahSymbolicLink?(jalur: string): boolean;
 }
 
 /**
@@ -302,5 +303,14 @@ export class PembacaBerkasNode implements PembacaBerkas {
     }
     if (this.fs.realpathSync.native) return this.fs.realpathSync.native(jalur);
     return this.fs.realpathSync(jalur);
+  }
+
+  public apakahSymbolicLink(jalur: string): boolean {
+    if (!this.fs?.lstatSync) return false;
+    try {
+      return this.fs.lstatSync(jalur).isSymbolicLink();
+    } catch {
+      return false;
+    }
   }
 }
