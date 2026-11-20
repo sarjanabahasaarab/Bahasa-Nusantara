@@ -201,7 +201,7 @@ export class PemeriksaProyek {
   }
 
   /**
-   * Menjelajahi struktur direktori secara rekursif untuk menemukan berkas .nusantara,
+   * Menjelajahi struktur direktori secara iteratif untuk menemukan berkas .nusantara,
    * dengan mengabaikan direktori tersembunyi/vendor (.git, .nusantara, node_modules, dist).
    */
   public temukanBerkasNusantara(direktori: string): string[] {
@@ -276,4 +276,5 @@ export class PemeriksaProyek {
     }
 
     return hasil.sort((a, b) => a.localeCompare(b));
-  }}
+  }
+}
