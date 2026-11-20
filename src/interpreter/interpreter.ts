@@ -598,15 +598,6 @@ export class Interpreter {
         const s = stmt as NodePerulanganSelama;
         let iterasi = 0;
         while (true) {
-          if (this.maksimalIterasiPerulangan > 0 && ++iterasi > this.maksimalIterasiPerulangan) {
-            throw new GalatRuntime(
-              JenisGalatRuntime.BATAS_ITERASI_TERLAMPAUI,
-              `Batas maksimal iterasi perulangan (${this.maksimalIterasiPerulangan}) terlampaui. Kemungkinan terjadi perulangan tak terbatas (infinite loop).`,
-              s.kondisi.posisi.awal,
-              [...this.tumpukanPanggilan]
-            );
-          }
-
           const kondisi = this.evaluasiEkspresi(s.kondisi);
           if (kondisi.jenis !== JenisNilaiRuntime.LOGIKA) {
             throw new GalatRuntime(
@@ -618,6 +609,17 @@ export class Interpreter {
           }
 
           if (!kondisi.nilai) break;
+
+          // Batas menghitung eksekusi tubuh loop, bukan evaluasi kondisi terakhir
+          // yang memang harus bernilai salah agar loop dapat selesai normal.
+          if (this.maksimalIterasiPerulangan > 0 && ++iterasi > this.maksimalIterasiPerulangan) {
+            throw new GalatRuntime(
+              JenisGalatRuntime.BATAS_ITERASI_TERLAMPAUI,
+              `Batas maksimal iterasi perulangan (${this.maksimalIterasiPerulangan}) terlampaui. Kemungkinan terjadi perulangan tak terbatas (infinite loop).`,
+              s.kondisi.posisi.awal,
+              [...this.tumpukanPanggilan]
+            );
+          }
 
           try {
             this.eksekusiBlok(s.tubuh);
@@ -635,10 +637,15 @@ export class Interpreter {
         const awal = this.evaluasiEkspresi(s.nilaiAwal);
         const akhir = this.evaluasiEkspresi(s.nilaiAkhir);
 
-        if (awal.jenis !== JenisNilaiRuntime.BILANGAN || akhir.jenis !== JenisNilaiRuntime.BILANGAN) {
+        if (
+          awal.jenis !== JenisNilaiRuntime.BILANGAN ||
+          akhir.jenis !== JenisNilaiRuntime.BILANGAN ||
+          !Number.isSafeInteger(awal.nilai) ||
+          !Number.isSafeInteger(akhir.nilai)
+        ) {
           throw new GalatRuntime(
             JenisGalatRuntime.OPERASI_TIPE_TIDAK_VALID,
-            "Rentang perulangan 'untuk' ('dari' dan 'sampai') harus bernilai bilangan bulat.",
+            "Rentang perulangan 'untuk' ('dari' dan 'sampai') harus berupa bilangan bulat aman.",
             s.posisi.awal,
             [...this.tumpukanPanggilan]
           );
