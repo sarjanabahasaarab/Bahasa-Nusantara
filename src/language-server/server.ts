@@ -334,7 +334,7 @@ export class ServerBahasaNUSANTARA {
     const capabilities: KemampuanServerLSP = {
       textDocumentSync: {
         openClose: true,
-        change: 1, // Full document sync
+        change: 2, // Incremental sync; ManajerDokumen menerapkan range berurutan.
       },
       completionProvider: {
         resolveProvider: false,
