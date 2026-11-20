@@ -179,8 +179,8 @@ export class SandboxBerkas {
     const basisNyata = this.pembaca.apakahAda(this.direktoriBasis)
       ? this.pembaca.normalisasiJalur(this.pembaca.jalurNyata(this.direktoriBasis)).replace(/\\/g, '/')
       : this.direktoriBasis.replace(/\\/g, '/');
-    const nyataBanding = /^[a-zA-Z]:\\//.test(nyata) ? nyata.toLowerCase() : nyata;
-    const basisBanding = /^[a-zA-Z]:\\//.test(basisNyata) ? basisNyata.toLowerCase() : basisNyata;
+    const nyataBanding = /^[a-zA-Z]:\//.test(nyata) ? nyata.toLowerCase() : nyata;
+    const basisBanding = /^[a-zA-Z]:\//.test(basisNyata) ? basisNyata.toLowerCase() : basisNyata;
     const masihDiDalam =
       nyataBanding === basisBanding ||
       nyataBanding.startsWith(basisBanding.endsWith('/') ? basisBanding : `${basisBanding}/`);
