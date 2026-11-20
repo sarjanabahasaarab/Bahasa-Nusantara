@@ -131,6 +131,26 @@ export class PemeriksaTipe {
     }
   }
 
+  /**
+   * Reinicia o estado transitório antes de analisar outro programa.
+   * Modul yang sudah terdaftar tetap tersedia; simbol lokal dan fungsi
+   * importadas/declaradas pertencem somente à análise atual.
+   */
+  private mulaiUlangKeadaanAnalisis(): void {
+    this.lingkupSaatIni = new LingkupTipe();
+    for (const namaModul of this.tabelModul.keys()) {
+      this.lingkupSaatIni.definisikan({
+        nome: namaModul,
+        tipo: NamaTipe.MODULO,
+        tetap: true,
+      });
+    }
+    this.tabelFungsi.clear();
+    this.daftarkanFungsiBawaan();
+    this.fungsiAktifSaatIni = undefined;
+    this.kedalamanPerulangan = 0;
+  }
+
   public daftarkanModul(nama: string, modul: CatatanModul): void {
     this.tabelModul.set(nama, modul);
     this.lingkupSaatIni.definisikan({
@@ -142,7 +162,7 @@ export class PemeriksaTipe {
 
   public periksa(program: NodeProgram, direktoriBasis?: string): GalatTipe[] {
     this.daftarGalat.length = 0;
-    this.kedalamanPerulangan = 0;
+    this.mulaiUlangKeadaanAnalisis();
 
     // 0. Proses impor modul jika ada
     if (program.daftarImpor && program.daftarImpor.length > 0) {
