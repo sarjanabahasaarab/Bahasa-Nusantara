@@ -195,12 +195,42 @@ export class SandboxBerkas {
       );
     }
 
+    if (bersih.includes('\0')) {
+      throw new GalatRuntime(
+        JenisGalatRuntime.OPERASI_TIPE_TIDAK_VALID,
+        `Kesalahan berkas: jalur '${jalurInput}' mengandung karakter null yang tidak diizinkan oleh sandbox.`
+      );
+    }
+
+    // Semua akses, termasuk jalur absolut, wajib tetap berada di dalam
+    // direktori basis. Pemeriksaan batas direktori harus memakai pemisah
+    // segmen agar /proyek-lain tidak dianggap berada di dalam /proyek.
+    const apakahAbsolut =
+      bersih.startsWith('/') ||
+      bersih.startsWith('\\\\') ||
+      /^[a-zA-Z]:[\\/]/.test(bersih);
     const absolut = this.pembaca.jalurAbsolut(
-      bersih.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(bersih)
-        ? bersih
-        : this.pembaca.gabungJalur(this.direktoriBasis, bersih)
+      apakahAbsolut ? bersih : this.pembaca.gabungJalur(this.direktoriBasis, bersih)
     );
-    return this.pembaca.normalisasiJalur(absolut);
+    const hasil = this.pembaca.normalisasiJalur(absolut).replace(/\\\\/g, '/');
+    const basis = this.pembaca.normalisasiJalur(this.direktoriBasis).replace(/\\\\/g, '/');
+    const basisBersih = basis.length > 1 ? basis.replace(/\\/+$/, '') : basis;
+    const kandidatPerbandingan = /^[a-zA-Z]:\\//.test(hasil) ? hasil.toLowerCase() : hasil;
+    const basisPerbandingan = /^[a-zA-Z]:\\//.test(basisBersih) ? basisBersih.toLowerCase() : basisBersih;
+    const diDalamSandbox =
+      kandidatPerbandingan === basisPerbandingan ||
+      kandidatPerbandingan.startsWith(
+        basisPerbandingan.endsWith('/') ? basisPerbandingan : `${basisPerbandingan}/`
+      );
+
+    if (!diDalamSandbox) {
+      throw new GalatRuntime(
+        JenisGalatRuntime.OPERASI_TIPE_TIDAK_VALID,
+        `Kesalahan berkas: akses ke jalur '${jalurInput}' ditolak karena berada di luar direktori sandbox '${this.direktoriBasis}'.`
+      );
+    }
+
+    return hasil;
   }
 
   public ada(jalur: string): boolean {
