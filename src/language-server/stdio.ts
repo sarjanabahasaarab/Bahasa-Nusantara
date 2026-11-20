@@ -40,7 +40,7 @@ export function jalankanServerBahasaStdio(): void {
           daftarPesan = pembacaBingkai.prosesPotongan(chunk);
         } catch (err: any) {
           process.stderr.write(
-            \`[NUSANTARA-LSP ERROR] Bingkai masuk ditolak: \${err?.message || String(err)}\n\`
+            '[NUSANTARA-LSP ERROR] Bingkai masuk ditolak: ' + (err?.message || String(err)) + '\n'
           );
           pembacaBingkai.bersihkan();
           return;
@@ -56,7 +56,7 @@ export function jalankanServerBahasaStdio(): void {
       })
       .catch((err: any) => {
         process.stderr.write(
-          \`[NUSANTARA-LSP ERROR] Pemrosesan pesan gagal: \${err?.message || String(err)}\n\`
+          '[NUSANTARA-LSP ERROR] Pemrosesan pesan gagal: ' + (err?.message || String(err)) + '\n'
         );
       });
   });
