@@ -242,6 +242,45 @@ uji('Menolak fungsi yang mengembalikan tipe tidak sesuai dengan deklarasi kembal
   samaDengan(galat[0].jenis, JenisGalatTipe.KEMBALIAN_TIDAK_SESUAI);
 });
 
+uji('Menolak fungsi bertipe-kembalian ketika hanya cabang jika yang mengembalikan nilai', () => {
+  const sumber = `
+  fungsi pilih(nilai : logika) : bilangan
+  mulai
+      jika nilai maka
+          kembalikan 1
+      akhir
+  selesai
+
+  program UjiJalurTidakLengkap
+  mulai
+      pilih(benar)
+  selesai`;
+
+  const galat = periksaTipeProgram(sumber);
+  samaDengan(galat.some(g => g.jenis === JenisGalatTipe.KEMBALIAN_TIDAK_SESUAI), true,
+    'Jalur ketika kondisi salah juga harus mengembalikan nilai');
+});
+
+uji('Menerima fungsi bertipe-kembalian ketika kedua cabang jika/selain mengembalikan nilai', () => {
+  const sumber = `
+  fungsi pilih(nilai : logika) : bilangan
+  mulai
+      jika nilai maka
+          kembalikan 1
+      selain
+          kembalikan 2
+      akhir
+  selesai
+
+  program UjiJalurLengkap
+  mulai
+      tampilkan(pilih(benar))
+  selesai`;
+
+  const galat = periksaTipeProgram(sumber);
+  samaDengan(galat.length, 0, 'Kedua cabang mengembalikan bilangan sehingga fungsi valid');
+});
+
 // 8. UJI OPERATOR DAN KOMPATIBILITAS TIPE
 console.log('\n--- Kelompok 8: Aturan Tipe Operator ---');
 uji('Menolak operasi pengurangan antara tipe teks dan bilangan', () => {
