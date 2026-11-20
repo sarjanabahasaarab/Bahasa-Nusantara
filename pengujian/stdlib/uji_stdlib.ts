@@ -411,6 +411,49 @@ uji('Keamanan Sandbox: penolakan path traversal ekstrem dan berkas sensitif sist
   );
 });
 
+uji('Sandbox menolak seluruh jalur absolut dan relatif di luar direktori proyek', () => {
+  const memFS = new PembacaBerkasMemori();
+  const sandbox = new SandboxBerkas(memFS, '/proyek');
+  const berkasMod = buatEksporBerkas(sandbox);
+  const fnTulis = berkasMod.get('tulis') as NilaiFungsiBawaan;
+
+  samaDengan(sandbox.validasiDanSelesaikanJalur('catatan.txt'), '/proyek/catatan.txt');
+  samaDengan(
+    sandbox.validasiDanSelesaikanJalur('/proyek/sub/aman.txt'),
+    '/proyek/sub/aman.txt'
+  );
+  samaDengan(
+    sandbox.validasiDanSelesaikanJalur('../proyek/masih-di-dalam.txt'),
+    '/proyek/masih-di-dalam.txt'
+  );
+
+  lemparGalat(
+    () => sandbox.validasiDanSelesaikanJalur('/tmp/rahasia.txt'),
+    'di luar direktori sandbox'
+  );
+  lemparGalat(
+    () => sandbox.validasiDanSelesaikanJalur('/proyek-lain/rahasia.txt'),
+    'di luar direktori sandbox'
+  );
+  lemparGalat(
+    () => sandbox.validasiDanSelesaikanJalur('../proyek-lain/rahasia.txt'),
+    'di luar direktori sandbox'
+  );
+  lemparGalat(
+    () => sandbox.validasiDanSelesaikanJalur('folder/\\0rahasia.txt'),
+    'null'
+  );
+
+  lemparGalat(
+    () => fnTulis.eksekusi([
+      buatTeks('/proyek-lain/terlarang.txt'),
+      buatTeks('payload'),
+    ]),
+    'di luar direktori sandbox'
+  );
+  salah(memFS.apakahAda('/proyek-lain/terlarang.txt'));
+});
+
 // ----------------------------------------------------------------------------
 // 9. MODUL SISTEM
 // ----------------------------------------------------------------------------
