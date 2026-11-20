@@ -47,8 +47,11 @@ export class ResolverModul {
     const akarNorm = this.pembaca.normalisasiJalur(this.direktoriAkarProyek);
     const tujuanNorm = this.pembaca.normalisasiJalur(absolut);
 
-    // Mencegah traversal melampaui direktori akar proyek
-    if (!tujuanNorm.startsWith(akarNorm) && !akarNorm.startsWith(tujuanNorm)) {
+    // Target harus berada tepat di akar proyek atau di salah satu turunannya.
+    // Prefix sederhana tanpa pemisah batas dapat menerima sibling seperti /proyek-lain.
+    const prefiksAkar = akarNorm.endsWith('/') ? akarNorm : `${akarNorm}/`;
+    const beradaDalamAkar = tujuanNorm === akarNorm || tujuanNorm.startsWith(prefiksAkar);
+    if (!beradaDalamAkar) {
       throw new GalatModul(
         JenisGalatModul.JALUR_TIDAK_AMAN,
         `Pelanggaran keamanan jalur direktori (path traversal) terdeteksi pada '${namaAsli}'. Akses berkas di luar batas proyek tidak diizinkan demi keamanan eksekusi.`,
