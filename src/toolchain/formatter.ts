@@ -4,6 +4,7 @@
  */
 
 import { Lexer, KomentarSumber } from '../lexer';
+import { JenisToken } from '../lexer/jenisToken';
 import { Parser } from '../parser/parser';
 import {
   NodeProgram,
@@ -73,6 +74,8 @@ export class FormatterNUSANTARA {
   private readonly kodeSumberAsli: string;
   private komentarDaftar: KomentarSumber[] = [];
   private komentarSudahDiproses = new Set<number>(); // indeks komentar
+  private adaDeklarasiProgram = false;
+  private adaKataKunciMulai = false;
 
   constructor(kodeSumber: string, konfigurasi?: Partial<KonfigurasiFormat>) {
     this.kodeSumberAsli = kodeSumber;
@@ -116,7 +119,9 @@ export class FormatterNUSANTARA {
   public format(): string {
     // 1. Lexer untuk mengekstrak komentar
     const lexer = new Lexer(this.kodeSumberAsli, { sertakanBarisBaru: false });
-    lexer.tokenisasi();
+    const hasilLeksikal = lexer.tokenisasi();
+    this.adaDeklarasiProgram = hasilLeksikal.token.some(t => t.jenis === JenisToken.KW_PROGRAM);
+    this.adaKataKunciMulai = hasilLeksikal.token.some(t => t.jenis === JenisToken.KW_MULAI);
     this.komentarDaftar = [...lexer.dapatkanDaftarKomentar()];
     this.komentarSudahDiproses.clear();
 
@@ -195,11 +200,10 @@ export class FormatterNUSANTARA {
     }
 
     // 5. Tubuh Utama Program
-    // Cek apakah kode asli menggunakan kata kunci 'program' atau 'mulai'
-    const polaProgram = /\bprogram\s+([a-zA-Z0-9_]+)\b/;
-    const cocokProgram = this.kodeSumberAsli.match(polaProgram);
-    const adaKataKunciProgram = !!cocokProgram;
-    const adaKataKunciMulai = /\bmulai\b/.test(this.kodeSumberAsli);
+    // Gunakan token lexer, bukan regex teks mentah, agar kata "program" atau
+    // "mulai" di dalam komentar/string tidak dianggap sebagai kata kunci.
+    const adaKataKunciProgram = this.adaDeklarasiProgram;
+    const adaKataKunciMulai = this.adaKataKunciMulai;
 
     // Ambil pernyataan tubuh utama yang bukan impor dan bukan fungsi
     const pernyataanTubuh = program.tubuhUtama.filter(
@@ -207,7 +211,7 @@ export class FormatterNUSANTARA {
     );
 
     if (adaKataKunciProgram) {
-      const nama = cocokProgram ? cocokProgram[1] : program.namaProgram;
+      const nama = program.namaProgram;
       const teksTubuh = this.formatDaftarPernyataan(pernyataanTubuh, 1);
       bagian.push(`program ${nama}\nmulai\n${teksTubuh}\nselesai`);
     } else if (adaKataKunciMulai) {
