@@ -20,11 +20,15 @@ export class TokenStream {
     } else {
       // Selalu pertahankan sentinel EOF agar aliran kosong/tanpa EOF tidak macet.
       const tokenMasukan = [...token];
-      const tokenEOF = new Lexer('').tokenisasi().token[0];
-      if (tokenMasukan.length === 0 || tokenMasukan[tokenMasukan.length - 1].jenis !== JenisToken.EOF) {
+      const indeksEOF = tokenMasukan.findIndex(t => t.jenis === JenisToken.EOF);
+      if (indeksEOF >= 0) {
+        // Token setelah EOF tidak termasuk aliran yang dapat dikonsumsi parser.
+        this.daftarToken = tokenMasukan.slice(0, indeksEOF + 1);
+      } else {
+        const tokenEOF = new Lexer('').tokenisasi().token[0];
         tokenMasukan.push(tokenEOF);
+        this.daftarToken = tokenMasukan;
       }
-      this.daftarToken = tokenMasukan;
     }
   }
 
