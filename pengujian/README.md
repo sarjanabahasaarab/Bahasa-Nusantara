@@ -35,7 +35,7 @@ Setiap fitur dan subsistem diklasifikasikan secara jujur dan transparan berdasar
 
 ---
 
-## 3. Matriks Hasil Pengujian Komprehensif (50 Langkah Pemeriksaan)
+## 3. Matriks Hasil Pengujian Komprehensif (51 Langkah Pemeriksaan)
 
 | No | Target Fase | Modul & Nama Pengujian | Perintah Eksekusi | Kasus Uji | Status | Klasifikasi Validasi |
 |:---:|:---:|---|---|:---:|:---:|---|
@@ -44,9 +44,10 @@ Setiap fitur dan subsistem diklasifikasikan secara jujur dan transparan berdasar
 | 3 | Phase 2 | Konstitusi, 32 bentuk kata kunci, 10 tipe data & NIP-0002 | `npm run test:phase2` | 9 pemeriksaan | Menunggu CI | ACCEPTANCE TEST |
 | 4 | Phase 3 | Lisensi Apache 2.0, SemVer, tata kelola, keamanan & alur kontribusi | `npm run test:phase3` | 10 pemeriksaan | Menunggu CI | ACCEPTANCE TEST |
 | 5 | Phase 4 | Spesifikasi sintaks formal EBNF, identifier, literal, presedensi, blok & katalog valid/invalid | `npm run test:phase4` | 12 pemeriksaan | Menunggu CI | ACCEPTANCE TEST |
-| 6 | Phase 5 | Dokumentasi awal, panduan, indeks, glosarium & tautan lokal | `npm run test:phase5` | 13 pemeriksaan | Menunggu CI | ACCEPTANCE TEST |\n| 7 | Phase 6 | Lexer & Tokenizer UTF-8 | `npx tsx pengujian/lexer/uji_lexer.ts` | 21 uji | LULUS | UNIT TEST PASSED |
-| 6 | Phase 7 | Parser & Pohon Sintaksis Abstrak (AST) | `npx tsx pengujian/parser/uji_parser.ts` | 11 uji | LULUS | UNIT TEST PASSED |
-| 7 | Phase 8 | Interpreter & Evaluator Runtime | `npx tsx pengujian/interpreter/uji_interpreter.ts` | 15 uji | LULUS | INTEGRATION TEST PASSED |
+| 6 | Phase 5 | Dokumentasi awal, panduan, indeks, glosarium & tautan lokal | `npm run test:phase5` | 13 pemeriksaan | Menunggu CI | ACCEPTANCE TEST |
+| 7 | Phase 6 | Lexer & Tokenizer UTF-8 | `npx tsx pengujian/lexer/uji_lexer.ts` | 21 uji | LULUS | UNIT TEST PASSED |
+| 8 | Phase 7 | Parser & Pohon Sintaksis Abstrak (AST) | `npx tsx pengujian/parser/uji_parser.ts` | 11 uji | LULUS | UNIT TEST PASSED |
+| 9 | Phase 8 | Interpreter & Evaluator Runtime | `npx tsx pengujian/interpreter/uji_interpreter.ts` | 15 uji | LULUS | INTEGRATION TEST PASSED |
 | 8 | Phase 9 | Pemeriksa Tipe Statis & Immutability | `npx tsx pengujian/tipe/uji_tipe.ts` | 13 uji | LULUS | UNIT TEST PASSED |
 | 9 | Phase 10 | Operator 8 Tingkat & Evaluasi Short-Circuit | `npx tsx pengujian/operator/uji_operator.ts` | 21 uji | LULUS | UNIT TEST PASSED |
 | 10 | Phase 11 | Percabangan Kondisional (`jika..maka..akhir`) | `npx tsx pengujian/percabangan/uji_percabangan.ts` | 24 uji | LULUS | INTEGRATION TEST PASSED |
