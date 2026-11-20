@@ -713,6 +713,56 @@ selesai`,
       tegaskan((pesanEkstrak[0] as any).result === 'sukses', 'Result harus cocok');
     });
 
+    uji('PembacaBingkaiLSP mempertahankan payload UTF-8 saat bingkai terpotong di surrogate pair', () => {
+      const pembacaUnicode = new PembacaBingkaiLSP();
+      const bingkaiUnicode = formatPesanBingkaiLSP({
+        jsonrpc: '2.0',
+        id: 101,
+        result: 'Bahasa – 日本語 🌏',
+      });
+      const indeksEmoji = bingkaiUnicode.indexOf('🌏') + 1;
+      const bagianAwal = pembacaUnicode.prosesPotongan(bingkaiUnicode.slice(0, indeksEmoji));
+      const bagianAkhir = pembacaUnicode.prosesPotongan(bingkaiUnicode.slice(indeksEmoji));
+      tegaskan(bagianAwal.length === 0, 'Potongan pertama belum boleh menghasilkan pesan');
+      tegaskan(bagianAkhir.length === 1, 'Potongan kedua harus menyelesaikan satu pesan');
+      tegaskan(
+        (bagianAkhir[0] as any).result === 'Bahasa – 日本語 🌏',
+        'Payload UTF-8 harus tetap utuh'
+      );
+    });
+
+    uji('PembacaBingkaiLSP menolak payload dan header yang melewati batas ukuran', () => {
+      let payloadDitolak = false;
+      try {
+        new PembacaBingkaiLSP(16, 128).prosesPotongan(
+          formatPesanBingkaiLSP({ jsonrpc: '2.0', id: 1, result: 'payload terlalu besar' })
+        );
+      } catch {
+        payloadDitolak = true;
+      }
+      tegaskan(payloadDitolak, 'Payload di atas batas byte harus ditolak');
+
+      let headerDitolak = false;
+      try {
+        new PembacaBingkaiLSP(1024, 32).prosesPotongan('X'.repeat(40));
+      } catch {
+        headerDitolak = true;
+      }
+      tegaskan(headerDitolak, 'Header yang terlalu panjang harus ditolak');
+    });
+
+    uji('PembacaBingkaiLSP menolak header Content-Length duplikat', () => {
+      let ditolak = false;
+      try {
+        new PembacaBingkaiLSP().prosesPotongan(
+          'Content-Length: 2\\r\\nContent-Length: 2\\r\\n\\r\\n{}'
+        );
+      } catch {
+        ditolak = true;
+      }
+      tegaskan(ditolak, 'Header Content-Length ganda harus ditolak');
+    });
+
     // 3. ID nol tidak boleh berubah menjadi null pada respons permintaan tidak valid.
     const serverIdNol = new ServerBahasaNUSANTARA();
     const resIdNol: any = await serverIdNol.tanganiPesan({
