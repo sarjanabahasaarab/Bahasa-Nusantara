@@ -146,7 +146,11 @@ export class SandboxBerkas {
       pembaca ||
       (typeof window !== 'undefined' ? new PembacaBerkasMemori() : new PembacaBerkasNode());
     const base = direktoriBasis || (typeof process !== 'undefined' && process.cwd ? process.cwd() : '/proyek');
-    this.direktoriBasis = this.pembaca.normalisasiJalur(this.pembaca.jalurAbsolut(base));
+    const basisAbsolut = this.pembaca.normalisasiJalur(this.pembaca.jalurAbsolut(base));
+    this.direktoriBasis =
+      this.pembaca.jalurNyata && this.pembaca.apakahAda(basisAbsolut)
+        ? this.pembaca.normalisasiJalur(this.pembaca.jalurNyata(basisAbsolut))
+        : basisAbsolut;
   }
 
   public tetapkanPembaca(pembaca: PembacaBerkas): void {
@@ -155,6 +159,38 @@ export class SandboxBerkas {
 
   public dapatkanDirektoriBasis(): string {
     return this.direktoriBasis;
+  }
+
+  private pastikanJalurFisikDalamSandbox(jalur: string): void {
+    if (!this.pembaca.jalurNyata) return;
+
+    // Untuk target yang belum ada (misalnya file baru), periksa ancestor
+    // terdekat yang sudah ada. Ini menangkap symlink pada direktori induk.
+    let pemeriksaan = jalur;
+    while (!this.pembaca.apakahAda(pemeriksaan)) {
+      const induk = this.pembaca.direktoriDari(pemeriksaan);
+      if (!induk || induk === pemeriksaan) return;
+      pemeriksaan = induk;
+    }
+
+    const nyata = this.pembaca
+      .normalisasiJalur(this.pembaca.jalurNyata(pemeriksaan))
+      .replace(/\\/g, '/');
+    const basisNyata = this.pembaca.apakahAda(this.direktoriBasis)
+      ? this.pembaca.normalisasiJalur(this.pembaca.jalurNyata(this.direktoriBasis)).replace(/\\/g, '/')
+      : this.direktoriBasis.replace(/\\/g, '/');
+    const nyataBanding = /^[a-zA-Z]:\\//.test(nyata) ? nyata.toLowerCase() : nyata;
+    const basisBanding = /^[a-zA-Z]:\\//.test(basisNyata) ? basisNyata.toLowerCase() : basisNyata;
+    const masihDiDalam =
+      nyataBanding === basisBanding ||
+      nyataBanding.startsWith(basisBanding.endsWith('/') ? basisBanding : `${basisBanding}/`);
+
+    if (!masihDiDalam) {
+      throw new GalatRuntime(
+        JenisGalatRuntime.OPERASI_TIPE_TIDAK_VALID,
+        `Kesalahan berkas: jalur '${jalur}' melewati symbolic link yang keluar dari direktori sandbox.`
+      );
+    }
   }
 
   public validasiDanSelesaikanJalur(jalurInput: string): string {
@@ -230,6 +266,7 @@ export class SandboxBerkas {
       );
     }
 
+    this.pastikanJalurFisikDalamSandbox(hasil);
     return hasil;
   }
 
