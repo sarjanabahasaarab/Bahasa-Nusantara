@@ -454,6 +454,32 @@ uji('Sandbox menolak seluruh jalur absolut dan relatif di luar direktori proyek'
   salah(memFS.apakahAda('/proyek-lain/terlarang.txt'));
 });
 
+uji('Sandbox menolak symbolic link yang menunjuk keluar dari direktori proyek', () => {
+  class PembacaDenganSymlink extends PembacaBerkasMemori {
+    public jalurNyata(jalur: string): string {
+      if (jalur === '/proyek/link') return '/rahasia';
+      if (jalur.startsWith('/proyek/link/')) {
+        return jalur.replace('/proyek/link', '/rahasia');
+      }
+      return jalur;
+    }
+  }
+
+  const memFS = new PembacaDenganSymlink();
+  memFS.tulisBerkas('/proyek/penanda.txt', 'akar proyek');
+  memFS.tulisBerkas('/proyek/link/berkas-ada.txt', 'target symlink');
+  const sandbox = new SandboxBerkas(memFS, '/proyek');
+
+  lemparGalat(
+    () => sandbox.validasiDanSelesaikanJalur('link/berkas-ada.txt'),
+    'symbolic link'
+  );
+  lemparGalat(
+    () => sandbox.validasiDanSelesaikanJalur('link/berkas-baru.txt'),
+    'symbolic link'
+  );
+});
+
 // ----------------------------------------------------------------------------
 // 9. MODUL SISTEM
 // ----------------------------------------------------------------------------
