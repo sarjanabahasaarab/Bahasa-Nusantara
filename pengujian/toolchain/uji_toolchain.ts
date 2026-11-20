@@ -63,6 +63,19 @@ console.log('===================================================================
 // -----------------------------------------------------------------------------
 console.log('--- Kelompok 1: Formatter Dasar & Rekonstruksi AST ---');
 
+uji('Mengamankan nilai konfigurasi formatter dari indentasi ekstrem dan panjang baris berlebihan', () => {
+  const konfigurasi = muatKonfigurasiFormatDariTOML(
+    `[format]\nindentasi = 0.5\npanjang_baris = 999999`
+  );
+  pastikanSama(konfigurasi.indentasi, 1, 'Indentasi pecahan positif dibulatkan ke batas minimum 1');
+  pastikanSama(konfigurasi.panjangBaris, 240, 'Panjang baris dibatasi maksimum 240');
+
+  const kode = `program Aman\nmulai\nvariabel nilai: bilangan = 10\nselesai`;
+  const hasil = new FormatterNUSANTARA(kode, { indentasi: -100 }).format();
+  pastikan(hasil.includes('    variabel nilai: bilangan = 10'), 'Konfigurasi indentasi negatif memakai nilai aman');
+});
+
+
 uji('Memformat deklarasi variabel, tetap, dan operator spacing', () => {
   const masukan = `variabel  x:bilangan=10+20*3
 tetap   PI:desimal=3.14159`;
