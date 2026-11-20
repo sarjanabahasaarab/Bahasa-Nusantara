@@ -664,7 +664,7 @@ mulai
 selesai`;
     const fsMemori = new PembacaBerkasMemori({
       '/proyek/utama.nusantara': sumber,
-      '/rahasia.nusantara': 'modul rahasia\\nekspor fungsi bocor() : kosong\\nmulai\\nselesai',
+      '/rahasia.nusantara': 'modul rahasia\nekspor fungsi bocor() : kosong\nmulai\nselesai',
     });
     const manajer = new ManajerDokumen();
     const dokumen = manajer.bukaDokumen(
