@@ -15,6 +15,7 @@ import {
 } from '../../src/parser/ast';
 import { ASTPrinter } from '../../src/parser/astPrinter';
 import { Lexer } from '../../src/lexer/lexer';
+import { TokenStream } from '../../src/lexer/tokenStream';
 
 interface HasilUji {
   nama: string;
@@ -277,10 +278,11 @@ uji('Parser menerima daftar token kosong sebagai program kosong', () => {
 
 uji('Parser menambahkan sentinel EOF untuk daftar token tanpa EOF', () => {
   const token = new Lexer('program Uji\\nmulai\\nselesai', { sertakanBarisBaru: false }).tokenisasi().token.slice(0, -1);
-  const parser = new Parser(token);
-  const ast = parser.parse();
-  samaDengan(ast.namaProgram, 'Uji');
-  samaDengan(parser.dapatkanDaftarGalat().length, 0);
+  const aliran = new TokenStream(token);
+  samaDengan(aliran.eof(), false, 'Aliran harus dimulai dari token pertama, bukan EOF');
+  samaDengan(aliran.toArray().at(-1)?.jenis, 'EOF', 'TokenStream harus menambahkan sentinel EOF');
+  while (!aliran.eof()) aliran.next();
+  samaDengan(aliran.eof(), true, 'Aliran harus mencapai sentinel EOF');
 });
 
 uji('Satu kesalahan sintaks dicatat tepat satu kali', () => {
