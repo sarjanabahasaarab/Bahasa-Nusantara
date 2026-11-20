@@ -97,7 +97,11 @@ export class ResolverModul {
 
     if (apakahJalurEksplisit) {
       const basis = direktoriPemanggil ? this.pembaca.jalurAbsolut(direktoriPemanggil) : this.direktoriAkarProyek;
-      const basisGabung = this.pembaca.gabungJalur(basis, namaBersih);
+      const apakahJalurAbsolut =
+        namaBersih.startsWith('/') || /^[A-Za-z]:[\\\\/]/.test(namaBersih);
+      const basisGabung = apakahJalurAbsolut
+        ? this.pembaca.jalurAbsolut(namaBersih)
+        : this.pembaca.gabungJalur(basis, namaBersih);
 
       daftarKandidat.push(basisGabung);
       if (!basisGabung.endsWith('.nusantara')) {
