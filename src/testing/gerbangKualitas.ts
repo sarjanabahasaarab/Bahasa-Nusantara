@@ -42,7 +42,7 @@ export class GerbangKualitas {
       this.verbose = Boolean(opt.verbose ?? opsi?.verbose);
     } else {
       this.pembaca = new PembacaBerkasMemori();
-      this.ambangBatasCakupan = opsi?.ambangBatasCakupan ?? 85;
+      this.ambangBatasCakupan = normalisasiAmbangBatasCakupan(opsi?.ambangBatasCakupan);
       this.verbose = Boolean(opsi?.verbose);
     }
   }
