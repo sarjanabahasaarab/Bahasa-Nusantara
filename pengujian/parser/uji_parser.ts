@@ -14,6 +14,7 @@ import {
   NodeDeklarasiFungsi,
 } from '../../src/parser/ast';
 import { ASTPrinter } from '../../src/parser/astPrinter';
+import { Lexer } from '../../src/lexer/lexer';
 
 interface HasilUji {
   nama: string;
@@ -262,6 +263,30 @@ uji('Integrasi Program Kasir Toko', () => {
 
   samaDengan(parser.dapatkanDaftarGalat().length, 0);
   samaDengan(ast.tubuhUtama.length, 4);
+});
+
+// 11. REGRESI ALIRAN TOKEN KOSONG / TANPA EOF
+console.log('\\n--- Kelompok 11: Ketahanan TokenStream & Diagnostik ---');
+uji('Parser menerima daftar token kosong sebagai program kosong', () => {
+  const parser = new Parser([]);
+  const ast = parser.parse();
+  samaDengan(ast.jenis, JenisNodeAST.PROGRAM);
+  samaDengan(ast.tubuhUtama.length, 0);
+  samaDengan(parser.dapatkanDaftarGalat().length, 0);
+});
+
+uji('Parser menambahkan sentinel EOF untuk daftar token tanpa EOF', () => {
+  const token = new Lexer('program Uji\\nmulai\\nselesai').tokenisasi().token.slice(0, -1);
+  const parser = new Parser(token);
+  const ast = parser.parse();
+  samaDengan(ast.namaProgram, 'Uji');
+  samaDengan(parser.dapatkanDaftarGalat().length, 0);
+});
+
+uji('Satu kesalahan sintaks dicatat tepat satu kali', () => {
+  const parser = new Parser('program Rusak\\nmulai\\njika nilai >= 75\\nselesai');
+  parser.parse();
+  samaDengan(parser.dapatkanDaftarGalat().length, 1, 'Objek galat yang sama tidak boleh dicatat dua kali');
 });
 
 // REKAPITULASI HASIL
