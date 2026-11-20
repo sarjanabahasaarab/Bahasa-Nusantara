@@ -82,8 +82,8 @@ tampilkan("program Teks mulai")`;
   const hasil = formatKode(masukan);
   pastikan(hasil.includes('// program Komentar mulai'), 'Komentar yang memuat kata kunci tetap dipertahankan');
   pastikan(hasil.includes('tampilkan("program Teks mulai")'), 'Literal teks tetap utuh');
-  pastikan(!hasil.includes('program Komentar\\nmulai'), 'Komentar tidak dianggap sebagai deklarasi program');
-  pastikan(!hasil.includes('program Teks\\nmulai'), 'Literal teks tidak dianggap sebagai deklarasi program');
+  pastikan(!hasil.includes('program Komentar\nmulai'), 'Komentar tidak dianggap sebagai deklarasi program');
+  pastikan(!hasil.includes('program Teks\nmulai'), 'Literal teks tidak dianggap sebagai deklarasi program');
 });
 
 uji('Memformat deklarasi variabel, tetap, dan operator spacing', () => {
