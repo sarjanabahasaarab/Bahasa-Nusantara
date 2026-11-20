@@ -84,6 +84,7 @@ async function jalankanPengujianLSP(): Promise<void> {
     uji('Server merespons initialize dengan kapabilitas lengkap', () => {
       tegaskan(resInit !== null, 'Respons inisialisasi tidak boleh null');
       tegaskan(resInit.result !== undefined, 'Hasil inisialisasi harus ada');
+      tegaskan(resInit.result.capabilities.textDocumentSync.change === 2, 'Sinkronisasi harus mengiklankan mode incremental');
       tegaskan(resInit.result.capabilities.hoverProvider === true, 'Hover provider harus aktif');
       tegaskan(resInit.result.capabilities.definitionProvider === true, 'Definition provider harus aktif');
       tegaskan(resInit.result.capabilities.completionProvider !== undefined, 'Completion provider harus ada');
