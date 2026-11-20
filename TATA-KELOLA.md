@@ -43,7 +43,8 @@ Peran dalam proyek NUSANTARA didasarkan pada rekam jejak kontribusi, keahlian te
 
 ## 3. Penegasan Hak Akses & Pengaturan GitHub
 
-Struktur peran di atas bukan sekadar pedoman tertulis, melainkan **ditegakkan secara teknis melalui pengaturan repositori GitHub**:
-- Hak akses tulis (*Write / Maintain / Admin*) ke repositori diatur melalui manajemen tim organisasi GitHub.
-- Perlindungan cabang (*Branch Protection*) pada `main` dan `develop` dikonfigurasi untuk mewajibkan review tertulis sebelum penggabungan kode diizinkan oleh sistem GitHub.
-- Akses ke kunci penandatanganan rilis (*Release signing keys*) hanya dipegang oleh pengelola rilis terdaftar.
+Struktur peran di atas adalah **model tata kelola yang harus ditegakkan melalui pengaturan repositori GitHub**, bukan bukti bahwa seluruh pengaturan sudah aktif. Hasil audit konfigurasi publik pada 20 November 2026 menunjukkan cabang `main` belum terlindungi (`protected: false`), belum ada ruleset repositori, dan cabang `develop` tidak ditemukan. Karena itu, penggabungan PR saat ini belum dapat dianggap dibatasi oleh branch protection sampai administrator mengaktifkan dan memverifikasi pengaturan tersebut.
+
+- Hak akses tulis (*Write / Maintain / Admin*) harus dikelola melalui pengaturan kolaborator/tim GitHub.
+- Perlindungan cabang `main` harus mewajibkan Pull Request, peninjauan, dan pemeriksaan CI yang relevan.
+- Akses ke kunci penandatanganan rilis (*release signing keys*) harus dibatasi kepada pengelola rilis yang berwenang; jangan menyimpan kunci privat di repositori.

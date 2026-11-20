@@ -268,14 +268,24 @@ export class Lexer {
 
   private bacaLiteralKarakter(posAwal: PosisiSumber): Token {
     this.maju(); // Lewati kutip tunggal pembuka '
-    let nilai = '';
+    const nilai = this.karakterSekarang();
 
-    if (!this.sudahSelesai() && this.karakterSekarang() !== "'") {
-      nilai += this.karakterSekarang();
-      this.maju();
-    }
+    // Spesifikasi Phase 4 menetapkan tepat satu Unicode scalar value,
+    // bukan satu unit UTF-16 dan bukan satu grapheme cluster.
+    const valid = !this.sudahSelesai()
+      && nilai !== "'"
+      && nilai !== "\\"
+      && nilai !== "\n"
+      && nilai !== "\r";
 
-    if (this.karakterSekarang() !== "'") {
+    if (valid) this.maju();
+
+    if (!valid || this.karakterSekarang() !== "'") {
+      // Pulihkan posisi ke penutup literal agar tokenisasi setelah galat tetap berjalan.
+      while (!this.sudahSelesai() && this.karakterSekarang() !== "'" && this.karakterSekarang() !== "\n" && this.karakterSekarang() !== "\r") {
+        this.maju();
+      }
+      if (this.karakterSekarang() === "'") this.maju();
       const galat = buatGalatKarakterTidakDitutup(posAwal, this.dapatkanBarisTeks(posAwal.baris));
       this.catatGalat(galat);
       return buatToken(JenisToken.ILEGAL, nilai, posAwal, klonaPosisi(this.posisiSaatIni));
@@ -397,20 +407,23 @@ export class Lexer {
 
   private karakterSekarang(): string {
     if (this.sudahSelesai()) return '\0';
-    return this.sumber[this.posisiSaatIni.indeks];
+    const kode = this.sumber.codePointAt(this.posisiSaatIni.indeks);
+    return kode === undefined ? '\0' : String.fromCodePoint(kode);
   }
 
   private karakterBerikutnya(): string {
-    const indeksBerikutnya = this.posisiSaatIni.indeks + 1;
-    if (indeksBerikutnya >= this.panjang) return '\0';
-    return this.sumber[indeksBerikutnya];
+    const kode = this.sumber.codePointAt(this.posisiSaatIni.indeks);
+    if (kode === undefined) return '\0';
+    const indeksBerikutnya = this.posisiSaatIni.indeks + (kode > 0xFFFF ? 2 : 1);
+    const kodeBerikutnya = this.sumber.codePointAt(indeksBerikutnya);
+    return kodeBerikutnya === undefined ? '\0' : String.fromCodePoint(kodeBerikutnya);
   }
 
   private maju(): void {
     if (this.sudahSelesai()) return;
 
-    const c = this.sumber[this.posisiSaatIni.indeks];
-    this.posisiSaatIni.indeks++;
+    const c = this.karakterSekarang();
+    this.posisiSaatIni.indeks += c.length; // Indeks sumber tetap UTF-16; kolom menghitung scalar.
 
     if (c === '\n') {
       this.posisiSaatIni.baris++;
