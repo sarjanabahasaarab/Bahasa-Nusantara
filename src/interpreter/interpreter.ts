@@ -1138,15 +1138,21 @@ export class Interpreter {
       versiPaket: infoPaket?.versiPaket,
     });
 
-    this.profiler?.mulaiPanggilan(fnDeklarasi.nama);
-    this.kaitDebug?.sebelumPanggilanFungsi?.(
-      fnDeklarasi.nama,
-      argumen,
-      nodePanggil.posisi?.awal,
-      fnDeklarasi
-    );
-
+    // Kait eksternal dapat melempar; jalankan semuanya di dalam try agar
+    // lingkungan dan tumpukan selalu dipulihkan oleh finally.
+    let profilerDimulai = false;
     try {
+      if (this.profiler) {
+        this.profiler.mulaiPanggilan(fnDeklarasi.nama);
+        profilerDimulai = true;
+      }
+      this.kaitDebug?.sebelumPanggilanFungsi?.(
+        fnDeklarasi.nama,
+        argumen,
+        nodePanggil.posisi?.awal,
+        fnDeklarasi
+      );
+
       for (const stmt of fnDeklarasi.tubuh) {
         this.eksekusiPernyataan(stmt);
       }
@@ -1192,7 +1198,9 @@ export class Interpreter {
       this.tumpukanPanggilan.pop();
       this.lingkunganSaatIni = simpanLingkungan;
       this.modulAktifSaatIni = simpanModulAktif;
-      this.profiler?.selesaiPanggilan(fnDeklarasi.nama);
+      if (profilerDimulai) {
+        this.profiler?.selesaiPanggilan(fnDeklarasi.nama);
+      }
     }
   }
 }
