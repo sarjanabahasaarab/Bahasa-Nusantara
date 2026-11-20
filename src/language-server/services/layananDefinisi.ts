@@ -260,8 +260,8 @@ export class LayananDefinisi {
         const targetNyata = pembaca
           .normalisasiJalur(pembaca.jalurNyata(jalurTarget))
           .replace(/\\/g, '/');
-        const akarBanding = /^[a-zA-Z]:\\//.test(akarNyata) ? akarNyata.toLowerCase() : akarNyata;
-        const targetBanding = /^[a-zA-Z]:\\//.test(targetNyata) ? targetNyata.toLowerCase() : targetNyata;
+        const akarBanding = /^[a-zA-Z]:\//.test(akarNyata) ? akarNyata.toLowerCase() : akarNyata;
+        const targetBanding = /^[a-zA-Z]:\//.test(targetNyata) ? targetNyata.toLowerCase() : targetNyata;
         const masihDiDalam =
           targetBanding === akarBanding ||
           targetBanding.startsWith(akarBanding.endsWith('/') ? akarBanding : `${akarBanding}/`);
@@ -275,6 +275,7 @@ export class LayananDefinisi {
       return null;
     }
   }
+
   private cariVariabelDiDaftar(
     daftar: PernyataanAST[],
     nama: string
