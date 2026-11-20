@@ -136,7 +136,7 @@ uji('Menangani batas tepi cuplikan kode sumber dengan aman', () => {
 });
 
 uji('Cuplikan memperluas tab secara konsisten dan menjaga posisi caret', () => {
-  const potongan = buatCuplikanSumber('a\\tb', 1, 3, 1);
+  const potongan = buatCuplikanSumber('a\tb', 1, 3, 1);
   pastikan(potongan !== undefined);
   pastikanSama(potongan!.teksBaris, 'a    b');
   pastikanSama(potongan!.teksCaret, '     ^');
