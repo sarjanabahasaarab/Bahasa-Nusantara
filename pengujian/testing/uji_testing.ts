@@ -24,6 +24,7 @@ import {
 import { PembacaBerkasMemori } from '../../src/modul';
 import { NusantaraCLI } from '../../src/paket/cli';
 import { KodeGalat } from '../../src/diagnostik/kode';
+import { JenisNilaiRuntime } from '../../src/interpreter/nilai';
 
 let totalUji = 0;
 let ujiBerhasil = 0;
@@ -153,6 +154,23 @@ async function jalankanPengujianTestingFramework(): Promise<void> {
       gagal = true;
     }
     tegaskan(gagal, 'pastikan_galat harus melempar galat saat fungsi tidak melempar eksepsi');
+  });
+
+  uji('Penegasan membandingkan objek dan daftar siklik tanpa stack overflow', () => {
+    const objekA: any = { nilai: 1 };
+    const objekB: any = { nilai: 1 };
+    objekA.diri = objekA;
+    objekB.diri = objekB;
+    tegaskan(Penegasan.bandingkanNilai(objekA, objekB), 'Objek siklik dengan struktur sama harus setara');
+
+    const daftarA: any = { jenis: JenisNilaiRuntime.DAFTAR, elemen: [] };
+    const daftarB: any = { jenis: JenisNilaiRuntime.DAFTAR, elemen: [] };
+    daftarA.elemen.push(daftarA);
+    daftarB.elemen.push(daftarB);
+    tegaskan(
+      Penegasan.bandingkanNilai(daftarA, daftarB),
+      'Daftar runtime siklik harus dapat diekstrak dan dibandingkan'
+    );
   });
 
   // --- KELOMPOK 2: ASSERTION DIAGNOSTICS & FORMATTING ---
