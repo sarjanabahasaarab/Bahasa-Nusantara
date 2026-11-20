@@ -724,8 +724,8 @@ selesai`,
         return jalur === '/proyek/tautan';
       }
     })({
-      '/proyek/src/aman.nusantara': 'program Aman\\nmulai\\nselesai',
-      '/proyek/tautan/rahasia.nusantara': 'program Rahasia\\nmulai\\nselesai',
+      '/proyek/src/aman.nusantara': 'program Aman\nmulai\nselesai',
+      '/proyek/tautan/rahasia.nusantara': 'program Rahasia\nmulai\nselesai',
     });
     const serverTautan = new ServerBahasaNUSANTARA({
       pembacaBerkas: fsTautan,
