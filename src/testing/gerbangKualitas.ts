@@ -184,14 +184,14 @@ export class GerbangKualitas {
     // 6. Verifikasi Fondasi Cakupan Kode (Coverage >= 85%)
     const awalCov = performance.now();
     const dataCakupan = PengukurCakupan.hitungCakupan();
-    const lolosCakupan = dataCakupan.totalPersentase >= 85;
+    const lolosCakupan = dataCakupan.totalPersentase >= this.ambangBatasCakupan;
     hasil.push({
-      nama: `Ambang Batas Cakupan Kode (Target >= 85%, Aktual: ${dataCakupan.totalPersentase}%)`,
+      nama: `Ambang Batas Cakupan Kode (Target >= ${this.ambangBatasCakupan}%, Aktual: ${dataCakupan.totalPersentase}%)`,
       kategori: 'Kualitas',
       status: lolosCakupan ? 'LULUS' : 'GAGAL',
       pesan: lolosCakupan
         ? `Cakupan kode komprehensif mencapai ${dataCakupan.totalPersentase}%.`
-        : `Cakupan kode di bawah ambang batas minimal (${dataCakupan.totalPersentase}% < 85%).`,
+        : `Cakupan kode di bawah ambang batas minimal (${dataCakupan.totalPersentase}% < ${this.ambangBatasCakupan}%).`,
       durasiMs: Math.round((performance.now() - awalCov) * 100) / 100,
     });
 
