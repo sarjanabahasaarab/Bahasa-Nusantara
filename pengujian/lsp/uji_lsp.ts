@@ -715,6 +715,40 @@ selesai`,
       const ada = resWsSym.result.some((s: any) => s.name === 'hitungTotal');
       tegaskan(ada, 'Harus menemukan simbol hitungTotal dari kueri hitung');
     });
+
+    const fsTautan = new (class extends PembacaBerkasMemori {
+      public jalurNyata(jalur: string): string {
+        return jalur === '/proyek/tautan' ? '/di-luar-proyek' : jalur;
+      }
+      public apakahSymbolicLink(jalur: string): boolean {
+        return jalur === '/proyek/tautan';
+      }
+    })({
+      '/proyek/src/aman.nusantara': 'program Aman\\nmulai\\nselesai',
+      '/proyek/tautan/rahasia.nusantara': 'program Rahasia\\nmulai\\nselesai',
+    });
+    const serverTautan = new ServerBahasaNUSANTARA({
+      pembacaBerkas: fsTautan,
+      janganKeluarOtomatis: true,
+    });
+    await serverTautan.tanganiPesan({
+      jsonrpc: '2.0',
+      id: 60,
+      method: 'initialize',
+      params: { processId: null, rootUri: 'file:///proyek', capabilities: {} },
+    });
+    const resRahasia: any = await serverTautan.tanganiPesan({
+      jsonrpc: '2.0',
+      id: 61,
+      method: 'workspace/symbol',
+      params: { query: 'Rahasia' },
+    });
+    uji('Pencarian simbol workspace tidak mengikuti symbolic link keluar proyek', () => {
+      tegaskan(
+        !resRahasia.result.some((simbol: any) => simbol.name === 'Rahasia'),
+        'Simbol dari symbolic link luar proyek tidak boleh muncul'
+      );
+    });
   })();
 
   // --- KELOMPOK 8: PROTOKOL FRAMING JSON-RPC & INTEGRASI CLI ---
