@@ -487,7 +487,9 @@ uji('Menolak akses variabel lokal cabang setelah blok jika berakhir', () => {
       jika benar maka
           lokal : bilangan = 10
       akhir
-      tampilkan(lokal)
+      jika lokal maka
+          tampilkan(1)
+      akhir
   selesai`;
   const galat = periksaTipeProgram(sumber);
   samaDengan(galat.length > 0, true, 'Variabel lokal cabang tidak boleh bocor ke lingkup luar');
@@ -501,7 +503,9 @@ uji('Menolak akses variabel cabang maka dari cabang selain', () => {
       jika benar maka
           lokal : bilangan = 10
       selain
-          tampilkan(lokal)
+          jika lokal maka
+              tampilkan(1)
+          akhir
       akhir
   selesai`;
   const galat = periksaTipeProgram(sumber);
