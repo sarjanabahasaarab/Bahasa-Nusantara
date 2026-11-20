@@ -47,8 +47,8 @@ uji('Literal karakter dengan lebih dari satu scalar ditolak', () => {
   assert.equal(token.at(-1)?.jenis, JenisToken.EOF);
 });
 
-uji('Karakter kutip tunggal tidak boleh menjadi isi tanpa escape yang ditetapkan', () => {
-  const { token, galat } = new Lexer("'''").tokenisasi();
+uji('Urutan escape belum diizinkan pada literal karakter', () => {
+  const { token, galat } = new Lexer("'\\\\n'").tokenisasi();
   assert.equal(token[0].jenis, JenisToken.ILEGAL);
   assert.equal(galat.length, 1);
 });
