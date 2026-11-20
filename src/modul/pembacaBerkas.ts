@@ -300,7 +300,7 @@ export class PembacaBerkasNode implements PembacaBerkas {
     if (!this.fs?.realpathSync) {
       throw new Error('Resolusi jalur fisik tidak tersedia pada lingkungan ini.');
     }
-    const realpath = this.fs.realpathSync.native || this.fs.realpathSync;
-    return realpath.call(this.fs.realpathSync, jalur);
+    if (this.fs.realpathSync.native) return this.fs.realpathSync.native(jalur);
+    return this.fs.realpathSync(jalur);
   }
 }
