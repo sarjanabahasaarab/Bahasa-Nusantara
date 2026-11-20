@@ -213,7 +213,7 @@ export class SandboxBerkas {
       apakahAbsolut ? bersih : this.pembaca.gabungJalur(this.direktoriBasis, bersih)
     );
     const hasil = this.pembaca.normalisasiJalur(absolut).replace(/\\/g, '/');
-    const basis = this.pembaca.normalisasiJalur(this.direktoriBasis).replace(/\\\\/g, '/');
+    const basis = this.pembaca.normalisasiJalur(this.direktoriBasis).replace(/\\/g, '/');
     const basisBersih = basis.length > 1 ? basis.replace(/\/+$/, '') : basis;
     const kandidatPerbandingan = /^[a-zA-Z]:\//.test(hasil) ? hasil.toLowerCase() : hasil;
     const basisPerbandingan = /^[a-zA-Z]:\//.test(basisBersih) ? basisBersih.toLowerCase() : basisBersih;
