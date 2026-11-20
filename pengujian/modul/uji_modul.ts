@@ -125,6 +125,25 @@ uji('Resolver mendeteksi dan menggagalkan serangan Path Traversal (../)', () => 
   mengandung(pesanGalat, 'Pelanggaran keamanan jalur direktori');
 });
 
+uji('Resolver menolak target direktori induk dan sibling yang hanya berbagi prefiks akar', () => {
+  const fs = new PembacaBerkasMemori({
+    '/rahasia.nusantara': 'modul rahasia',
+    '/proyek/utama.nusantara': 'program utama',
+    '/proyek-lain/rahasia.nusantara': 'modul di luar proyek',
+  });
+  const resolver = new ResolverModul(fs, { direktoriAkarProyek: '/proyek' });
+
+  for (const target of ['../..', '/proyek-lain/rahasia']) {
+    let tertangkap = false;
+    try {
+      resolver.selesaikan(target);
+    } catch (err: any) {
+      tertangkap = err instanceof GalatModul && err.jenis === JenisGalatModul.JALUR_TIDAK_AMAN;
+    }
+    samaDengan(tertangkap, true, `Resolver harus menolak target di luar akar proyek: ${target}`);
+  }
+});
+
 // -----------------------------------------------------------------------------
 // KELOMPOK 2: PARSER & STRUKTUR AST MODUL
 // -----------------------------------------------------------------------------
