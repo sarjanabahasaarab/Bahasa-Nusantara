@@ -316,6 +316,22 @@ async function jalankanPengujianTestingFramework(): Promise<void> {
     tegaskan(berkasHasil.daftarGalat[0].pesan.includes('Perhitungan keliru'), 'Pesan galat harus sesuai');
   });
 
+  uji('PelariUji memisahkan kegagalan assertion dari galat runtime dalam ringkasan', () => {
+    const memori = new PembacaBerkasMemori({
+      'tests/assertion.uji.nusantara': 'pastikan_sama(1, 2)',
+      'tests/runtime.uji.nusantara': 'tampilkan(nama_yang_tidak_ada)',
+    });
+    const ringkasan = new PelariUji({ pembaca: memori }).jalankanSinkron([
+      'tests/assertion.uji.nusantara',
+      'tests/runtime.uji.nusantara',
+    ]);
+    tegaskan(ringkasan.gagal === 1, 'Gagal hanya menghitung assertion yang gagal');
+    tegaskan(ringkasan.galat === 1, 'Galat runtime/type harus berada di kolom terpisah');
+    const json = JSON.parse(PelaporJSON.format(ringkasan));
+    tegaskan(json.gagal === 2, 'Pelapor JSON harus menjumlahkan gagal dan galat tepat satu kali');
+    tegaskan(json.galat === 1, 'Pelapor JSON tetap menampilkan jumlah galat terpisah');
+  });
+
   uji('PelariUji menghentikan program uji tak berujung sesuai timeout kooperatif', async () => {
     const memori = new PembacaBerkasMemori({
       'tests/tak-berujung.uji.nusantara': `
