@@ -75,8 +75,9 @@ export class PenemuUji {
 
   private stripPrefix(jalur: string): string {
     let j = jalur.replace(/\\/g, '/');
-    if (j === '/proyek') return '.';
-    if (j.startsWith('/proyek/')) {
+    const pembacaMemori = typeof (this.pembaca as any).dapatkanSemuaBerkas === 'function';
+    if (pembacaMemori && j === '/proyek') return '.';
+    if (pembacaMemori && j.startsWith('/proyek/')) {
       j = j.slice('/proyek/'.length);
     } else if (j.startsWith('./')) {
       j = j.slice(2);
