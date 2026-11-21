@@ -811,6 +811,7 @@ uji('5.0b Generator installer menetralkan nama dan menolak versi atau jalur exec
   );
 
   for (const opsi of [
+    { ...dasar, appName: '..' },
     { ...dasar, appVersion: '1.0.0; touch-pwned' },
     { ...dasar, binRelativePath: '../../tmp/pwned' },
     { ...dasar, binRelativePath: 'bin/$(touch-pwned)' },
