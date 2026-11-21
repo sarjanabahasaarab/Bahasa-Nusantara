@@ -61,7 +61,7 @@ export class RegistriJarakJauh implements AntarmukaRegistri {
     ) {
       throw new GalatRegistri('URL basis registri hanya boleh menggunakan HTTP(S), tanpa kredensial, query, atau fragment.');
     }
-    return url.toString().replace(/\\/+$/, '');
+    return url.toString().replace(/\/+$/, '');
   }
 
   private async kirimPermintaan(endpoint: string, init: RequestInit): Promise<Response> {
