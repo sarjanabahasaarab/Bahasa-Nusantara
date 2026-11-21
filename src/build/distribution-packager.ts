@@ -35,7 +35,7 @@ export class DesktopDistributionPackager {
       cap.arch === 'unknown' ? 'x86_64' : cap.arch;
 
     const cleanApp = options.appName.replace(/[^A-Za-z0-9._-]/g, '_');
-    if (!cleanApp || !/^[vV]?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(options.appVersion)) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(cleanApp) || !/^[vV]?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(options.appVersion)) {
       throw new Error('Nama aplikasi dan versi SemVer wajib valid untuk membuat paket distribusi.');
     }
     const baseName = `${cleanApp}-${options.appVersion}-${legacyTarget}`;
