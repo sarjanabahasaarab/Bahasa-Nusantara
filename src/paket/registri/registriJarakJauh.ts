@@ -38,7 +38,32 @@ export class RegistriJarakJauh implements AntarmukaRegistri {
     } else {
       this.urlBasis = (opsi?.urlBasis || 'https://paket.nusantara.lang/api/v1').replace(/\/+$/, '');
       this.token = opsi?.token;
-      this.waktuTungguMs = opsi?.waktuTungguMs || 5000;
+      const timeout = opsi?.waktuTungguMs ?? 5000;
+      this.waktuTungguMs = Number.isFinite(timeout) && timeout > 0
+        ? Math.min(120_000, Math.max(1, Math.floor(timeout)))
+        : 5000;
+    }
+  }
+
+  private async kirimPermintaan(endpoint: string, init: RequestInit): Promise<Response> {
+    if (typeof fetch === 'undefined') {
+      throw new Error('Lingkungan eksekusi tidak menyediakan fungsi fetch HTTP.');
+    }
+    if (typeof AbortController === 'undefined') {
+      throw new Error('Lingkungan eksekusi tidak mendukung pembatalan permintaan HTTP.');
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.waktuTungguMs);
+    try {
+      return await fetch(endpoint, { ...init, signal: controller.signal });
+    } catch (err: any) {
+      if (controller.signal.aborted) {
+        throw new Error(`Permintaan registri melewati batas waktu ${this.waktuTungguMs}ms.`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -54,7 +79,7 @@ export class RegistriJarakJauh implements AntarmukaRegistri {
         throw new Error('Lingkungan eksekusi tidak menyediakan fungsi fetch HTTP.');
       }
 
-      const res = await fetch(endpoint, {
+      const res = await this.kirimPermintaan(endpoint, {
         method: 'GET',
         headers: this.buatHeader(),
       });
