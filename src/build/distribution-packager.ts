@@ -78,6 +78,13 @@ export class DesktopDistributionPackager {
 
     const packageKind: 'native' | 'script-launcher' =
       options.packageKind || (options.nativeBuildResult?.executablePath ? 'native' : 'script-launcher');
+    if (
+      packageKind === 'native' &&
+      (!options.nativeBuildResult?.executablePath ||
+        !safeFS.existsSync(options.nativeBuildResult.executablePath))
+    ) {
+      throw new Error('Paket native membutuhkan executable hasil build yang benar-benar tersedia.');
+    }
 
     const exeExt = targetOs === 'windows' ? (packageKind === 'native' ? '.exe' : '.cmd') : '';
     const exeName = `${cleanApp}${exeExt}`;
