@@ -492,7 +492,8 @@ export class ArchiveBuilder {
       throw new Error(`Jalur absolut tidak diizinkan dalam arsip: '${entryName}'.`);
     }
     const parts = cleaned.split('/').filter((p) => p.length > 0);
-    if (parts.some((p) => p === '..')) {
+    const namaPerangkatWindows = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\\..*)?$/i;
+    if (parts.some((p) => p === '..' || p.includes(':') || namaPerangkatWindows.test(p))) {
       throw new Error(`Path traversal ('..') terdeteksi dan ditolak: '${entryName}'.`);
     }
     const absBase = safePath.resolve(baseDir);
@@ -519,7 +520,13 @@ export class ArchiveBuilder {
         !cleanName ||
         cleanName.startsWith('/') ||
         /^[A-Za-z]:/.test(cleanName) ||
-        segmen.some((bagian) => !bagian || bagian === '.' || bagian === '..')
+        segmen.some((bagian) =>
+          !bagian ||
+          bagian === '.' ||
+          bagian === '..' ||
+          bagian.includes(':') ||
+          /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\\..*)?$/i.test(bagian)
+        )
       ) {
         throw new Error(`Nama entri arsip tidak aman: '${e.name}'.`);
       }
