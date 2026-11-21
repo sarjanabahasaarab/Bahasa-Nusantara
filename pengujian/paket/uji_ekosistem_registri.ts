@@ -52,17 +52,18 @@ function setGrup(nama: string) {
 }
 
 function uji(nama: string, fn: () => void | Promise<void>) {
+  const grup = grupSaatIni;
   try {
     const hasil = fn();
     if (hasil && typeof (hasil as any).then === 'function') {
       tugasAsinkron.push(
         (hasil as Promise<void>)
           .then(() => {
-            daftarHasil.push({ grup: grupSaatIni, nama, lulus: true });
+            daftarHasil.push({ grup, nama, lulus: true });
             console.log(`  [✓ LULUS] ${nama}`);
           })
           .catch((err: any) => {
-            daftarHasil.push({ grup: grupSaatIni, nama, lulus: false, pesan: err?.message || String(err) });
+            daftarHasil.push({ grup, nama, lulus: false, pesan: err?.message || String(err) });
             console.error(`  [✗ GAGAL] ${nama}: ${err?.message || String(err)}`);
           })
       );
@@ -71,7 +72,7 @@ function uji(nama: string, fn: () => void | Promise<void>) {
       console.log(`  [✓ LULUS] ${nama}`);
     }
   } catch (error: any) {
-    daftarHasil.push({ grup: grupSaatIni, nama, lulus: false, pesan: error.message });
+    daftarHasil.push({ grup, nama, lulus: false, pesan: error.message });
     console.error(`  [✗ GAGAL] ${nama}: ${error.message}`);
   }
 }
