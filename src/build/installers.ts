@@ -29,8 +29,8 @@ export interface PowerShellDetectionResult {
 export class DesktopInstallerGenerator {
   public static generate(options: InstallerGenerationOptions): InstallerScriptBundle {
     const appNameAman = options.appName.replace(/[^A-Za-z0-9._-]/g, '_');
-    const versiAman = /^[vV]?\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$/.test(options.appVersion);
-    const binPath = options.binRelativePath.replace(/\\\\/g, '/');
+    const versiAman = /^[vV]?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(options.appVersion);
+    const binPath = options.binRelativePath.replace(/\\/g, '/');
     if (
       !appNameAman ||
       !versiAman ||
