@@ -508,16 +508,39 @@ export class ArchiveBuilder {
     entries: ArchiveEntryInput[],
     reproducible: boolean
   ): Array<{ name: string; bytes: Uint8Array; mode: number; mtime: Date }> {
+    const namaTerdaftar = new Set<string>();
     const mapped = entries.map((e) => {
-      const cleanName = e.name.replace(/\\/g, '/').replace(/^\/+/, '');
-      if (!cleanName || cleanName.split('/').includes('..')) {
+      if (!e || typeof e.name !== 'string' || e.name.includes('\\0')) {
+        throw new Error('Nama entri arsip tidak valid atau mengandung null byte.');
+      }
+      const cleanName = e.name.replace(/\\\\/g, '/');
+      const segmen = cleanName.split('/');
+      if (
+        !cleanName ||
+        cleanName.startsWith('/') ||
+        /^[A-Za-z]:/.test(cleanName) ||
+        segmen.some((bagian) => !bagian || bagian === '.' || bagian === '..')
+      ) {
         throw new Error(`Nama entri arsip tidak aman: '${e.name}'.`);
+      }
+      const namaKunci = cleanName.toLowerCase();
+      if (namaTerdaftar.has(namaKunci)) {
+        throw new Error(`Nama entri arsip duplikat atau bertabrakan lintas platform: '${cleanName}'.`);
+      }
+      namaTerdaftar.add(namaKunci);
+
+      if (typeof e.content !== 'string' && !(e.content instanceof Uint8Array)) {
+        throw new Error(`Konten entri arsip '${cleanName}' harus berupa teks atau byte.`);
+      }
+      const mode = e.mode ?? 0o644;
+      if (!Number.isSafeInteger(mode) || mode < 0 || mode > 0o777) {
+        throw new Error(`Mode izin entri arsip '${cleanName}' tidak valid.`);
       }
       const bytes = typeof e.content === 'string' ? Buffer.from(e.content, 'utf-8') : e.content;
       return {
         name: cleanName,
         bytes,
-        mode: e.mode ?? 0o644,
+        mode,
         mtime: reproducible ? REPRODUCIBLE_DATE : e.mtime ?? new Date(),
       };
     });
