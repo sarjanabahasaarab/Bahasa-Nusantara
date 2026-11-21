@@ -639,7 +639,8 @@ uji('RegistriJarakJauh menangani galat jaringan secara aman', async () => {
   try {
     await remote.dapatkanMetadata('paket-apapun');
   } catch (err: any) {
-    const pesan = String(err?.message || err).toLowerCase();\n    harusBenar(pesan.includes('jaringan') || pesan.includes('fetch') || pesan.includes('koneksi') || pesan.includes('waktu'));
+    const pesan = String(err?.message || err).toLowerCase();
+    harusBenar(pesan.includes('jaringan') || pesan.includes('fetch') || pesan.includes('koneksi') || pesan.includes('waktu'));
   }
 });
 
