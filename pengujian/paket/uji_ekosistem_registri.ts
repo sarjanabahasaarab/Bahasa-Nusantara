@@ -43,6 +43,7 @@ interface HasilUji {
 }
 
 const daftarHasil: HasilUji[] = [];
+const tugasAsinkron: Promise<void>[] = [];
 let grupSaatIni = 'Umum';
 
 function setGrup(nama: string) {
@@ -54,15 +55,17 @@ function uji(nama: string, fn: () => void | Promise<void>) {
   try {
     const hasil = fn();
     if (hasil && typeof (hasil as any).then === 'function') {
-      (hasil as Promise<void>)
-        .then(() => {
-          daftarHasil.push({ grup: grupSaatIni, nama, lulus: true });
-          console.log(`  [✓ LULUS] ${nama}`);
-        })
-        .catch((err: any) => {
-          daftarHasil.push({ grup: grupSaatIni, nama, lulus: false, pesan: err.message });
-          console.error(`  [✗ GAGAL] ${nama}: ${err.message}`);
-        });
+      tugasAsinkron.push(
+        (hasil as Promise<void>)
+          .then(() => {
+            daftarHasil.push({ grup: grupSaatIni, nama, lulus: true });
+            console.log(`  [✓ LULUS] ${nama}`);
+          })
+          .catch((err: any) => {
+            daftarHasil.push({ grup: grupSaatIni, nama, lulus: false, pesan: err?.message || String(err) });
+            console.error(`  [✗ GAGAL] ${nama}: ${err?.message || String(err)}`);
+          })
+      );
     } else {
       daftarHasil.push({ grup: grupSaatIni, nama, lulus: true });
       console.log(`  [✓ LULUS] ${nama}`);
@@ -783,7 +786,7 @@ lisensi = "MIT"
 // ============================================================================
 // RINGKASAN HASIL PENGUJIAN
 // ============================================================================
-setTimeout(() => {
+void Promise.all(tugasAsinkron).then(() => {
   const total = daftarHasil.length;
   const lulus = daftarHasil.filter(h => h.lulus).length;
   const gagal = total - lulus;
@@ -803,4 +806,4 @@ setTimeout(() => {
   } else {
     console.log('Seluruh pengujian Phase 22 LULUS DENGAN SEMPURNA! (100% Pass)');
   }
-}, 50);
+});
