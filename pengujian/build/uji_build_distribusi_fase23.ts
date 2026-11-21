@@ -314,7 +314,7 @@ uji('2.3 Verifikasi SHA256SUMS mendeteksi berkas terubah (tamper) dan berkas hil
 });
 
 uji('2.3b ArchiveBuilder menolak jalur absolut, null byte, dan entri duplikat', () => {
-  for (const nama of ['/etc/passwd', 'C:\\Windows\\system.ini', '../keluar.txt', 'folder/../keluar.txt', 'aman\\0sisipan']) {
+  for (const nama of ['/etc/passwd', 'C:\\Windows\\system.ini', '../keluar.txt', 'folder/../keluar.txt', 'aman\0sisipan']) {
     let ditolak = false;
     try {
       ArchiveBuilder.createZip([{ name: nama, content: 'payload' }]);
