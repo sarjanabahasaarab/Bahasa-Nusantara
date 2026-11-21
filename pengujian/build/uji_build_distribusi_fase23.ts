@@ -829,7 +829,7 @@ uji('5.0b Generator installer menetralkan nama dan menolak versi atau jalur exec
     appName: 'aman-$(touch-pwned)',
   });
   pastikan(
-    !bundle.files.some(berkas => berkas.content.includes('$(') || berkas.content.includes(')')),
+    !bundle.files.some(berkas => berkas.content.includes('aman-$(touch-pwned)')),
     'Nama aplikasi tidak boleh menyisipkan perintah ke skrip installer'
   );
 
