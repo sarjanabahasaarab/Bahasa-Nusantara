@@ -24,7 +24,7 @@ export class DesktopDistributionPackager {
   public static packageTarget(options: DesktopDistributionOptions): DesktopDistributionResult {
     const diagnostics: string[] = [];
     const cap = TargetMatrixManager.inspectTargetCapability(options.target);
-    if (!cap.canonicalTarget || cap.os === 'unknown' || cap.arch === 'unknown') {
+    if (!cap.canonicalTarget) {
       throw new Error(`Target distribusi tidak didukung atau tidak valid: '${options.target}'.`);
     }
     const canonical: CanonicalDesktopTarget = cap.canonicalTarget;
