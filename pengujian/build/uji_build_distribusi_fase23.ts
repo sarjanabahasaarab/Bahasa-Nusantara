@@ -1494,6 +1494,26 @@ uji('7.5 Ketidakcocokan SHA-256 artefak di disk terdeteksi (SHA256_TIDAK_COCOK)'
   }
 });
 
+uji('7.5b Gerbang menolak path traversal relatif pada metadata artefak evidence', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cert-path-'));
+  try {
+    const evDir = writeAll6Fixtures(tmp, (target, ev) => {
+      if (target === 'linux-x86_64') {
+        ev.binaryPath = '../../etc/passwd';
+        ev.executable.path = '../../etc/passwd';
+      }
+    });
+    const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
+    samaDengan(agg.overallStatus, 'FAILED');
+    pastikan(
+      agg.findings.some(f => f.code === 'SHA256_TIDAK_COCOK' && f.message.includes('keluar dari direktori')),
+      'Path relatif di luar bundle harus ditolak sebelum file dibaca'
+    );
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 uji('7.6 Salah arsitektur biner executable terdeteksi (ARSITEKTUR_BINER_SALAH)', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cert-76-'));
   try {
