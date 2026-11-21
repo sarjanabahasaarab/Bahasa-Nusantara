@@ -75,7 +75,7 @@ export class RegistriJarakJauh implements AntarmukaRegistri {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.waktuTungguMs);
     try {
-      return await fetch(endpoint, { ...init, signal: controller.signal });
+      return await this.kirimPermintaan(endpoint, { ...init, signal: controller.signal });
     } catch (err: any) {
       if (controller.signal.aborted) {
         throw new Error(`Permintaan registri melewati batas waktu ${this.waktuTungguMs}ms.`);
@@ -140,7 +140,7 @@ export class RegistriJarakJauh implements AntarmukaRegistri {
         throw new Error('Fungsi fetch HTTP tidak tersedia.');
       }
 
-      const res = await fetch(endpoint, {
+      const res = await this.kirimPermintaan(endpoint, {
         method: 'GET',
         headers: this.buatHeader(),
       });
@@ -178,7 +178,7 @@ export class RegistriJarakJauh implements AntarmukaRegistri {
         throw new Error('Fungsi fetch HTTP tidak tersedia.');
       }
 
-      const res = await fetch(endpoint, {
+      const res = await this.kirimPermintaan(endpoint, {
         method: 'POST',
         headers: {
           ...this.buatHeader(),
@@ -225,7 +225,7 @@ export class RegistriJarakJauh implements AntarmukaRegistri {
         throw new Error('Fungsi fetch HTTP tidak tersedia.');
       }
 
-      const res = await fetch(endpoint, {
+      const res = await this.kirimPermintaan(endpoint, {
         method: 'GET',
         headers: this.buatHeader(),
       });
