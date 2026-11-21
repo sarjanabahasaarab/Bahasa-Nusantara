@@ -420,7 +420,23 @@ uji('Registri lokal menolak nama arsip berbahaya dari metadata yang dimanipulasi
   metadata.daftarVersi['1.0.0'].namaBerkasArsip = '../../rahasia.txt';
   memori.tulisBerkas(jalurMetadata, JSON.stringify(metadata));
 
-  harusGalat(() => registri.unduh('paket-aman', '1.0.0'), 'tidak aman');
+  harusGalat(() => registri.unduh('paket-aman', '1.0.0'), 'rusak atau tidak valid');
+});
+
+uji('Registri lokal tidak menimpa rilis saat metadata yang ada rusak', () => {
+  const memori = new PembacaBerkasMemori();
+  const registri = new RegistriLokal({ pembacaBerkas: memori, direktoriBasis: '/registri' });
+  const manifest = buatManifestAwal('rilis-tetap', { versi: '1.0.0' });
+  const arsip = buatArsipPaket(manifest, { 'nusantara.toml': tulisManifest(manifest) });
+  registri.terbitkan(arsip);
+
+  memori.tulisBerkas('/registri/metadata/rilis-tetap.json', '{metadata-rusak');
+  harusGalat(() => registri.terbitkan(arsip), 'rusak atau tidak valid');
+  samaDengan(
+    memori.baca('/registri/packages/rilis-tetap/rilis-tetap-1.0.0.npk'),
+    arsip.kontenSerial,
+    'Arsip rilis yang sudah ada tidak boleh ditimpa saat metadata korup'
+  );
 });
 
 uji('Registri mendukung banyak versi berbeda secara urut SemVer', () => {
