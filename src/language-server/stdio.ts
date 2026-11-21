@@ -28,18 +28,42 @@ export function jalankanServerBahasaStdio(): void {
   });
 
   process.stdin.setEncoding('utf-8');
-  process.stdin.on('data', async (chunk: string) => {
-    const daftarPesan = pembacaBingkai.prosesPotongan(chunk);
-    for (const pesan of daftarPesan) {
-      const balasan = await server.tanganiPesan(pesan);
-      if (balasan) {
-        const bingkaiBalasan = formatPesanBingkaiLSP(balasan);
-        process.stdout.write(bingkaiBalasan);
-      }
-    }
+
+  // Pemrosesan diserialkan agar event 'data' yang datang berdekatan tidak
+  // menjalankan request LSP secara paralel dan mengubah urutan respons.
+  let antreanPemrosesan: Promise<void> = Promise.resolve();
+  process.stdin.on('data', (chunk: string) => {
+    antreanPemrosesan = antreanPemrosesan
+      .then(async () => {
+        let daftarPesan;
+        try {
+          daftarPesan = pembacaBingkai.prosesPotongan(chunk);
+        } catch (err: any) {
+          process.stderr.write(
+            '[NUSANTARA-LSP ERROR] Bingkai masuk ditolak: ' + (err?.message || String(err)) + '\n'
+          );
+          pembacaBingkai.bersihkan();
+          return;
+        }
+
+        for (const pesan of daftarPesan) {
+          const balasan = await server.tanganiPesan(pesan);
+          if (balasan) {
+            const bingkaiBalasan = formatPesanBingkaiLSP(balasan);
+            process.stdout.write(bingkaiBalasan);
+          }
+        }
+      })
+      .catch((err: any) => {
+        process.stderr.write(
+          '[NUSANTARA-LSP ERROR] Pemrosesan pesan gagal: ' + (err?.message || String(err)) + '\n'
+        );
+      });
   });
 
   process.stdin.on('end', () => {
-    process.stderr.write('[NUSANTARA-LSP INFO] Stdin terputus. Server keluar.\n');
+    void antreanPemrosesan.finally(() => {
+      process.stderr.write('[NUSANTARA-LSP INFO] Stdin terputus. Server keluar.\n');
+    });
   });
 }

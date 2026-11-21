@@ -18,6 +18,7 @@ import {
   bacaLock,
   tulisLock,
   hitungChecksum,
+  validasiJalurArsip,
   GrafDependensi,
   GalatKetergantunganMelingkar,
   GalatKonflikVersi,
@@ -193,6 +194,20 @@ uji('Mencegah eskalasi direktori pada pemeriksaan jalur paket lokal', () => {
     mengandung(err.message, 'path traversal berlebih');
   }
   samaDengan(tertangkap, true);
+});
+
+uji('Menolak jalur arsip absolut, traversal, dan null byte', () => {
+  validasiJalurArsip('src/utama.nusantara');
+  for (const jalur of ['../rahasia.txt', '/tmp/rahasia.txt', 'C:\\\\rahasia.txt', 'src/\0rahasia']) {
+    let tertangkap = false;
+    try {
+      validasiJalurArsip(jalur);
+    } catch (err: any) {
+      tertangkap = true;
+      samaDengan(err instanceof GalatKeamananPaket, true);
+    }
+    samaDengan(tertangkap, true, `Jalur berbahaya harus ditolak: ${jalur}`);
+  }
 });
 
 // -----------------------------------------------------------------------------
@@ -511,6 +526,43 @@ uji('nusantara pasang: memasang dependensi lokal dan membuat nusantara.lock', ()
 
   // Pastikan berkas paket tersalin ke .nusantara/paket/matematika
   samaDengan(fs.apakahAda('/proyek/.nusantara/paket/matematika/src/matematika.nusantara'), true);
+});
+
+uji('Instalasi terkunci menolak checksum salah tanpa menulis payload paket', () => {
+  const fs = new PembacaBerkasMemori();
+  fs.tulisBerkas(
+    '/paket/matematika/nusantara.toml',
+    `[nusantara]\nnama = "matematika"\nversi = "1.2.3"\ndeskripsi = "Matematika"\nlisensi = "MIT"\n\n[dependensi]\n`
+  );
+  fs.tulisBerkas('/paket/matematika/src/utama.nusantara', 'program Utama mulai selesai');
+  fs.tulisBerkas(
+    '/proyek/nusantara.toml',
+    `[nusantara]\nnama = "aplikasi"\nversi = "1.0.0"\ndeskripsi = "Aplikasi"\nlisensi = "MIT"\n\n[dependensi]\nmatematika = "^1.0.0"\n`
+  );
+  fs.tulisBerkas(
+    '/proyek/nusantara.lock',
+    `versi_format = 1\n\n[[paket]]\nnama = "matematika"\nversi = "1.2.3"\nsumber = "registri:matematika@1.2.3"\nintegritas = "sha256-checksum-salah"\n`
+  );
+
+  const pengelola = new PengelolaPaket({
+    pembacaBerkas: fs,
+    direktoriProyek: '/proyek',
+    registry: new LocalRegistry(fs, ['/paket']),
+  });
+
+  let tertangkap = false;
+  try {
+    pengelola.pasang({ terkunci: true });
+  } catch (err: any) {
+    tertangkap = true;
+    mengandung(err.message, 'Verifikasi integritas GAGAL');
+  }
+  samaDengan(tertangkap, true);
+  samaDengan(
+    fs.apakahAda('/proyek/.nusantara/paket/matematika/nusantara.toml'),
+    false,
+    'Paket dengan checksum salah tidak boleh meninggalkan berkas terpasang.'
+  );
 });
 
 uji('nusantara pasang --terkunci: memverifikasi lockfile', () => {

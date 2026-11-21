@@ -22,6 +22,10 @@ export function buatCuplikanSumber(
 ): PotonganKode | undefined {
   if (!kodeSumber) return undefined;
 
+  if (!Number.isSafeInteger(baris) || baris < 1 || !Number.isSafeInteger(kolom) || kolom < 1) {
+    return undefined;
+  }
+
   const barisList = kodeSumber.split(/\r?\n/);
   const indeksBaris = baris - 1;
 
@@ -29,15 +33,23 @@ export function buatCuplikanSumber(
     return undefined;
   }
 
-  const teksBaris = barisList[indeksBaris];
-  const kolomAwal = Math.max(1, kolom);
-  const panjangEfektif = Math.max(1, panjang);
+  const teksBarisAsli = barisList[indeksBaris];
+  const kolomAwal = Math.min(kolom, teksBarisAsli.length + 1);
+  const lebarDiminta =
+    Number.isFinite(panjang) && panjang > 0 ? Math.floor(panjang) : 1;
+  // Batasi rentang caret ke sisa baris untuk mencegah repeat() menerima
+  // angka tak terbatas atau alokasi string yang tidak masuk akal.
+  const panjangEfektif = Math.min(
+    Math.max(1, lebarDiminta),
+    Math.max(1, teksBarisAsli.length - kolomAwal + 1)
+  );
 
-  // Buat teks caret penunjuk
-  // Gantikan tab dengan spasi pada perhitungan posisi agar caret lurus sejajar
+  // Terminal menampilkan tab dengan lebar tab-stop yang berbeda-beda.
+  // Ekspansi menjadi empat spasi membuat teks dan caret selalu sejajar.
+  const teksBaris = teksBarisAsli.replace(/\t/g, '    ');
   let indentasi = '';
-  for (let i = 0; i < kolomAwal - 1 && i < teksBaris.length; i++) {
-    indentasi += teksBaris[i] === '\t' ? '    ' : ' ';
+  for (let i = 0; i < kolomAwal - 1 && i < teksBarisAsli.length; i++) {
+    indentasi += teksBarisAsli[i] === '\t' ? '    ' : ' ';
   }
 
   const tandaCaret = '^'.repeat(panjangEfektif);

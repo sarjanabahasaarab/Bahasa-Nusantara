@@ -14,6 +14,8 @@ import {
   NodeDeklarasiFungsi,
 } from '../../src/parser/ast';
 import { ASTPrinter } from '../../src/parser/astPrinter';
+import { Lexer } from '../../src/lexer/lexer';
+import { TokenStream } from '../../src/lexer/tokenStream';
 
 interface HasilUji {
   nama: string;
@@ -262,6 +264,35 @@ uji('Integrasi Program Kasir Toko', () => {
 
   samaDengan(parser.dapatkanDaftarGalat().length, 0);
   samaDengan(ast.tubuhUtama.length, 4);
+});
+
+// 11. REGRESI ALIRAN TOKEN KOSONG / TANPA EOF
+console.log('\\n--- Kelompok 11: Ketahanan TokenStream & Diagnostik ---');
+uji('Parser menerima daftar token kosong sebagai program kosong', () => {
+  const parser = new Parser([]);
+  const ast = parser.parse();
+  samaDengan(ast.jenis, JenisNodeAST.PROGRAM);
+  samaDengan(ast.tubuhUtama.length, 0);
+  samaDengan(parser.dapatkanDaftarGalat().length, 0);
+});
+
+uji('Parser menambahkan sentinel EOF untuk daftar token tanpa EOF', () => {
+  const token = new Lexer('program Uji\\nmulai\\nselesai', { sertakanBarisBaru: false }).tokenisasi().token.slice(0, -1);
+  const aliran = new TokenStream(token);
+  samaDengan(aliran.eof(), false, 'Aliran harus dimulai dari token pertama, bukan EOF');
+  samaDengan(aliran.toArray()[aliran.length - 1]?.jenis, 'EOF', 'TokenStream harus menambahkan sentinel EOF');
+  while (!aliran.eof()) aliran.next();
+  samaDengan(aliran.eof(), true, 'Aliran harus mencapai sentinel EOF');
+});
+
+uji('Satu kesalahan sintaks dicatat tepat satu kali', () => {
+  const parser = new Parser('fungsi (');
+  try {
+    parser.parseDeklarasiFungsi();
+  } catch {
+    // Jalur diagnostik publik mengembalikan galat melalui daftar parser.
+  }
+  samaDengan(parser.dapatkanDaftarGalat().length, 1, 'Satu objek galat harus dicatat tepat satu kali');
 });
 
 // REKAPITULASI HASIL

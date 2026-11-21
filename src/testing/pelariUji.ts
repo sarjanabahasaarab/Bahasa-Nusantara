@@ -49,6 +49,12 @@ export class PelariUji {
         ...opsi,
       };
     }
+
+    const timeoutMs = this.opsi.timeoutMs;
+    this.opsi.timeoutMs =
+      typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0
+        ? Math.min(60_000, Math.max(1, Math.floor(timeoutMs)))
+        : 5000;
   }
 
   /**
@@ -111,7 +117,7 @@ export class PelariUji {
       total: totalUji,
       totalUji,
       lulus: totalLulus,
-      gagal: totalGagal + totalGalat,
+      gagal: totalGagal,
       dilewati: totalDilewati,
       galat: totalGalat,
       durasiTotalMs,
@@ -186,7 +192,7 @@ export class PelariUji {
       total: totalUji,
       totalUji,
       lulus: totalLulus,
-      gagal: totalGagal + totalGalat,
+      gagal: totalGagal,
       dilewati: totalDilewati,
       galat: totalGalat,
       durasiTotalMs,
@@ -354,6 +360,7 @@ export class PelariUji {
       resolverModul: resolver,
       pemuatModul: pemuat,
       direktoriBasis: direktoriBerkas,
+      batasWaktuEksekusiMs: this.opsi.timeoutMs || 5000,
     });
 
     const namaUji = programAST.namaProgram || namaBerkas.replace(/\.(uji|test)\.nusantara$/, '');
@@ -559,16 +566,16 @@ export class PelariUji {
       resolverModul: resolver,
       pemuatModul: pemuat,
       direktoriBasis: direktoriBerkas,
+      batasWaktuEksekusiMs: this.opsi.timeoutMs || 5000,
     });
 
     const namaUji = programAST.namaProgram || namaBerkas.replace(/\.(uji|test)\.nusantara$/, '');
 
     try {
-      // Jalankan dengan batas waktu
-      await this.eksekusiDenganTimeout(
-        () => interpreter.interpretasikan(programAST),
-        this.opsi.timeoutMs || 5000
-      );
+      // Batas waktu diperiksa secara kooperatif di setiap pernyataan dan
+      // evaluasi ekspresi interpreter; timer Promise biasa tidak dapat
+      // menghentikan loop sinkron yang memblokir event loop.
+      interpreter.interpretasikan(programAST);
 
       const durasiMs = Math.round((performance.now() - awal) * 100) / 100;
       daftarHasil.push({
@@ -652,29 +659,4 @@ export class PelariUji {
     }
   }
 
-  /**
-   * Menjalankan aksi dengan proteksi batas waktu (timeout).
-   */
-  private async eksekusiDenganTimeout<T>(aksi: () => T, timeoutMs: number): Promise<T> {
-    return new Promise<T>((resolve, reject) => {
-      let selesai = false;
-      const timer = setTimeout(() => {
-        if (!selesai) {
-          selesai = true;
-          reject(new Error(`Batas waktu eksekusi pengujian terlampaui (${timeoutMs}ms).`));
-        }
-      }, timeoutMs);
-
-      try {
-        const res = aksi();
-        selesai = true;
-        clearTimeout(timer);
-        resolve(res);
-      } catch (err) {
-        selesai = true;
-        clearTimeout(timer);
-        reject(err);
-      }
-    });
-  }
 }

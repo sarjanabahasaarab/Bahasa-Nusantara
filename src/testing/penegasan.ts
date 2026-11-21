@@ -204,67 +204,116 @@ export class Penegasan {
   }
 
   public static bandingkanNilai(a: any, b: any): boolean {
+    return Penegasan.bandingkanNilaiInternal(a, b, new WeakMap<object, WeakSet<object>>());
+  }
+
+  private static bandingkanNilaiInternal(
+    a: any,
+    b: any,
+    pasangan: WeakMap<object, WeakSet<object>>
+  ): boolean {
     const valA = Penegasan.ekstrakNilaiPrimitif(a);
     const valB = Penegasan.ekstrakNilaiPrimitif(b);
 
-    if (valA === valB) return true;
+    if (Object.is(valA, valB)) return true;
     if (valA === null || valA === undefined || valB === null || valB === undefined) {
       return valA === valB;
     }
+    if (typeof valA !== typeof valB) return false;
+    if (typeof valA !== 'object') return false;
 
-    if (typeof valA !== typeof valB) {
-      return false;
+    const objekA = valA as object;
+    const objekB = valB as object;
+    let pasanganB = pasangan.get(objekA);
+    if (pasanganB?.has(objekB)) return true;
+    if (!pasanganB) {
+      pasanganB = new WeakSet<object>();
+      pasangan.set(objekA, pasanganB);
     }
+    pasanganB.add(objekB);
 
-    if (Array.isArray(valA) && Array.isArray(valB)) {
-      if (valA.length !== valB.length) return false;
+    if (Array.isArray(valA) || Array.isArray(valB)) {
+      if (!Array.isArray(valA) || !Array.isArray(valB) || valA.length !== valB.length) {
+        return false;
+      }
       for (let i = 0; i < valA.length; i++) {
-        if (!Penegasan.bandingkanNilai(valA[i], valB[i])) return false;
+        if (!Penegasan.bandingkanNilaiInternal(valA[i], valB[i], pasangan)) return false;
       }
       return true;
     }
 
-    if (typeof valA === 'object' && typeof valB === 'object') {
-      const keysA = Object.keys(valA).sort();
-      const keysB = Object.keys(valB).sort();
-      if (keysA.length !== keysB.length) return false;
-      for (let i = 0; i < keysA.length; i++) {
-        if (keysA[i] !== keysB[i]) return false;
-        if (!Penegasan.bandingkanNilai(valA[keysA[i]], valB[keysB[i]])) return false;
+    if (valA instanceof Date || valB instanceof Date) {
+      return valA instanceof Date && valB instanceof Date && valA.getTime() === valB.getTime();
+    }
+
+    if (valA instanceof Map || valB instanceof Map) {
+      if (!(valA instanceof Map) || !(valB instanceof Map) || valA.size !== valB.size) return false;
+      const entriB = Array.from(valB.entries());
+      for (const [kunciA, nilaiA] of valA.entries()) {
+        const pasanganEntri = entriB.find(([kunciB]) => Object.is(kunciA, kunciB));
+        if (!pasanganEntri || !Penegasan.bandingkanNilaiInternal(nilaiA, pasanganEntri[1], pasangan)) {
+          return false;
+        }
       }
       return true;
     }
 
-    return false;
+    if (valA instanceof Set || valB instanceof Set) {
+      if (!(valA instanceof Set) || !(valB instanceof Set) || valA.size !== valB.size) return false;
+      for (const nilai of valA) {
+        if (!valB.has(nilai)) return false;
+      }
+      return true;
+    }
+
+    const keysA = Object.keys(valA).sort();
+    const keysB = Object.keys(valB).sort();
+    if (keysA.length !== keysB.length) return false;
+    for (let i = 0; i < keysA.length; i++) {
+      if (keysA[i] !== keysB[i]) return false;
+      if (!Penegasan.bandingkanNilaiInternal(valA[keysA[i]], valB[keysB[i]], pasangan)) return false;
+    }
+    return true;
   }
 
   public static ekstrakNilaiPrimitif(v: any): any {
+    return Penegasan.ekstrakNilaiInternal(v, new WeakMap<object, any>());
+  }
+
+  private static ekstrakNilaiInternal(v: any, sudahDilihat: WeakMap<object, any>): any {
     if (v === null || v === undefined) return null;
-    if (typeof v === 'object' && v.jenis) {
-      const nr = v as NilaiRuntime;
-      switch (nr.jenis) {
-        case JenisNilaiRuntime.TEKS:
-        case JenisNilaiRuntime.BILANGAN:
-        case JenisNilaiRuntime.DESIMAL:
-        case JenisNilaiRuntime.LOGIKA:
-        case JenisNilaiRuntime.KARAKTER:
-          return nr.nilai;
-        case JenisNilaiRuntime.KOSONG:
-          return null;
-        case JenisNilaiRuntime.DAFTAR:
-          return nr.elemen.map(e => Penegasan.ekstrakNilaiPrimitif(e));
-        case JenisNilaiRuntime.PETA: {
-          const obj: Record<string, any> = {};
-          for (const [key, val] of nr.nilai.entries()) {
-            obj[key] = Penegasan.ekstrakNilaiPrimitif(val);
-          }
-          return obj;
+    if (typeof v !== 'object' || !v.jenis) return v;
+    if (sudahDilihat.has(v)) return sudahDilihat.get(v);
+
+    const nr = v as NilaiRuntime;
+    switch (nr.jenis) {
+      case JenisNilaiRuntime.TEKS:
+      case JenisNilaiRuntime.BILANGAN:
+      case JenisNilaiRuntime.DESIMAL:
+      case JenisNilaiRuntime.LOGIKA:
+      case JenisNilaiRuntime.KARAKTER:
+        return nr.nilai;
+      case JenisNilaiRuntime.KOSONG:
+        return null;
+      case JenisNilaiRuntime.DAFTAR: {
+        const daftar: any[] = [];
+        sudahDilihat.set(v, daftar);
+        for (const elemen of nr.elemen) {
+          daftar.push(Penegasan.ekstrakNilaiInternal(elemen, sudahDilihat));
         }
-        default:
-          return nr.jenis;
+        return daftar;
       }
+      case JenisNilaiRuntime.PETA: {
+        const obj: Record<string, any> = {};
+        sudahDilihat.set(v, obj);
+        for (const [key, val] of nr.nilai.entries()) {
+          obj[key] = Penegasan.ekstrakNilaiInternal(val, sudahDilihat);
+        }
+        return obj;
+      }
+      default:
+        return nr.jenis;
     }
-    return v;
   }
 
   public static formatNilaiRingkas(v: any): string {

@@ -21,7 +21,7 @@ Kode Sumber (.nusantara)
          │
          ▼
  ┌───────────────┐
- │    Parser     │  <-- (Phase 7: Direncanakan)
+ │    Parser     │  <-- (Phase 7: Diimplementasikan)
  └───────────────┘
          │
          ▼
@@ -34,7 +34,7 @@ Kode Sumber (.nusantara)
 
 1. **Pemindaian Karakter (*Scanning*):** Membaca teks sumber karakter demi karakter.
 2. **Pengenalan Pola (*Pattern Recognition*):**
-   - Mengidentifikasi 32 kata kunci resmi bahasa Indonesia.
+   - Mengidentifikasi kata kunci inti dan kata kunci lintas fase yang terdaftar pada kamus lexer.
    - Mengidentifikasi nama pengidentifikasi (*identifiers*).
    - Memindai literal (bilangan bulat, desimal pecahan, teks, karakter).
    - Menangani operator multi-karakter dengan prinsip kecocokan terpanjang (*longest match*), seperti `<=`, `>=`, `==`, `!=`.
@@ -45,7 +45,7 @@ Kode Sumber (.nusantara)
 
 ---
 
-## 3. Struktur Token & Posisi
+## 3. Unicode, Indeks, dan Posisi\n\nLexer membaca karakter berdasarkan Unicode code point (scalar value), sehingga karakter supplementary seperti emoji tidak terbelah menjadi dua unit UTF-16. `posisi.indeks` tetap merupakan offset UTF-16 agar sesuai dengan indeks string JavaScript, sedangkan `baris` dan `kolom` menghitung scalar yang dipindai. Literal `karakter` menerima tepat satu Unicode scalar value sesuai EBNF; literal kosong dan lebih dari satu scalar ditolak.\n\n---\n\n## 4. Struktur Token & Posisi
 
 Setiap token didefinisikan oleh antarmuka `Token`:
 
@@ -61,7 +61,7 @@ export interface Token {
 
 ---
 
-## 4. Aliran Token (*TokenStream*)
+## 5. Aliran Token (*TokenStream*)
 
 Untuk mempermudah pekerjaan **Parser pada Phase 7**, Lexer menyediakan kelas pembungkus `TokenStream` yang mendukung navigasi kursor token:
 
@@ -73,7 +73,7 @@ Untuk mempermudah pekerjaan **Parser pada Phase 7**, Lexer menyediakan kelas pem
 
 ---
 
-## 5. Antarmuka Pemrograman (API Lexer)
+## 6. Antarmuka Pemrograman (API Lexer)
 
 ### A. Tokenisasi Sekaligus (*Batch*)
 ```typescript
@@ -103,7 +103,7 @@ while (tok.jenis !== JenisToken.EOF) {
 
 ---
 
-## 6. Penanganan Galat Leksikal
+## 7. Penanganan Galat Leksikal
 
 Jika ditemukan kekeliruan leksikal pada kode masukan, Lexer tidak memicu penghentian paksa (*unhandled exception / panic*), melainkan mencatatnya ke dalam objek `GalatLexer`:
 
@@ -116,20 +116,20 @@ Jika ditemukan kekeliruan leksikal pada kode masukan, Lexer tidak memicu penghen
 
 ---
 
-## 7. Cara Menjalankan Pengujian Lexer
+## 8. Cara Menjalankan Pengujian Lexer
 
 Pengujian komprehensif unit test dan property test Lexer dapat dijalankan melalui skrip:
 
 ```bash
-node pengujian/lexer/uji_lexer.js
+npx tsx pengujian/lexer/uji_lexer.ts\nnpm run test:lexer-unicode
 ```
 
 ---
 
-## 8. Panduan Menambahkan Token Baru
+## 9. Panduan Menambahkan Token Baru
 
 Jika di masa depan terdapat proposal NIP yang mengesahkan token baru:
 1. Daftarkan jenis token baru pada enum `JenisToken` di `src/lexer/jenisToken.ts`.
 2. Jika merupakan kata kunci, tambahkan pemetaan kata ke `TABEL_KATA_KUNCI` di `src/lexer/keyword.ts`.
 3. Jika merupakan operator baru atau pemisah, tambahkan cabang pengenalan pada `bacaTokenBerikutnya()` di `src/lexer/lexer.ts`.
-4. Tambahkan unit test verifikasi pada `pengujian/lexer/uji_lexer.js`.
+4. Tambahkan unit test verifikasi pada `pengujian/lexer/uji_lexer.ts`.

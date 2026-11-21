@@ -24,25 +24,29 @@ import {
 import { PembacaBerkasMemori } from '../../src/modul';
 import { NusantaraCLI } from '../../src/paket/cli';
 import { KodeGalat } from '../../src/diagnostik/kode';
+import { JenisNilaiRuntime } from '../../src/interpreter/nilai';
 
 let totalUji = 0;
 let ujiBerhasil = 0;
 let ujiGagal = 0;
+const tugasUjiAsinkron: Promise<void>[] = [];
 
 function uji(nama: string, fn: () => void | Promise<void>): void {
   totalUji++;
   try {
     const res = fn();
     if (res instanceof Promise) {
-      res
-        .then(() => {
-          ujiBerhasil++;
-          console.log(`  ✓ ${nama}`);
-        })
-        .catch(err => {
-          ujiGagal++;
-          console.error(`  ✗ ${nama}: ${err.message || err}`);
-        });
+      tugasUjiAsinkron.push(
+        res
+          .then(() => {
+            ujiBerhasil++;
+            console.log(`  ✓ ${nama}`);
+          })
+          .catch(err => {
+            ujiGagal++;
+            console.error(`  ✗ ${nama}: ${err?.message || String(err)}`);
+          })
+      );
     } else {
       ujiBerhasil++;
       console.log(`  ✓ ${nama}`);
@@ -155,6 +159,23 @@ async function jalankanPengujianTestingFramework(): Promise<void> {
     tegaskan(gagal, 'pastikan_galat harus melempar galat saat fungsi tidak melempar eksepsi');
   });
 
+  uji('Penegasan membandingkan objek dan daftar siklik tanpa stack overflow', () => {
+    const objekA: any = { nilai: 1 };
+    const objekB: any = { nilai: 1 };
+    objekA.diri = objekA;
+    objekB.diri = objekB;
+    tegaskan(Penegasan.bandingkanNilai(objekA, objekB), 'Objek siklik dengan struktur sama harus setara');
+
+    const daftarA: any = { jenis: JenisNilaiRuntime.DAFTAR, elemen: [] };
+    const daftarB: any = { jenis: JenisNilaiRuntime.DAFTAR, elemen: [] };
+    daftarA.elemen.push(daftarA);
+    daftarB.elemen.push(daftarB);
+    tegaskan(
+      Penegasan.bandingkanNilai(daftarA, daftarB),
+      'Daftar runtime siklik harus dapat diekstrak dan dibandingkan'
+    );
+  });
+
   // --- KELOMPOK 2: ASSERTION DIAGNOSTICS & FORMATTING ---
   console.log('\n--- Kelompok 2: Assertion Diagnostics & Formatting ---');
 
@@ -205,6 +226,32 @@ async function jalankanPengujianTestingFramework(): Promise<void> {
     tegaskan(hasil.some(b => b.includes('matematika.uji.nusantara')), 'Harus menemukan *.uji.nusantara');
     tegaskan(hasil.some(b => b.includes('string_test.nusantara')), 'Harus menemukan *_test.nusantara');
     tegaskan(hasil.some(b => b.includes('compat.test.nusantara')), 'Harus menemukan *.test.nusantara');
+  });
+
+  uji('PenemuUji mengabaikan berkas uji di bawah symbolic link', () => {
+    class PembacaDenganTautan extends PembacaBerkasMemori {
+      public apakahSymbolicLink(jalur: string): boolean {
+        return jalur === '/proyek/tautan';
+      }
+    }
+    const memori = new PembacaDenganTautan({
+      '/proyek/tests/aman.uji.nusantara': 'pastikan_benar(benar)',
+      '/proyek/tautan/rahasia.uji.nusantara': 'pastikan_benar(benar)',
+    });
+    const hasil = new PenemuUji(memori).temukanBerkasUji('/proyek');
+    tegaskan(hasil.includes('tests/aman.uji.nusantara'), 'Berkas di dalam proyek harus ditemukan');
+    tegaskan(!hasil.some(j => j.includes('rahasia')), 'Berkas di bawah symbolic link harus diabaikan');
+  });
+
+  uji('PenemuUji mempertahankan path absolut untuk target proyek Node', () => {
+    const memori = new PembacaBerkasMemori({
+      '/tmp/proyek/tests/absolut.uji.nusantara': 'pastikan_benar(benar)',
+    });
+    const hasil = new PenemuUji(memori).temukanBerkasUji('/tmp/proyek');
+    tegaskan(
+      hasil.includes('/tmp/proyek/tests/absolut.uji.nusantara'),
+      'Path absolut tidak boleh diubah menjadi path relatif yang salah'
+    );
   });
 
   uji('3.2 PenemuUji mengabaikan direktori terlarang (node_modules, dist, .git)', () => {
@@ -269,6 +316,44 @@ async function jalankanPengujianTestingFramework(): Promise<void> {
     tegaskan(berkasHasil.daftarGalat[0].pesan.includes('Perhitungan keliru'), 'Pesan galat harus sesuai');
   });
 
+  uji('PelariUji memisahkan kegagalan assertion dari galat runtime dalam ringkasan', () => {
+    const memori = new PembacaBerkasMemori({
+      'tests/assertion.uji.nusantara': 'pastikan_sama(1, 2)',
+      'tests/runtime.uji.nusantara': 'tampilkan(nama_yang_tidak_ada)',
+    });
+    const ringkasan = new PelariUji({ pembaca: memori }).jalankanSinkron([
+      'tests/assertion.uji.nusantara',
+      'tests/runtime.uji.nusantara',
+    ]);
+    tegaskan(ringkasan.gagal === 1, 'Gagal hanya menghitung assertion yang gagal');
+    tegaskan(ringkasan.galat === 1, 'Galat runtime/type harus berada di kolom terpisah');
+    const json = JSON.parse(PelaporJSON.format(ringkasan));
+    tegaskan(json.gagal === 2, 'Pelapor JSON harus menjumlahkan gagal dan galat tepat satu kali');
+    tegaskan(json.galat === 1, 'Pelapor JSON tetap menampilkan jumlah galat terpisah');
+  });
+
+  uji('PelariUji menghentikan program uji tak berujung sesuai timeout kooperatif', async () => {
+    const memori = new PembacaBerkasMemori({
+      'tests/tak-berujung.uji.nusantara': `
+        program UjiTimeout
+        mulai
+          variabel hitung: bilangan = 0
+          selama benar lakukan
+            hitung = hitung + 1
+          akhir
+        selesai
+      `,
+    });
+    const runner = new PelariUji({ pembaca: memori, timeoutMs: 30 });
+    const ringkasan = await runner.jalankan('tests/tak-berujung.uji.nusantara');
+    tegaskan(ringkasan.gagal === 1, 'Timeout harus dihitung sebagai kegagalan uji');
+    tegaskan(ringkasan.galat === 0, 'Timeout bukan galat internal runner');
+    tegaskan(
+      ringkasan.berkas![0].daftarHasil[0].pesan?.includes('Batas waktu eksekusi'),
+      'Pesan timeout harus dilaporkan secara eksplisit'
+    );
+  });
+
   uji('4.3 PelariUji mengisolasi variabel antar berkas uji', () => {
     const memori = new PembacaBerkasMemori({
       'tests/satu.uji.nusantara': `
@@ -297,7 +382,8 @@ async function jalankanPengujianTestingFramework(): Promise<void> {
     const runner = new PelariUji({ pembaca: memori });
     const ringkasan = runner.jalankanSinkron(['tests/sintaks_rusak.uji.nusantara']);
 
-    tegaskan(ringkasan.gagal === 1, 'Harus mencatat sebagai berkas gagal');
+    tegaskan(ringkasan.galat === 1, 'Galat sintaks harus dicatat pada kolom galat, bukan assertion gagal');
+    tegaskan(ringkasan.status === 'GAGAL', 'Berkas dengan galat sintaks harus menggagalkan proses uji');
     tegaskan(ringkasan.berkas![0].daftarGalat.length > 0, 'Harus mencatat diagnostik sintaks');
   });
 
@@ -420,6 +506,14 @@ async function jalankanPengujianTestingFramework(): Promise<void> {
     tegaskan(hasil.pemeriksaan.some(p => p.nama.includes('Pustaka Standar')), 'Pemeriksaan Stdlib harus ada');
   });
 
+  uji('GerbangKualitas menerapkan ambang cakupan khusus yang dikonfigurasi', () => {
+    const gerbang = new GerbangKualitas({ ambangBatasCakupan: 99 });
+    const hasil = gerbang.jalankanSinkron();
+    const pemeriksaanCakupan = hasil.pemeriksaan.find(p => p.nama.includes('Ambang Batas Cakupan'));
+    tegaskan(pemeriksaanCakupan?.status === 'GAGAL', 'Cakupan aktual di bawah 99% harus menggagalkan pemeriksaan');
+    tegaskan(hasil.ambangBatasCakupan === 99, 'Ambang khusus harus tercatat dalam laporan');
+  });
+
   uji('8.2 NusantaraCLI menangani perintah nusantara versi dengan v0.21.0', () => {
     let luaran = '';
     const cli = new NusantaraCLI(new PembacaBerkasMemori(), {
@@ -474,6 +568,9 @@ async function jalankanPengujianTestingFramework(): Promise<void> {
     tegaskan(status === 0, `Quality gate harus exit 0, didapat: ${status}`);
     tegaskan(luaran.includes('GERBANG KUALITAS'), 'Harus memuat laporan gerbang kualitas');
   });
+
+  // Tunggu seluruh kasus asinkron sebelum menghitung status proses.
+  await Promise.all(tugasUjiAsinkron);
 
   console.log('\n=============================================================================');
   console.log(`TOTAL UJI: ${totalUji} | BERHASIL: ${ujiBerhasil} | GAGAL: ${ujiGagal}`);

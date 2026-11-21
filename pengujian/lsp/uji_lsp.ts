@@ -6,6 +6,9 @@
 import {
   ServerBahasaNUSANTARA,
   ManajerDokumen,
+  LayananDefinisi,
+  jalurBerkasKeUri,
+  uriKeJalurBerkas,
   PembacaBingkaiLSP,
   formatPesanBingkaiLSP,
   KodeGalatJSONRPC,
@@ -15,25 +18,29 @@ import {
 } from '../../src/language-server';
 import { PembacaBerkasMemori } from '../../src/modul';
 import { NusantaraCLI } from '../../src/paket/cli';
+import { Parser } from '../../src/parser/parser';
 
 let totalUji = 0;
 let ujiBerhasil = 0;
 let ujiGagal = 0;
+const tugasUjiAsinkron: Promise<void>[] = [];
 
 function uji(nama: string, fn: () => void | Promise<void>): void {
   totalUji++;
   try {
     const res = fn();
     if (res instanceof Promise) {
-      res
-        .then(() => {
-          ujiBerhasil++;
-          console.log(`  ✓ ${nama}`);
-        })
-        .catch(err => {
-          ujiGagal++;
-          console.error(`  ✗ ${nama}: ${err.message || err}`);
-        });
+      tugasUjiAsinkron.push(
+        res
+          .then(() => {
+            ujiBerhasil++;
+            console.log(`  ✓ ${nama}`);
+          })
+          .catch(err => {
+            ujiGagal++;
+            console.error(`  ✗ ${nama}: ${err?.message || String(err)}`);
+          })
+      );
     } else {
       ujiBerhasil++;
       console.log(`  ✓ ${nama}`);
@@ -77,10 +84,21 @@ async function jalankanPengujianLSP(): Promise<void> {
     uji('Server merespons initialize dengan kapabilitas lengkap', () => {
       tegaskan(resInit !== null, 'Respons inisialisasi tidak boleh null');
       tegaskan(resInit.result !== undefined, 'Hasil inisialisasi harus ada');
+      tegaskan(resInit.result.capabilities.textDocumentSync.change === 2, 'Sinkronisasi harus mengiklankan mode incremental');
       tegaskan(resInit.result.capabilities.hoverProvider === true, 'Hover provider harus aktif');
       tegaskan(resInit.result.capabilities.definitionProvider === true, 'Definition provider harus aktif');
       tegaskan(resInit.result.capabilities.completionProvider !== undefined, 'Completion provider harus ada');
       tegaskan(resInit.result.serverInfo.version === '0.20.0', 'Versi server harus v0.20.0');
+    });
+
+    const resInitUlang: any = await server.tanganiPesan({
+      jsonrpc: '2.0',
+      id: 3,
+      method: 'initialize',
+      params: { processId: null, rootUri: null, capabilities: {} },
+    });
+    uji('Server menolak initialize kedua kali dengan InvalidRequest', () => {
+      tegaskan(resInitUlang.error?.code === KodeGalatJSONRPC.InvalidRequest, 'Initialize ganda harus ditolak');
     });
 
     // 2. Notifikasi Initialized
@@ -104,6 +122,19 @@ async function jalankanPengujianLSP(): Promise<void> {
       tegaskan(resShutdown.result === null, 'Hasil shutdown harus null sesuai spesifikasi LSP');
     });
 
+    const resSetelahShutdown: any = await server.tanganiPesan({
+      jsonrpc: '2.0',
+      id: 4,
+      method: 'textDocument/completion',
+      params: { textDocument: { uri: 'file:///setelah-shutdown.nusantara' }, position: { line: 0, character: 0 } },
+    });
+    uji('Server menolak permintaan baru setelah shutdown', () => {
+      tegaskan(
+        resSetelahShutdown.error?.code === KodeGalatJSONRPC.InvalidRequest,
+        'Permintaan setelah shutdown harus ditolak'
+      );
+    });
+
     // 4. Notifikasi Exit
     await server.tanganiPesan({
       jsonrpc: '2.0',
@@ -121,6 +152,16 @@ async function jalankanPengujianLSP(): Promise<void> {
   {
     const manajer = new ManajerDokumen();
     const uri = 'file:///proyek/utama.nusantara';
+
+    uji('Konversi file URI meng-encode spasi, tanda pagar, dan tanda tanya dengan benar', () => {
+      const jalur = '/proyek/folder dengan #tag?/utama.nusantara';
+      const uriAman = jalurBerkasKeUri(jalur);
+      tegaskan(
+        uriAman === 'file:///proyek/folder%20dengan%20%23tag%3F/utama.nusantara',
+        'Karakter khusus harus di-encode sebagai segmen path URI'
+      );
+      tegaskan(uriKeJalurBerkas(uriAman) === jalur, 'Konversi URI harus dapat dibalik');
+    });
 
     // Buka Dokumen
     const dok = manajer.bukaDokumen(uri, 'nusantara', 1, 'program Demo\nmulai\n    tampilkan(1)\nselesai');
@@ -147,6 +188,30 @@ async function jalankanPengujianLSP(): Promise<void> {
       tegaskan(dokBaru !== null && dokBaru.version === 2, 'Versi harus naik menjadi 2');
       tegaskan(dokBaru?.konten.includes('"halo"') === true, 'Teks baru harus termuat');
       tegaskan(dokBaru?.astCache === undefined, 'Cache AST harus diinvaliasi');
+    });
+
+    const dokVersiSama = manajer.perbaruiDokumen(uri, 2, [{ text: 'konten versi duplikat' }]);
+    uji('Menolak pembaruan dengan versi yang sama (duplicate version guard)', () => {
+      tegaskan(dokVersiSama?.konten.includes('"halo"') === true, 'Isi tidak boleh berubah pada versi duplikat');
+    });
+
+    const uriMulti = 'file:///proyek/multi-edit.nusantara';
+    manajer.bukaDokumen(uriMulti, 'nusantara', 1, 'alpha\nbeta\n');
+    const hasilMulti = manajer.perbaruiDokumen(uriMulti, 2, [
+      { range: { start: { line: 0, character: 0 }, end: { line: 0, character: 5 } }, text: 'A' },
+      { range: { start: { line: 1, character: 0 }, end: { line: 1, character: 4 } }, text: 'B' },
+    ]);
+    uji('Menerapkan beberapa perubahan inkremental dengan offset dokumen terkini', () => {
+      tegaskan(hasilMulti?.konten === 'A\nB\n', 'Perubahan kedua harus memakai offset setelah perubahan pertama');
+    });
+
+    const uriCRLF = 'file:///proyek/crlf.nusantara';
+    const dokCRLF = manajer.bukaDokumen(uriCRLF, 'nusantara', 1, 'ab\r\ncd');
+    uji('Membatasi posisi karakter LSP ke akhir baris sebelum CRLF', () => {
+      tegaskan(
+        manajer.posisiKeIndeks(dokCRLF, { line: 0, character: 99 }) === 2,
+        'Karakter di luar baris tidak boleh menyeberang ke pemisah CRLF'
+      );
     });
 
     // Penolakan Update Stale (versi lebih rendah)
@@ -592,6 +657,33 @@ selesai`,
     });
   })();
 
+  uji('Go-to-definition menolak import yang keluar dari root workspace', () => {
+    const sumber = `program Utama
+gunakan "../../rahasia" sebagai rahasia
+mulai
+    rahasia.bocor()
+selesai`;
+    const fsMemori = new PembacaBerkasMemori({
+      '/proyek/utama.nusantara': sumber,
+      '/rahasia.nusantara': 'modul rahasia\nekspor fungsi bocor() : kosong\nmulai\nselesai',
+    });
+    const manajer = new ManajerDokumen();
+    const dokumen = manajer.bukaDokumen(
+      'file:///proyek/utama.nusantara',
+      'nusantara',
+      1,
+      sumber
+    );
+    const program = new Parser(sumber).parse();
+    const layanan = new LayananDefinisi(manajer, fsMemori, '/proyek');
+    const lokasi = layanan.dapatkanDefinisi(
+      dokumen,
+      { line: 3, character: 14 },
+      program
+    );
+    tegaskan(lokasi === null, 'Import di luar workspace tidak boleh dibuka oleh go-to-definition');
+  });
+
   // --- KELOMPOK 7: SIMBOL DOKUMEN & WORKSPACE (SYMBOLS) ---
   console.log('\n--- Kelompok 7: Simbol Dokumen & Workspace (Symbols) ---');
 
@@ -665,6 +757,40 @@ selesai`,
       const ada = resWsSym.result.some((s: any) => s.name === 'hitungTotal');
       tegaskan(ada, 'Harus menemukan simbol hitungTotal dari kueri hitung');
     });
+
+    const fsTautan = new (class extends PembacaBerkasMemori {
+      public jalurNyata(jalur: string): string {
+        return jalur === '/proyek/tautan' ? '/di-luar-proyek' : jalur;
+      }
+      public apakahSymbolicLink(jalur: string): boolean {
+        return jalur === '/proyek/tautan';
+      }
+    })({
+      '/proyek/src/aman.nusantara': 'program Aman\nmulai\nselesai',
+      '/proyek/tautan/rahasia.nusantara': 'program Rahasia\nmulai\nselesai',
+    });
+    const serverTautan = new ServerBahasaNUSANTARA({
+      pembacaBerkas: fsTautan,
+      janganKeluarOtomatis: true,
+    });
+    await serverTautan.tanganiPesan({
+      jsonrpc: '2.0',
+      id: 60,
+      method: 'initialize',
+      params: { processId: null, rootUri: 'file:///proyek', capabilities: {} },
+    });
+    const resRahasia: any = await serverTautan.tanganiPesan({
+      jsonrpc: '2.0',
+      id: 61,
+      method: 'workspace/symbol',
+      params: { query: 'Rahasia' },
+    });
+    uji('Pencarian simbol workspace tidak mengikuti symbolic link keluar proyek', () => {
+      tegaskan(
+        !resRahasia.result.some((simbol: any) => simbol.name === 'Rahasia'),
+        'Simbol dari symbolic link luar proyek tidak boleh muncul'
+      );
+    });
   })();
 
   // --- KELOMPOK 8: PROTOKOL FRAMING JSON-RPC & INTEGRASI CLI ---
@@ -690,7 +816,69 @@ selesai`,
       tegaskan((pesanEkstrak[0] as any).result === 'sukses', 'Result harus cocok');
     });
 
-    // 3. Error Recovery pada Permintaan Tidak Dikenal
+    uji('PembacaBingkaiLSP mempertahankan payload UTF-8 saat bingkai terpotong di surrogate pair', () => {
+      const pembacaUnicode = new PembacaBingkaiLSP();
+      const bingkaiUnicode = formatPesanBingkaiLSP({
+        jsonrpc: '2.0',
+        id: 101,
+        result: 'Bahasa – 日本語 🌏',
+      });
+      const indeksEmoji = bingkaiUnicode.indexOf('🌏') + 1;
+      const bagianAwal = pembacaUnicode.prosesPotongan(bingkaiUnicode.slice(0, indeksEmoji));
+      const bagianAkhir = pembacaUnicode.prosesPotongan(bingkaiUnicode.slice(indeksEmoji));
+      tegaskan(bagianAwal.length === 0, 'Potongan pertama belum boleh menghasilkan pesan');
+      tegaskan(bagianAkhir.length === 1, 'Potongan kedua harus menyelesaikan satu pesan');
+      tegaskan(
+        (bagianAkhir[0] as any).result === 'Bahasa – 日本語 🌏',
+        'Payload UTF-8 harus tetap utuh'
+      );
+    });
+
+    uji('PembacaBingkaiLSP menolak payload dan header yang melewati batas ukuran', () => {
+      let payloadDitolak = false;
+      try {
+        new PembacaBingkaiLSP(16, 128).prosesPotongan(
+          formatPesanBingkaiLSP({ jsonrpc: '2.0', id: 1, result: 'payload terlalu besar' })
+        );
+      } catch {
+        payloadDitolak = true;
+      }
+      tegaskan(payloadDitolak, 'Payload di atas batas byte harus ditolak');
+
+      let headerDitolak = false;
+      try {
+        new PembacaBingkaiLSP(1024, 32).prosesPotongan('X'.repeat(40));
+      } catch {
+        headerDitolak = true;
+      }
+      tegaskan(headerDitolak, 'Header yang terlalu panjang harus ditolak');
+    });
+
+    uji('PembacaBingkaiLSP menolak header Content-Length duplikat', () => {
+      let ditolak = false;
+      try {
+        new PembacaBingkaiLSP().prosesPotongan(
+          'Content-Length: 2\r\nContent-Length: 2\r\n\r\n{}'
+        );
+      } catch {
+        ditolak = true;
+      }
+      tegaskan(ditolak, 'Header Content-Length ganda harus ditolak');
+    });
+
+    // 3. ID nol tidak boleh berubah menjadi null pada respons permintaan tidak valid.
+    const serverIdNol = new ServerBahasaNUSANTARA();
+    const resIdNol: any = await serverIdNol.tanganiPesan({
+      jsonrpc: '1.0',
+      id: 0,
+      method: 'uji',
+    } as any);
+    uji('Mempertahankan request ID numerik nol pada respons InvalidRequest', () => {
+      tegaskan(resIdNol.id === 0, 'ID 0 harus dipertahankan, bukan diganti null');
+      tegaskan(resIdNol.error.code === KodeGalatJSONRPC.InvalidRequest, 'Versi JSON-RPC salah harus ditolak');
+    });
+
+    // 4. Error Recovery pada Permintaan Tidak Dikenal
     const server = new ServerBahasaNUSANTARA();
     const resTakDikenal: any = await server.tanganiPesan({
       jsonrpc: '2.0',
@@ -725,6 +913,9 @@ selesai`,
       tegaskan(outputCLI.includes('bahasa-server') || outputCLI.includes('lsp'), 'Harus mendokumentasikan bahasa-server / lsp');
     });
   }
+
+  // Pastikan semua callback uji asinkron selesai sebelum rekapitulasi.
+  await Promise.all(tugasUjiAsinkron);
 
   console.log('\n======================================================');
   console.log(`TOTAL UJI: ${totalUji} | BERHASIL: ${ujiBerhasil} | GAGAL: ${ujiGagal}`);

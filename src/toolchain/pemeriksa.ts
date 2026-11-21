@@ -201,44 +201,80 @@ export class PemeriksaProyek {
   }
 
   /**
-   * Menjelajahi struktur direktori secara rekursif untuk menemukan berkas .nusantara,
+   * Menjelajahi struktur direktori secara iteratif untuk menemukan berkas .nusantara,
    * dengan mengabaikan direktori tersembunyi/vendor (.git, .nusantara, node_modules, dist).
    */
   public temukanBerkasNusantara(direktori: string): string[] {
     const hasil: string[] = [];
 
-    // Jika ini adalah berkas langsung
+    // Berkas tunggal tetap didukung, tetapi symbolic link tidak diikuti.
+    if (this.pembaca.apakahSymbolicLink?.(direktori)) return hasil;
     if (this.pembaca.apakahAda(direktori) && direktori.endsWith('.nusantara')) {
       return [direktori];
     }
 
     if (typeof this.pembaca.daftarDirektori !== 'function') {
-      return [];
+      return hasil;
+    }
+    if (
+      typeof this.pembaca.apakahDirektori === 'function' &&
+      !this.pembaca.apakahDirektori(direktori)
+    ) {
+      return hasil;
     }
 
-    const daftarAbaikan = new Set(['.git', '.nusantara', 'node_modules', 'dist', 'build', '.aistudio']);
+    const daftarAbaikan = new Set([
+      '.git',
+      '.nusantara',
+      'node_modules',
+      'dist',
+      'build',
+      '.aistudio',
+    ]);
+    const tumpukanDirektori = [direktori];
+    const direktoriDikunjungi = new Set<string>();
 
-    const jelajahi = (dir: string): void => {
+    // Iteratif agar direktori bertingkat tidak menghabiskan call stack.
+    // Kunci realpath mencegah kunjungan berulang ke lokasi fisik yang sama.
+    while (tumpukanDirektori.length > 0) {
+      const dir = tumpukanDirektori.pop()!;
+      let kunciDirektori: string;
+      try {
+        kunciDirektori = this.pembaca.jalurNyata
+          ? this.pembaca.jalurNyata(dir)
+          : this.pembaca.normalisasiJalur(this.pembaca.jalurAbsolut(dir));
+      } catch {
+        continue;
+      }
+
+      if (direktoriDikunjungi.has(kunciDirektori)) continue;
+      direktoriDikunjungi.add(kunciDirektori);
+
       let entri: string[] = [];
       try {
         entri = this.pembaca.daftarDirektori!(dir);
       } catch {
-        return;
+        continue;
       }
 
       for (const item of entri) {
         if (daftarAbaikan.has(item)) continue;
         const jalurLengkap = this.pembaca.gabungJalur(dir, item);
 
-        if (typeof this.pembaca.apakahDirektori === 'function' && this.pembaca.apakahDirektori(jalurLengkap)) {
-          jelajahi(jalurLengkap);
+        // Jangan pernah mengikuti symlink file maupun direktori.
+        if (this.pembaca.apakahSymbolicLink?.(jalurLengkap)) continue;
+
+        if (
+          typeof this.pembaca.apakahDirektori === 'function' &&
+          this.pembaca.apakahDirektori(jalurLengkap)
+        ) {
+          tumpukanDirektori.push(jalurLengkap);
         } else if (item.endsWith('.nusantara')) {
           hasil.push(jalurLengkap);
         }
       }
-    };
+    }
 
-    jelajahi(direktori);
-    return hasil;
+    return hasil.sort((a, b) => a.localeCompare(b));
   }
 }

@@ -23,6 +23,7 @@ import {
   ekstrakArsipPaket,
   ArsipPaketData,
   apakahHarusDiabaikan,
+  validasiJalurArsip,
 } from './arsip';
 import { ValidatorPaket, LaporanValidasiPaket } from './validasi';
 import {
@@ -377,25 +378,37 @@ export class PengelolaPaket {
         dependensi: subDependensi,
       });
 
-      // Simpan/salin berkas ke .nusantara/paket/<namaDep>/
-      const targetDirPaket = this.pembaca.gabungJalur(dirInstalasiPaket, namaDep);
+      // Validasi seluruh jalur dan isi sebelum menyentuh direktori instalasi.
+      // Registry/cache adalah sumber data eksternal: jangan biarkan nama berkas
+      // seperti ../../berkas-rahasia keluar dari direktori paket.
       let ringkasanKonten = '';
       for (const [namaFile, isi] of Object.entries(berkasPaket)) {
-        this.tulisBerkasAman(this.pembaca.gabungJalur(targetDirPaket, namaFile), isi);
+        validasiJalurArsip(namaFile);
+        if (typeof isi !== 'string') {
+          throw new Error(`Isi berkas '${namaFile}' pada paket '${namaDep}' bukan teks yang valid.`);
+        }
         ringkasanKonten += isi;
       }
 
       const hash = hitungChecksum(ringkasanKonten || `${namaDep}@${versiTerpilih}`);
 
-      // Verifikasi integritas dengan lockfile jika dalam mode terkunci
+      // Verifikasi lockfile SEBELUM menulis berkas agar paket dengan checksum
+      // yang tidak cocok tidak meninggalkan payload parsial/berbahaya di disk.
       if (opsi?.terkunci && entriKunciSebelumnya && entriKunciSebelumnya.integritas) {
         if (entriKunciSebelumnya.integritas !== hash) {
           throw new Error(
             `Verifikasi integritas GAGAL untuk paket '${namaDep}@${versiTerpilih}'.\n` +
             `Hash diharapkan (nusantara.lock): ${entriKunciSebelumnya.integritas}\n` +
-            `Hash aktual terpasang           : ${hash}`
+            `Hash aktual                    : ${hash}`
           );
         }
+      }
+
+      // Baru tulis setelah semua jalur dan checksum paket lolos validasi.
+      const targetDirPaket = this.pembaca.gabungJalur(dirInstalasiPaket, namaDep);
+      for (const [namaFile, isi] of Object.entries(berkasPaket)) {
+        const jalurTujuan = this.pembaca.gabungJalur(targetDirPaket, namaFile);
+        this.tulisBerkasAman(jalurTujuan, isi);
       }
 
       entriKunciHasil.push({

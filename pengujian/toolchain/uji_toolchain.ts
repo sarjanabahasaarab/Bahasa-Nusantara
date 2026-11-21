@@ -14,6 +14,8 @@ import { NusantaraCLI } from '../../src/paket/cli';
 let totalUji = 0;
 let ujiBerhasil = 0;
 let ujiGagal = 0;
+let totalKasusUji = 0;
+let kasusUjiGagal = 0;
 
 function pastikan(kondisi: boolean, pesan: string): void {
   totalUji++;
@@ -40,10 +42,14 @@ function pastikanSama<T>(aktual: T, ekspektasi: T, pesan: string): void {
 }
 
 function uji(nama: string, fn: () => void): void {
+  totalKasusUji++;
   try {
     fn();
+    console.log(`  ✓ KASUS: ${nama}`);
   } catch (err: any) {
-    // Error sudah dicatat di pastikan/pastikanSama
+    kasusUjiGagal++;
+    console.error(`  ✗ KASUS GAGAL: ${nama}`);
+    console.error(`    Alasan: ${err?.message || String(err)}`);
   }
 }
 
@@ -56,6 +62,29 @@ console.log('===================================================================
 // KELOMPOK 1: FORMATTER DASAR & REKONSTRUKSI AST
 // -----------------------------------------------------------------------------
 console.log('--- Kelompok 1: Formatter Dasar & Rekonstruksi AST ---');
+
+uji('Mengamankan nilai konfigurasi formatter dari indentasi ekstrem dan panjang baris berlebihan', () => {
+  const konfigurasi = muatKonfigurasiFormatDariTOML(
+    `[format]\nindentasi = 0.5\npanjang_baris = 999999`
+  );
+  pastikanSama(konfigurasi.indentasi, 1, 'Indentasi pecahan positif dibulatkan ke batas minimum 1');
+  pastikanSama(konfigurasi.panjangBaris, 240, 'Panjang baris dibatasi maksimum 240');
+
+  const kode = `program Aman\nmulai\nvariabel nilai: bilangan = 10\nselesai`;
+  const hasil = new FormatterNUSANTARA(kode, { indentasi: -100 }).format();
+  pastikan(hasil.includes('    variabel nilai: bilangan = 10'), 'Konfigurasi indentasi negatif memakai nilai aman');
+});
+
+
+uji('Kata program dan mulai di komentar atau string tidak memicu pembungkus program palsu', () => {
+  const masukan = `// program Komentar mulai
+tampilkan("program Teks mulai")`;
+  const hasil = formatKode(masukan);
+  pastikan(hasil.includes('// program Komentar mulai'), 'Komentar yang memuat kata kunci tetap dipertahankan');
+  pastikan(hasil.includes('tampilkan("program Teks mulai")'), 'Literal teks tetap utuh');
+  pastikan(!hasil.includes('program Komentar\nmulai'), 'Komentar tidak dianggap sebagai deklarasi program');
+  pastikan(!hasil.includes('program Teks\nmulai'), 'Literal teks tidak dianggap sebagai deklarasi program');
+});
 
 uji('Memformat deklarasi variabel, tetap, dan operator spacing', () => {
   const masukan = `variabel  x:bilangan=10+20*3
@@ -341,6 +370,32 @@ selesai`,
   pastikan(hasilProyek.totalBerkasDiperiksa >= 1, 'Menemukan berkas .nusantara');
 });
 
+uji('Pemindaian proyek mengabaikan symbolic link dan mengurutkan hasil secara deterministik', () => {
+  class PembacaDenganTautan extends PembacaBerkasMemori {
+    public jalurNyata(jalur: string): string {
+      return jalur === '/proyek/tautan' ? '/proyek' : jalur;
+    }
+
+    public apakahSymbolicLink(jalur: string): boolean {
+      return jalur === '/proyek/tautan';
+    }
+  }
+
+  const fs = new PembacaDenganTautan({
+    '/proyek/z.nusantara': 'program Z mulai selesai',
+    '/proyek/a.nusantara': 'program A mulai selesai',
+    '/proyek/src/index.nusantara': 'program Index mulai selesai',
+    '/proyek/tautan/rahasia.nusantara': 'program Rahasia mulai selesai',
+  });
+  const pemeriksa = new PemeriksaProyek(fs);
+  const hasil = pemeriksa.temukanBerkasNusantara('/proyek');
+
+  pastikanSama(hasil.length, 3, 'Berkas di dalam symbolic link tidak boleh ikut dipindai');
+  pastikanSama(hasil[0], '/proyek/a.nusantara', 'Hasil pemindaian harus diurutkan stabil');
+  pastikanSama(hasil[1], '/proyek/src/index.nusantara', 'Berkas dalam direktori proyek tetap ditemukan');
+  pastikanSama(hasil[2], '/proyek/z.nusantara', 'Berkas terakhir tetap ditemukan');
+});
+
 uji('Mendeteksi manifest rusak pada pemeriksaan proyek', () => {
   const fs = new PembacaBerkasMemori({
     '/proyek/nusantara.toml': `[nusantara]\nversi = "bukan_semver"`, // tanpa nama
@@ -435,10 +490,11 @@ uji('CLI nusantara versi menampilkan target v0.19.0', () => {
 // REKAPITULASI HASIL PENGUJIAN
 // -----------------------------------------------------------------------------
 console.log('\n======================================================');
-console.log(`TOTAL UJI: ${totalUji} | BERHASIL: ${ujiBerhasil} | GAGAL: ${ujiGagal}`);
+console.log(`TOTAL KASUS: ${totalKasusUji} | KASUS GAGAL: ${kasusUjiGagal}`);
+console.log(`TOTAL ASSERTION: ${totalUji} | BERHASIL: ${ujiBerhasil} | GAGAL: ${ujiGagal}`);
 console.log('======================================================');
 
-if (ujiGagal > 0) {
+if (ujiGagal > 0 || kasusUjiGagal > 0) {
   console.error('\n[GAGAL] Sebagian pengujian Phase 19 belum memenuhi syarat.');
   process.exit(1);
 } else {

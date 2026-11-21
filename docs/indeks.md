@@ -7,7 +7,7 @@ Dokumen ini memuat daftar tautan seluruh topik dokumentasi resmi bahasa pemrogra
 ### Bagian 1: Pengenalan
 - [Apa itu NUSANTARA?](pengenalan/apa-itu-nusantara.md) — Definisi, identitas, dan visi kedaulatan komputasi.
 - [Tujuan & Filosofi](pengenalan/tujuan-dan-filosofi.md) — 4 pilar utama desain bahasa: keterbacaan, keterbukaan, konsistensi, dan evolusi bertahap.
-- [Status Pengembangan](pengenalan/status-pengembangan.md) — Status Phase 5, batas implementasi, dan target Phase 6 (Lexer).
+- [Status Pengembangan](pengenalan/status-pengembangan.md) — Status pengembangan dan batas verifikasi implementasi Phase 1–50.
 - [Tanya Jawab (FAQ)](pengenalan/tanya-jawab.md) — Jawaban atas pertanyaan umum seputar instalasi, compiler, dan kontribusi.
 
 ---
@@ -39,7 +39,7 @@ Dokumen ini memuat daftar tautan seluruh topik dokumentasi resmi bahasa pemrogra
 
 ### Bagian 4: Dokumentasi Pengembang
 - [Struktur Proyek](pengembang/struktur-proyek.md) — Penjelasan tata letak direktori repositori.
-- [Alur Pengembangan](pengembang/alur-pengembangan.md) — Cara membaca roadmap 36 fase dan tonggak rekayasa.
+- [Alur Pengembangan](pengembang/alur-pengembangan.md) — Cara membaca roadmap 50 fase dan tonggak rekayasa.
 - [Arsitektur Kompilator](pengembang/type-system.md) — Spesifikasi sistem tipe statis dan semantik.
 - [Arsitektur Fungsi](pengembang/fungsi.md) — Desain internal sistem fungsi dan pemanggilan (Phase 13).
 - [Arsitektur Struktur Data](pengembang/struktur-data.md) — Implementasi internal parser, AST, representasi runtime, dan pengujian koleksi (Phase 14).

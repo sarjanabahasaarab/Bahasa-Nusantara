@@ -18,7 +18,17 @@ export class TokenStream {
     if (token instanceof Lexer) {
       this.daftarToken = token.tokenisasi().token;
     } else {
-      this.daftarToken = token;
+      // Selalu pertahankan sentinel EOF agar aliran kosong/tanpa EOF tidak macet.
+      const tokenMasukan = [...token];
+      const indeksEOF = tokenMasukan.findIndex(t => t.jenis === JenisToken.EOF);
+      if (indeksEOF >= 0) {
+        // Token setelah EOF tidak termasuk aliran yang dapat dikonsumsi parser.
+        this.daftarToken = tokenMasukan.slice(0, indeksEOF + 1);
+      } else {
+        const tokenEOF = new Lexer('').tokenisasi().token[0];
+        tokenMasukan.push(tokenEOF);
+        this.daftarToken = tokenMasukan;
+      }
     }
   }
 

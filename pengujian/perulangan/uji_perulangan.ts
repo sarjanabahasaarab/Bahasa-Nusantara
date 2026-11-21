@@ -471,7 +471,44 @@ uji('Mencegah loop tak terbatas dengan melempar galat batas iterasi terlampaui',
   samaDengan(terkenaBatas, true, 'Harus mendeteksi loop tak terbatas dan melempar BATAS_ITERASI_TERLAMPAUI');
 });
 
-// 11. REKAPITULASI HASIL
+// 11. REGRESI BATAS ITERASI DAN VALIDASI RENTANG INTEGER
+console.log('\\n--- Kelompok 11: Regresi Batas Iterasi & Rentang Bilangan Bulat ---');
+uji('Perulangan selama tepat pada batas iterasi dapat selesai normal', () => {
+  const sumber = `
+  program BatasIterasiTepat
+  mulai
+      hitung : bilangan = 0
+      selama hitung < 50 lakukan
+          hitung = hitung + 1
+          tampilkan(hitung)
+      akhir
+  selesai`;
+
+  const output = jalankanProgram(sumber, 50);
+  samaDengan(output.length, 50, '50 iterasi sah harus diizinkan pada batas 50');
+  samaDengan(output[49], '50');
+});
+
+uji('Menolak rentang perulangan untuk dengan batas desimal', () => {
+  const sumber = `
+  program RentangDesimal
+  mulai
+      untuk i dari 1.5 sampai 3 lakukan
+          tampilkan(i)
+      akhir
+  selesai`;
+
+  let terkenaGalat = false;
+  try {
+    jalankanProgram(sumber);
+  } catch (e: any) {
+    terkenaGalat = true;
+    samaDengan(e.jenis, JenisGalatRuntime.OPERASI_TIPE_TIDAK_VALID);
+  }
+  samaDengan(terkenaGalat, true, 'Batas rentang untuk harus berupa bilangan bulat aman');
+});
+
+// 12. REKAPITULASI HASIL
 console.log('\n-----------------------------------------------------------------------------');
 const jumlahLulus = daftarHasil.filter(h => h.lulus).length;
 const jumlahGagal = daftarHasil.filter(h => !h.lulus).length;

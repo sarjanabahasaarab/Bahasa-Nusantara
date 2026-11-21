@@ -6,6 +6,8 @@ Status: **[DITETAPKAN] untuk taksonomi nama; [RANCANGAN] untuk representasi inte
 
 ---
 
+> **Catatan lintas fase:** Status pada tabel ini adalah status spesifikasi awal Phase 2, bukan klaim bahwa tipe yang berstatus rancangan belum pernah diimplementasikan pada fase lebih lanjut. Status implementasi terkini mengikuti `ROADMAP.md` dan pengujian fase terkait.
+
 ## 1. Taksonomi Tipe Data Awal
 
 | Tipe Data | Kegunaan Komputasi | Contoh Nilai Literal | Status |
@@ -14,11 +16,11 @@ Status: **[DITETAPKAN] untuk taksonomi nama; [RANCANGAN] untuk representasi inte
 | `bilangan` | Menyimpan bilangan bulat (*integer*) | `0`, `42`, `-100`, `1000` | **[DITETAPKAN]** |
 | `desimal` | Menyimpan bilangan pecahan / titik mengambang (*floating point*) | `3.14`, `170.5`, `-0.01` | **[DITETAPKAN]** |
 | `logika` | Menyimpan nilai kebenaran boolean | `benar`, `salah` | **[DITETAPKAN]** |
-| `karakter` | Menyimpan satu satuan karakter UTF-8 tunggal | `'A'`, `'z'`, `'🇮🇩'` | **[DITETAPKAN]** |
+| `karakter` | Menyimpan satu nilai skalar Unicode (bukan satu grafem yang dapat terdiri dari beberapa skalar) | `'A'`, `'z'`, `'é'` | **[DITETAPKAN]** |
 | `daftar` | Menyimpan kumpulan nilai berurutan terindeks (*array/list*) | `[1, 2, 3]`, `["A", "B"]` | **[RANCANGAN]** |
 | `peta` | Menyimpan pasangan kunci dan nilai (*dictionary/hash map*) | `{"kunci": "nilai"}` | **[RANCANGAN]** |
-| `tanggal` | Menyimpan komponen tanggal kalender (Tahun-Bulan-Hari) | `2026-10-02` | **[RANCANGAN]** |
-| `waktu` | Menyimpan pencacah jam, menit, detik, dan milidetik | `08:30:00` | **[RANCANGAN]** |
+| `tanggal` | Rancangan tipe tanggal kalender (Tahun-Bulan-Hari); bentuk literal khusus belum ditetapkan | `"2026-10-02"` sebagai teks contoh | **[RANCANGAN]** |
+| `waktu` | Rancangan tipe waktu jam-menit-detik; bentuk literal khusus belum ditetapkan | `"08:30:00"` sebagai teks contoh | **[RANCANGAN]** |
 | `kosong` | Menyimpan representasi ketiadaan nilai (*null/void*) | `kosong` | **[DITETAPKAN]** |
 
 ---

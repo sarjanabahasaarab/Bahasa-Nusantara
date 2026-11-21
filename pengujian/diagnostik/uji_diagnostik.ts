@@ -135,6 +135,21 @@ uji('Menangani batas tepi cuplikan kode sumber dengan aman', () => {
   pastikanSama(diLuarBatas, undefined, 'Baris di luar batas harus mengembalikan undefined');
 });
 
+uji('Cuplikan memperluas tab secara konsisten dan menjaga posisi caret', () => {
+  const potongan = buatCuplikanSumber('a\tb', 1, 3, 1);
+  pastikan(potongan !== undefined);
+  pastikanSama(potongan!.teksBaris, 'a    b');
+  pastikanSama(potongan!.teksCaret, '     ^');
+});
+
+uji('Cuplikan membatasi panjang caret dan menolak posisi yang tidak valid', () => {
+  const panjangEkstrem = buatCuplikanSumber('x', 1, 1, Number.MAX_SAFE_INTEGER);
+  pastikan(panjangEkstrem !== undefined);
+  pastikanSama(panjangEkstrem!.teksCaret, '^');
+  pastikanSama(buatCuplikanSumber('x', 1, Number.NaN, 1), undefined);
+  pastikanSama(buatCuplikanSumber('x', 1, 1.5, 1), undefined);
+});
+
 // -----------------------------------------------------------------------------
 // KELOMPOK 3: ALGORITMA LEVENSHTEIN & SARAN SALTIK (TYPO)
 // -----------------------------------------------------------------------------

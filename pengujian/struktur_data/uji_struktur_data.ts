@@ -449,6 +449,23 @@ uji('Kesetaraan peta (kunci dan nilai identik)', () => {
   samaDengan(baris[2], 'salah');
 });
 
+uji('Kesetaraan dan pencetakan peta yang memiliki referensi siklik', () => {
+  const sumber = `
+  program UjiPetaSiklik
+  mulai
+      a : peta = {}
+      b : peta = {}
+      a["diri"] = a
+      b["diri"] = b
+      tampilkan(a == b)
+      tampilkan(a)
+  selesai
+  `;
+  const baris = jalankanProgram(sumber);
+  samaDengan(baris[0], 'benar', 'Dua peta siklik dengan struktur setara harus dianggap sama');
+  samaDengan(baris[1], '{"diri": <siklus>}', 'Pencetakan harus menandai referensi siklik tanpa rekursi tak berujung');
+});
+
 // 8. PENGGUNAAN STRUKTUR DATA DALAM FUNGSI
 console.log('\n--- Kelompok 8: Struktur Data dalam Fungsi & Nilai Kembali ---');
 

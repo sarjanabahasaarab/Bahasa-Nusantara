@@ -29,7 +29,4 @@ touch halo.nusantara
 
 ## 3. Status Alat Eksekusi & Kompiler
 
-> ⚠️ **Informasi Kesiapan Alat Kompilasi:**
-> Saat ini, paket biner kompilator (*compiler executable*) untuk menjalankan berkas `.nusantara` **belum dirilis**.
->
-> Pembangunan modul kompilasi dimulai dari **Phase 6 (Lexer)** dan **Phase 7 (Parser)**. Petunjuk instalasi paket biner resmi, penambahan ke PATH sistem, serta perintah eksekusi terminal (seperti `nusantara jalankan halo.nusantara`) akan diperbarui secara lengkap setelah perangkat lunak kompilator resmi tersedia.
+> **Status Distribusi:** Repositori telah memiliki implementasi lexer, parser, interpreter, dan toolchain pada fase berikutnya. Keberadaan kode sumber harus dibedakan dari ketersediaan paket biner resmi yang siap dipasang. Ikuti petunjuk build dan CLI di dokumentasi pengembang serta status rilis pada [ROADMAP](../../ROADMAP.md). Jangan menganggap perintah CLI tersedia di PATH sebelum paket dipasang.

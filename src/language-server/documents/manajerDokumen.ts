@@ -28,29 +28,50 @@ export interface DokumenTeks {
  * Mengubah URI (file://...) menjadi jalur sistem berkas absolut.
  */
 export function uriKeJalurBerkas(uri: string): string {
-  if (uri.startsWith('file://')) {
-    let jalur = decodeURIComponent(uri.replace(/^file:\/\//, ''));
-    // Windows file URI: file:///C:/path -> C:/path
+  if (!uri.startsWith('file://')) return uri;
+
+  try {
+    const parsed = new URL(uri);
+    let jalur = decodeURIComponent(parsed.pathname);
+
+    // URI UNC memakai hostname sebagai server: file://server/share/path.
+    if (parsed.hostname && parsed.hostname !== 'localhost') {
+      jalur = `//${parsed.hostname}${jalur}`;
+    }
+
+    // Windows file URI: file:///C:/path -> C:/path.
     if (/^\/[a-zA-Z]:/.test(jalur)) {
       jalur = jalur.substring(1);
     }
     return jalur;
+  } catch {
+    // URI cacat tidak boleh menjatuhkan Language Server.
+    return uri;
   }
-  return uri;
 }
 
 /**
  * Mengubah jalur berkas menjadi URI skema file://.
  */
 export function jalurBerkasKeUri(jalur: string): string {
-  if (jalur.startsWith('file://')) {
-    return jalur;
+  if (jalur.startsWith('file://')) return jalur;
+
+  const bersih = jalur.replace(/\\/g, '/');
+
+  // UNC path: //server/share/path -> file://server/share/path.
+  if (bersih.startsWith('//')) {
+    const bagian = bersih.slice(2).split('/');
+    const server = bagian.shift() || '';
+    const sisa = bagian.map(segmen => encodeURIComponent(segmen)).join('/');
+    return `file://${server}/${sisa}`;
   }
-  let bersih = jalur.replace(/\\/g, '/');
-  if (!bersih.startsWith('/')) {
-    bersih = '/' + bersih;
-  }
-  return 'file://' + encodeURI(bersih);
+
+  const absolut = bersih.startsWith('/') ? bersih : `/${bersih}`;
+  const segmen = absolut.split('/').map((bagian, indeks) => {
+    if (indeks === 0) return '';
+    return encodeURIComponent(bagian).replace(/%3A/gi, ':');
+  });
+  return `file://${segmen.join('/')}`;
 }
 
 /**
@@ -103,7 +124,7 @@ export class ManajerDokumen {
     }
 
     // Hindari memperbarui jika version masuk lebih rendah (stale update)
-    if (version < dokumen.version) {
+    if (version <= dokumen.version) {
       return dokumen;
     }
 
@@ -114,8 +135,18 @@ export class ManajerDokumen {
         teksBaru = ubah.text;
       } else {
         // Pembaruan inkremental berbasis rentang posisi
-        const indeksAwal = this.posisiKeIndeks(dokumen, ubah.range.start);
-        const indeksAkhir = this.posisiKeIndeks(dokumen, ubah.range.end);
+        // Setiap perubahan LSP diterapkan berurutan. Posisi perubahan berikutnya
+        // harus dihitung terhadap teks hasil perubahan sebelumnya, bukan offset lama.
+        const dokumenSaatIni: DokumenTeks = {
+          ...dokumen,
+          konten: teksBaru,
+          barisOffset: hitungOffsetBaris(teksBaru),
+        };
+        const indeksAwal = this.posisiKeIndeks(dokumenSaatIni, ubah.range.start);
+        const indeksAkhir = this.posisiKeIndeks(dokumenSaatIni, ubah.range.end);
+        if (indeksAkhir < indeksAwal) {
+          throw new RangeError('Rentang perubahan LSP tidak valid: posisi akhir mendahului posisi awal.');
+        }
         teksBaru = teksBaru.substring(0, indeksAwal) + ubah.text + teksBaru.substring(indeksAkhir);
       }
     }
@@ -165,13 +196,29 @@ export class ManajerDokumen {
    * Mengonversi PosisiLSP (baris, karakter) menjadi indeks karakter string.
    */
   public posisiKeIndeks(dokumen: DokumenTeks, posisi: PosisiLSP): number {
-    const baris = posisi.line;
+    const baris = Number.isFinite(posisi.line) ? Math.floor(posisi.line) : 0;
     if (baris < 0) return 0;
     if (baris >= dokumen.barisOffset.length) {
       return dokumen.konten.length;
     }
+
     const awalBaris = dokumen.barisOffset[baris];
-    return Math.min(awalBaris + Math.max(0, posisi.character), dokumen.konten.length);
+    const awalBarisBerikutnya =
+      baris + 1 < dokumen.barisOffset.length
+        ? dokumen.barisOffset[baris + 1]
+        : dokumen.konten.length;
+    let akhirIsiBaris = awalBarisBerikutnya;
+    if (akhirIsiBaris > awalBaris && dokumen.konten[akhirIsiBaris - 1] === '\n') {
+      akhirIsiBaris--;
+    }
+    if (akhirIsiBaris > awalBaris && dokumen.konten[akhirIsiBaris - 1] === '\r') {
+      akhirIsiBaris--;
+    }
+
+    const karakter = Number.isFinite(posisi.character)
+      ? Math.max(0, Math.floor(posisi.character))
+      : 0;
+    return Math.min(awalBaris + karakter, akhirIsiBaris);
   }
 
   /**
