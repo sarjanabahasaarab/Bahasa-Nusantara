@@ -28,6 +28,22 @@ export interface PowerShellDetectionResult {
 
 export class DesktopInstallerGenerator {
   public static generate(options: InstallerGenerationOptions): InstallerScriptBundle {
+    const appNameAman = options.appName.replace(/[^A-Za-z0-9._-]/g, '_');
+    const versiAman = /^[vV]?\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$/.test(options.appVersion);
+    const binPath = options.binRelativePath.replace(/\\\\/g, '/');
+    if (
+      !appNameAman ||
+      !versiAman ||
+      !binPath ||
+      binPath.startsWith('/') ||
+      /^[A-Za-z]:/.test(binPath) ||
+      binPath.split('/').some(segmen => !segmen || segmen === '.' || segmen === '..') ||
+      !/^[A-Za-z0-9._/-]+$/.test(binPath)
+    ) {
+      throw new Error('Parameter pemasang tidak aman: nama aplikasi, versi SemVer, atau jalur biner tidak valid.');
+    }
+    options = { ...options, appName: appNameAman, binRelativePath: binPath };
+
     if (options.os === 'windows') {
       return {
         target: options.target,
