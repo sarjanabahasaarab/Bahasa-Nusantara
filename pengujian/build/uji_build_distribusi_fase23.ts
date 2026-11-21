@@ -793,7 +793,7 @@ uji('4.2 CLI nusantara bangun menulis arsip, release-manifest.json, dan SHA256SU
 // -----------------------------------------------------------------------------
 console.log('\n[GRUP 5] Generator Pemasang, Penanganan JSON UTF-8 Tanpa BOM, & Sandbox Lifecycle');
 
-uji('5.0b Generator installer menolak injeksi nama, versi, dan jalur executable', () => {
+uji('5.0b Generator installer menetralkan nama dan menolak versi atau jalur executable berbahaya', () => {
   const dasar = {
     appName: 'nusa-aman',
     appVersion: 'v1.2.3',
@@ -801,9 +801,17 @@ uji('5.0b Generator installer menolak injeksi nama, versi, dan jalur executable'
     os: 'linux' as const,
     binRelativePath: 'bin/nusa-aman',
   };
+  const bundle = DesktopInstallerGenerator.generate({
+    ...dasar,
+    appName: 'aman-$(touch-pwned)',
+  });
+  pastikan(
+    !bundle.files.some(berkas => berkas.content.includes('touch-pwned')),
+    'Nama aplikasi tidak boleh menyisipkan perintah ke skrip installer'
+  );
+
   for (const opsi of [
-    { ...dasar, appName: 'aman\n$(touch /tmp/nusa-pwned)' },
-    { ...dasar, appVersion: '1.0.0; touch /tmp/nusa-pwned' },
+    { ...dasar, appVersion: '1.0.0; touch-pwned' },
     { ...dasar, binRelativePath: '../../tmp/pwned' },
     { ...dasar, binRelativePath: 'bin/$(touch-pwned)' },
   ]) {
@@ -813,7 +821,7 @@ uji('5.0b Generator installer menolak injeksi nama, versi, dan jalur executable'
     } catch {
       ditolak = true;
     }
-    pastikan(ditolak, 'Input installer berbahaya harus ditolak sebelum skrip dibuat');
+    pastikan(ditolak, 'Versi atau jalur executable berbahaya harus ditolak');
   }
 });
 
