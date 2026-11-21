@@ -32,7 +32,7 @@ export class DesktopInstallerGenerator {
     const versiAman = /^[vV]?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(options.appVersion);
     const binPath = options.binRelativePath.replace(/\\/g, '/');
     if (
-      !appNameAman ||
+      !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(appNameAman) ||
       !versiAman ||
       !binPath ||
       binPath.startsWith('/') ||
