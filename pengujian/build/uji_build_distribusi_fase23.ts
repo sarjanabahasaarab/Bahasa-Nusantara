@@ -793,6 +793,30 @@ uji('4.2 CLI nusantara bangun menulis arsip, release-manifest.json, dan SHA256SU
 // -----------------------------------------------------------------------------
 console.log('\n[GRUP 5] Generator Pemasang, Penanganan JSON UTF-8 Tanpa BOM, & Sandbox Lifecycle');
 
+uji('5.0b Generator installer menolak injeksi nama, versi, dan jalur executable', () => {
+  const dasar = {
+    appName: 'nusa-aman',
+    appVersion: 'v1.2.3',
+    target: 'linux-x86_64' as const,
+    os: 'linux' as const,
+    binRelativePath: 'bin/nusa-aman',
+  };
+  for (const opsi of [
+    { ...dasar, appName: 'aman\n$(touch /tmp/nusa-pwned)' },
+    { ...dasar, appVersion: '1.0.0; touch /tmp/nusa-pwned' },
+    { ...dasar, binRelativePath: '../../tmp/pwned' },
+    { ...dasar, binRelativePath: 'bin/$(touch-pwned)' },
+  ]) {
+    let ditolak = false;
+    try {
+      DesktopInstallerGenerator.generate(opsi as any);
+    } catch {
+      ditolak = true;
+    }
+    pastikan(ditolak, 'Input installer berbahaya harus ditolak sebelum skrip dibuat');
+  }
+});
+
 uji('5.1 Skrip installer Windows memakai .NET SHA256::Create() (tanpa Get-FileHash) & UTF8Encoding($false)', () => {
   const winBundle = DesktopInstallerGenerator.generate({
     appName: 'nusa_demo',
