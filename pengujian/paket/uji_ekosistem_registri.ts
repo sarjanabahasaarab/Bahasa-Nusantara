@@ -182,6 +182,33 @@ uji('Ekstraksi arsip ke sistem berkas memori', () => {
 // ============================================================================
 setGrup('Grup 2: Integritas & Checksum SHA-256');
 
+uji('Parser arsip menolak checksum yang hilang dan metadata ukuran palsu', () => {
+  const manifest = buatManifestAwal('validasi-arsip', { versi: '1.0.0' });
+  const arsip = buatArsipPaket(manifest, { 'nusantara.toml': tulisManifest(manifest) });
+
+  const tanpaChecksum = JSON.parse(arsip.kontenSerial);
+  delete tanpaChecksum.header.checksum;
+  harusGalat(() => uraiArsipPaket(JSON.stringify(tanpaChecksum)), 'checksum SHA-256 wajib');
+
+  const ukuranPalsu = JSON.parse(arsip.kontenSerial);
+  ukuranPalsu.header.totalUkuranByte += 1;
+  harusGalat(() => uraiArsipPaket(JSON.stringify(ukuranPalsu)), 'ukuran arsip');
+});
+
+uji('Parser arsip menolak properti berbahaya dan isi berkas non-teks', () => {
+  const manifest = buatManifestAwal('arsip-aman', { versi: '1.0.0' });
+  const arsip = buatArsipPaket(manifest, { 'nusantara.toml': tulisManifest(manifest) });
+  const denganProto = arsip.kontenSerial.replace(
+    '"berkas": {',
+    '"berkas": {\n    "__proto__": "injeksi",'
+  );
+  harusGalat(() => uraiArsipPaket(denganProto), 'properti berbahaya');
+
+  const nonTeks = JSON.parse(arsip.kontenSerial);
+  nonTeks.berkas['nusantara.toml'] = { payload: true };
+  harusGalat(() => uraiArsipPaket(JSON.stringify(nonTeks)), 'harus berupa teks');
+});
+
 uji('Deteksi manipulasi data arsip (Tamper detection)', () => {
   const manifest = buatManifestAwal('aman', { versi: '1.0.0' });
   const arsip = buatArsipPaket(manifest, {
@@ -376,6 +403,20 @@ uji('Registri menolak penerbitan ulang versi yang sama (Immutabilitas Release)',
   harusGalat(() => {
     registri.terbitkan(arsip);
   }, 'sudah pernah diterbitkan');
+});
+
+uji('Registri lokal menolak nama arsip berbahaya dari metadata yang dimanipulasi', () => {
+  const memori = new PembacaBerkasMemori();
+  const registri = new RegistriLokal({ pembacaBerkas: memori, direktoriBasis: '/registri' });
+  const manifest = buatManifestAwal('paket-aman', { versi: '1.0.0' });
+  registri.terbitkan(buatArsipPaket(manifest, { 'nusantara.toml': tulisManifest(manifest) }));
+
+  const jalurMetadata = '/registri/metadata/paket-aman.json';
+  const metadata = JSON.parse(memori.baca(jalurMetadata));
+  metadata.daftarVersi['1.0.0'].namaBerkasArsip = '../../rahasia.txt';
+  memori.tulisBerkas(jalurMetadata, JSON.stringify(metadata));
+
+  harusGalat(() => registri.unduh('paket-aman', '1.0.0'), 'tidak aman');
 });
 
 uji('Registri mendukung banyak versi berbeda secara urut SemVer', () => {
