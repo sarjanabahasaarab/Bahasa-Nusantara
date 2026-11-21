@@ -111,7 +111,20 @@ export class RegistriJarakJauh implements AntarmukaRegistri {
         throw new GalatRegistri(`Gagal mengambil metadata paket '${nama}' (HTTP ${res.status}: ${res.statusText}).`);
       }
 
-      return (await res.json()) as MetadataPaketRegistri;
+      const data = await res.json();
+      if (
+        !data ||
+        typeof data !== 'object' ||
+        data.nama !== nama ||
+        !data.daftarVersi ||
+        typeof data.daftarVersi !== 'object' ||
+        Array.isArray(data.daftarVersi) ||
+        typeof data.versiTerbaru !== 'string' ||
+        !Object.prototype.hasOwnProperty.call(data.daftarVersi, data.versiTerbaru)
+      ) {
+        throw new GalatRegistri(`Metadata paket '${nama}' dari registri memiliki format tidak valid.`);
+      }
+      return data as MetadataPaketRegistri;
     } catch (err: any) {
       if (err instanceof GalatRegistri) throw err;
       throw new GalatRegistri(
@@ -150,7 +163,19 @@ export class RegistriJarakJauh implements AntarmukaRegistri {
       }
 
       const data = await res.json();
-      return Array.isArray(data) ? data : data.hasil || [];
+      const hasil = Array.isArray(data) ? data : data?.hasil;
+      if (!Array.isArray(hasil)) {
+        throw new GalatRegistri('Respons pencarian registri memiliki format yang tidak valid.');
+      }
+      return hasil.filter((item: any) =>
+        item &&
+        typeof item.nama === 'string' &&
+        typeof item.versi === 'string' &&
+        typeof item.deskripsi === 'string' &&
+        typeof item.lisensi === 'string' &&
+        typeof item.skorRelevansi === 'number' &&
+        Number.isFinite(item.skorRelevansi)
+      );
     } catch (err: any) {
       if (err instanceof GalatRegistri) throw err;
       throw new GalatRegistri(`Gagal menghubungi registri daring untuk pencarian: ${err.message}`);
@@ -164,6 +189,15 @@ export class RegistriJarakJauh implements AntarmukaRegistri {
     arsip: ArsipPaketData,
     opsi?: { token?: string }
   ): Promise<HasilPenerbitanPaket> {
+    const arsipTerverifikasi = uraiArsipPaket(arsip.kontenSerial);
+    if (
+      arsipTerverifikasi.header.nama !== arsip.header?.nama ||
+      arsipTerverifikasi.header.versi !== arsip.header?.versi ||
+      arsipTerverifikasi.checksum !== arsip.checksum
+    ) {
+      throw new GalatRegistri('Objek arsip tidak konsisten dengan konten serial yang diverifikasi.');
+    }
+    arsip = arsipTerverifikasi;
     const tokenAktif = opsi?.token || this.token;
     if (!tokenAktif) {
       throw new GalatRegistri(
@@ -239,7 +273,11 @@ export class RegistriJarakJauh implements AntarmukaRegistri {
       }
 
       const teksArsip = await res.text();
-      return uraiArsipPaket(teksArsip);
+      const arsip = uraiArsipPaket(teksArsip);
+      if (arsip.header.nama !== nama || arsip.header.versi !== versi) {
+        throw new GalatRegistri('Arsip unduhan tidak cocok dengan nama dan versi yang diminta.');
+      }
+      return arsip;
     } catch (err: any) {
       if (err instanceof GalatRegistri) throw err;
       throw new GalatRegistri(`Gagal mengunduh paket dari registri daring: ${err.message}`);
