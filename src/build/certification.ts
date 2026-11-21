@@ -142,7 +142,8 @@ export class Phase23CertificationEngine {
       const beradaDiDalamBundle =
         relative === '' ||
         (relative !== '..' &&
-          !relative.startsWith('../') && !relative.startsWith('..\\\\') &&
+          !relative.startsWith('../') &&
+          !relative.startsWith('..\\') &&
           !safePath.isAbsolute(relative));
       if (beradaDiDalamBundle) {
         return source;
