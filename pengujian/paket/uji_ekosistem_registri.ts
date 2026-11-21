@@ -612,6 +612,24 @@ uji('RegistriJarakJauh membuat konfigurasi token dan memformat endpoint', () => 
   samaDengan(remote.urlBasis, 'https://registri.nusantara-lang.org/api/v1');
 });
 
+uji('RegistriJarakJauh menolak URL basis non-HTTP dan kredensial tertanam', () => {
+  harusGalat(() => new RegistriJarakJauh('file:///tmp/registry'), 'HTTP(S)');
+  harusGalat(() => new RegistriJarakJauh('https://user:pass@registry.example/api'), 'kredensial');
+});
+
+uji('Registri lokal menolak objek arsip yang tidak sesuai dengan serialisasinya', () => {
+  const memori = new PembacaBerkasMemori();
+  const registri = new RegistriLokal({ pembacaBerkas: memori, direktoriBasis: '/registri' });
+  const manifest = buatManifestAwal('arsip-palsu', { versi: '1.0.0' });
+  const arsip = buatArsipPaket(manifest, { 'nusantara.toml': tulisManifest(manifest) });
+  const palsu = {
+    ...arsip,
+    header: { ...arsip.header, nama: 'nama-lain' },
+  };
+  harusGalat(() => registri.terbitkan(palsu as any), 'tidak konsisten');
+  harusSalah(memori.apakahAda('/registri/metadata/arsip-palsu.json'));
+});
+
 uji('RegistriJarakJauh menangani galat jaringan secara aman', async () => {
   const remote = new RegistriJarakJauh({
     urlBasis: 'http://127.0.0.1:54321/tidak-ada-server',
