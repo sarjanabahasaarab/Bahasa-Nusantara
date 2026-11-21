@@ -124,6 +124,21 @@ export class RegistriJarakJauh implements AntarmukaRegistri {
       ) {
         throw new GalatRegistri(`Metadata paket '${nama}' dari registri memiliki format tidak valid.`);
       }
+      for (const [versi, info] of Object.entries(data.daftarVersi) as [string, any][]) {
+        if (
+          !info ||
+          typeof info !== 'object' ||
+          info.versi !== versi ||
+          typeof info.checksum !== 'string' ||
+          !/^sha256-[a-f0-9]{64}$/i.test(info.checksum) ||
+          info.namaBerkasArsip !== `${nama}-${versi}.npk` ||
+          typeof info.ukuranByte !== 'number' ||
+          !Number.isSafeInteger(info.ukuranByte) ||
+          info.ukuranByte < 0
+        ) {
+          throw new GalatRegistri(`Metadata versi '${versi}' paket '${nama}' tidak valid.`);
+        }
+      }
       return data as MetadataPaketRegistri;
     } catch (err: any) {
       if (err instanceof GalatRegistri) throw err;
