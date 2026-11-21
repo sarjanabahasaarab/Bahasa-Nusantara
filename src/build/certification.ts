@@ -136,8 +136,16 @@ export class Phase23CertificationEngine {
 
     const copyIfPresent = (srcPath?: string): string | undefined => {
       if (!srcPath || !safeFS.existsSync(srcPath)) return undefined;
-      if (safePath.resolve(srcPath).startsWith(safePath.resolve(bundleArtifactsDir))) {
-        return srcPath;
+      const root = safePath.resolve(bundleArtifactsDir);
+      const source = safePath.resolve(srcPath);
+      const relative = safePath.relative(root, source);
+      const beradaDiDalamBundle =
+        relative === '' ||
+        (relative !== '..' &&
+          !relative.startsWith(`..${safePath.sep}`) &&
+          !safePath.isAbsolute(relative));
+      if (beradaDiDalamBundle) {
+        return source;
       }
       const dest = safePath.join(bundleArtifactsDir, safePath.basename(srcPath));
       safeFS.writeFileSync(dest, safeFS.readFileBufferSync(srcPath));
