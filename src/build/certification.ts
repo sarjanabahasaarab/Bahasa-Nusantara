@@ -693,9 +693,27 @@ export class Phase23CertificationEngine {
           targetValid = false;
           return null;
         }
-        const resolved = safePath.isAbsolute(relOrAbs)
-          ? relOrAbs
+        const isAbsolutePath = safePath.isAbsolute(relOrAbs);
+        const resolved = isAbsolutePath
+          ? safePath.resolve(relOrAbs)
           : safePath.resolve(absBaseDir, relOrAbs);
+        if (!isAbsolutePath) {
+          const relativeToBase = safePath.relative(absBaseDir, resolved);
+          if (
+            relativeToBase === '..' ||
+            relativeToBase.startsWith(`..${safePath.sep}`) ||
+            safePath.isAbsolute(relativeToBase)
+          ) {
+            findings.push({
+              severity: 'error',
+              code: 'SHA256_TIDAK_COCOK',
+              target,
+              message: `Jalur artefak relatif ${label} keluar dari direktori evidence: '${relOrAbs}'.`,
+            });
+            targetValid = false;
+            return null;
+          }
+        }
         if (!safeFS.existsSync(resolved)) {
           findings.push({
             severity: 'error',
