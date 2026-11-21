@@ -313,6 +313,29 @@ uji('2.3 Verifikasi SHA256SUMS mendeteksi berkas terubah (tamper) dan berkas hil
   }
 });
 
+uji('2.3b ArchiveBuilder menolak jalur absolut, null byte, dan entri duplikat', () => {
+  for (const nama of ['/etc/passwd', 'C:\\Windows\\system.ini', '../keluar.txt', 'folder/../keluar.txt', 'aman\\0sisipan']) {
+    let ditolak = false;
+    try {
+      ArchiveBuilder.createZip([{ name: nama, content: 'payload' }]);
+    } catch {
+      ditolak = true;
+    }
+    pastikan(ditolak, `Nama entri berbahaya harus ditolak: ${nama}`);
+  }
+
+  let duplikatDitolak = false;
+  try {
+    ArchiveBuilder.createZip([
+      { name: 'Bin/Program', content: 'satu' },
+      { name: 'bin/program', content: 'dua' },
+    ]);
+  } catch {
+    duplikatDitolak = true;
+  }
+  pastikan(duplikatDitolak, 'Entri duplikat yang bentrok di Windows harus ditolak');
+});
+
 uji('2.4 Proteksi keamanan menolak path traversal dan jalur absolut dalam arsip', () => {
   let rejectedTraversal = false;
   try {
