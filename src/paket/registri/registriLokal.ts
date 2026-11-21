@@ -152,6 +152,17 @@ export class RegistriLokal implements AntarmukaRegistri {
    * Menerbitkan arsip paket ke registri lokal dengan penegakan immutabilitas ketat.
    */
   public terbitkan(arsip: ArsipPaketData): HasilPenerbitanPaket {
+    // Jangan percaya objek arsip dari pemanggil: verifikasi ulang serialisasi
+    // sebelum metadata atau berkas apa pun ditulis ke registri.
+    const arsipTerverifikasi = uraiArsipPaket(arsip.kontenSerial);
+    if (
+      arsipTerverifikasi.header.nama !== arsip.header?.nama ||
+      arsipTerverifikasi.header.versi !== arsip.header?.versi ||
+      arsipTerverifikasi.checksum !== arsip.checksum
+    ) {
+      throw new GalatRegistri('Objek arsip tidak konsisten dengan konten serial yang diverifikasi.');
+    }
+    arsip = arsipTerverifikasi;
     const nama = arsip.header.nama;
     const versi = arsip.header.versi;
 
