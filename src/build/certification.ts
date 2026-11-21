@@ -701,7 +701,7 @@ export class Phase23CertificationEngine {
           const relativeToBase = safePath.relative(absBaseDir, resolved);
           if (
             relativeToBase === '..' ||
-            relativeToBase.startsWith(`..${safePath.sep}`) ||
+            (relativeToBase.startsWith('../') || relativeToBase.startsWith('..\\\\')) ||
             safePath.isAbsolute(relativeToBase)
           ) {
             findings.push({
