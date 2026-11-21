@@ -277,11 +277,24 @@ export class RegistriLokal implements AntarmukaRegistri {
       );
     }
 
+    // Metadata registri adalah input yang dapat rusak/diubah secara lokal.
+    // Jangan pernah memakai nama berkas darinya sebelum memvalidasi nama dan
+    // memastikan berkas tepat berada di direktori paket yang diharapkan.
+    const namaBerkasDiharapkan = `${nama}-${versi}.npk`;
+    if (
+      typeof infoVersi.namaBerkasArsip !== 'string' ||
+      infoVersi.namaBerkasArsip !== namaBerkasDiharapkan
+    ) {
+      throw new GalatRegistri(
+        `Metadata paket '${nama}@${versi}' memiliki nama arsip yang tidak aman atau tidak konsisten.`
+      );
+    }
+
     const jalurArsip = this.pembaca.gabungJalur(
       this.direktoriBasis,
       'packages',
       nama,
-      infoVersi.namaBerkasArsip
+      namaBerkasDiharapkan
     );
 
     if (!this.pembaca.apakahAda(jalurArsip)) {
