@@ -85,9 +85,39 @@ export class RegistriLokal implements AntarmukaRegistri {
 
     try {
       const konten = this.pembaca.baca(jalurMeta);
-      return JSON.parse(konten) as MetadataPaketRegistri;
-    } catch {
-      return null;
+      const data = JSON.parse(konten);
+      if (
+        !data ||
+        typeof data !== 'object' ||
+        data.nama !== nama ||
+        !data.daftarVersi ||
+        typeof data.daftarVersi !== 'object' ||
+        Array.isArray(data.daftarVersi) ||
+        typeof data.versiTerbaru !== 'string' ||
+        !Object.prototype.hasOwnProperty.call(data.daftarVersi, data.versiTerbaru)
+      ) {
+        throw new Error('Struktur metadata paket tidak valid.');
+      }
+      for (const [versi, info] of Object.entries(data.daftarVersi) as [string, any][]) {
+        if (
+          !info ||
+          typeof info !== 'object' ||
+          info.versi !== versi ||
+          typeof info.checksum !== 'string' ||
+          !/^sha256-[a-f0-9]{64}$/i.test(info.checksum) ||
+          info.namaBerkasArsip !== `${nama}-${versi}.npk` ||
+          typeof info.ukuranByte !== 'number' ||
+          !Number.isSafeInteger(info.ukuranByte) ||
+          info.ukuranByte < 0
+        ) {
+          throw new Error(`Metadata versi '${versi}' tidak valid.`);
+        }
+      }
+      return data as MetadataPaketRegistri;
+    } catch (err: any) {
+      throw new GalatRegistri(
+        `Metadata paket '${nama}' rusak atau tidak valid: ${err?.message || String(err)}`
+      );
     }
   }
 
