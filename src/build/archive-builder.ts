@@ -510,10 +510,10 @@ export class ArchiveBuilder {
   ): Array<{ name: string; bytes: Uint8Array; mode: number; mtime: Date }> {
     const namaTerdaftar = new Set<string>();
     const mapped = entries.map((e) => {
-      if (!e || typeof e.name !== 'string' || e.name.includes('\\0')) {
+      if (!e || typeof e.name !== 'string' || e.name.includes('\0')) {
         throw new Error('Nama entri arsip tidak valid atau mengandung null byte.');
       }
-      const cleanName = e.name.replace(/\\\\/g, '/');
+      const cleanName = e.name.replace(/\\/g, '/');
       const segmen = cleanName.split('/');
       if (
         !cleanName ||
