@@ -687,6 +687,60 @@ uji('3.3 Preflight sysroot, CRT, /usr/lib/*, mismatch arsitektur, & penolakan li
 // -----------------------------------------------------------------------------
 console.log('\n[GRUP 4] Pengemas Distribusi Desktop & Reproducible Build');
 
+uji('4.0b DesktopDistributionPackager menolak path traversal, metadata override, dan versi tidak valid', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-dist-security-'));
+  try {
+    const opsiDasar = {
+      appName: 'uji-aman',
+      appVersion: 'v1.2.3',
+      target: 'linux-x86_64',
+      mode: 'release' as const,
+      outputDirectory: tmp,
+      packageKind: 'script-launcher' as const,
+      includeInstallers: false,
+    };
+    let traversalDitolak = false;
+    try {
+      DesktopDistributionPackager.packageTarget({
+        ...opsiDasar,
+        extraFiles: [{ relativePath: '../../keluar.txt', content: 'tidak boleh' }],
+      });
+    } catch (err: any) {
+      traversalDitolak = /traversal|Jalur absolut|batas direktori/i.test(err.message);
+    }
+    pastikan(traversalDitolak, 'Path traversal pada extraFiles harus ditolak');
+
+    let manifestOverrideDitolak = false;
+    try {
+      DesktopDistributionPackager.packageTarget({
+        ...opsiDasar,
+        extraFiles: [{ relativePath: 'manifest.json', content: '{"palsu":true}' }],
+      });
+    } catch {
+      manifestOverrideDitolak = true;
+    }
+    pastikan(manifestOverrideDitolak, 'extraFiles tidak boleh menimpa manifest.json');
+
+    let versiTidakValidDitolak = false;
+    try {
+      DesktopDistributionPackager.packageTarget({ ...opsiDasar, appVersion: '../../keluar' });
+    } catch {
+      versiTidakValidDitolak = true;
+    }
+    pastikan(versiTidakValidDitolak, 'Versi aplikasi tidak boleh menyisipkan path');
+
+    let nativePalsuDitolak = false;
+    try {
+      DesktopDistributionPackager.packageTarget({ ...opsiDasar, packageKind: 'native' });
+    } catch {
+      nativePalsuDitolak = true;
+    }
+    pastikan(nativePalsuDitolak, 'Mode native wajib memiliki executable hasil build nyata');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 uji('4.1 DesktopDistributionPackager menghasilkan arsip deterministik & manifest lengkap', () => {
   const tmp1 = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-dist1-'));
   const tmp2 = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-dist2-'));
