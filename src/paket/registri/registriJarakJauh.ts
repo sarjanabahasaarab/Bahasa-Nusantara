@@ -33,16 +33,35 @@ export class RegistriJarakJauh implements AntarmukaRegistri {
 
   constructor(opsi?: OpsiRegistriJarakJauh | string) {
     if (typeof opsi === 'string') {
-      this.urlBasis = opsi.replace(/\/+$/, '');
+      this.urlBasis = this.normalisasiUrlBasis(opsi);
       this.waktuTungguMs = 5000;
     } else {
-      this.urlBasis = (opsi?.urlBasis || 'https://paket.nusantara.lang/api/v1').replace(/\/+$/, '');
+      this.urlBasis = this.normalisasiUrlBasis(opsi?.urlBasis || 'https://paket.nusantara.lang/api/v1');
       this.token = opsi?.token;
       const timeout = opsi?.waktuTungguMs ?? 5000;
       this.waktuTungguMs = Number.isFinite(timeout) && timeout > 0
         ? Math.min(120_000, Math.max(1, Math.floor(timeout)))
         : 5000;
     }
+  }
+
+  private normalisasiUrlBasis(nilai: string): string {
+    let url: URL;
+    try {
+      url = new URL(nilai);
+    } catch {
+      throw new GalatRegistri('URL basis registri harus berupa URL absolut yang valid.');
+    }
+    if (
+      (url.protocol !== 'https:' && url.protocol !== 'http:') ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash
+    ) {
+      throw new GalatRegistri('URL basis registri hanya boleh menggunakan HTTP(S), tanpa kredensial, query, atau fragment.');
+    }
+    return url.toString().replace(/\\/+$/, '');
   }
 
   private async kirimPermintaan(endpoint: string, init: RequestInit): Promise<Response> {
