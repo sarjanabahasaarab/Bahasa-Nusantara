@@ -136,8 +136,17 @@ export class Phase23CertificationEngine {
 
     const copyIfPresent = (srcPath?: string): string | undefined => {
       if (!srcPath || !safeFS.existsSync(srcPath)) return undefined;
-      if (safePath.resolve(srcPath).startsWith(safePath.resolve(bundleArtifactsDir))) {
-        return srcPath;
+      const root = safePath.resolve(bundleArtifactsDir);
+      const source = safePath.resolve(srcPath);
+      const relative = safePath.relative(root, source);
+      const beradaDiDalamBundle =
+        relative === '' ||
+        (relative !== '..' &&
+          !relative.startsWith('../') &&
+          !relative.startsWith('..\\') &&
+          !safePath.isAbsolute(relative));
+      if (beradaDiDalamBundle) {
+        return source;
       }
       const dest = safePath.join(bundleArtifactsDir, safePath.basename(srcPath));
       safeFS.writeFileSync(dest, safeFS.readFileBufferSync(srcPath));
@@ -685,9 +694,27 @@ export class Phase23CertificationEngine {
           targetValid = false;
           return null;
         }
-        const resolved = safePath.isAbsolute(relOrAbs)
-          ? relOrAbs
+        const isAbsolutePath = safePath.isAbsolute(relOrAbs);
+        const resolved = isAbsolutePath
+          ? safePath.resolve(relOrAbs)
           : safePath.resolve(absBaseDir, relOrAbs);
+        if (!isAbsolutePath) {
+          const relativeToBase = safePath.relative(absBaseDir, resolved);
+          if (
+            relativeToBase === '..' ||
+            (relativeToBase.startsWith('../') || relativeToBase.startsWith('..\\')) ||
+            safePath.isAbsolute(relativeToBase)
+          ) {
+            findings.push({
+              severity: 'error',
+              code: 'SHA256_TIDAK_COCOK',
+              target,
+              message: `Jalur artefak relatif ${label} keluar dari direktori evidence: '${relOrAbs}'.`,
+            });
+            targetValid = false;
+            return null;
+          }
+        }
         if (!safeFS.existsSync(resolved)) {
           findings.push({
             severity: 'error',

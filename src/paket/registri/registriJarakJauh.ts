@@ -33,12 +33,56 @@ export class RegistriJarakJauh implements AntarmukaRegistri {
 
   constructor(opsi?: OpsiRegistriJarakJauh | string) {
     if (typeof opsi === 'string') {
-      this.urlBasis = opsi.replace(/\/+$/, '');
+      this.urlBasis = this.normalisasiUrlBasis(opsi);
       this.waktuTungguMs = 5000;
     } else {
-      this.urlBasis = (opsi?.urlBasis || 'https://paket.nusantara.lang/api/v1').replace(/\/+$/, '');
+      this.urlBasis = this.normalisasiUrlBasis(opsi?.urlBasis || 'https://paket.nusantara.lang/api/v1');
       this.token = opsi?.token;
-      this.waktuTungguMs = opsi?.waktuTungguMs || 5000;
+      const timeout = opsi?.waktuTungguMs ?? 5000;
+      this.waktuTungguMs = Number.isFinite(timeout) && timeout > 0
+        ? Math.min(120_000, Math.max(1, Math.floor(timeout)))
+        : 5000;
+    }
+  }
+
+  private normalisasiUrlBasis(nilai: string): string {
+    let url: URL;
+    try {
+      url = new URL(nilai);
+    } catch {
+      throw new GalatRegistri('URL basis registri harus berupa URL absolut yang valid.');
+    }
+    if (
+      (url.protocol !== 'https:' && url.protocol !== 'http:') ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash
+    ) {
+      throw new GalatRegistri('URL basis registri hanya boleh menggunakan HTTP(S), tanpa kredensial, query, atau fragment.');
+    }
+    return url.toString().replace(/\/+$/, '');
+  }
+
+  private async kirimPermintaan(endpoint: string, init: RequestInit): Promise<Response> {
+    if (typeof fetch === 'undefined') {
+      throw new Error('Lingkungan eksekusi tidak menyediakan fungsi fetch HTTP.');
+    }
+    if (typeof AbortController === 'undefined') {
+      throw new Error('Lingkungan eksekusi tidak mendukung pembatalan permintaan HTTP.');
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.waktuTungguMs);
+    try {
+      return await this.kirimPermintaan(endpoint, { ...init, signal: controller.signal });
+    } catch (err: any) {
+      if (controller.signal.aborted) {
+        throw new Error(`Permintaan registri melewati batas waktu ${this.waktuTungguMs}ms.`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -54,7 +98,7 @@ export class RegistriJarakJauh implements AntarmukaRegistri {
         throw new Error('Lingkungan eksekusi tidak menyediakan fungsi fetch HTTP.');
       }
 
-      const res = await fetch(endpoint, {
+      const res = await this.kirimPermintaan(endpoint, {
         method: 'GET',
         headers: this.buatHeader(),
       });
@@ -67,7 +111,35 @@ export class RegistriJarakJauh implements AntarmukaRegistri {
         throw new GalatRegistri(`Gagal mengambil metadata paket '${nama}' (HTTP ${res.status}: ${res.statusText}).`);
       }
 
-      return (await res.json()) as MetadataPaketRegistri;
+      const data = await res.json();
+      if (
+        !data ||
+        typeof data !== 'object' ||
+        data.nama !== nama ||
+        !data.daftarVersi ||
+        typeof data.daftarVersi !== 'object' ||
+        Array.isArray(data.daftarVersi) ||
+        typeof data.versiTerbaru !== 'string' ||
+        !Object.prototype.hasOwnProperty.call(data.daftarVersi, data.versiTerbaru)
+      ) {
+        throw new GalatRegistri(`Metadata paket '${nama}' dari registri memiliki format tidak valid.`);
+      }
+      for (const [versi, info] of Object.entries(data.daftarVersi) as [string, any][]) {
+        if (
+          !info ||
+          typeof info !== 'object' ||
+          info.versi !== versi ||
+          typeof info.checksum !== 'string' ||
+          !/^sha256-[a-f0-9]{64}$/i.test(info.checksum) ||
+          info.namaBerkasArsip !== `${nama}-${versi}.npk` ||
+          typeof info.ukuranByte !== 'number' ||
+          !Number.isSafeInteger(info.ukuranByte) ||
+          info.ukuranByte < 0
+        ) {
+          throw new GalatRegistri(`Metadata versi '${versi}' paket '${nama}' tidak valid.`);
+        }
+      }
+      return data as MetadataPaketRegistri;
     } catch (err: any) {
       if (err instanceof GalatRegistri) throw err;
       throw new GalatRegistri(
@@ -96,7 +168,7 @@ export class RegistriJarakJauh implements AntarmukaRegistri {
         throw new Error('Fungsi fetch HTTP tidak tersedia.');
       }
 
-      const res = await fetch(endpoint, {
+      const res = await this.kirimPermintaan(endpoint, {
         method: 'GET',
         headers: this.buatHeader(),
       });
@@ -106,7 +178,19 @@ export class RegistriJarakJauh implements AntarmukaRegistri {
       }
 
       const data = await res.json();
-      return Array.isArray(data) ? data : data.hasil || [];
+      const hasil = Array.isArray(data) ? data : data?.hasil;
+      if (!Array.isArray(hasil)) {
+        throw new GalatRegistri('Respons pencarian registri memiliki format yang tidak valid.');
+      }
+      return hasil.filter((item: any) =>
+        item &&
+        typeof item.nama === 'string' &&
+        typeof item.versi === 'string' &&
+        typeof item.deskripsi === 'string' &&
+        typeof item.lisensi === 'string' &&
+        typeof item.skorRelevansi === 'number' &&
+        Number.isFinite(item.skorRelevansi)
+      );
     } catch (err: any) {
       if (err instanceof GalatRegistri) throw err;
       throw new GalatRegistri(`Gagal menghubungi registri daring untuk pencarian: ${err.message}`);
@@ -120,6 +204,15 @@ export class RegistriJarakJauh implements AntarmukaRegistri {
     arsip: ArsipPaketData,
     opsi?: { token?: string }
   ): Promise<HasilPenerbitanPaket> {
+    const arsipTerverifikasi = uraiArsipPaket(arsip.kontenSerial);
+    if (
+      arsipTerverifikasi.header.nama !== arsip.header?.nama ||
+      arsipTerverifikasi.header.versi !== arsip.header?.versi ||
+      arsipTerverifikasi.checksum !== arsip.checksum
+    ) {
+      throw new GalatRegistri('Objek arsip tidak konsisten dengan konten serial yang diverifikasi.');
+    }
+    arsip = arsipTerverifikasi;
     const tokenAktif = opsi?.token || this.token;
     if (!tokenAktif) {
       throw new GalatRegistri(
@@ -134,7 +227,7 @@ export class RegistriJarakJauh implements AntarmukaRegistri {
         throw new Error('Fungsi fetch HTTP tidak tersedia.');
       }
 
-      const res = await fetch(endpoint, {
+      const res = await this.kirimPermintaan(endpoint, {
         method: 'POST',
         headers: {
           ...this.buatHeader(),
@@ -181,7 +274,7 @@ export class RegistriJarakJauh implements AntarmukaRegistri {
         throw new Error('Fungsi fetch HTTP tidak tersedia.');
       }
 
-      const res = await fetch(endpoint, {
+      const res = await this.kirimPermintaan(endpoint, {
         method: 'GET',
         headers: this.buatHeader(),
       });
@@ -195,7 +288,11 @@ export class RegistriJarakJauh implements AntarmukaRegistri {
       }
 
       const teksArsip = await res.text();
-      return uraiArsipPaket(teksArsip);
+      const arsip = uraiArsipPaket(teksArsip);
+      if (arsip.header.nama !== nama || arsip.header.versi !== versi) {
+        throw new GalatRegistri('Arsip unduhan tidak cocok dengan nama dan versi yang diminta.');
+      }
+      return arsip;
     } catch (err: any) {
       if (err instanceof GalatRegistri) throw err;
       throw new GalatRegistri(`Gagal mengunduh paket dari registri daring: ${err.message}`);

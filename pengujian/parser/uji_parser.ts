@@ -14,6 +14,8 @@ import {
   NodeDeklarasiFungsi,
 } from '../../src/parser/ast';
 import { ASTPrinter } from '../../src/parser/astPrinter';
+import { Lexer } from '../../src/lexer/lexer';
+import { TokenStream } from '../../src/lexer/tokenStream';
 
 interface HasilUji {
   nama: string;
@@ -262,6 +264,52 @@ uji('Integrasi Program Kasir Toko', () => {
 
   samaDengan(parser.dapatkanDaftarGalat().length, 0);
   samaDengan(ast.tubuhUtama.length, 4);
+});
+
+// 11. REGRESI ALIRAN TOKEN KOSONG / TANPA EOF
+console.log('\\n--- Kelompok 11: Ketahanan TokenStream & Diagnostik ---');
+uji('Parser menerima daftar token kosong sebagai program kosong', () => {
+  const parser = new Parser([]);
+  const ast = parser.parse();
+  samaDengan(ast.jenis, JenisNodeAST.PROGRAM);
+  samaDengan(ast.tubuhUtama.length, 0);
+  samaDengan(parser.dapatkanDaftarGalat().length, 0);
+});
+
+uji('Parser menambahkan sentinel EOF untuk daftar token tanpa EOF', () => {
+  const token = new Lexer('program Uji\\nmulai\\nselesai', { sertakanBarisBaru: false }).tokenisasi().token.slice(0, -1);
+  const aliran = new TokenStream(token);
+  samaDengan(aliran.eof(), false, 'Aliran harus dimulai dari token pertama, bukan EOF');
+  samaDengan(aliran.toArray()[aliran.length - 1]?.jenis, 'EOF', 'TokenStream harus menambahkan sentinel EOF');
+  while (!aliran.eof()) aliran.next();
+  samaDengan(aliran.eof(), true, 'Aliran harus mencapai sentinel EOF');
+});
+
+uji('TokenStream.peek memvalidasi offset dan mempertahankan sentinel EOF', () => {
+  const aliran = new TokenStream(new Lexer('nama = 1', { sertakanBarisBaru: false }));
+  samaDengan(aliran.peek(0).nilai, 'nama', 'Offset nol harus menunjuk token saat ini');
+  samaDengan(aliran.peek(1).nilai, '=', 'Offset satu harus menunjuk token berikutnya');
+  samaDengan(aliran.peek(999).jenis, 'EOF', 'Offset yang melewati aliran harus mengembalikan sentinel EOF');
+
+  for (const offset of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1]) {
+    let ditolak = false;
+    try {
+      aliran.peek(offset);
+    } catch (error) {
+      ditolak = error instanceof RangeError;
+    }
+    samaDengan(ditolak, true, `Offset tidak valid (${offset}) harus ditolak dengan RangeError`);
+  }
+});
+
+uji('Satu kesalahan sintaks dicatat tepat satu kali', () => {
+  const parser = new Parser('fungsi (');
+  try {
+    parser.parseDeklarasiFungsi();
+  } catch {
+    // Jalur diagnostik publik mengembalikan galat melalui daftar parser.
+  }
+  samaDengan(parser.dapatkanDaftarGalat().length, 1, 'Satu objek galat harus dicatat tepat satu kali');
 });
 
 // REKAPITULASI HASIL

@@ -12,7 +12,7 @@ export interface PosisiSumber {
   baris: number;
   /** Nomor kolom dalam baris (dimulai dari 1) */
   kolom: number;
-  /** Indeks karakter global dari awal dokumen (dimulai dari 0) */
+  /** Offset unit kode UTF-16 global dari awal dokumen (dimulai dari 0), sesuai indeks string JavaScript */
   indeks: number;
 }
 

@@ -150,25 +150,41 @@ export function buatModul(
 }
 
 export function formatNilaiTeks(nilai: NilaiRuntime, diDalamKoleksi: boolean = false): string {
+  return formatNilaiTeksInternal(nilai, diDalamKoleksi, new WeakSet<object>());
+}
+
+function formatNilaiTeksInternal(
+  nilai: NilaiRuntime,
+  diDalamKoleksi: boolean,
+  jalurAktif: WeakSet<object>
+): string {
   switch (nilai.jenis) {
     case JenisNilaiRuntime.TEKS:
       return diDalamKoleksi ? `"${nilai.nilai}"` : nilai.nilai;
     case JenisNilaiRuntime.BILANGAN:
-      return nilai.nilai.toString();
     case JenisNilaiRuntime.DESIMAL:
       return nilai.nilai.toString();
     case JenisNilaiRuntime.LOGIKA:
       return nilai.nilai ? 'benar' : 'salah';
     case JenisNilaiRuntime.KARAKTER:
       return diDalamKoleksi ? `'${nilai.nilai}'` : nilai.nilai;
-    case JenisNilaiRuntime.DAFTAR:
-      return '[' + nilai.elemen.map(e => formatNilaiTeks(e, true)).join(', ') + ']';
+    case JenisNilaiRuntime.DAFTAR: {
+      if (jalurAktif.has(nilai)) return '<siklus>';
+      jalurAktif.add(nilai);
+      const hasil = '[' + nilai.elemen.map(e => formatNilaiTeksInternal(e, true, jalurAktif)).join(', ') + ']';
+      jalurAktif.delete(nilai);
+      return hasil;
+    }
     case JenisNilaiRuntime.PETA: {
+      if (jalurAktif.has(nilai)) return '<siklus>';
+      jalurAktif.add(nilai);
       const entri: string[] = [];
       nilai.nilai.forEach((val, key) => {
-        entri.push(`"${key}": ${formatNilaiTeks(val, true)}`);
+        entri.push(`"${key}": ${formatNilaiTeksInternal(val, true, jalurAktif)}`);
       });
-      return '{' + entri.join(', ') + '}';
+      const hasil = '{' + entri.join(', ') + '}';
+      jalurAktif.delete(nilai);
+      return hasil;
     }
     case JenisNilaiRuntime.KOSONG:
       return 'kosong';

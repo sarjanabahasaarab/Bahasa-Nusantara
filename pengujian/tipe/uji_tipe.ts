@@ -242,6 +242,45 @@ uji('Menolak fungsi yang mengembalikan tipe tidak sesuai dengan deklarasi kembal
   samaDengan(galat[0].jenis, JenisGalatTipe.KEMBALIAN_TIDAK_SESUAI);
 });
 
+uji('Menolak fungsi bertipe-kembalian ketika hanya cabang jika yang mengembalikan nilai', () => {
+  const sumber = `
+  fungsi pilih(nilai : logika) : bilangan
+  mulai
+      jika nilai maka
+          kembalikan 1
+      akhir
+  selesai
+
+  program UjiJalurTidakLengkap
+  mulai
+      pilih(benar)
+  selesai`;
+
+  const galat = periksaTipeProgram(sumber);
+  samaDengan(galat.some(g => g.jenis === JenisGalatTipe.KEMBALIAN_TIDAK_SESUAI), true,
+    'Jalur ketika kondisi salah juga harus mengembalikan nilai');
+});
+
+uji('Menerima fungsi bertipe-kembalian ketika kedua cabang jika/selain mengembalikan nilai', () => {
+  const sumber = `
+  fungsi pilih(nilai : logika) : bilangan
+  mulai
+      jika nilai maka
+          kembalikan 1
+      selain
+          kembalikan 2
+      akhir
+  selesai
+
+  program UjiJalurLengkap
+  mulai
+      tampilkan(pilih(benar))
+  selesai`;
+
+  const galat = periksaTipeProgram(sumber);
+  samaDengan(galat.length, 0, 'Kedua cabang mengembalikan bilangan sehingga fungsi valid');
+});
+
 // 8. UJI OPERATOR DAN KOMPATIBILITAS TIPE
 console.log('\n--- Kelompok 8: Aturan Tipe Operator ---');
 uji('Menolak operasi pengurangan antara tipe teks dan bilangan', () => {
@@ -270,7 +309,27 @@ uji('Menolak perbandingan relasional lebih besar antara teks dan bilangan', () =
   samaDengan(galat[0].jenis, JenisGalatTipe.OPERATOR_TIDAK_DIDUKUNG);
 });
 
-// 9. REKAPITULASI HASIL
+// 9. REGRESI PEMAKAIAN ULANG PEMERIKSA TIPE
+console.log('\\n--- Kelompok 9: Pemakaian Ulang Pemeriksa Tipe ---');
+uji('Mengisolasi deklarasi variabel antarprogram pada instance pemeriksa yang sama', () => {
+  const pemeriksa = new PemeriksaTipe();
+  const pertama = new Parser('program Pertama mulai nilai : bilangan = 1 selesai').parse();
+  const kedua = new Parser('program Kedua mulai nilai : bilangan = 2 selesai').parse();
+  samaDengan(pemeriksa.periksa(pertama).length, 0);
+  samaDengan(pemeriksa.periksa(kedua).length, 0,
+    'Deklarasi dari program pertama tidak boleh mencemari analisis program kedua');
+});
+
+uji('Mengisolasi deklarasi fungsi antarprogram pada instance pemeriksa yang sama', () => {
+  const pemeriksa = new PemeriksaTipe();
+  const pertama = new Parser('fungsi hitung() : bilangan mulai kembalikan 1 selesai program Pertama mulai tampilkan(hitung()) selesai').parse();
+  const kedua = new Parser('fungsi hitung() : bilangan mulai kembalikan 2 selesai program Kedua mulai tampilkan(hitung()) selesai').parse();
+  samaDengan(pemeriksa.periksa(pertama).length, 0);
+  samaDengan(pemeriksa.periksa(kedua).length, 0,
+    'Deklarasi fungsi dari program pertama tidak boleh dianggap duplikat di program kedua');
+});
+
+// 10. REKAPITULASI HASIL
 console.log('\n-----------------------------------------------------------------------------');
 const jumlahLulus = daftarHasil.filter(h => h.lulus).length;
 const jumlahGagal = daftarHasil.filter(h => !h.lulus).length;

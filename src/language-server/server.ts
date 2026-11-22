@@ -104,7 +104,7 @@ export class ServerBahasaNUSANTARA {
     if (!pesan || typeof pesan !== 'object' || pesan.jsonrpc !== '2.0') {
       return {
         jsonrpc: '2.0',
-        id: (pesan as any)?.id || null,
+        id: (pesan as any)?.id ?? null,
         error: {
           code: KodeGalatJSONRPC.InvalidRequest,
           message: 'Permintaan JSON-RPC 2.0 tidak valid.',
@@ -112,8 +112,33 @@ export class ServerBahasaNUSANTARA {
       };
     }
 
+    if (typeof (pesan as any).method !== 'string' || !(pesan as any).method.trim()) {
+      return {
+        jsonrpc: '2.0',
+        id: (pesan as any).id ?? null,
+        error: {
+          code: KodeGalatJSONRPC.InvalidRequest,
+          message: 'Permintaan JSON-RPC harus memiliki nama metode yang valid.',
+        },
+      };
+    }
+
+    // Setelah shutdown, hanya notifikasi exit yang boleh diproses.
+    const apakahNotifikasi = !('id' in pesan) || pesan.id === undefined;
+    if (this.sedangShutdown && (apakahNotifikasi ? (pesan as any).method !== 'exit' : true)) {
+      if (apakahNotifikasi) return null;
+      return {
+        jsonrpc: '2.0',
+        id: (pesan as any).id ?? null,
+        error: {
+          code: KodeGalatJSONRPC.InvalidRequest,
+          message: 'Server sudah menerima shutdown dan tidak menerima permintaan baru.',
+        },
+      };
+    }
+
     // 1. Tangani Notifikasi (tanpa id)
-    if (!('id' in pesan) || pesan.id === undefined) {
+    if (apakahNotifikasi) {
       this.tanganiNotifikasi(pesan as NotifikasiJSONRPC);
       return null;
     }
@@ -150,6 +175,13 @@ export class ServerBahasaNUSANTARA {
         return this.tanganiInisialisasi(req.params as ParameterInisialisasiLSP);
 
       case 'shutdown':
+        this.pastikanTerinisialisasi();
+        if (this.sedangShutdown) {
+          throw {
+            code: KodeGalatJSONRPC.InvalidRequest,
+            message: 'Permintaan shutdown sudah pernah diproses.',
+          };
+        }
         this.sedangShutdown = true;
         this.pencatatLog('INFO', 'Server menerima permintaan shutdown.');
         return null;
@@ -281,6 +313,13 @@ export class ServerBahasaNUSANTARA {
    * Menangani permintaan inisialisasi awal LSP.
    */
   private tanganiInisialisasi(params: ParameterInisialisasiLSP): HasilInisialisasiLSP {
+    if (this.terinisialisasi || this.sedangShutdown) {
+      throw {
+        code: KodeGalatJSONRPC.InvalidRequest,
+        message: 'Language Server hanya dapat diinisialisasi satu kali sebelum shutdown.',
+      };
+    }
+
     if (params.rootUri) {
       this.direktoriKerja = uriKeJalurBerkas(params.rootUri);
     } else if (params.rootPath) {
@@ -295,7 +334,7 @@ export class ServerBahasaNUSANTARA {
     const capabilities: KemampuanServerLSP = {
       textDocumentSync: {
         openClose: true,
-        change: 1, // Full document sync
+        change: 2, // Incremental sync; ManajerDokumen menerapkan range berurutan.
       },
       completionProvider: {
         resolveProvider: false,

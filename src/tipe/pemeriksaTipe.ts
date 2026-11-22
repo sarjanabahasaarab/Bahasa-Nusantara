@@ -131,6 +131,26 @@ export class PemeriksaTipe {
     }
   }
 
+  /**
+   * Mengatur ulang keadaan sementara sebelum menganalisis program lain.
+   * Modul yang sudah terdaftar tetap tersedia; simbol lokal dan fungsi
+   * impor/deklarasi hanya berlaku untuk analisis saat ini.
+   */
+  private mulaiUlangKeadaanAnalisis(): void {
+    this.lingkupSaatIni = new LingkupTipe();
+    for (const namaModul of this.tabelModul.keys()) {
+      this.lingkupSaatIni.definisikan({
+        nama: namaModul,
+        tipe: NamaTipe.MODUL,
+        tetap: true,
+      });
+    }
+    this.tabelFungsi.clear();
+    this.daftarkanFungsiBawaan();
+    this.fungsiAktifSaatIni = undefined;
+    this.kedalamanPerulangan = 0;
+  }
+
   public daftarkanModul(nama: string, modul: CatatanModul): void {
     this.tabelModul.set(nama, modul);
     this.lingkupSaatIni.definisikan({
@@ -142,7 +162,7 @@ export class PemeriksaTipe {
 
   public periksa(program: NodeProgram, direktoriBasis?: string): GalatTipe[] {
     this.daftarGalat.length = 0;
-    this.kedalamanPerulangan = 0;
+    this.mulaiUlangKeadaanAnalisis();
 
     // 0. Proses impor modul jika ada
     if (program.daftarImpor && program.daftarImpor.length > 0) {
@@ -302,19 +322,28 @@ export class PemeriksaTipe {
     return this.daftarGalat;
   }
 
-  private mempunyaiInstruksiKembalikan(pernyataan: PernyataanAST[]): boolean {
+  /**
+   * Memastikan setiap jalur eksekusi fungsi bertipe-kembalian memiliki return.
+   * Return di dalam loop tidak dianggap pasti karena loop dapat berjalan nol kali.
+   */
+  private semuaJalurMengembalikan(pernyataan: PernyataanAST[]): boolean {
     for (const st of pernyataan) {
       if (st.jenis === JenisNodeAST.INSTRUKSI_KEMBALIKAN) return true;
+
       if (st.jenis === JenisNodeAST.PERCABANGAN_JIKA) {
         const j = st as NodePercabanganJika;
-        if (this.mempunyaiInstruksiKembalikan(j.cabangMaka)) return true;
-        if (j.cabangSelain && this.mempunyaiInstruksiKembalikan(j.cabangSelain)) return true;
+        if (
+          j.cabangSelain &&
+          this.semuaJalurMengembalikan(j.cabangMaka) &&
+          this.semuaJalurMengembalikan(j.cabangSelain)
+        ) {
+          return true;
+        }
       }
-      if (st.jenis === JenisNodeAST.PERULANGAN_SELAMA) {
-        if (this.mempunyaiInstruksiKembalikan((st as NodePerulanganSelama).tubuh)) return true;
-      }
-      if (st.jenis === JenisNodeAST.PERULANGAN_UNTUK) {
-        if (this.mempunyaiInstruksiKembalikan((st as NodePerulanganUntuk).tubuh)) return true;
+
+      if (st.jenis === JenisNodeAST.PERNYATAAN_BLOK) {
+        const daftar = (st as any).daftarPernyataan as PernyataanAST[];
+        if (Array.isArray(daftar) && this.semuaJalurMengembalikan(daftar)) return true;
       }
     }
     return false;
@@ -344,7 +373,7 @@ export class PemeriksaTipe {
         this.periksaPernyataan(st);
       }
 
-      if (infoFn.tipeKembalian !== NamaTipe.KOSONG && !this.mempunyaiInstruksiKembalikan(fn.tubuh)) {
+      if (infoFn.tipeKembalian !== NamaTipe.KOSONG && !this.semuaJalurMengembalikan(fn.tubuh)) {
         this.daftarGalat.push(
           new GalatTipe(
             JenisGalatTipe.KEMBALIAN_TIDAK_SESUAI,

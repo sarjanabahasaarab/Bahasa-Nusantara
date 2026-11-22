@@ -1,6 +1,6 @@
 /**
  * Skrip Pemeriksaan Kepatuhan Repositori Bahasa NUSANTARA
- * Memvalidasi integritas seluruh berkas Phase 1, 2, 3, 4, 5, 6, 7, 8, 9, dan Phase 10 (v0.10.0).
+ * Memeriksa keberadaan berkas wajib lintas fase. Pemeriksaan isi semantik dilakukan oleh suite khusus.
  */
 
 import fs from 'node:fs';
@@ -224,7 +224,7 @@ const berkasWajib = [
 
 console.log('=============================================================================');
 console.log('PEMERIKSAAN KEPATUHAN SPESIFIKASI & IMPLEMENTASI BAHASA NUSANTARA');
-console.log('Target Milestone: Phase 15 — Sistem Modul (v0.15.0)');
+console.log('Inventaris Berkas Wajib: Phase 1–50 (pemeriksaan keberadaan, bukan sertifikasi isi)');
 console.log('=============================================================================\n');
 
 let jumlahLulus = 0;
@@ -243,12 +243,12 @@ for (const item of berkasWajib) {
 }
 
 console.log('\n-----------------------------------------------------------------------------');
-console.log(`Hasil Evaluasi: ${jumlahLulus} berkas LULUS, ${jumlahGagal} berkas GAGAL.`);
+console.log(`Hasil Evaluasi: ${jumlahLulus} berkas ditemukan, ${jumlahGagal} berkas hilang.`);
 console.log('-----------------------------------------------------------------------------');
 
 if (jumlahGagal === 0) {
-  console.log('STATUS: SELURUH DOKUMENTASI, SPESIFIKASI, LEXER, PARSER, INTERPRETER, TIPE, OPERATOR, PERCABANGAN, PERULANGAN, FUNGSI, STRUKTUR DATA, DAN SISTEM MODUL LENGKAP & TERUJI.');
-  console.log('Repositori siap untuk milestone v0.15.0 (feat: implement nusantara module system).');
+  console.log('STATUS: SELURUH BERKAS DALAM DAFTAR INVENTARIS DITEMUKAN. Pemeriksaan ini tidak menyatakan fitur telah terimplementasi atau teruji.');
+  console.log('Catatan: gunakan suite pengujian khusus dan CI untuk memverifikasi isi, perilaku, serta kesiapan tiap fase.');
   process.exit(0);
 } else {
   console.error('STATUS: TERDAPAT BERKAS RESMI YANG HILANG. PERIKSA KEMBALI SEBELUM COMMIT.');

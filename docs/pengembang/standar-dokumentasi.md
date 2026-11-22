@@ -21,4 +21,6 @@ Dokumen ini mendefinisikan aturan gaya bahasa, format Markdown, dan konvensi pen
    - Gunakan ```` ```nusantara ```` untuk kode sumber NUSANTARA.
    - Gunakan ```` ```ebnf ```` untuk tata bahasa EBNF.
    - Gunakan ```` ```bash ```` untuk perintah baris perintah.
-3. **Catatan Kesiapan:** Setiap contoh kode `.nusantara` yang dicantumkan dalam tutorial wajib menyertakan keterangan penafian (*disclaimer*) bahwa contoh tersebut merupakan rancangan sintaksis acuan dan belum dapat dieksekusi sebelum modul kompilator tersedia.
+3. **Catatan Kesiapan:** Setiap contoh kode `.nusantara` wajib menyebutkan cakupan fitur dan status verifikasinya. Jangan menyatakan semua contoh belum dapat dieksekusi jika interpreter atau kompilator sudah tersedia; jangan pula mengklaim contoh berjalan tanpa hasil uji relevan.
+4. **Tautan Lokal:** Setiap tautan relatif Markdown harus menunjuk ke berkas atau direktori yang benar-benar ada di repositori.
+5. **Status Pengembangan:** Bedakan konteks historis milestone dengan status terkini pada `ROADMAP.md`; perbarui versi, fase, dan batasan jika dokumen dijadikan panduan aktif.

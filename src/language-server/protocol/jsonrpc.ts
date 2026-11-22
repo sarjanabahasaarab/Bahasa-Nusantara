@@ -69,8 +69,23 @@ export function formatPesanBingkaiLSP(payload: any): string {
 export class PembacaBingkaiLSP {
   private bufferTeks = '';
 
+  constructor(
+    private readonly batasMaksimumKontenByte = 16 * 1024 * 1024,
+    private readonly batasMaksimumHeaderByte = 8 * 1024
+  ) {
+    if (
+      !Number.isSafeInteger(batasMaksimumKontenByte) ||
+      batasMaksimumKontenByte < 1 ||
+      !Number.isSafeInteger(batasMaksimumHeaderByte) ||
+      batasMaksimumHeaderByte < 32
+    ) {
+      throw new RangeError('Batas ukuran bingkai LSP tidak valid.');
+    }
+  }
+
   /**
-   * Menerima potongan teks masuk dan mengekstrak pesan-pesan JSON-RPC yang lengkap.
+   * Menerima potongan teks masuk dan mengekstrak pesan-pesan lengkap.
+   * Ukuran header dan payload dibatasi untuk mencegah buffer exhaustion.
    */
   public prosesPotongan(potongan: string): PesanJSONRPC[] {
     this.bufferTeks += potongan;
@@ -79,69 +94,76 @@ export class PembacaBingkaiLSP {
     while (true) {
       const indeksHeaderAkhir = this.bufferTeks.indexOf('\r\n\r\n');
       if (indeksHeaderAkhir === -1) {
-        break; // Header belum lengkap
+        if (this.hitungByte(this.bufferTeks) > this.batasMaksimumHeaderByte) {
+          this.bersihkan();
+          throw new RangeError('Header LSP melebihi batas ukuran maksimum.');
+        }
+        break;
+      }
+
+      const byteHeader = this.hitungByte(this.bufferTeks.slice(0, indeksHeaderAkhir + 4));
+      if (byteHeader > this.batasMaksimumHeaderByte) {
+        this.bersihkan();
+        throw new RangeError('Header LSP melebihi batas ukuran maksimum.');
       }
 
       const barisHeader = this.bufferTeks.substring(0, indeksHeaderAkhir);
-      let panjangKonten = -1;
+      const daftarPanjang = barisHeader
+        .split('\r\n')
+        .filter(baris => /^Content-Length\s*:/i.test(baris));
 
-      for (const baris of barisHeader.split('\r\n')) {
-        const cocokan = baris.match(/Content-Length:\s*(\d+)/i);
-        if (cocokan) {
-          panjangKonten = parseInt(cocokan[1], 10);
-          break;
-        }
+      if (daftarPanjang.length !== 1) {
+        this.bersihkan();
+        throw new Error('Bingkai LSP harus memiliki tepat satu header Content-Length.');
       }
 
-      if (panjangKonten === -1) {
-        // Format header tidak sah, lewati hingga pembatas berikutnya
-        this.bufferTeks = this.bufferTeks.substring(indeksHeaderAkhir + 4);
-        continue;
+      const cocokPanjang = daftarPanjang[0].match(/^Content-Length:\s*(\d+)\s*$/i);
+      if (!cocokPanjang) {
+        this.bersihkan();
+        throw new Error('Nilai header Content-Length tidak valid.');
       }
 
-      const awalKonten = indeksHeaderAkhir + 4;
-      const totalPanjangDibutuhkan = awalKonten + panjangKonten;
+      const panjangKonten = Number(cocokPanjang[1]);
+      if (!Number.isSafeInteger(panjangKonten) || panjangKonten < 0) {
+        this.bersihkan();
+        throw new RangeError('Nilai Content-Length berada di luar rentang aman.');
+      }
+      if (panjangKonten > this.batasMaksimumKontenByte) {
+        this.bersihkan();
+        throw new RangeError('Payload LSP melebihi batas ukuran maksimum.');
+      }
+
+      const awalKontenKarakter = indeksHeaderAkhir + 4;
+      const awalKontenByte = this.hitungByte(this.bufferTeks.slice(0, awalKontenKarakter));
+      const akhirKontenByte = awalKontenByte + panjangKonten;
 
       if (typeof Buffer !== 'undefined') {
         const bufferAsli = Buffer.from(this.bufferTeks, 'utf-8');
-        if (bufferAsli.length < totalPanjangDibutuhkan) {
-          // Konten belum sepenuhnya tiba
-          break;
-        }
+        if (bufferAsli.length < akhirKontenByte) break;
 
-        // Potong payload konten
-        const kontenBuf = bufferAsli.subarray(awalKonten, totalPanjangDibutuhkan);
+        const kontenBuf = bufferAsli.subarray(awalKontenByte, akhirKontenByte);
         const kontenTeks = kontenBuf.toString('utf-8');
-
-        // Potong sisa buffer
-        const sisaBuf = bufferAsli.subarray(totalPanjangDibutuhkan);
-        this.bufferTeks = sisaBuf.toString('utf-8');
+        this.bufferTeks = bufferAsli.subarray(akhirKontenByte).toString('utf-8');
 
         try {
-          const pesanTerurai = JSON.parse(kontenTeks);
-          daftarPesan.push(pesanTerurai);
-        } catch (err) {
-          // JSON tidak valid
+          daftarPesan.push(JSON.parse(kontenTeks));
+        } catch {
+          // Payload JSON rusak dibuang; parser tetap dapat memproses bingkai berikutnya.
         }
       } else {
         const encoder = new TextEncoder();
         const decoder = new TextDecoder();
         const bufferAsli = encoder.encode(this.bufferTeks);
-        if (bufferAsli.length < totalPanjangDibutuhkan) {
-          break;
-        }
+        if (bufferAsli.length < akhirKontenByte) break;
 
-        const kontenBuf = bufferAsli.subarray(awalKonten, totalPanjangDibutuhkan);
+        const kontenBuf = bufferAsli.subarray(awalKontenByte, akhirKontenByte);
         const kontenTeks = decoder.decode(kontenBuf);
-
-        const sisaBuf = bufferAsli.subarray(totalPanjangDibutuhkan);
-        this.bufferTeks = decoder.decode(sisaBuf);
+        this.bufferTeks = decoder.decode(bufferAsli.subarray(akhirKontenByte));
 
         try {
-          const pesanTerurai = JSON.parse(kontenTeks);
-          daftarPesan.push(pesanTerurai);
-        } catch (err) {
-          // JSON tidak valid
+          daftarPesan.push(JSON.parse(kontenTeks));
+        } catch {
+          // Payload JSON rusak dibuang; parser tetap dapat memproses bingkai berikutnya.
         }
       }
     }
@@ -149,9 +171,11 @@ export class PembacaBingkaiLSP {
     return daftarPesan;
   }
 
-  /**
-   * Mengosongkan buffer parser.
-   */
+  private hitungByte(teks: string): number {
+    if (typeof Buffer !== 'undefined') return Buffer.byteLength(teks, 'utf-8');
+    return new TextEncoder().encode(teks).length;
+  }
+
   public bersihkan(): void {
     this.bufferTeks = '';
   }

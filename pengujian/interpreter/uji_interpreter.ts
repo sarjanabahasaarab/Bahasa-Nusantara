@@ -343,6 +343,48 @@ uji('definisi kosong dapat diisi kemudian tanpa mengubah inferensi ekspresi konk
   samaDengan(output[0], '3');
 });
 
+uji('Pemulihan lingkungan dan tumpukan saat kait debug sebelum fungsi melempar', () => {
+  const buffer = new PenulisOutputBuffer();
+  const peristiwaProfiler: string[] = [];
+  const interpreter = new Interpreter(buffer, {
+    kaitDebug: {
+      sebelumPanggilanFungsi: () => {
+        throw new Error('kait debug gagal');
+      },
+    },
+    profiler: {
+      mulaiPanggilan: nama => peristiwaProfiler.push(`mulai:${nama}`),
+      selesaiPanggilan: nama => peristiwaProfiler.push(`selesai:${nama}`),
+    },
+  });
+
+  let pesanGalat = '';
+  try {
+    interpreter.jalankanKode(`
+      fungsi uji() : bilangan
+      mulai
+        kembalikan 1
+      selesai
+
+      program UjiKait
+      mulai
+        tampilkan(uji())
+      selesai
+    `);
+  } catch (error: any) {
+    pesanGalat = error.message;
+  }
+
+  samaDengan(pesanGalat, 'kait debug gagal', 'Galat dari kait debug harus diteruskan ke pemanggil');
+  samaDengan(interpreter.dapatkanTumpukanPanggilan().length, 0, 'Tumpukan panggilan harus dibersihkan');
+  samaDengan(
+    interpreter.dapatkanLingkunganSaatIni(),
+    interpreter.dapatkanLingkunganGlobal(),
+    'Lingkungan saat ini harus dipulihkan ke lingkungan global'
+  );
+  samaDengan(peristiwaProfiler.join(','), 'mulai:uji,selesai:uji', 'Siklus profiler harus ditutup tepat satu kali');
+});
+
 // REKAPITULASI HASIL
 console.log('\n-----------------------------------------------------------------------------');
 const jumlahLulus = daftarHasil.filter(h => h.lulus).length;

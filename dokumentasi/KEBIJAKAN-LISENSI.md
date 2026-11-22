@@ -6,7 +6,7 @@ Dokumen ini mengatur kepatuhan hukum atas lisensi kode utama, dependensi pustaka
 
 ## 1. Lisensi Kode Utama Proyek
 
-Seluruh kode sumber asli, spesifikasi, tata bahasa formal, pustaka standar, serta perkakas internal yang ditulis khusus untuk repositori NUSANTARA dilindungi di bawah **Apache License 2.0**. Setiap kontribusi baru yang digabungkan ke cabang utama secara otomatis terikat oleh ketentuan lisensi ini.
+Seluruh kode sumber asli, spesifikasi, tata bahasa formal, pustaka standar, serta perkakas internal yang didistribusikan sebagai bagian dari repositori NUSANTARA dilisensikan di bawah **Apache License 2.0**, sesuai pemberitahuan lisensi dan ketentuan lisensi yang berlaku. Kontributor harus memiliki hak untuk mengirimkan kontribusi dan menyetujui distribusinya berdasarkan ketentuan tersebut; jangan mengirimkan materi pihak ketiga tanpa izin atau atribusi yang diperlukan.
 
 ---
 

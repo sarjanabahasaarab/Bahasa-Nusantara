@@ -198,20 +198,38 @@ export function uraiArsipPaket(kontenSerial: string): ArsipPaketData {
     );
   }
 
-  if (!data.berkas || typeof data.berkas !== 'object') {
+  if (!data.berkas || typeof data.berkas !== 'object' || Array.isArray(data.berkas)) {
     throw new GalatArsipPaket(`Arsip tidak menyertakan daftar berkas paket yang valid.`);
   }
 
-  // Validasi seluruh jalur berkas terhadap traversal
-  for (const jalur of Object.keys(data.berkas)) {
-    validasiJalurArsip(jalur);
+  if (
+    typeof data.header.nama !== 'string' ||
+    typeof data.header.versi !== 'string' ||
+    !data.header.nama.trim() ||
+    !data.header.versi.trim() ||
+    typeof data.header.checksum !== 'string' ||
+    !/^sha256-[a-f0-9]{64}$/i.test(data.header.checksum)
+  ) {
+    throw new GalatArsipPaket('Header arsip tidak lengkap atau checksum SHA-256 wajib tidak valid.');
   }
 
-  // Verifikasi integritas checksum
+  // Gunakan objek tanpa prototype agar nama berkas seperti "__proto__"
+  // tidak dapat memodifikasi prototype saat arsip dibangun ulang.
+  const berkasTerurut: Record<string, string> = Object.create(null);
   const kunciUrut = Object.keys(data.berkas).sort();
-  const berkasTerurut: Record<string, string> = {};
+  let totalUkuranByte = 0;
   for (const k of kunciUrut) {
+    validasiJalurArsip(k);
+    if (k === '__proto__' || k === 'prototype' || k === 'constructor') {
+      throw new GalatArsipPaket(`Nama berkas '${k}' ditolak karena merupakan nama properti berbahaya.`);
+    }
+    if (typeof data.berkas[k] !== 'string') {
+      throw new GalatArsipPaket(`Isi berkas '${k}' harus berupa teks.`);
+    }
     berkasTerurut[k] = data.berkas[k];
+    totalUkuranByte += typeof TextEncoder !== 'undefined'
+      ? new TextEncoder().encode(data.berkas[k]).length
+      : (typeof Buffer !== 'undefined' ? Buffer.from(data.berkas[k], 'utf-8').length : data.berkas[k].length);
   }
 
   const payloadUji = JSON.stringify({
@@ -221,17 +239,23 @@ export function uraiArsipPaket(kontenSerial: string): ArsipPaketData {
   });
 
   const checksumAktual = hitungChecksum(payloadUji);
-  if (data.header.checksum && data.header.checksum !== checksumAktual) {
+  if (data.header.checksum !== checksumAktual) {
     throw new GalatArsipPaket(
       `Verifikasi integritas arsip gagal (Checksum Mismatch)!\nDiharapkan: ${data.header.checksum}\nAktual    : ${checksumAktual}`
     );
+  }
+  if (
+    data.header.totalBerkas !== kunciUrut.length ||
+    data.header.totalUkuranByte !== totalUkuranByte
+  ) {
+    throw new GalatArsipPaket('Metadata jumlah berkas atau ukuran arsip tidak cocok dengan payload.');
   }
 
   return {
     header: data.header,
     berkas: berkasTerurut,
     kontenSerial,
-    checksum: data.header.checksum || checksumAktual,
+    checksum: checksumAktual,
   };
 }
 

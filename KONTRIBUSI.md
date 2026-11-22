@@ -15,7 +15,7 @@ Untuk menjaga kualitas dan ketertiban rekayasa piranti lunak, setiap kontributor
 3. **Membuat Issue Diskusi:**
    Jika menemukan kutu (*bug*) atau ingin mengusulkan perbaikan, buat Issue baru menggunakan template yang tersedia di `.github/ISSUE_TEMPLATE/`.
 4. **Membuat Fork atau Branch Kerja:**
-   Buat salinan repositori (*fork*) dan buat cabang kerja baru dari `develop`. **Dilarang keras melakukan push langsung ke cabang `main`**.
+   Buat salinan repositori (*fork*) bila diperlukan, lalu buat cabang kerja dari `main` (atau dari cabang dasar yang secara eksplisit ditentukan maintainer). Repositori saat audit ini tidak memiliki cabang `develop`, sehingga jangan mengarahkan pekerjaan ke cabang tersebut. **Jangan melakukan push langsung ke `main`; ajukan perubahan melalui Pull Request.**
 5. **Membuat Perubahan Kecil & Terfokus:**
    Hindari PR raksasa yang menggabungkan banyak hal tak terkait sekaligus. Buat perubahan atomik yang mudah ditinjau.
 6. **Menambahkan Pengujian:**
@@ -23,7 +23,7 @@ Untuk menjaga kualitas dan ketertiban rekayasa piranti lunak, setiap kontributor
 7. **Memperbarui Dokumentasi:**
    Jika perubahan menyangkut perilaku, sintaksis, atau panduan baru, perbarui berkas dokumentasi terkait di folder `dokumentasi/`.
 8. **Mengirim Pull Request:**
-   Buka Pull Request menuju cabang `develop` dengan mengisi formulir lengkap di [.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md).
+   Buka Pull Request menuju cabang `main` dengan mengisi formulir lengkap di [.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md).
 9. **Menunggu Peninjauan (*Review*):**
    Reviewer dan maintainer akan memeriksa kode Anda. Diskusikan masukan dengan pikiran terbuka dan profesional.
 10. **Menyempurnakan Masukan Reviewer:**
@@ -75,11 +75,13 @@ Contoh tipe:
 
 ## 5. Menjalankan Uji Kepatuhan Pra-Pengajuan
 
-Sebelum mengirim Pull Request, jalankan skrip verifikasi repositori:
+Sebelum mengirim Pull Request, jalankan pemeriksaan inventaris, pemeriksaan tipe, dan seluruh suite pengujian:
 
 ```bash
-# Uji kelengkapan seluruh dokumen resmi
+npm ci
 node skrip/periksa_fondasi.js
+npm run lint
+npm test
 ```
 
-Seluruh pengujian harus berstatus **LULUS** sebelum penggabungan kode disetujui.
+`skrip/periksa_fondasi.js` hanya memeriksa keberadaan jalur berkas; skrip ini bukan bukti bahwa fitur telah terimplementasi atau lulus uji. `npm test` menjalankan suite penerimaan Phase 1–3 dan rangkaian regresi yang terdaftar di `package.json`. Lampirkan hasil CI untuk commit yang diajukan.

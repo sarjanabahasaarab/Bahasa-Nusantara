@@ -43,6 +43,7 @@ interface HasilUji {
 }
 
 const daftarHasil: HasilUji[] = [];
+const tugasAsinkron: Promise<void>[] = [];
 let grupSaatIni = 'Umum';
 
 function setGrup(nama: string) {
@@ -51,24 +52,27 @@ function setGrup(nama: string) {
 }
 
 function uji(nama: string, fn: () => void | Promise<void>) {
+  const grup = grupSaatIni;
   try {
     const hasil = fn();
     if (hasil && typeof (hasil as any).then === 'function') {
-      (hasil as Promise<void>)
-        .then(() => {
-          daftarHasil.push({ grup: grupSaatIni, nama, lulus: true });
-          console.log(`  [✓ LULUS] ${nama}`);
-        })
-        .catch((err: any) => {
-          daftarHasil.push({ grup: grupSaatIni, nama, lulus: false, pesan: err.message });
-          console.error(`  [✗ GAGAL] ${nama}: ${err.message}`);
-        });
+      tugasAsinkron.push(
+        (hasil as Promise<void>)
+          .then(() => {
+            daftarHasil.push({ grup, nama, lulus: true });
+            console.log(`  [✓ LULUS] ${nama}`);
+          })
+          .catch((err: any) => {
+            daftarHasil.push({ grup, nama, lulus: false, pesan: err?.message || String(err) });
+            console.error(`  [✗ GAGAL] ${nama}: ${err?.message || String(err)}`);
+          })
+      );
     } else {
       daftarHasil.push({ grup: grupSaatIni, nama, lulus: true });
       console.log(`  [✓ LULUS] ${nama}`);
     }
   } catch (error: any) {
-    daftarHasil.push({ grup: grupSaatIni, nama, lulus: false, pesan: error.message });
+    daftarHasil.push({ grup, nama, lulus: false, pesan: error.message });
     console.error(`  [✗ GAGAL] ${nama}: ${error.message}`);
   }
 }
@@ -181,6 +185,33 @@ uji('Ekstraksi arsip ke sistem berkas memori', () => {
 // GRUP 2: INTEGRITAS & CHECKSUM KRIPTOGRAFIS SHA-256
 // ============================================================================
 setGrup('Grup 2: Integritas & Checksum SHA-256');
+
+uji('Parser arsip menolak checksum yang hilang dan metadata ukuran palsu', () => {
+  const manifest = buatManifestAwal('validasi-arsip', { versi: '1.0.0' });
+  const arsip = buatArsipPaket(manifest, { 'nusantara.toml': tulisManifest(manifest) });
+
+  const tanpaChecksum = JSON.parse(arsip.kontenSerial);
+  delete tanpaChecksum.header.checksum;
+  harusGalat(() => uraiArsipPaket(JSON.stringify(tanpaChecksum)), 'checksum SHA-256 wajib');
+
+  const ukuranPalsu = JSON.parse(arsip.kontenSerial);
+  ukuranPalsu.header.totalUkuranByte += 1;
+  harusGalat(() => uraiArsipPaket(JSON.stringify(ukuranPalsu)), 'ukuran arsip');
+});
+
+uji('Parser arsip menolak properti berbahaya dan isi berkas non-teks', () => {
+  const manifest = buatManifestAwal('arsip-aman', { versi: '1.0.0' });
+  const arsip = buatArsipPaket(manifest, { 'nusantara.toml': tulisManifest(manifest) });
+  const denganProto = arsip.kontenSerial.replace(
+    '"berkas": {',
+    '"berkas": {\n    "__proto__": "injeksi",'
+  );
+  harusGalat(() => uraiArsipPaket(denganProto), 'properti berbahaya');
+
+  const nonTeks = JSON.parse(arsip.kontenSerial);
+  nonTeks.berkas['nusantara.toml'] = { payload: true };
+  harusGalat(() => uraiArsipPaket(JSON.stringify(nonTeks)), 'harus berupa teks');
+});
 
 uji('Deteksi manipulasi data arsip (Tamper detection)', () => {
   const manifest = buatManifestAwal('aman', { versi: '1.0.0' });
@@ -378,6 +409,36 @@ uji('Registri menolak penerbitan ulang versi yang sama (Immutabilitas Release)',
   }, 'sudah pernah diterbitkan');
 });
 
+uji('Registri lokal menolak nama arsip berbahaya dari metadata yang dimanipulasi', () => {
+  const memori = new PembacaBerkasMemori();
+  const registri = new RegistriLokal({ pembacaBerkas: memori, direktoriBasis: '/registri' });
+  const manifest = buatManifestAwal('paket-aman', { versi: '1.0.0' });
+  registri.terbitkan(buatArsipPaket(manifest, { 'nusantara.toml': tulisManifest(manifest) }));
+
+  const jalurMetadata = '/registri/metadata/paket-aman.json';
+  const metadata = JSON.parse(memori.baca(jalurMetadata));
+  metadata.daftarVersi['1.0.0'].namaBerkasArsip = '../../rahasia.txt';
+  memori.tulisBerkas(jalurMetadata, JSON.stringify(metadata));
+
+  harusGalat(() => registri.unduh('paket-aman', '1.0.0'), 'rusak atau tidak valid');
+});
+
+uji('Registri lokal tidak menimpa rilis saat metadata yang ada rusak', () => {
+  const memori = new PembacaBerkasMemori();
+  const registri = new RegistriLokal({ pembacaBerkas: memori, direktoriBasis: '/registri' });
+  const manifest = buatManifestAwal('rilis-tetap', { versi: '1.0.0' });
+  const arsip = buatArsipPaket(manifest, { 'nusantara.toml': tulisManifest(manifest) });
+  registri.terbitkan(arsip);
+
+  memori.tulisBerkas('/registri/metadata/rilis-tetap.json', '{metadata-rusak');
+  harusGalat(() => registri.terbitkan(arsip), 'rusak atau tidak valid');
+  samaDengan(
+    memori.baca('/registri/packages/rilis-tetap/rilis-tetap-1.0.0.npk'),
+    arsip.kontenSerial,
+    'Arsip rilis yang sudah ada tidak boleh ditimpa saat metadata korup'
+  );
+});
+
 uji('Registri mendukung banyak versi berbeda secara urut SemVer', () => {
   const memori = new PembacaBerkasMemori();
   const registri = new RegistriLokal({ pembacaBerkas: memori, direktoriBasis: '/registri' });
@@ -551,6 +612,24 @@ uji('RegistriJarakJauh membuat konfigurasi token dan memformat endpoint', () => 
   samaDengan(remote.urlBasis, 'https://registri.nusantara-lang.org/api/v1');
 });
 
+uji('RegistriJarakJauh menolak URL basis non-HTTP dan kredensial tertanam', () => {
+  harusGalat(() => new RegistriJarakJauh('file:///tmp/registry'), 'HTTP(S)');
+  harusGalat(() => new RegistriJarakJauh('https://user:pass@registry.example/api'), 'kredensial');
+});
+
+uji('Registri lokal menolak objek arsip yang tidak sesuai dengan serialisasinya', () => {
+  const memori = new PembacaBerkasMemori();
+  const registri = new RegistriLokal({ pembacaBerkas: memori, direktoriBasis: '/registri' });
+  const manifest = buatManifestAwal('arsip-palsu', { versi: '1.0.0' });
+  const arsip = buatArsipPaket(manifest, { 'nusantara.toml': tulisManifest(manifest) });
+  const palsu = {
+    ...arsip,
+    header: { ...arsip.header, nama: 'nama-lain' },
+  };
+  harusGalat(() => registri.terbitkan(palsu as any), 'tidak konsisten');
+  harusSalah(memori.apakahAda('/registri/metadata/arsip-palsu.json'));
+});
+
 uji('RegistriJarakJauh menangani galat jaringan secara aman', async () => {
   const remote = new RegistriJarakJauh({
     urlBasis: 'http://127.0.0.1:54321/tidak-ada-server',
@@ -560,7 +639,8 @@ uji('RegistriJarakJauh menangani galat jaringan secara aman', async () => {
   try {
     await remote.dapatkanMetadata('paket-apapun');
   } catch (err: any) {
-    harusBenar(err.message.includes('jaringan') || err.message.includes('fetch') || err.message.includes('koneksi'));
+    const pesan = String(err?.message || err).toLowerCase();
+    harusBenar(pesan.includes('jaringan') || pesan.includes('fetch') || pesan.includes('koneksi') || pesan.includes('waktu'));
   }
 });
 
@@ -742,7 +822,7 @@ lisensi = "MIT"
 // ============================================================================
 // RINGKASAN HASIL PENGUJIAN
 // ============================================================================
-setTimeout(() => {
+void Promise.all(tugasAsinkron).then(() => {
   const total = daftarHasil.length;
   const lulus = daftarHasil.filter(h => h.lulus).length;
   const gagal = total - lulus;
@@ -762,4 +842,4 @@ setTimeout(() => {
   } else {
     console.log('Seluruh pengujian Phase 22 LULUS DENGAN SEMPURNA! (100% Pass)');
   }
-}, 50);
+});

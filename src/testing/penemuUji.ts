@@ -75,15 +75,28 @@ export class PenemuUji {
 
   private stripPrefix(jalur: string): string {
     let j = jalur.replace(/\\/g, '/');
-    if (j.startsWith('/proyek/')) {
+    const pembacaMemori = typeof (this.pembaca as any).dapatkanSemuaBerkas === 'function';
+    if (pembacaMemori && j === '/proyek') return '.';
+    if (pembacaMemori && j.startsWith('/proyek/')) {
       j = j.slice('/proyek/'.length);
     } else if (j.startsWith('./')) {
       j = j.slice(2);
     }
-    if (j.startsWith('/') && j.length > 1) {
-      j = j.slice(1);
-    }
+    // Jangan menghapus slash awal pada path absolut Node; path tersebut
+    // harus tetap dapat dibaca oleh PembacaBerkasNode.
     return j;
+  }
+
+  private apakahDiBawahSymbolicLink(jalur: string): boolean {
+    if (!this.pembaca.apakahSymbolicLink) return false;
+    let induk = this.pembaca.direktoriDari(jalur);
+    while (induk) {
+      if (this.pembaca.apakahSymbolicLink(induk)) return true;
+      const berikutnya = this.pembaca.direktoriDari(induk);
+      if (!berikutnya || berikutnya === induk) break;
+      induk = berikutnya;
+    }
+    return false;
   }
 
   private prosesTargetTunggal(target: string, hasilSet: Set<string>): void {
@@ -113,12 +126,10 @@ export class PenemuUji {
     }
   }
 
-  private pindaiDirektori(direktori: string, hasilSet: Set<string>, kedalaman: number = 0): void {
-    if (kedalaman > 10) return; // Lindungi dari infinite loop atau symlink melingkar
-
-    // Ambil daftar entri direktori
+  private pindaiDirektori(direktori: string, hasilSet: Set<string>): void {
+    // Pembaca memori tidak memiliki struktur direktori fisik. Daftar berkas
+    // diproses langsung, sementara jalur ancestor tetap diperiksa untuk symlink.
     if (typeof (this.pembaca as any).dapatkanSemuaBerkas === 'function') {
-      // PembacaBerkasMemori: saring berkas yang berada di bawah direktori
       const semua = (this.pembaca as any).dapatkanSemuaBerkas() as Map<string, string>;
       const targetBersih = this.stripPrefix(direktori);
       for (const jalur of semua.keys()) {
@@ -130,11 +141,11 @@ export class PenemuUji {
           jBersih.includes('/.git/') ||
           jBersih.startsWith('dist/') ||
           jBersih.includes('/dist/') ||
+          jBersih.startsWith('build/') ||
+          jBersih.includes('/build/') ||
           jBersih.startsWith('.aistudio/') ||
           jBersih.includes('/.aistudio/')
-        ) {
-          continue;
-        }
+        ) continue;
 
         const cocokDirektori =
           targetBersih === '.' ||
@@ -142,38 +153,68 @@ export class PenemuUji {
           jBersih.startsWith(targetBersih.endsWith('/') ? targetBersih : targetBersih + '/') ||
           jBersih === targetBersih;
 
-        if (cocokDirektori && PenemuUji.apakahBerkasUji(jBersih)) {
+        if (
+          cocokDirektori &&
+          !this.apakahDiBawahSymbolicLink(jalur) &&
+          PenemuUji.apakahBerkasUji(jBersih)
+        ) {
           hasilSet.add(jBersih);
         }
       }
       return;
     }
 
-    let entri: string[] = [];
-    if (typeof (this.pembaca as any).daftarDirektori === 'function') {
-      try {
-        entri = (this.pembaca as any).daftarDirektori(direktori) || [];
-      } catch {
-        entri = [];
-      }
-    }
+    if (typeof (this.pembaca as any).daftarDirektori !== 'function') return;
 
-    for (const item of entri) {
-      // Abaikan node_modules, .git, dist, dan direktori build
-      if (item === 'node_modules' || item === '.git' || item === 'dist' || item === '.aistudio') {
+    const tumpukan = [direktori];
+    const direktoriDikunjungi = new Set<string>();
+    const abaikan = new Set([
+      'node_modules',
+      '.git',
+      'dist',
+      'build',
+      '.aistudio',
+      'coverage',
+      'vendor',
+      'target',
+    ]);
+
+    while (tumpukan.length > 0) {
+      const dir = tumpukan.pop()!;
+      if (this.pembaca.apakahSymbolicLink?.(dir)) continue;
+
+      let kunci: string;
+      try {
+        kunci = this.pembaca.jalurNyata
+          ? this.pembaca.jalurNyata(dir)
+          : this.pembaca.normalisasiJalur(this.pembaca.jalurAbsolut(dir));
+      } catch {
+        continue;
+      }
+      if (direktoriDikunjungi.has(kunci)) continue;
+      direktoriDikunjungi.add(kunci);
+
+      let entri: string[] = [];
+      try {
+        entri = (this.pembaca as any).daftarDirektori(dir) || [];
+      } catch {
         continue;
       }
 
-      const jalurLengkap = this.pembaca.gabungJalur(direktori, item);
-      const isDir =
-        typeof (this.pembaca as any).apakahDirektori === 'function'
-          ? (this.pembaca as any).apakahDirektori(jalurLengkap)
-          : false;
+      for (const item of entri) {
+        if (abaikan.has(item)) continue;
+        const jalurLengkap = this.pembaca.gabungJalur(dir, item);
+        if (this.pembaca.apakahSymbolicLink?.(jalurLengkap)) continue;
 
-      if (isDir) {
-        this.pindaiDirektori(jalurLengkap, hasilSet, kedalaman + 1);
-      } else if (PenemuUji.apakahBerkasUji(item)) {
-        hasilSet.add(this.stripPrefix(this.pembaca.normalisasiJalur(jalurLengkap)));
+        const isDir =
+          typeof (this.pembaca as any).apakahDirektori === 'function' &&
+          (this.pembaca as any).apakahDirektori(jalurLengkap);
+
+        if (isDir) {
+          tumpukan.push(jalurLengkap);
+        } else if (PenemuUji.apakahBerkasUji(item)) {
+          hasilSet.add(this.stripPrefix(this.pembaca.normalisasiJalur(jalurLengkap)));
+        }
       }
     }
   }

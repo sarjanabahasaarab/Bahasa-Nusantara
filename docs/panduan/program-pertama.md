@@ -16,7 +16,7 @@ mulai
 selesai
 ```
 
-*(Catatan: Contoh ini menunjukkan rancangan sintaks resmi bahasa NUSANTARA dan belum dapat dijalankan sebelum alat eksekusi NUSANTARA tersedia pada fase kompilator berikutnya).*
+*(Catatan: Contoh ini mengikuti bentuk sintaks program utama pada spesifikasi Phase 4. Dukungan eksekusi bergantung pada cakupan fitur interpreter/kompilator dan cara menjalankan build proyek; contoh dokumentasi tidak dengan sendirinya membuktikan tersedianya paket biner.)*
 
 ---
 

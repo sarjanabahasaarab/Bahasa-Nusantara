@@ -245,29 +245,57 @@ export class LayananSimbol {
     const hasil: string[] = [];
     if (!fs.daftarDirektori || !fs.apakahDirektori) return hasil;
 
-    const pindai = (dir: string) => {
+    const direktoriAbaikan = new Set([
+      '.git',
+      '.nusantara',
+      'node_modules',
+      'vendor',
+      'cache',
+      'dist',
+      'build',
+    ]);
+    const tumpukan = [dirBasis];
+    const sudahDikunjungi = new Set<string>();
+
+    // Iteratif dan berbasis jalur fisik agar pemindaian workspace tidak
+    // mengikuti symlink keluar proyek atau terjebak pada siklus direktori.
+    while (tumpukan.length > 0) {
+      const dir = tumpukan.pop()!;
+      let kunci: string;
       try {
-        const entri = fs.daftarDirektori!(dir);
-        for (const item of entri) {
-          const jalurPenuh = dir === '/' ? `/${item}` : `${dir}/${item}`;
-          if (['.git', '.nusantara', 'node_modules', 'vendor', 'cache'].includes(item)) {
-            continue;
-          }
-          if (fs.apakahDirektori!(jalurPenuh)) {
-            pindai(jalurPenuh);
-          } else if (item.endsWith('.nusantara')) {
-            hasil.push(jalurPenuh);
-          }
-        }
-      } catch (e) {
-        // Abaikan galat direktori
+        kunci = fs.jalurNyata
+          ? fs.jalurNyata(dir)
+          : fs.normalisasiJalur(fs.jalurAbsolut(dir));
+      } catch {
+        continue;
       }
-    };
 
-    pindai(dirBasis);
-    return hasil;
+      if (sudahDikunjungi.has(kunci)) continue;
+      sudahDikunjungi.add(kunci);
+
+      let entri: string[] = [];
+      try {
+        entri = fs.daftarDirektori!(dir);
+      } catch {
+        continue;
+      }
+
+      for (const item of entri) {
+        if (direktoriAbaikan.has(item)) continue;
+        const jalurPenuh = fs.gabungJalur(dir, item);
+
+        if (fs.apakahSymbolicLink?.(jalurPenuh)) continue;
+
+        if (fs.apakahDirektori!(jalurPenuh)) {
+          tumpukan.push(jalurPenuh);
+        } else if (item.endsWith('.nusantara')) {
+          hasil.push(jalurPenuh);
+        }
+      }
+    }
+
+    return hasil.sort((a, b) => a.localeCompare(b));
   }
-
   private ubahRentangAstKeLsp(pos: any): RentangLSP {
     if (!pos || !pos.awal || !pos.akhir) {
       return {

@@ -12,6 +12,12 @@ import { ServerBahasaNUSANTARA } from '../language-server/server';
 import { KATALOG_MODUL_STANDAR } from '../stdlib';
 import { HasilItemGerbang, LaporanGerbangKualitas } from './types';
 
+function normalisasiAmbangBatasCakupan(nilai: number | undefined): number {
+  return typeof nilai === 'number' && Number.isFinite(nilai) && nilai >= 0 && nilai <= 100
+    ? nilai
+    : 85;
+}
+
 /**
  * Gerbang Kualitas Resmi (Quality Gate) NUSANTARA (Phase 21).
  * Memverifikasi seluruh subsistem bahasa dari Phase 1 hingga Phase 21 sebelum kode diintegrasikan/dirilis.
@@ -27,16 +33,16 @@ export class GerbangKualitas {
   ) {
     if (pembacaAtauOpsi && typeof (pembacaAtauOpsi as any).apakahAda === 'function') {
       this.pembaca = pembacaAtauOpsi as PembacaBerkas;
-      this.ambangBatasCakupan = opsi?.ambangBatasCakupan ?? 85;
+      this.ambangBatasCakupan = normalisasiAmbangBatasCakupan(opsi?.ambangBatasCakupan);
       this.verbose = Boolean(opsi?.verbose);
     } else if (pembacaAtauOpsi) {
       const opt = pembacaAtauOpsi as { pembaca?: PembacaBerkas; ambangBatasCakupan?: number; verbose?: boolean };
       this.pembaca = opt.pembaca || new PembacaBerkasMemori();
-      this.ambangBatasCakupan = opt.ambangBatasCakupan ?? opsi?.ambangBatasCakupan ?? 85;
+      this.ambangBatasCakupan = normalisasiAmbangBatasCakupan(opt.ambangBatasCakupan ?? opsi?.ambangBatasCakupan);
       this.verbose = Boolean(opt.verbose ?? opsi?.verbose);
     } else {
       this.pembaca = new PembacaBerkasMemori();
-      this.ambangBatasCakupan = opsi?.ambangBatasCakupan ?? 85;
+      this.ambangBatasCakupan = normalisasiAmbangBatasCakupan(opsi?.ambangBatasCakupan);
       this.verbose = Boolean(opsi?.verbose);
     }
   }
@@ -184,14 +190,14 @@ export class GerbangKualitas {
     // 6. Verifikasi Fondasi Cakupan Kode (Coverage >= 85%)
     const awalCov = performance.now();
     const dataCakupan = PengukurCakupan.hitungCakupan();
-    const lolosCakupan = dataCakupan.totalPersentase >= 85;
+    const lolosCakupan = dataCakupan.totalPersentase >= this.ambangBatasCakupan;
     hasil.push({
-      nama: `Ambang Batas Cakupan Kode (Target >= 85%, Aktual: ${dataCakupan.totalPersentase}%)`,
+      nama: `Ambang Batas Cakupan Kode (Target >= ${this.ambangBatasCakupan}%, Aktual: ${dataCakupan.totalPersentase}%)`,
       kategori: 'Kualitas',
       status: lolosCakupan ? 'LULUS' : 'GAGAL',
       pesan: lolosCakupan
         ? `Cakupan kode komprehensif mencapai ${dataCakupan.totalPersentase}%.`
-        : `Cakupan kode di bawah ambang batas minimal (${dataCakupan.totalPersentase}% < 85%).`,
+        : `Cakupan kode di bawah ambang batas minimal (${dataCakupan.totalPersentase}% < ${this.ambangBatasCakupan}%).`,
       durasiMs: Math.round((performance.now() - awalCov) * 100) / 100,
     });
 
@@ -358,14 +364,14 @@ export class GerbangKualitas {
     // 6. Verifikasi Fondasi Cakupan Kode (Coverage >= 85%)
     const awalCov = performance.now();
     const dataCakupan = PengukurCakupan.hitungCakupan();
-    const lolosCakupan = dataCakupan.totalPersentase >= 85;
+    const lolosCakupan = dataCakupan.totalPersentase >= this.ambangBatasCakupan;
     hasil.push({
-      nama: `Ambang Batas Cakupan Kode (Target >= 85%, Aktual: ${dataCakupan.totalPersentase}%)`,
+      nama: `Ambang Batas Cakupan Kode (Target >= ${this.ambangBatasCakupan}%, Aktual: ${dataCakupan.totalPersentase}%)`,
       kategori: 'Kualitas',
       status: lolosCakupan ? 'LULUS' : 'GAGAL',
       pesan: lolosCakupan
         ? `Cakupan kode komprehensif mencapai ${dataCakupan.totalPersentase}%.`
-        : `Cakupan kode di bawah ambang batas minimal (${dataCakupan.totalPersentase}% < 85%).`,
+        : `Cakupan kode di bawah ambang batas minimal (${dataCakupan.totalPersentase}% < ${this.ambangBatasCakupan}%).`,
       durasiMs: Math.round((performance.now() - awalCov) * 100) / 100,
     });
 

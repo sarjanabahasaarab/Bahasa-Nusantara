@@ -24,7 +24,10 @@ export class DesktopDistributionPackager {
   public static packageTarget(options: DesktopDistributionOptions): DesktopDistributionResult {
     const diagnostics: string[] = [];
     const cap = TargetMatrixManager.inspectTargetCapability(options.target);
-    const canonical: CanonicalDesktopTarget = cap.canonicalTarget || 'linux-x86_64';
+    if (!cap.canonicalTarget) {
+      throw new Error(`Target distribusi tidak didukung atau tidak valid: '${options.target}'.`);
+    }
+    const canonical: CanonicalDesktopTarget = cap.canonicalTarget;
     const legacyTarget = cap.legacyAlias || DESKTOP_LEGACY_ALIAS_MAP[canonical];
     const targetOs: 'windows' | 'linux' | 'darwin' =
       cap.os === 'unknown' ? 'linux' : cap.os;
@@ -32,6 +35,9 @@ export class DesktopDistributionPackager {
       cap.arch === 'unknown' ? 'x86_64' : cap.arch;
 
     const cleanApp = options.appName.replace(/[^A-Za-z0-9._-]/g, '_');
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(cleanApp) || !/^[vV]?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(options.appVersion)) {
+      throw new Error('Nama aplikasi dan versi SemVer wajib valid untuk membuat paket distribusi.');
+    }
     const baseName = `${cleanApp}-${options.appVersion}-${legacyTarget}`;
     const outRoot = safePath.resolve(options.outputDirectory);
     const pkgDir = safePath.join(outRoot, baseName);
@@ -43,9 +49,18 @@ export class DesktopDistributionPackager {
 
     const archiveEntries: ArchiveEntryInput[] = [];
     const shaEntries: Sha256SumEntry[] = [];
+    const recordedPaths = new Set<string>();
 
     const writeAndRecord = (relPath: string, content: string | Uint8Array, mode = 0o644) => {
-      const dest = safePath.join(pkgDir, relPath);
+      const normalizedRelPath = relPath.replace(/\\/g, '/');
+      const pathKey = normalizedRelPath.toLowerCase();
+      if (!normalizedRelPath || pathKey === 'sha256sums' || recordedPaths.has(pathKey)) {
+        throw new Error(`Jalur berkas duplikat atau dicadangkan dalam paket: '${relPath}'.`);
+      }
+      // Memastikan jalur tetap berada di dalam direktori paket, termasuk pada
+      // host Windows yang memakai pemisah jalur berbeda.
+      const dest = ArchiveBuilder.resolveSafeSubpath(pkgDir, normalizedRelPath);
+      recordedPaths.add(pathKey);
       safeFS.mkdirSync(safePath.dirname(dest), { recursive: true });
       const bytes = typeof content === 'string' ? Buffer.from(content, 'utf-8') : Buffer.from(content);
       safeFS.writeFileSync(dest, bytes);
@@ -56,13 +71,20 @@ export class DesktopDistributionPackager {
           // abaikan
         }
       }
-      archiveEntries.push({ name: `${baseName}/${relPath}`, content: bytes, mode });
-      shaEntries.push({ sha256: ArchiveBuilder.computeSha256(bytes), filename: relPath });
+      archiveEntries.push({ name: `${baseName}/${normalizedRelPath}`, content: bytes, mode });
+      shaEntries.push({ sha256: ArchiveBuilder.computeSha256(bytes), filename: normalizedRelPath });
       return bytes;
     };
 
     const packageKind: 'native' | 'script-launcher' =
       options.packageKind || (options.nativeBuildResult?.executablePath ? 'native' : 'script-launcher');
+    if (
+      packageKind === 'native' &&
+      (!options.nativeBuildResult?.executablePath ||
+        !safeFS.existsSync(options.nativeBuildResult.executablePath))
+    ) {
+      throw new Error('Paket native membutuhkan executable hasil build yang benar-benar tersedia.');
+    }
 
     const exeExt = targetOs === 'windows' ? (packageKind === 'native' ? '.exe' : '.cmd') : '';
     const exeName = `${cleanApp}${exeExt}`;
@@ -92,7 +114,11 @@ export class DesktopDistributionPackager {
 
     if (options.extraFiles) {
       for (const ef of options.extraFiles) {
-        writeAndRecord(ef.relativePath, ef.content, ef.mode ?? 0o644);
+        const normalized = ef.relativePath.replace(/\\/g, '/');
+        if (normalized === 'manifest.json' || normalized === 'SHA256SUMS') {
+          throw new Error(`Berkas tambahan tidak boleh menimpa metadata paket: '${normalized}'.`);
+        }
+        writeAndRecord(normalized, ef.content, ef.mode ?? 0o644);
       }
     }
 

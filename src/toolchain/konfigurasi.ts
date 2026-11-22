@@ -50,12 +50,12 @@ export function muatKonfigurasiFormatDariTOML(teksTOML?: string): KonfigurasiFor
 
     const indentasi =
       typeof bagianFormat.indentasi === 'number' && bagianFormat.indentasi > 0 && bagianFormat.indentasi <= 8
-        ? Math.floor(bagianFormat.indentasi)
+        ? Math.max(1, Math.floor(bagianFormat.indentasi))
         : KONFIGURASI_FORMAT_DEFAULT.indentasi;
 
     const panjangBaris =
-      typeof bagianFormat.panjang_baris === 'number' && bagianFormat.panjang_baris >= 40
-        ? Math.floor(bagianFormat.panjang_baris)
+      typeof bagianFormat.panjang_baris === 'number' && Number.isFinite(bagianFormat.panjang_baris) && bagianFormat.panjang_baris >= 40
+        ? Math.min(240, Math.floor(bagianFormat.panjang_baris))
         : KONFIGURASI_FORMAT_DEFAULT.panjangBaris;
 
     const spasiOperator =

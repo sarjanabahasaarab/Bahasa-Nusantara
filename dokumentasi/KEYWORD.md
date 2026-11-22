@@ -1,12 +1,14 @@
 # Tabel Kata Kunci Resmi Bahasa NUSANTARA
 
-Dokumen ini memuat daftar lengkap kata kunci (*keywords*) yang dicadangkan dalam tata bahasa NUSANTARA. Kata kunci tidak boleh digunakan sebagai pengidentifikasi (*identifier*) untuk nama program, variabel, fungsi, atau kelas.
+Dokumen ini memuat 32 bentuk kata kunci (*keyword spellings*) yang dicadangkan dalam tata bahasa NUSANTARA: 21 berstatus **[DITETAPKAN]** dan 11 berstatus **[RANCANGAN]** pada inventaris Phase 2. `buat` dan `baru` merupakan dua bentuk alternatif dalam satu kelompok konsep sebagaimana dicatat pada NIP-0001. Kata kunci tidak boleh digunakan sebagai pengidentifikasi (*identifier*) untuk nama program, variabel, fungsi, atau kelas.
 
 Status:
 - **[DITETAPKAN]:** Sintaks dan semantiknya telah disepakati sebagai acuan konstitusi sejak Phase 1 dan Phase 2.
 - **[RANCANGAN]:** Konstruksi leksikal telah dicadangkan, namun semantik operasionalnya akan disahkan pada fase spesifikasi sintaksis dan implementasi terkait.
 
 ---
+
+> **Catatan lintas fase:** Status pada tabel ini merekam keputusan spesifikasi Phase 2. Status implementasi dan pengesahan operasional pada fase-fase berikutnya harus diperiksa pada `ROADMAP.md` serta spesifikasi fase terkait.
 
 ## Daftar Kata Kunci Awal
 

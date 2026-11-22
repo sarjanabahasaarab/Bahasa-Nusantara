@@ -313,6 +313,29 @@ uji('2.3 Verifikasi SHA256SUMS mendeteksi berkas terubah (tamper) dan berkas hil
   }
 });
 
+uji('2.3b ArchiveBuilder menolak jalur absolut, null byte, dan entri duplikat', () => {
+  for (const nama of ['/etc/passwd', 'C:\\Windows\\system.ini', '../keluar.txt', 'folder/../keluar.txt', 'folder/berkas:stream', 'CON.txt', 'aman\0sisipan']) {
+    let ditolak = false;
+    try {
+      ArchiveBuilder.createZip([{ name: nama, content: 'payload' }]);
+    } catch {
+      ditolak = true;
+    }
+    pastikan(ditolak, `Nama entri berbahaya harus ditolak: ${nama}`);
+  }
+
+  let duplikatDitolak = false;
+  try {
+    ArchiveBuilder.createZip([
+      { name: 'Bin/Program', content: 'satu' },
+      { name: 'bin/program', content: 'dua' },
+    ]);
+  } catch {
+    duplikatDitolak = true;
+  }
+  pastikan(duplikatDitolak, 'Entri duplikat yang bentrok di Windows harus ditolak');
+});
+
 uji('2.4 Proteksi keamanan menolak path traversal dan jalur absolut dalam arsip', () => {
   let rejectedTraversal = false;
   try {
@@ -687,6 +710,60 @@ uji('3.3 Preflight sysroot, CRT, /usr/lib/*, mismatch arsitektur, & penolakan li
 // -----------------------------------------------------------------------------
 console.log('\n[GRUP 4] Pengemas Distribusi Desktop & Reproducible Build');
 
+uji('4.0b DesktopDistributionPackager menolak path traversal, metadata override, dan versi tidak valid', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-dist-security-'));
+  try {
+    const opsiDasar = {
+      appName: 'uji-aman',
+      appVersion: 'v1.2.3',
+      target: 'linux-x86_64',
+      mode: 'release' as const,
+      outputDirectory: tmp,
+      packageKind: 'script-launcher' as const,
+      includeInstallers: false,
+    };
+    let traversalDitolak = false;
+    try {
+      DesktopDistributionPackager.packageTarget({
+        ...opsiDasar,
+        extraFiles: [{ relativePath: '../../keluar.txt', content: 'tidak boleh' }],
+      });
+    } catch (err: any) {
+      traversalDitolak = /traversal|Jalur absolut|batas direktori/i.test(err.message);
+    }
+    pastikan(traversalDitolak, 'Path traversal pada extraFiles harus ditolak');
+
+    let manifestOverrideDitolak = false;
+    try {
+      DesktopDistributionPackager.packageTarget({
+        ...opsiDasar,
+        extraFiles: [{ relativePath: 'manifest.json', content: '{"palsu":true}' }],
+      });
+    } catch {
+      manifestOverrideDitolak = true;
+    }
+    pastikan(manifestOverrideDitolak, 'extraFiles tidak boleh menimpa manifest.json');
+
+    let versiTidakValidDitolak = false;
+    try {
+      DesktopDistributionPackager.packageTarget({ ...opsiDasar, appVersion: '../../keluar' });
+    } catch {
+      versiTidakValidDitolak = true;
+    }
+    pastikan(versiTidakValidDitolak, 'Versi aplikasi tidak boleh menyisipkan path');
+
+    let nativePalsuDitolak = false;
+    try {
+      DesktopDistributionPackager.packageTarget({ ...opsiDasar, packageKind: 'native' });
+    } catch {
+      nativePalsuDitolak = true;
+    }
+    pastikan(nativePalsuDitolak, 'Mode native wajib memiliki executable hasil build nyata');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 uji('4.1 DesktopDistributionPackager menghasilkan arsip deterministik & manifest lengkap', () => {
   const tmp1 = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-dist1-'));
   const tmp2 = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-dist2-'));
@@ -738,6 +815,39 @@ uji('4.2 CLI nusantara bangun menulis arsip, release-manifest.json, dan SHA256SU
 // GRUP 5: INSTALLER, SANDBOX LIFECYCLE, & UTF-8 BOM DEFENSIVE PARSING
 // -----------------------------------------------------------------------------
 console.log('\n[GRUP 5] Generator Pemasang, Penanganan JSON UTF-8 Tanpa BOM, & Sandbox Lifecycle');
+
+uji('5.0b Generator installer menetralkan nama dan menolak versi atau jalur executable berbahaya', () => {
+  const dasar = {
+    appName: 'nusa-aman',
+    appVersion: 'v1.2.3',
+    target: 'linux-x86_64' as const,
+    os: 'linux' as const,
+    binRelativePath: 'bin/nusa-aman',
+  };
+  const bundle = DesktopInstallerGenerator.generate({
+    ...dasar,
+    appName: 'aman-$(touch-pwned)',
+  });
+  pastikan(
+    !bundle.files.some(berkas => berkas.content.includes('aman-$(touch-pwned)')),
+    'Nama aplikasi tidak boleh menyisipkan perintah ke skrip installer'
+  );
+
+  for (const opsi of [
+    { ...dasar, appName: '..' },
+    { ...dasar, appVersion: '1.0.0; touch-pwned' },
+    { ...dasar, binRelativePath: '../../tmp/pwned' },
+    { ...dasar, binRelativePath: 'bin/$(touch-pwned)' },
+  ]) {
+    let ditolak = false;
+    try {
+      DesktopInstallerGenerator.generate(opsi as any);
+    } catch {
+      ditolak = true;
+    }
+    pastikan(ditolak, 'Versi atau jalur executable berbahaya harus ditolak');
+  }
+});
 
 uji('5.1 Skrip installer Windows memakai .NET SHA256::Create() (tanpa Get-FileHash) & UTF8Encoding($false)', () => {
   const winBundle = DesktopInstallerGenerator.generate({
@@ -1379,6 +1489,26 @@ uji('7.5 Ketidakcocokan SHA-256 artefak di disk terdeteksi (SHA256_TIDAK_COCOK)'
     const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
     samaDengan(agg.overallStatus, 'FAILED');
     pastikan(agg.findings.some((f) => f.code === 'SHA256_TIDAK_COCOK'), 'Wajib mendeteksi mismatch SHA-256');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+uji('7.5b Gerbang menolak path traversal relatif pada metadata artefak evidence', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cert-path-'));
+  try {
+    const evDir = writeAll6Fixtures(tmp, (target, ev) => {
+      if (target === 'linux-x86_64') {
+        ev.binaryPath = '../../etc/passwd';
+        ev.executable.path = '../../etc/passwd';
+      }
+    });
+    const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
+    samaDengan(agg.overallStatus, 'FAILED');
+    pastikan(
+      agg.findings.some(f => f.code === 'SHA256_TIDAK_COCOK' && f.message.includes('keluar dari direktori')),
+      'Path relatif di luar bundle harus ditolak sebelum file dibaca'
+    );
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

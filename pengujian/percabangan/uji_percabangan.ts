@@ -478,7 +478,42 @@ uji('Program Seleksi kompleks dengan operator dan berjalan melalui pipeline penu
   samaDengan(output[0], 'Memenuhi syarat');
 });
 
-// 10. REKAPITULASI HASIL
+// 10. REGRESI ISOLASI LINGKUP PADA PEMERIKSA TIPE
+console.log('\\n--- Kelompok 10: Isolasi Lingkup Percabangan pada Type Checker ---');
+uji('Menolak akses variabel lokal cabang setelah blok jika berakhir', () => {
+  const sumber = `
+  program LingkupKeluar
+  mulai
+      jika benar maka
+          lokal : bilangan = 10
+      akhir
+      jika lokal maka
+          tampilkan(1)
+      akhir
+  selesai`;
+  const galat = periksaTipeProgram(sumber);
+  samaDengan(galat.length > 0, true, 'Variabel lokal cabang tidak boleh bocor ke lingkup luar');
+  samaDengan(galat[0].jenis, JenisGalatTipe.VARIABEL_BELUM_DIDEKLARASIKAN);
+});
+
+uji('Menolak akses variabel cabang maka dari cabang selain', () => {
+  const sumber = `
+  program LingkupSaudara
+  mulai
+      jika benar maka
+          lokal : bilangan = 10
+      selain
+          jika lokal maka
+              tampilkan(1)
+          akhir
+      akhir
+  selesai`;
+  const galat = periksaTipeProgram(sumber);
+  samaDengan(galat.length > 0, true, 'Lingkup cabang maka dan selain harus terpisah');
+  samaDengan(galat[0].jenis, JenisGalatTipe.VARIABEL_BELUM_DIDEKLARASIKAN);
+});
+
+// 11. REKAPITULASI HASIL
 console.log('\n-----------------------------------------------------------------------------');
 const jumlahLulus = daftarHasil.filter(h => h.lulus).length;
 const jumlahGagal = daftarHasil.filter(h => !h.lulus).length;
