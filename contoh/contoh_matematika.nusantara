@@ -11,7 +11,7 @@ mulai
     kembalikan a * b
 selesai
 
-ekspor fungsi bagi(a : bilangan, b : bilangan) : bilangan
+ekspor fungsi bagi(a : bilangan, b : bilangan) : desimal
 mulai
     kembalikan a / b
 selesai
