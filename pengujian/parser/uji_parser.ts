@@ -285,6 +285,23 @@ uji('Parser menambahkan sentinel EOF untuk daftar token tanpa EOF', () => {
   samaDengan(aliran.eof(), true, 'Aliran harus mencapai sentinel EOF');
 });
 
+uji('TokenStream.peek memvalidasi offset dan mempertahankan sentinel EOF', () => {
+  const aliran = new TokenStream(new Lexer('nama = 1', { sertakanBarisBaru: false }));
+  samaDengan(aliran.peek(0).nilai, 'nama', 'Offset nol harus menunjuk token saat ini');
+  samaDengan(aliran.peek(1).nilai, '=', 'Offset satu harus menunjuk token berikutnya');
+  samaDengan(aliran.peek(999).jenis, 'EOF', 'Offset yang melewati aliran harus mengembalikan sentinel EOF');
+
+  for (const offset of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1]) {
+    let ditolak = false;
+    try {
+      aliran.peek(offset);
+    } catch (error) {
+      ditolak = error instanceof RangeError;
+    }
+    samaDengan(ditolak, true, `Offset tidak valid (${offset}) harus ditolak dengan RangeError`);
+  }
+});
+
 uji('Satu kesalahan sintaks dicatat tepat satu kali', () => {
   const parser = new Parser('fungsi (');
   try {
