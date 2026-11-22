@@ -202,6 +202,48 @@ async function jalankanSemuaPengujian() {
     tegas(verif.valid === false, 'Manifest yang dimodifikasi setelah penandatanganan harus ditolak');
   });
 
+  await uji('UpdateRegistry menolak manifest unsigned dan tampered serta menyimpan snapshot terverifikasi', () => {
+    const keys = SignatureVerifier.buatPasanganKunciEd25519();
+    const keyId = 'phase42-registry-test-key';
+    TrustManager.dapatkanInstance().daftarkanKunci({
+      keyId,
+      algoritma: 'Ed25519',
+      kunciPublikHex: keys.fingerprintHex,
+      kunciPublikPem: keys.kunciPublikPem,
+      deskripsi: 'Ephemeral registry security test key',
+      tanggalDibuat: new Date().toISOString(),
+      aktif: true,
+    });
+
+    const registry = UpdateRegistry.dapatkanInstance();
+    let unsignedDitolak = false;
+    try {
+      registry.daftarkanManifest(validManifest);
+    } catch {
+      unsignedDitolak = true;
+    }
+    tegas(unsignedDitolak, 'Registry wajib menolak manifest tanpa tanda tangan');
+
+    const signed = SignatureVerifier.tandaTangani(validManifest, keyId, keys.kunciPrivatPem, 'Ed25519');
+    const tampered = { ...signed, releaseVersion: '9.9.9-unauthorized' };
+    let tamperedDitolak = false;
+    try {
+      registry.daftarkanManifest(tampered);
+    } catch {
+      tamperedDitolak = true;
+    }
+    tegas(tamperedDitolak, 'Registry wajib menolak manifest yang diubah setelah penandatanganan');
+
+    registry.daftarkanManifest(signed);
+    signed.releaseNotes.id = 'Konten yang diubah dari luar';
+    const retrieved = registry.ambilManifest('id.nusantara.demo', 'android', 'stable');
+    tegas(retrieved?.releaseNotes.id === 'Catatan rilis OTA Bahasa Indonesia', 'Mutasi objek sumber tidak boleh mengubah manifest di registry');
+
+    if (retrieved) retrieved.releaseNotes.id = 'Mutasi pada salinan hasil baca';
+    const reread = registry.ambilManifest('id.nusantara.demo', 'android', 'stable');
+    tegas(reread?.releaseNotes.id === 'Catatan rilis OTA Bahasa Indonesia', 'Mutasi hasil baca tidak boleh mengubah snapshot internal registry');
+  });
+
   // --- 4. HashValidator & Integrity ---
   console.log('\n[KELOMPOK 4] HashValidator SHA-256 & Integritas Resource');
   await uji('HashValidator FIPS 180-4 SHA-256 menghasilkan digest yang tepat', () => {
