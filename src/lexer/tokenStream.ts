@@ -46,6 +46,9 @@ export class TokenStream {
    * Mengintip token pada offset ke depan tanpa memajukan posisi kursor (default offset: 1).
    */
   public peek(offset: number = 1): Token {
+    if (!Number.isSafeInteger(offset) || offset < 0) {
+      throw new RangeError('Offset TokenStream.peek harus berupa bilangan bulat aman >= 0.');
+    }
     const target = this.posisi + offset;
     if (target >= this.daftarToken.length) {
       return this.daftarToken[this.daftarToken.length - 1]; // Token EOF terakhir
