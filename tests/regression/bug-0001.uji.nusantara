@@ -3,7 +3,7 @@
 # Verifikasi: Pembagian bilangan dan penanganan operasi aritmetika batas
 # ==============================================================================
 
-fungsi bagi_aman(a : bilangan, b : bilangan) : bilangan
+fungsi bagi_aman(a : bilangan, b : bilangan) : desimal
 mulai
     jika b == 0 maka
         kembalikan 0
