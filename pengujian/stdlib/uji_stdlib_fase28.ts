@@ -650,6 +650,37 @@ uji('kripto.byteAcak, kripto.bilanganAcak, dan kripto.bandingkanWaktuKonstan', (
   salah((fnBanding.eksekusi([buatTeks('kunci_rahasia_123'), buatTeks('kunci_palsu_456')]) as any).nilai);
 });
 
+
+uji('Web Crypto menjadi fallback aman dan rejection sampling menolak nilai bias', () => {
+  const kandidat: number[] = [0xffffffff, 9];
+  let panggilanByte = 0;
+  const penyediaWeb = {
+    getRandomValues<T extends ArrayBufferView>(target: T): T {
+      if (target instanceof Uint32Array) {
+        target[0] = kandidat.shift() ?? 0;
+      } else {
+        new Uint8Array(target.buffer, target.byteOffset, target.byteLength).fill(0xab);
+        panggilanByte++;
+      }
+      return target;
+    },
+  } as unknown as Crypto;
+
+  const k = buatEksporKripto({ cryptoNode: null, cryptoWeb: penyediaWeb });
+  const fnByte = k.get('byteAcak') as NilaiFungsiBawaan;
+  const fnAngka = k.get('bilanganAcak') as NilaiFungsiBawaan;
+
+  const byte: any = fnByte.eksekusi([buatBilangan(4)]);
+  samaDengan(byte.nilai, 'abababab', 'Web Crypto harus mengisi byte acak tanpa Node');
+  samaDengan(panggilanByte, 1, 'Web Crypto harus dipanggil untuk byte acak');
+
+  // Untuk rentang 1..10, 0xffffffff berada di atas batas 4.294.967.290
+  // dan wajib ditolak; kandidat 9 berikutnya menghasilkan nilai 10.
+  const angka: any = fnAngka.eksekusi([buatBilangan(1), buatBilangan(10)]);
+  samaDengan(angka.nilai, 10, 'Rejection sampling harus menolak kandidat yang bias');
+  samaDengan(kandidat.length, 0, 'Kandidat ditolak dan kandidat valid harus sama-sama dikonsumsi');
+});
+
 // ----------------------------------------------------------------------------
 // 13. INTEGRASI END-TO-END DENGAN INTERPRETER (PROGRAM .nusantara)
 // ----------------------------------------------------------------------------
