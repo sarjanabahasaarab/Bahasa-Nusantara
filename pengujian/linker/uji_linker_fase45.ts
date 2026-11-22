@@ -580,7 +580,7 @@ uji('10.1 Pengujian kompilasi objek nyata + tautan biner native + inspeksi + eks
       `Eksekusi executable harus keluar 0 (stderr=${execRes.stderr || ''})`
     );
     pastikan(
-      /^NUSANTARA_PHASE45_LINKER_OK\\r?\\n$/.test(execRes.stdout || ''),
+      /^NUSANTARA_PHASE45_LINKER_OK\r?\n$/.test(execRes.stdout || ''),
       `Stdout executable harus tepat sentinel NUSANTARA_PHASE45_LINKER_OK diikuti baris baru (aktual=${JSON.stringify(execRes.stdout || '')})`
     );
   } finally {
