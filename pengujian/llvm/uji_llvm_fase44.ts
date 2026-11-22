@@ -387,6 +387,8 @@ uji('6.1 Menghasilkan kode C runtime stub dengan delegasi main ke @utama', () =>
   pastikan(cSrc.includes('int main(int argc, char** argv)'), 'Harus memuat entrypoint OS main');
   pastikan(cSrc.includes('nusantara_cetak_bilangan'), 'Harus menyertakan helper bilangan');
   pastikan(cSrc.includes('nusantara_cetak_teks'), 'Harus menyertakan helper teks');
+  pastikan(cSrc.includes('printf("%s\\\\n", str);'), 'Helper teks harus memakai escape newline C');
+  pastikan(!/printf\\("[^"]*\\n/.test(cSrc), 'String printf tidak boleh terpotong baris baru mentah');
 });
 
 // -----------------------------------------------------------------------------
