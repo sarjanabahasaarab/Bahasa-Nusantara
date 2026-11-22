@@ -27,6 +27,54 @@ function encodeBase64Url(input: string | Uint8Array): string {
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+/** Parse a classic ZIP central directory and reject metadata-only/fake AAB payloads. */
+function validasiKontainerAAB(bytes: Uint8Array): string[] {
+  const data = Buffer.from(bytes);
+  if (data.length < 22) throw new Error('AAB bukan ZIP yang lengkap.');
+  const batas = Math.max(0, data.length - 65557);
+  let eocd = -1;
+  for (let i = data.length - 22; i >= batas; i--) {
+    if (data.readUInt32LE(i) === 0x06054b50) {
+      const commentLength = data.readUInt16LE(i + 20);
+      if (i + 22 + commentLength === data.length) { eocd = i; break; }
+    }
+  }
+  if (eocd < 0) throw new Error('ZIP End Of Central Directory AAB tidak ditemukan.');
+  if (data.readUInt16LE(eocd + 4) !== 0 || data.readUInt16LE(eocd + 6) !== 0) {
+    throw new Error('AAB multi-disk ZIP tidak didukung.');
+  }
+  const jumlah = data.readUInt16LE(eocd + 10);
+  const ukuranDirektori = data.readUInt32LE(eocd + 12);
+  const offsetDirektori = data.readUInt32LE(eocd + 16);
+  if (offsetDirektori + ukuranDirektori > eocd) throw new Error('ZIP central directory AAB berada di luar batas berkas.');
+  const entries: string[] = [];
+  let offset = offsetDirektori;
+  for (let n = 0; n < jumlah; n++) {
+    if (offset + 46 > offsetDirektori + ukuranDirektori || data.readUInt32LE(offset) !== 0x02014b50) {
+      throw new Error('ZIP central directory AAB rusak atau terpotong.');
+    }
+    const nameLength = data.readUInt16LE(offset + 28);
+    const extraLength = data.readUInt16LE(offset + 30);
+    const commentLength = data.readUInt16LE(offset + 32);
+    const end = offset + 46 + nameLength + extraLength + commentLength;
+    if (end > offsetDirektori + ukuranDirektori) throw new Error('Nama entri ZIP AAB melewati batas direktori.');
+    const name = data.subarray(offset + 46, offset + 46 + nameLength).toString('utf8');
+    const localOffset = data.readUInt32LE(offset + 42);
+    if (localOffset + 30 > data.length || data.readUInt32LE(localOffset) !== 0x04034b50) {
+      throw new Error(`Local ZIP header tidak valid untuk entri AAB '${name}'.`);
+    }
+    entries.push(name);
+    offset = end;
+  }
+  if (offset !== offsetDirektori + ukuranDirektori) throw new Error('Ukuran ZIP central directory AAB tidak konsisten.');
+  const wajib = ['BundleConfig.pb', 'base/manifest/AndroidManifest.xml'];
+  for (const entry of wajib) if (!entries.includes(entry)) throw new Error(`AAB tidak memuat entri wajib '${entry}'.`);
+  if (!entries.some((entry) => /^base\/dex\/classes(\d+)?\.dex$/.test(entry))) {
+    throw new Error('AAB tidak memuat bytecode DEX pada base/dex/.');
+  }
+  return entries;
+}
+
 export class GooglePlayClient {
   private konfig: KonfigurasiGooglePlay;
   private editIdAktif?: string;
@@ -333,6 +381,9 @@ export class GooglePlayClient {
       const berkasAab = fs.readFileSync(jalurAab);
       const payloadBytes = new Uint8Array(berkasAab);
       const hashAktual = crypto.createHash('sha256').update(berkasAab).digest('hex');
+      if (!Number.isSafeInteger(versionCode) || versionCode < 1) throw new Error('versionCode harus bilangan bulat positif.');
+      if (!/^[a-fA-F0-9]{64}$/.test(String(sha256))) throw new Error('Metadata SHA-256 harus 64 karakter heksadesimal.');
+      validasiKontainerAAB(payloadBytes);
       if (hashAktual.toLowerCase() !== String(sha256).toLowerCase()) {
         throw new Error('SHA-256 berkas AAB tidak cocok dengan nilai yang diberikan; upload dibatalkan.');
       }

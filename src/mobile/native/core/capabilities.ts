@@ -83,50 +83,57 @@ export class PengelolaKemampuanPerangkat {
     const isSim = InfoPerangkatMobile.apakahSimulator();
     const plat = info.platform as 'android' | 'ios' | 'desktop' | 'simulator';
     const probe = PemeriksaHardwareHost.periksaHost();
-    const adbAktif = probe.perangkatADB.some((p) => p.status === 'device');
+    const adbPerangkat = probe.perangkatADB.find((p) => p.status === 'device');
+    const adbAktif = Boolean(adbPerangkat);
+    const adbEmulator = Boolean(adbPerangkat && /emulator|sdk_gphone|generic|goldfish|ranchu/i.test(`${adbPerangkat.model || ''} ${adbPerangkat.serial}`));
+    const perangkatAndroidFisikTerdeteksi = Boolean(adbAktif && !adbEmulator);
+    const wifiTerdeteksi = probe.jaringan.terhubung && probe.jaringan.tipeDominan === 'wifi';
+    const kameraHostTerdeteksi = probe.kameraV4L2.length > 0;
 
     this.cacheKemampuan = {
       kamera: {
-        tersedia: true,
-        depan: true,
-        belakang: true,
-        flash: plat === 'android' || plat === 'ios',
+        tersedia: kameraHostTerdeteksi || perangkatAndroidFisikTerdeteksi,
+        depan: false,
+        belakang: kameraHostTerdeteksi || perangkatAndroidFisikTerdeteksi,
+        flash: false,
         v4l2Host: probe.kameraV4L2,
       },
+      // Sensor tidak boleh diasumsikan tersedia hanya karena OS mendukung API.
+      // Perlu enumerasi sensor dari native bridge/perangkat sebelum dinyatakan ada.
       sensor: {
-        akselerometer: true,
-        giroskop: true,
-        magnetometer: plat === 'android' || plat === 'ios',
-        kedekatan: plat === 'android' || plat === 'ios',
-        cahaya: plat === 'android',
+        akselerometer: false,
+        giroskop: false,
+        magnetometer: false,
+        kedekatan: false,
+        cahaya: false,
       },
       konektivitas: {
-        wifi: true,
-        seluler: plat === 'android' || plat === 'ios',
-        bluetooth: true,
-        bluetoothLE: true,
-        gps: true,
+        wifi: wifiTerdeteksi,
+        seluler: false,
+        bluetooth: probe.bluetoothHCI.length > 0,
+        bluetoothLE: false,
+        gps: false,
         bluetoothHCIHost: probe.bluetoothHCI,
         jaringanOSTerhubung: probe.jaringan.terhubung,
       },
       audio: {
-        perekam: true,
-        pemutar: true,
+        perekam: false,
+        pemutar: false,
       },
       keamanan: {
-        penyimpananAman: true,
-        biometrik: plat === 'android' || plat === 'ios',
+        penyimpananAman: false,
+        biometrik: false,
       },
-      haptik: true,
-      papanKlip: true,
-      berbagi: true,
+      haptik: false,
+      papanKlip: false,
+      berbagi: false,
       sistem: {
         platform: plat,
         versiOS: info.versiOS,
         model: info.model,
         arsitektur: typeof process !== 'undefined' ? process.arch : 'arm64',
         apakahSimulator: isSim,
-        modeKontrakSimulasi: isSim && !adbAktif,
+        modeKontrakSimulasi: isSim || adbEmulator,
       },
       probeHost: {
         nodeRuntime: probe.nodeRuntime,

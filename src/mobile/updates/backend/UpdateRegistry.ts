@@ -7,14 +7,15 @@
  */
 
 import { ManifestPembaruan, SaluranPembaruan, PlatformMobile } from '../types';
+import { ManifestValidator } from '../manifest/ManifestValidator';
 import { SignatureVerifier } from '../security/SignatureVerifier';
 
 export class UpdateRegistry {
   private static instance: UpdateRegistry;
-  private manifestStore: Map<string, ManifestPembaruan> = new Map(); // key: `${appId}:${platform}:${channel}`
+  private manifestStore: Map<string, ManifestPembaruan> = new Map();
 
   private constructor() {
-    this.inisialisasiManifestDefault();
+    // Tidak ada manifest bawaan: semua rilis wajib divalidasi dan ditandatangani.
   }
 
   public static dapatkanInstance(): UpdateRegistry {
@@ -24,59 +25,45 @@ export class UpdateRegistry {
     return UpdateRegistry.instance;
   }
 
-  private inisialisasiManifestDefault(): void {
-    const rawManifest: ManifestPembaruan = {
-      schemaVersion: 1,
-      applicationId: 'id.nusantara.aplikasi',
-      platform: 'keduanya',
-      channel: 'stable',
-      releaseVersion: '1.2.0',
-      minimumSupportedVersion: '1.0.0',
-      updateType: 'ota_resource',
-      policy: 'disarankan',
-      releaseDate: '2026-11-03',
-      expirationDate: '2027-11-03',
-      revision: 1,
-      storeUrl: {
-        googlePlay: 'https://play.google.com/store/apps/details?id=id.nusantara.aplikasi',
-        appStore: 'https://apps.apple.com/app/id.nusantara.aplikasi',
-      },
-      releaseNotes: {
-        id: 'Pembaruan tema visual Garuda Dark dan perbaikan performa sistem lokalisasi.',
-        en: 'Garuda Dark visual theme update and performance enhancements.',
-      },
-      resources: [
-        {
-          id: 'theme-garuda-dark',
-          tipe: 'theme',
-          jalurRelatif: 'themes/garuda-dark.json',
-          sha256: 'a127a941ef584d9444b0e50f0270a6a06df52b61f4fa96901842410a8bc011ef',
-          ukuranByte: 130,
-        },
-        {
-          id: 'locale-id-v1.2.0',
-          tipe: 'localization',
-          jalurRelatif: 'locales/id.json',
-          sha256: '9211c6d86db49f5786448a6096236aa5d8e7804473b64c8dcf7a5fb1231a5460',
-          ukuranByte: 132,
-        },
-      ],
-    };
-
-    // Tandatangani dengan kunci resmi
-    const signed = SignatureVerifier.tandaTangani(
-      rawManifest,
-      'nusantara-ota-root-2026',
-      undefined,
-      'Ed25519'
-    );
-
-    this.daftarkanManifest(signed);
-  }
-
+  /**
+   * Mendaftarkan snapshot manifest hanya setelah validasi skema dan verifikasi
+   * tanda tangan asimetris terhadap trust store. Manifest unsigned/tampered ditolak.
+   */
   public daftarkanManifest(manifest: ManifestPembaruan): void {
-    const k = this.buatKunci(manifest.applicationId, manifest.platform, manifest.channel);
-    this.manifestStore.set(k, manifest);
+    if (!manifest || typeof manifest !== 'object') {
+      throw new Error('Manifest pembaruan harus berupa objek yang valid.');
+    }
+
+    // Snapshot JSON mencegah pemanggil mengubah objek setelah pemeriksaan.
+    let snapshot: ManifestPembaruan;
+    try {
+      snapshot = JSON.parse(JSON.stringify(manifest)) as ManifestPembaruan;
+    } catch {
+      throw new Error('Manifest pembaruan tidak dapat diserialisasi sebagai JSON.');
+    }
+
+    const validasi = ManifestValidator.validasi(snapshot);
+    if (!validasi.valid) {
+      throw new Error(`Manifest pembaruan ditolak: ${validasi.pesanGalat.join('; ')}`);
+    }
+
+    const verifikasi = SignatureVerifier.verifikasi(snapshot);
+    if (!verifikasi.valid) {
+      throw new Error(`Manifest pembaruan ditolak karena tanda tangan tidak sah: ${verifikasi.alasan || verifikasi.pesan}`);
+    }
+
+    if (!Number.isSafeInteger(snapshot.revision) || snapshot.revision < 1) {
+      throw new Error('Manifest pembaruan ditolak: revision harus bilangan bulat aman mulai dari 1.');
+    }
+
+    const k = this.buatKunci(snapshot.applicationId, snapshot.platform, snapshot.channel);
+    const current = this.manifestStore.get(k);
+    if (current && snapshot.revision <= current.revision) {
+      throw new Error(
+        `Manifest pembaruan ditolak: revision ${snapshot.revision} tidak lebih tinggi dari revision aktif ${current.revision} (anti-replay/anti-rollback).`
+      );
+    }
+    this.manifestStore.set(k, snapshot);
   }
 
   public ambilManifest(
@@ -84,11 +71,12 @@ export class UpdateRegistry {
     platform: PlatformMobile | 'keduanya',
     channel: SaluranPembaruan
   ): ManifestPembaruan | undefined {
-    let m = this.manifestStore.get(this.buatKunci(applicationId, platform, channel));
-    if (!m && platform !== 'keduanya') {
-      m = this.manifestStore.get(this.buatKunci(applicationId, 'keduanya', channel));
+    let manifest = this.manifestStore.get(this.buatKunci(applicationId, platform, channel));
+    if (!manifest && platform !== 'keduanya') {
+      manifest = this.manifestStore.get(this.buatKunci(applicationId, 'keduanya', channel));
     }
-    return m;
+    // Kembalikan salinan agar konsumen tidak dapat mengubah data tepercaya di registry.
+    return manifest ? JSON.parse(JSON.stringify(manifest)) as ManifestPembaruan : undefined;
   }
 
   private buatKunci(appId: string, platform: string, channel: string): string {

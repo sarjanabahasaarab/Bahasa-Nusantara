@@ -168,26 +168,95 @@ async function jalankanSemuaPengujian() {
 
   // --- 3. Digital Signature & Trust Manager ---
   console.log('\n[KELOMPOK 3] Tanda Tangan Digital & Trust Manager');
-  await uji('TrustManager memuat root keys dan menolak kunci tidak terdaftar', () => {
+  await uji('TrustManager tidak mempercayai root key placeholder dan menolak kunci tidak terdaftar', () => {
     const tm = TrustManager.dapatkanInstance();
-    tegas(tm.apakahKunciDipercaya('nusantara-root-release-2026') === true, 'Root key 2026 harus dipercaya');
+    tegas(tm.apakahKunciDipercaya('nusantara-root-release-2026') === false, 'Placeholder root key tidak boleh dipercaya otomatis');
     tegas(tm.apakahKunciDipercaya('kunci-penyerang-palsu') === false, 'Kunci tidak terdaftar harus ditolak');
   });
 
-  await uji('Pembuatan dan verifikasi Tanda Tangan Digital Kanonikal', () => {
-    const signed = SignatureVerifier.tandaTangani(validManifest, 'nusantara-root-release-2026');
+  await uji('Pembuatan dan verifikasi tanda tangan kanonikal memakai Ed25519 nyata', () => {
+    const keys = SignatureVerifier.buatPasanganKunciEd25519();
+    const keyId = 'phase42-canonical-test-key';
+    TrustManager.dapatkanInstance().daftarkanKunci({
+      keyId, algoritma: 'Ed25519', kunciPublikHex: keys.fingerprintHex,
+      kunciPublikPem: keys.kunciPublikPem, deskripsi: 'Ephemeral test key',
+      tanggalDibuat: new Date().toISOString(), aktif: true,
+    });
+    const signed = SignatureVerifier.tandaTangani(validManifest, keyId, keys.kunciPrivatPem, 'Ed25519');
     tegas(signed.tandaTangan !== undefined, 'Tanda tangan harus ditambahkan ke manifest');
-
     const verif = SignatureVerifier.verifikasi(signed);
-    tegas(verif.valid === true, `Verifikasi tanda tangan harus valid: ${verif.pesan}`);
+    tegas(verif.valid === true, `Verifikasi Ed25519 harus valid: ${verif.pesan}`);
   });
 
-  await uji('Deteksi Pemalsuan Manifest (Tamper Detection)', () => {
-    const signed = SignatureVerifier.tandaTangani(validManifest, 'nusantara-root-release-2026');
-    // Palsukan isi manifest setelah ditandatangani
+  await uji('Deteksi pemalsuan manifest setelah penandatanganan Ed25519', () => {
+    const keys = SignatureVerifier.buatPasanganKunciEd25519();
+    const keyId = 'phase42-tamper-test-key';
+    TrustManager.dapatkanInstance().daftarkanKunci({
+      keyId, algoritma: 'Ed25519', kunciPublikHex: keys.fingerprintHex,
+      kunciPublikPem: keys.kunciPublikPem, deskripsi: 'Ephemeral tamper test key',
+      tanggalDibuat: new Date().toISOString(), aktif: true,
+    });
+    const signed = SignatureVerifier.tandaTangani(validManifest, keyId, keys.kunciPrivatPem, 'Ed25519');
     const dipalsukan = { ...signed, releaseVersion: '0.99.0-hacked' };
     const verif = SignatureVerifier.verifikasi(dipalsukan);
     tegas(verif.valid === false, 'Manifest yang dimodifikasi setelah penandatanganan harus ditolak');
+  });
+
+  await uji('UpdateRegistry menolak manifest unsigned dan tampered serta menyimpan snapshot terverifikasi', () => {
+    const keys = SignatureVerifier.buatPasanganKunciEd25519();
+    const keyId = 'phase42-registry-test-key';
+    TrustManager.dapatkanInstance().daftarkanKunci({
+      keyId,
+      algoritma: 'Ed25519',
+      kunciPublikHex: keys.fingerprintHex,
+      kunciPublikPem: keys.kunciPublikPem,
+      deskripsi: 'Ephemeral registry security test key',
+      tanggalDibuat: new Date().toISOString(),
+      aktif: true,
+    });
+
+    const registry = UpdateRegistry.dapatkanInstance();
+    let unsignedDitolak = false;
+    try {
+      registry.daftarkanManifest(validManifest);
+    } catch {
+      unsignedDitolak = true;
+    }
+    tegas(unsignedDitolak, 'Registry wajib menolak manifest tanpa tanda tangan');
+
+    const signed = SignatureVerifier.tandaTangani(validManifest, keyId, keys.kunciPrivatPem, 'Ed25519');
+    const tampered = { ...signed, releaseVersion: '9.9.9-unauthorized' };
+    let tamperedDitolak = false;
+    try {
+      registry.daftarkanManifest(tampered);
+    } catch {
+      tamperedDitolak = true;
+    }
+    tegas(tamperedDitolak, 'Registry wajib menolak manifest yang diubah setelah penandatanganan');
+
+    registry.daftarkanManifest(signed);
+
+    const replay = SignatureVerifier.tandaTangani(
+      { ...validManifest, revision: 1, releaseVersion: '0.42.0' },
+      keyId,
+      keys.kunciPrivatPem,
+      'Ed25519'
+    );
+    let replayDitolak = false;
+    try {
+      registry.daftarkanManifest(replay);
+    } catch {
+      replayDitolak = true;
+    }
+    tegas(replayDitolak, 'Registry wajib menolak manifest dengan revision yang sama agar rilis lama tidak dapat diputar ulang');
+
+    signed.releaseNotes.id = 'Konten yang diubah dari luar';
+    const retrieved = registry.ambilManifest('id.nusantara.demo', 'android', 'stable');
+    tegas(retrieved?.releaseNotes.id === 'Catatan rilis OTA Bahasa Indonesia', 'Mutasi objek sumber tidak boleh mengubah manifest di registry');
+
+    if (retrieved) retrieved.releaseNotes.id = 'Mutasi pada salinan hasil baca';
+    const reread = registry.ambilManifest('id.nusantara.demo', 'android', 'stable');
+    tegas(reread?.releaseNotes.id === 'Catatan rilis OTA Bahasa Indonesia', 'Mutasi hasil baca tidak boleh mengubah snapshot internal registry');
   });
 
   // --- 4. HashValidator & Integrity ---
@@ -231,6 +300,7 @@ async function jalankanSemuaPengujian() {
           jalurRelatif: 'assets/themes/garuda.json',
           sha256: 'abc123hash',
           ukuranByte: 1024,
+          konten: JSON.stringify({ nama: 'Tema Garuda Uji', mode: 'gelap' }),
         },
       ],
       'android'
@@ -247,16 +317,23 @@ async function jalankanSemuaPengujian() {
 
   // --- 6. Store Updates Bridges ---
   console.log('\n[KELOMPOK 6] Integrasi Toko Aplikasi (Google Play & Apple App Store)');
-  await uji('Google Play In-App Updates simulasi ketersediaan dan mode', () => {
+  await uji('Google Play hanya membandingkan versionCode yang diberikan dan tidak mengklaim Play Core berjalan', () => {
     const st = GooglePlayInAppUpdate.periksaKetersediaan('id.nusantara.demo', 100, 102);
-    tegas(st.tersedia === true, 'Pembaruan Play Store harus terdeteksi');
-    tegas(st.flexibleAllowed === true && st.immediateAllowed === true, 'Kedua mode harus diizinkan');
+    tegas(st.tersedia === true, 'Perbandingan versionCode yang diberikan harus benar');
+    tegas(st.flexibleAllowed === false && st.immediateAllowed === false, 'Mode update tidak boleh aktif tanpa Play Core native');
+    const flow = GooglePlayInAppUpdate.mulaiAlurUpdate('id.nusantara.demo', 'FLEXIBLE');
+    tegas(flow.sukses === false, 'Mulai update harus gagal tertutup tanpa Play Core bridge');
+    tegas(GooglePlayInAppUpdate.periksaKetersediaan('id.nusantara.demo', 100).tersedia === false, 'Tanpa versionCode remote, ketersediaan tidak boleh ditebak');
   });
 
-  await uji('Apple App Store Update bridge menghasilkan deep link resmi', () => {
+  await uji('Apple App Store tidak menebak versi remote dan hanya menyiapkan URL', () => {
     const st = AppleAppStoreUpdate.periksaKetersediaan('id.nusantara.demo', '1.0.0', '1.1.0');
-    tegas(st.tersedia === true, 'Pembaruan App Store harus terdeteksi');
+    tegas(st.tersedia === true, 'Perbandingan versi yang diberikan harus benar');
     tegas(st.appStoreUrl.startsWith('https://apps.apple.com/app/'), 'URL App Store resmi harus dihasilkan');
+    const unknown = AppleAppStoreUpdate.periksaKetersediaan('id.nusantara.demo', '1.0.0');
+    tegas(unknown.tersedia === false, 'Tanpa versi remote, status update tidak boleh ditebak');
+    const handoff = AppleAppStoreUpdate.arahkanKeAppStore('id.nusantara.demo');
+    tegas(handoff.sukses === true && handoff.dibuka === false, 'Pembuatan URL tidak boleh mengklaim App Store sudah dibuka');
   });
 
   // --- 7. UpdateManager Facade & Laporan ---

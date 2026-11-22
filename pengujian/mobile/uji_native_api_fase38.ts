@@ -95,18 +95,19 @@ async function jalankanSemuaPengujianFase38(): Promise<void> {
   // 2. Device Capability Manager
   console.log('\n[2] Pengelola Kemampuan Perangkat (Device Capability Manager)');
 
-  await uji('2.1 Deteksi Fitur Hardware & OS', () => {
+  await uji('2.1 Deteksi kemampuan perangkat berbasis bukti host, bukan nilai default', () => {
     const manager = PengelolaKemampuanPerangkat.dapatkanInstance();
-    const kemampuan = manager.dapatkanKemampuan();
+    const kemampuan = manager.dapatkanKemampuan(true);
+    const probe = PemeriksaHardwareHost.periksaHost();
 
-    pastikan(kemampuan.kamera.tersedia === true, 'Kamera harus terdeteksi');
-    pastikan(kemampuan.sensor.akselerometer === true, 'Akselerometer harus terdeteksi');
-    pastikan(kemampuan.konektivitas.wifi === true, 'WiFi harus terdeteksi');
-    pastikan(kemampuan.keamanan.penyimpananAman === true, 'Secure storage harus terdeteksi');
+    pastikan(kemampuan.kamera.tersedia === (probe.kameraV4L2.length > 0 || Boolean(probe.perangkatADB.find((p) => p.status === 'device' && !/emulator|sdk_gphone|generic|goldfish|ranchu/i.test(`${p.model || ''} ${p.serial}`)))), 'Kamera hanya tersedia jika host/perangkat fisik terdeteksi');
+    pastikan(kemampuan.sensor.akselerometer === false, 'Sensor tidak boleh dinyatakan tersedia tanpa enumerasi native');
+    pastikan(kemampuan.konektivitas.wifi === (probe.jaringan.terhubung && probe.jaringan.tipeDominan === 'wifi'), 'WiFi harus mengikuti interface OS yang terdeteksi');
+    pastikan(kemampuan.keamanan.penyimpananAman === false, 'Secure storage memerlukan bridge Keystore/Keychain nyata');
     pastikan(kemampuan.sistem.arsitektur.length > 0, 'Arsitektur CPU harus terdeteksi');
 
-    pastikan(manager.apakahMendukung('kamera.tersedia'), 'apakahMendukung kamera.tersedia');
-    pastikan(manager.apakahMendukung('sensor.akselerometer'), 'apakahMendukung sensor.akselerometer');
+    pastikan(manager.apakahMendukung('kamera.tersedia') === kemampuan.kamera.tersedia, 'apakahMendukung harus konsisten dengan hasil probe');
+    pastikan(!manager.apakahMendukung('sensor.akselerometer'), 'Sensor yang belum terdeteksi harus false');
     pastikan(!manager.apakahMendukung('fitur_fiktif.tidak_ada'), 'Fitur fiktif harus bernilai false');
   });
 
@@ -171,28 +172,25 @@ async function jalankanSemuaPengujianFase38(): Promise<void> {
     pastikan(lok.sukses && lok.data.latitude !== undefined, 'Koordinat lokasi simulator valid');
   });
 
-  await uji('5.2 Eksekusi Adaptor Android Mobile', async () => {
+  await uji('5.2 Adaptor Android tidak memalsukan perangkat, foto, atau data kamera', async () => {
     const android = new AdaptorAndroidMobile();
     const info = await android.dapatkanInfoPerangkat();
-    pastikan(info.sukses, 'Info perangkat Android sukses');
-    pastikan(info.data.platform === 'android', 'Platform harus android');
-    pastikan(info.data.levelAPI === 34, 'Level API Android 34');
-
+    if (info.sukses) {
+      pastikan(Number.isFinite(info.data.levelAPI), 'Level API harus berasal dari perangkat ADB nyata');
+      pastikan(['ADB_DEVICE_REAL', 'ADB_EMULATOR'].includes(info.data.sumberData), 'Sumber info harus perangkat/emulator ADB nyata');
+    } else {
+      pastikan(info.status === 'perangkat_tidak_tersedia', 'Tanpa perangkat ADB, status harus perangkat_tidak_tersedia');
+    }
     const foto = await android.ambilFoto();
-    pastikan(foto.sukses, 'Ambil foto Android sukses');
-    pastikan(foto.data.kontrakAndroid.includes('TakePicture'), 'Menggunakan kontrak TakePicture');
+    pastikan(!foto.sukses && foto.status === 'tidak_didukung', 'Kamera harus gagal tertutup sampai bridge CameraX/Intent nyata tersedia');
   });
 
-  await uji('5.3 Eksekusi Adaptor iOS Mobile', async () => {
+  await uji('5.3 Adaptor iOS tidak mengklaim API perangkat sebelum Swift bridge tersedia', async () => {
     const ios = new AdaptorIOSMobile();
     const info = await ios.dapatkanInfoPerangkat();
-    pastikan(info.sukses, 'Info perangkat iOS sukses');
-    pastikan(info.data.platform === 'ios', 'Platform harus ios');
-    pastikan(info.data.frameworks.includes('AVFoundation'), 'Framework iOS AVFoundation');
-
+    pastikan(!info.sukses && info.status === 'tidak_didukung', 'Info iOS harus menolak klaim dari host Xcode tanpa bridge aplikasi');
     const foto = await ios.ambilFoto();
-    pastikan(foto.sukses, 'Ambil foto iOS sukses');
-    pastikan(foto.data.format === 'image/heic', 'Format foto iOS HEIC');
+    pastikan(!foto.sukses && foto.status === 'tidak_didukung', 'Kamera iOS harus gagal tertutup sampai AVFoundation bridge terhubung');
   });
 
   // 6. Pengujian Layanan API Sensor, Audio, Berkas, dan Keamanan
@@ -434,8 +432,14 @@ async function jalankanSemuaPengujianFase38(): Promise<void> {
     const adaptorAwal = dapatkanAdaptorPlatformAktif();
     try {
       tetapkanAdaptorPlatform(new AdaptorAndroidMobile());
+      pastikan(dapatkanAdaptorPlatformAktif().namaPlatform === 'android', 'Pergantian adaptor dinamis harus langsung berlaku');
       const resAndroid = await RegistriNativeAPI.dapatkanInstance().panggil('perangkat.info');
-      pastikan(resAndroid.sukses && resAndroid.data.platform === 'android', 'Pergantian adaptor dinamis harus langsung berlaku di Registri');
+      if (resAndroid.sukses) {
+        pastikan(['ADB_DEVICE_REAL', 'ADB_EMULATOR'].includes(resAndroid.data.sumberData) && Number.isFinite(resAndroid.data.levelAPI), 'Info Android sukses hanya dari target ADB nyata dan harus membedakan emulator');
+        pastikan(resAndroid.data.perangkatFisikTerhubung === (resAndroid.data.sumberData === 'ADB_DEVICE_REAL'), 'Emulator tidak boleh dilabeli perangkat fisik');
+      } else {
+        pastikan(resAndroid.status === 'perangkat_tidak_tersedia', 'Tanpa perangkat ADB, adapter Android harus gagal tertutup alih-alih memakai data simulator');
+      }
     } finally {
       tetapkanAdaptorPlatform(adaptorAwal);
     }
