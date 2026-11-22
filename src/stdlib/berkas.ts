@@ -16,6 +16,7 @@ import {
 import { GalatRuntime, JenisGalatRuntime } from '../interpreter/galat';
 import { InfoSimbolModul } from '../modul/jenisModul';
 import { PembacaBerkas, PembacaBerkasMemori, PembacaBerkasNode } from '../modul/pembacaBerkas';
+import { muatModulNode } from './modulNode';
 
 export const simbolEksporBerkas: Map<string, InfoSimbolModul> = new Map([
   [
@@ -300,10 +301,8 @@ export class SandboxBerkas {
       return true;
     }
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const fs = typeof window === 'undefined' ? require('fs') : null;
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const path = typeof window === 'undefined' ? require('path') : null;
+      const fs = muatModulNode('node:fs');
+      const path = muatModulNode('node:path');
       if (fs && path) {
         const dir = path.dirname(kanonikal);
         if (!fs.existsSync(dir)) {
@@ -352,8 +351,7 @@ export class SandboxBerkas {
       return true;
     }
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const fs = typeof window === 'undefined' ? require('fs') : null;
+      const fs = muatModulNode('node:fs');
       if (fs) {
         fs.mkdirSync(kanonikal, { recursive: true });
         return true;
@@ -380,8 +378,7 @@ export class SandboxBerkas {
       return hasil;
     }
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const fs = typeof window === 'undefined' ? require('fs') : null;
+      const fs = muatModulNode('node:fs');
       if (fs && fs.existsSync(sasaran)) {
         return fs.readdirSync(sasaran);
       }
@@ -401,8 +398,7 @@ export class SandboxBerkas {
       return true;
     }
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const fs = typeof window === 'undefined' ? require('fs') : null;
+      const fs = muatModulNode('node:fs');
       if (fs && fs.existsSync(kanonikal)) {
         const stat = fs.statSync(kanonikal);
         if (stat.isDirectory()) {
@@ -424,8 +420,7 @@ export class SandboxBerkas {
       return this.pembaca.apakahDirektori(kanonikal);
     }
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const fs = typeof window === 'undefined' ? require('fs') : null;
+      const fs = muatModulNode('node:fs');
       if (fs && fs.existsSync(kanonikal)) {
         return fs.statSync(kanonikal).isDirectory();
       }
