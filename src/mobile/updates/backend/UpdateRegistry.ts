@@ -52,7 +52,17 @@ export class UpdateRegistry {
       throw new Error(`Manifest pembaruan ditolak karena tanda tangan tidak sah: ${verifikasi.alasan || verifikasi.pesan}`);
     }
 
+    if (!Number.isSafeInteger(snapshot.revision) || snapshot.revision < 1) {
+      throw new Error('Manifest pembaruan ditolak: revision harus bilangan bulat aman mulai dari 1.');
+    }
+
     const k = this.buatKunci(snapshot.applicationId, snapshot.platform, snapshot.channel);
+    const current = this.manifestStore.get(k);
+    if (current && snapshot.revision <= current.revision) {
+      throw new Error(
+        `Manifest pembaruan ditolak: revision ${snapshot.revision} tidak lebih tinggi dari revision aktif ${current.revision} (anti-replay/anti-rollback).`
+      );
+    }
     this.manifestStore.set(k, snapshot);
   }
 
