@@ -100,6 +100,44 @@ function lemparGalat(fn: () => void, kataKunci?: string) {
 
 console.log('=== PENGUJIAN KOMPREHENSIF STANDARD LIBRARY EXPANSION (PHASE 28) ===\n');
 
+// Regresi khusus Node.js ESM: API sistem tidak boleh bergantung pada require global.
+uji('Modul berkas memakai node:fs/node:path pada runtime ESM', () => {
+  const fs = muatModulNode('node:fs');
+  const path = muatModulNode('node:path');
+  const os = muatModulNode('node:os');
+  benar(!!fs && !!path && !!os, 'Modul bawaan Node harus tersedia melalui loader ESM');
+
+  const root = path.join(os.tmpdir(), `nusantara-esm-files-${process.pid}-${Date.now()}`);
+  fs.mkdirSync(root, { recursive: true });
+  try {
+    const sandbox = new SandboxBerkas(undefined, root);
+    benar(sandbox.tulis('catatan.txt', 'NUSANTARA_ESM_FILES_OK'));
+    samaDengan(sandbox.baca('catatan.txt'), 'NUSANTARA_ESM_FILES_OK');
+    benar(sandbox.buatDirektori('folder'));
+    benar(sandbox.apakahDirektori('folder'));
+    benar(sandbox.daftarDirektori().includes('folder'));
+    benar(sandbox.hapus('catatan.txt'));
+    salah(sandbox.ada('catatan.txt'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+uji('Modul proses memakai node:child_process pada runtime ESM tanpa shell', () => {
+  const p = muatModulNode('node:process');
+  benar(!!p && typeof p.execPath === 'string');
+  const modul = buatEksporProses();
+  const fnEksekusi = modul.get('eksekusi') as NilaiFungsiBawaan;
+  const hasil: any = fnEksekusi.eksekusi([
+    buatTeks(p.execPath),
+    buatDaftar([buatTeks('-e'), buatTeks('process.stdout.write("NUSANTARA_ESM_PROCESS_OK")')]),
+  ]);
+  samaDengan(hasil.nilai.get('kodeKeluar').nilai, 0);
+  samaDengan(hasil.nilai.get('stdout').nilai, 'NUSANTARA_ESM_PROCESS_OK');
+  benar(hasil.nilai.get('sukses').nilai);
+});
+
+
 // ----------------------------------------------------------------------------
 // 1. REGISTRI DAN METADATA MODUL FASE 28
 // ----------------------------------------------------------------------------
