@@ -630,6 +630,42 @@ uji('Registri lokal menolak objek arsip yang tidak sesuai dengan serialisasinya'
   harusSalah(memori.apakahAda('/registri/metadata/arsip-palsu.json'));
 });
 
+uji('RegistriJarakJauh meneruskan permintaan HTTP melalui fetch dengan AbortSignal', async () => {
+  const fetchAsli = globalThis.fetch;
+  let endpointDipanggil = '';
+  let initDipakai: RequestInit | undefined;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    endpointDipanggil = String(input);
+    initDipakai = init;
+    return new Response(JSON.stringify({
+      hasil: [{
+        nama: 'paket-uji',
+        versi: '1.0.0',
+        deskripsi: 'Paket pengujian',
+        lisensi: 'MIT',
+        skorRelevansi: 1,
+      }],
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }) as typeof fetch;
+
+  try {
+    const remote = new RegistriJarakJauh({
+      urlBasis: 'https://registry.example.test/api/v1',
+      waktuTungguMs: 1000,
+    });
+    const hasil = await remote.cari('paket uji');
+    samaDengan(endpointDipanggil, 'https://registry.example.test/api/v1/paket?q=paket%20uji');
+    harusBenar(initDipakai?.signal instanceof AbortSignal, 'Permintaan harus menerima AbortSignal timeout');
+    samaDengan(hasil.length, 1);
+    samaDengan(hasil[0].nama, 'paket-uji');
+  } finally {
+    globalThis.fetch = fetchAsli;
+  }
+});
+
 uji('RegistriJarakJauh menangani galat jaringan secara aman', async () => {
   const remote = new RegistriJarakJauh({
     urlBasis: 'http://127.0.0.1:54321/tidak-ada-server',
