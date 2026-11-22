@@ -7,7 +7,7 @@
  */
 
 import { ManifestPembaruan, SaluranPembaruan, PlatformMobile } from '../types';
-import { ManifestValidator } from '../security/ManifestValidator';
+import { ManifestValidator } from '../manifest/ManifestValidator';
 import { SignatureVerifier } from '../security/SignatureVerifier';
 
 export class UpdateRegistry {
