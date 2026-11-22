@@ -14,6 +14,7 @@ import {
 } from '../interpreter/nilai';
 import { GalatRuntime, JenisGalatRuntime } from '../interpreter/galat';
 import { InfoSimbolModul } from '../modul/jenisModul';
+import { muatModulNode } from './modulNode';
 
 export interface HasilEksekusiProses {
   kodeKeluar: number;
@@ -135,8 +136,7 @@ export function buatEksporProses(): Map<string, NilaiRuntime> {
 
       // 2. Lingkungan Node.js riil: gunakan child_process.spawnSync secara aman tanpa shell
       try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const cp = typeof window === 'undefined' ? require('child_process') : null;
+        const cp = muatModulNode('node:child_process');
         if (!cp || !cp.spawnSync) {
           const peta = new Map<string, NilaiRuntime>([
             ['kodeKeluar', buatBilangan(-1)],
