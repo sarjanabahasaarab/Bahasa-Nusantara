@@ -1021,7 +1021,7 @@ jobs:
   # 10. CENTRALIZED CERTIFICATION GATE (PHASE 23 & PHASE 36–42)
   # ============================================================================
   unified-certification-gate:
-    name: NUSANTARA / Gerbang Sertifikasi Terpusat (Phase 23 & 36–42)
+    name: NUSANTARA / Laporan Sertifikasi Terpusat (Phase 23 & 36–42)
     needs: [static-checks, clean-install, test-suite, quality-gate, build-matrix-validation, phase23-certification-gate, phase36-gui-matrix, phase37-42-android-sdk, phase37-42-apple, phase39-42-tls-ota]
     if: always()
     runs-on: ubuntu-latest
@@ -1069,6 +1069,7 @@ jobs:
             --commit "${{ github.sha }}" \
             --run-id "${{ github.run_id }}" \
             --require-ci-provenance \
+            --dry-run \
             --json-out artifacts/certification/CERTIFICATION-GATE-REPORT.json \
             --md-out artifacts/certification/CERTIFICATION-GATE-REPORT.md \
             --step-summary
@@ -1108,7 +1109,7 @@ jobs:
           echo "| Android SDK Toolchain Audit (Phase 37–42) | ${{ needs.phase37-42-android-sdk.result }} | ubuntu-latest | JDK 17 + Android SDK + AAPT2/apksigner + uji struktural vs .dex |" >> $GITHUB_STEP_SUMMARY
           echo "| Apple Xcode Toolchain Audit (Phase 37–42) | ${{ needs.phase37-42-apple.result }} | macos-latest | Xcode + Simulator + validasi kejujuran .xcarchive vs .ipa |" >> $GITHUB_STEP_SUMMARY
           echo "| Loopback HTTPS TLS & OTA (Phase 39 & 42) | ${{ needs.phase39-42-tls-ota.result }} | ubuntu-latest | OpenSSL X.509 & rotasi/pencabutan kunci Ed25519 |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Gerbang Sertifikasi Terpusat (23 & 36–42)** | ${{ needs.unified-certification-gate.result == 'success' && 'CERTIFIED (ALL PASS)' || 'PARTIAL / FAILED / BLOCKED' }} | ubuntu-latest | Menolak PASS bila ada FAIL/SKIPPED/NOT_VERIFIED/BLOCKED |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Laporan Sertifikasi Terpusat (23 & 36–42)** | ${{ needs.unified-certification-gate.result == 'success' && 'EVALUATED (REPORT ONLY)' || 'FAIL / BLOCKED' }} | ubuntu-latest | PARTIAL/NOT_VERIFIED tetap tercatat; sertifikasi penuh wajib lolos Release Gate |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ "${{ needs.quality-gate.result }}" = "skipped" ] || [ "${{ needs.build-matrix-validation.result }}" = "skipped" ]; then
             echo "### Diagnostik Prasyarat yang Dilewati (Skipped)" >> $GITHUB_STEP_SUMMARY
