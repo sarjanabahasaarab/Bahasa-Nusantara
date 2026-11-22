@@ -19,6 +19,8 @@ export interface OpsiRegistriJarakJauh {
   urlBasis?: string;
   token?: string;
   waktuTungguMs?: number;
+  /** Pengambil HTTP opsional untuk pengujian deterministik atau runtime khusus. */
+  pengambilFetch?: typeof fetch;
 }
 
 /**
@@ -30,6 +32,7 @@ export class RegistriJarakJauh implements AntarmukaRegistri {
   public readonly urlBasis: string;
   private readonly token?: string;
   private readonly waktuTungguMs: number;
+  private readonly pengambilFetch: typeof fetch;
 
   constructor(opsi?: OpsiRegistriJarakJauh | string) {
     if (typeof opsi === 'string') {
@@ -43,6 +46,10 @@ export class RegistriJarakJauh implements AntarmukaRegistri {
         ? Math.min(120_000, Math.max(1, Math.floor(timeout)))
         : 5000;
     }
+    this.pengambilFetch =
+      typeof opsi === 'object' && opsi?.pengambilFetch
+        ? opsi.pengambilFetch
+        : (input, init) => fetch(input, init);
   }
 
   private normalisasiUrlBasis(nilai: string): string {
@@ -75,7 +82,7 @@ export class RegistriJarakJauh implements AntarmukaRegistri {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.waktuTungguMs);
     try {
-      return await fetch(endpoint, { ...init, signal: controller.signal });
+      return await this.pengambilFetch(endpoint, { ...init, signal: controller.signal });
     } catch (err: any) {
       if (controller.signal.aborted) {
         throw new Error(`Permintaan registri melewati batas waktu ${this.waktuTungguMs}ms.`);
