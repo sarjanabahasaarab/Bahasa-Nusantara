@@ -6,7 +6,7 @@
 fungsi bagi_aman(a : bilangan, b : bilangan) : desimal
 mulai
     jika b == 0 maka
-        kembalikan 0
+        kembalikan 0.0
     akhir
     kembalikan a / b
 selesai
