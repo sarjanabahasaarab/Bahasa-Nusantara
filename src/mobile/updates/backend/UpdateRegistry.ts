@@ -7,13 +7,15 @@
  */
 
 import { ManifestPembaruan, SaluranPembaruan, PlatformMobile } from '../types';
+import { ManifestValidator } from '../security/ManifestValidator';
+import { SignatureVerifier } from '../security/SignatureVerifier';
 
 export class UpdateRegistry {
   private static instance: UpdateRegistry;
-  private manifestStore: Map<string, ManifestPembaruan> = new Map(); // key: `${appId}:${platform}:${channel}`
+  private manifestStore: Map<string, ManifestPembaruan> = new Map();
 
   private constructor() {
-    // No built-in manifest: releases must be registered with a verified signature.
+    // Tidak ada manifest bawaan: semua rilis wajib divalidasi dan ditandatangani.
   }
 
   public static dapatkanInstance(): UpdateRegistry {
@@ -23,9 +25,35 @@ export class UpdateRegistry {
     return UpdateRegistry.instance;
   }
 
+  /**
+   * Mendaftarkan snapshot manifest hanya setelah validasi skema dan verifikasi
+   * tanda tangan asimetris terhadap trust store. Manifest unsigned/tampered ditolak.
+   */
   public daftarkanManifest(manifest: ManifestPembaruan): void {
-    const k = this.buatKunci(manifest.applicationId, manifest.platform, manifest.channel);
-    this.manifestStore.set(k, manifest);
+    if (!manifest || typeof manifest !== 'object') {
+      throw new Error('Manifest pembaruan harus berupa objek yang valid.');
+    }
+
+    // Snapshot JSON mencegah pemanggil mengubah objek setelah pemeriksaan.
+    let snapshot: ManifestPembaruan;
+    try {
+      snapshot = JSON.parse(JSON.stringify(manifest)) as ManifestPembaruan;
+    } catch {
+      throw new Error('Manifest pembaruan tidak dapat diserialisasi sebagai JSON.');
+    }
+
+    const validasi = ManifestValidator.validasi(snapshot);
+    if (!validasi.valid) {
+      throw new Error(`Manifest pembaruan ditolak: ${validasi.pesanGalat.join('; ')}`);
+    }
+
+    const verifikasi = SignatureVerifier.verifikasi(snapshot);
+    if (!verifikasi.valid) {
+      throw new Error(`Manifest pembaruan ditolak karena tanda tangan tidak sah: ${verifikasi.alasan || verifikasi.pesan}`);
+    }
+
+    const k = this.buatKunci(snapshot.applicationId, snapshot.platform, snapshot.channel);
+    this.manifestStore.set(k, snapshot);
   }
 
   public ambilManifest(
@@ -33,11 +61,12 @@ export class UpdateRegistry {
     platform: PlatformMobile | 'keduanya',
     channel: SaluranPembaruan
   ): ManifestPembaruan | undefined {
-    let m = this.manifestStore.get(this.buatKunci(applicationId, platform, channel));
-    if (!m && platform !== 'keduanya') {
-      m = this.manifestStore.get(this.buatKunci(applicationId, 'keduanya', channel));
+    let manifest = this.manifestStore.get(this.buatKunci(applicationId, platform, channel));
+    if (!manifest && platform !== 'keduanya') {
+      manifest = this.manifestStore.get(this.buatKunci(applicationId, 'keduanya', channel));
     }
-    return m;
+    // Kembalikan salinan agar konsumen tidak dapat mengubah data tepercaya di registry.
+    return manifest ? JSON.parse(JSON.stringify(manifest)) as ManifestPembaruan : undefined;
   }
 
   private buatKunci(appId: string, platform: string, channel: string): string {
