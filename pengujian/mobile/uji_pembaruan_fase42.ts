@@ -235,6 +235,21 @@ async function jalankanSemuaPengujian() {
     tegas(tamperedDitolak, 'Registry wajib menolak manifest yang diubah setelah penandatanganan');
 
     registry.daftarkanManifest(signed);
+
+    const replay = SignatureVerifier.tandaTangani(
+      { ...validManifest, revision: 1, releaseVersion: '0.42.0' },
+      keyId,
+      keys.kunciPrivatPem,
+      'Ed25519'
+    );
+    let replayDitolak = false;
+    try {
+      registry.daftarkanManifest(replay);
+    } catch {
+      replayDitolak = true;
+    }
+    tegas(replayDitolak, 'Registry wajib menolak manifest dengan revision yang sama agar rilis lama tidak dapat diputar ulang');
+
     signed.releaseNotes.id = 'Konten yang diubah dari luar';
     const retrieved = registry.ambilManifest('id.nusantara.demo', 'android', 'stable');
     tegas(retrieved?.releaseNotes.id === 'Catatan rilis OTA Bahasa Indonesia', 'Mutasi objek sumber tidak boleh mengubah manifest di registry');
