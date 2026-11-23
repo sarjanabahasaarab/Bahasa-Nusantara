@@ -173,8 +173,10 @@ uji('5.1 ci.yml dan release.yml mendefinisikan target matriks 4 platform resmi',
 });
 
 uji('5.2 Runner GitHub Actions CI dan release dipetakan ke arsitektur native yang tepat', () => {
-  const kontenCI = pembacaReal.baca('.github/workflows/ci.yml');
-  const kontenRelease = pembacaReal.baca('.github/workflows/release.yml');
+  // Git checkout Windows dapat menyajikan YAML dengan CRLF; normalisasi agar
+  // pemeriksaan pemetaan runner tidak bergantung pada line ending host.
+  const kontenCI = pembacaReal.baca('.github/workflows/ci.yml').replace(/\r\n/g, '\n');
+  const kontenRelease = pembacaReal.baca('.github/workflows/release.yml').replace(/\r\n/g, '\n');
   pastikan(kontenCI.includes('windows-latest'), 'Runner Windows sah');
   pastikan(kontenCI.includes('ubuntu-latest'), 'Runner Linux sah');
   pastikan(kontenCI.includes('os: macos-15-intel'), 'Runner macOS x64 CI harus memakai runner Intel native');
