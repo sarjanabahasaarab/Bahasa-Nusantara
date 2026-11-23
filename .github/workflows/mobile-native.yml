@@ -59,7 +59,6 @@ jobs:
           set -euo pipefail
           npm ci
           npm run build:android-runtime
-          npm run test:android-runtime
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platform-tools" "build-tools;35.0.0" "platforms;android-35" "emulator" "system-images;android-35;google_apis;x86_64"
           echo "$ANDROID_HOME/build-tools/35.0.0" >> "$GITHUB_PATH"
@@ -77,6 +76,13 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --force --name nusantara-api35 --package "system-images;android-35;google_apis;x86_64" --path "$AVD_HOME/nusantara-api35.avd" <<< "no"
           test -s "$AVD_HOME/nusantara-api35.ini"
           emulator -list-avds | grep -Fx nusantara-api35
+      - name: Run Android interpreter runtime tests
+        id: android_runtime_tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run test:android-runtime
+
       - name: Run Android native unit tests
         id: android_unit_tests
         shell: bash
@@ -113,7 +119,6 @@ jobs:
           echo "EPHEMERAL_SIGNING_VERIFIED=true" >> "$GITHUB_ENV"
       - name: Boot emulator, install and launch native APK
         id: android_emulator
-        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -159,6 +164,7 @@ jobs:
         if: always()
         env:
           ANDROID_BUILD_OUTCOME: ${{ steps.android_build.outcome }}
+          ANDROID_RUNTIME_TEST_OUTCOME: ${{ steps.android_runtime_tests.outcome }}
           ANDROID_UNIT_TEST_OUTCOME: ${{ steps.android_unit_tests.outcome }}
           ANDROID_EMULATOR_OUTCOME: ${{ steps.android_emulator.outcome }}
           ANDROID_TESTS_OUTCOME: ${{ steps.android_mobile_tests.outcome }}
@@ -169,11 +175,12 @@ jobs:
           import datetime, json, os, platform, zipfile
           outcomes = [os.environ.get("ANDROID_BUILD_OUTCOME"), os.environ.get("ANDROID_EMULATOR_OUTCOME"), os.environ.get("ANDROID_TESTS_OUTCOME")]
           build_ok = os.environ.get("ANDROID_BUILD_OUTCOME") == "success"
+          runtime_ok = os.environ.get("ANDROID_RUNTIME_TEST_OUTCOME") == "success"
           unit_ok = os.environ.get("ANDROID_UNIT_TEST_OUTCOME") == "success"
           mobile_ok = os.environ.get("ANDROID_TESTS_OUTCOME") == "success"
           emulator_ok = os.environ.get("ANDROID_EMULATOR_OUTCOME") == "success"
-          failed = not build_ok or not unit_ok or (os.environ.get("ANDROID_TESTS_OUTCOME") == "failure")
-          complete = build_ok and unit_ok and mobile_ok and emulator_ok
+          failed = not build_ok or not runtime_ok or not unit_ok or (os.environ.get("ANDROID_TESTS_OUTCOME") == "failure")
+          complete = build_ok and runtime_ok and unit_ok and mobile_ok and emulator_ok
           apk = "native/android/app/build/outputs/apk/debug/app-debug.apk"
           aab = "native/android/app/build/outputs/bundle/release/app-release.aab"
           def has_entry(archive, predicate):
@@ -192,6 +199,7 @@ jobs:
             "os": "Linux",
             "arch": platform.machine(),
             "status": "FAIL" if failed else "PASS" if complete else "NOT_VERIFIED",
+            "runtimeTestStatus": "PASS" if runtime_ok else "FAIL" if os.environ.get("ANDROID_RUNTIME_TEST_OUTCOME") == "failure" else "NOT_VERIFIED",
             "unitTestStatus": "PASS" if unit_ok and mobile_ok else "FAIL" if not unit_ok or os.environ.get("ANDROID_TESTS_OUTCOME") == "failure" else "NOT_VERIFIED",
             "commitSha": os.environ["GITHUB_SHA"],
             "workflowRunId": os.environ["GITHUB_RUN_ID"],
