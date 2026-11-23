@@ -81,12 +81,27 @@ jobs:
         run: |
           set -euo pipefail
           emulator -avd nusantara-api35 -no-snapshot -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect > "$RUNNER_TEMP/emulator.log" 2>&1 &
-          adb wait-for-device
+          if ! timeout 180 adb wait-for-device; then
+            echo "[ERROR] ADB tidak melihat emulator dalam 180 detik."
+            adb devices -l || true
+            cat "$RUNNER_TEMP/emulator.log" || true
+            exit 1
+          fi
+          BOOT_COMPLETED=false
           for attempt in $(seq 1 120); do
-            if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)" = "1" ]; then break; fi
+            if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)" = "1" ]; then
+              BOOT_COMPLETED=true
+              break
+            fi
             sleep 5
           done
-          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
+          if [ "$BOOT_COMPLETED" != "true" ]; then
+            echo "[ERROR] Android Emulator belum menyelesaikan boot setelah 10 menit."
+            adb devices -l || true
+            adb shell getprop sys.boot_completed || true
+            cat "$RUNNER_TEMP/emulator.log" || true
+            exit 1
+          fi
           adb install -r "$APK_DEBUG"
           adb shell am start -n id.nusantara.aplikasi/id.nusantara.mobile.MainActivity
           sleep 5
@@ -165,6 +180,7 @@ jobs:
             native/android/app/build/outputs/apk/**/*.apk
             native/android/app/build/outputs/bundle/**/*.aab
             artifacts/mobile-evidence/
+            ${{ runner.temp }}/emulator.log
           retention-days: 30
           if-no-files-found: warn
 
