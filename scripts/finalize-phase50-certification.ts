@@ -158,7 +158,7 @@ function main(): void {
     return digest + '  ' + relativePath;
   });
   const checksumPath = path.join(artifactsDir, 'SHA256SUMS');
-  fs.writeFileSync(checksumPath, checksumLines.join('\\n') + '\\n', 'utf8');
+  fs.writeFileSync(checksumPath, checksumLines.join('\n') + '\n', 'utf8');
   for (const line of checksumLines) {
     const separator = line.indexOf('  ');
     const expected = line.slice(0, separator);
