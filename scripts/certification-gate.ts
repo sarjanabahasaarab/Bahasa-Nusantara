@@ -13,6 +13,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
   deteksiVersiToolchainHost,
+  StatusSertifikasiFase,
   muatDanEvaluasiDariDisk,
   validasiIntegritasBundelArtefak,
 } from '../src/cicd';
@@ -74,6 +75,16 @@ function cmdProbeToolchains(args: string[]): number {
   return 0;
 }
 
+function getStatusArg(args: string[], flag: string): StatusSertifikasiFase | undefined {
+  const value = getArg(args, flag);
+  if (value === undefined) return undefined;
+  const allowed: StatusSertifikasiFase[] = ['PASS', 'FAIL', 'SKIPPED', 'NOT_VERIFIED', 'BLOCKED'];
+  if (!allowed.includes(value as StatusSertifikasiFase)) {
+    throw new Error(`Nilai ${flag} tidak valid: ${value}`);
+  }
+  return value as StatusSertifikasiFase;
+}
+
 function cmdEvaluate(args: string[]): number {
   const phase23SummaryPath = getArg(args, '--phase23-summary');
   const phase23EvidenceDir = getArg(args, '--phase23-evidence-dir');
@@ -103,6 +114,11 @@ function cmdEvaluate(args: string[]): number {
     dryRun,
     requireCiProvenance,
     maxEvidenceAgeMs,
+    testSuiteStatuses: {
+      staticChecks: getStatusArg(args, '--static-checks-status'),
+      testSuite: getStatusArg(args, '--test-suite-status'),
+      qualityGate: getStatusArg(args, '--quality-gate-status'),
+    },
   });
 
   if (jsonOut) {
