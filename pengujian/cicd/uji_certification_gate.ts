@@ -433,7 +433,10 @@ try {
     // Linux Xvfb bukan monitor fisik.
     jobs[0].isNativeHardware = false;
 
-    // Android APK/AAB dan emulator valid, tetapi bukan perangkat ponsel fisik.
+    // Android APK/emulator lulus untuk Phase 37, tetapi bukti distribusi Phase 40/41 sengaja tidak lengkap.
+    // Ini memaksa diagnostik menampilkan nilai DEX/AAB/apksigner, bukan ringkasan PASS.
+    jobs[3].details!.aabBuiltWithBundletool = false;
+    jobs[3].details!.apksignerVerified = false;
     jobs[3].details!.physicalDeviceHardwareVerified = false;
 
     // iOS Simulator dan unsigned device .xcarchive valid; tidak ada signed IPA/device signing.
