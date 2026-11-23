@@ -99,22 +99,6 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Validasi arsitektur runner macOS native
-        if: startsWith(matrix.target, 'macos-')
-        shell: bash
-        run: |
-          set -euo pipefail
-          HOST_ARCH="$(uname -m)"
-          if [ "${{ matrix.target }}" = "macos-x86_64" ] && [ "$HOST_ARCH" != "x86_64" ]; then
-            echo "[ERROR] macos-x86_64 release wajib berjalan pada host Intel x86_64, bukan Rosetta."
-            exit 1
-          fi
-          if [ "${{ matrix.target }}" = "macos-arm64" ] && [ "$HOST_ARCH" != "arm64" ] && [ "$HOST_ARCH" != "aarch64" ]; then
-            echo "[ERROR] macos-arm64 release wajib berjalan pada host Apple Silicon ARM64."
-            exit 1
-          fi
-          echo "[OK] ${{ matrix.target }} berjalan native pada $HOST_ARCH."
-
       - name: Pasang Lingkungan Node.js
         uses: actions/setup-node@v4
         with:
@@ -238,6 +222,22 @@ jobs:
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
+
+      - name: Validasi arsitektur runner macOS native
+        if: startsWith(matrix.target, 'macos-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          HOST_ARCH="$(uname -m)"
+          if [ "${{ matrix.target }}" = "macos-x86_64" ] && [ "$HOST_ARCH" != "x86_64" ]; then
+            echo "[ERROR] macos-x86_64 release wajib berjalan pada host Intel x86_64, bukan Rosetta."
+            exit 1
+          fi
+          if [ "${{ matrix.target }}" = "macos-arm64" ] && [ "$HOST_ARCH" != "arm64" ] && [ "$HOST_ARCH" != "aarch64" ]; then
+            echo "[ERROR] macos-arm64 release wajib berjalan pada host Apple Silicon ARM64."
+            exit 1
+          fi
+          echo "[OK] ${{ matrix.target }} berjalan native pada $HOST_ARCH."
 
       - name: Pasang Lingkungan Node.js
         uses: actions/setup-node@v4
