@@ -69,7 +69,9 @@
     "test:phase4": "node skrip/uji_phase4.js",
     "test:phase5": "node skrip/uji_phase5.js",
     "test:lexer-unicode": "tsx pengujian/lexer/uji_unicode_fase6.ts",
-    "test:regression": "tsx skrip/uji_regresi.ts"
+    "test:regression": "tsx skrip/uji_regresi.ts",
+    "build:android-runtime": "esbuild native/android/runtime/runner.ts --bundle --platform=browser --format=iife --target=es2020 --global-name=NusantaraRuntime --outfile=native/android/app/src/main/assets/nusantara-runtime.js",
+    "test:android-runtime": "tsx pengujian/mobile/uji_android_interpreter_runtime.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
