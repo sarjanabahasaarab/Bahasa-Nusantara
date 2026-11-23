@@ -455,6 +455,12 @@ try {
     pastikan(lap.phases['37'].status === 'PASS', 'APK/emulator dan Mach-O/Simulator yang tervalidasi harus meluluskan Phase 37');
     pastikan(lap.phases['38'].status === 'NOT_VERIFIED', 'Simulator tidak boleh mengklaim sensor perangkat fisik');
     pastikan(lap.phases['40'].status === 'NOT_VERIFIED', 'Tanpa .ipa nyata, Phase 40 harus tetap NOT_VERIFIED');
+    const android40 = lap.phases['40'].criteria.find((c) => c.id === 'p40-android-dex-aab-apksigner');
+    const ios40 = lap.phases['40'].criteria.find((c) => c.id === 'p40-ios-xcarchive-macho-ipa');
+    const signing41 = lap.phases['41'].criteria.find((c) => c.id === 'p41-ephemeral-signing-sandbox');
+    pastikan(Boolean(android40?.catatan?.includes('apkCompiledWithDex=')), 'Diagnostik Android harus menampilkan bukti DEX/AAB/apksigner aktual');
+    pastikan(Boolean(ios40?.catatan?.includes('xcarchiveBuilt=') && ios40.catatan?.includes('ipaProduced=')), 'Diagnostik iOS harus membedakan Simulator .app dari archive/IPA');
+    pastikan(Boolean(signing41?.catatan?.includes('apksignerVerified=') && signing41.catatan?.includes('adHocOrDevSigned=')), 'Diagnostik signing harus melaporkan bukti kedua platform secara terpisah');
     pastikan(lap.phases['41'].status === 'NOT_VERIFIED', 'Tanpa iOS device signing, Phase 41 harus tetap NOT_VERIFIED');
     pastikan(lap.phases['39'].status === 'NOT_VERIFIED', 'Tanpa native SPKI, Phase 39 harus tetap NOT_VERIFIED');
     pastikan(lap.phases['42'].status === 'NOT_VERIFIED', 'Tanpa Play Core/StoreKit, Phase 42 harus tetap NOT_VERIFIED');
