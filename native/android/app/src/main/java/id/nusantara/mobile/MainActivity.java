@@ -15,6 +15,12 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -26,9 +32,9 @@ import java.util.List;
 /**
  * Native NUSANTARA Mobile IDE shell.
  *
- * The editor, local project storage and terminal UI are implemented natively.
- * Program execution is deliberately reported as unavailable until the NUSANTARA
- * interpreter/runtime is packaged for Android; the app never pretends to execute code.
+ * Native Android IDE shell with the official NUSANTARA interpreter bundled
+ * as a local, sandboxed JavaScript runtime hosted by Android WebView.
+ * The runtime has bounded source/output sizes, loop iterations and execution time.
  */
 public final class MainActivity extends Activity {
     private static final int BG = Color.rgb(11, 18, 32);
@@ -42,6 +48,8 @@ public final class MainActivity extends Activity {
     private EditText editor;
     private TextView terminalOutput;
     private EditText terminalInput;
+    private WebView runtimeWebView;
+    private boolean runtimeReady;
     private String activeFile = "program.nusantara";
     private final List<String> terminalLines = new ArrayList<>();
 
@@ -50,6 +58,7 @@ public final class MainActivity extends Activity {
         if (state != null) {
             activeFile = state.getString("activeFile", activeFile);
         }
+        initializeRuntimeEngine();
         showShell(state == null ? "Beranda" : state.getString("activePage", "Beranda"));
     }
 
@@ -66,6 +75,27 @@ public final class MainActivity extends Activity {
     }
 
     private String currentPage = "Beranda";
+
+    private void initializeRuntimeEngine() {
+        runtimeWebView = new WebView(this);
+        WebSettings settings = runtimeWebView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(false);
+        settings.setDatabaseEnabled(false);
+        settings.setAllowFileAccess(true);
+        settings.setAllowContentAccess(false);
+        settings.setAllowFileAccessFromFileURLs(false);
+        settings.setAllowUniversalAccessFromFileURLs(false);
+        runtimeWebView.setWebViewClient(new WebViewClient() {
+            @Override public void onPageFinished(WebView view, String url) {
+                runtimeWebView.evaluateJavascript(
+                    "!!(window.NusantaraMobileRuntime && window.NusantaraMobileRuntime.siap)",
+                    value -> runtimeReady = "true".equals(value)
+                );
+            }
+        });
+        runtimeWebView.loadUrl("file:///android_asset/runtime-host.html");
+    }
 
     private int dp(float value) {
         return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
@@ -102,6 +132,12 @@ public final class MainActivity extends Activity {
         currentPage = page;
         root = column();
         root.setBackgroundColor(BG);
+        if (runtimeWebView != null) {
+            ViewParent parent = runtimeWebView.getParent();
+            if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(runtimeWebView);
+            runtimeWebView.setVisibility(View.INVISIBLE);
+            root.addView(runtimeWebView, lp(1, 1));
+        }
         setContentView(root);
 
         LinearLayout header = column();
@@ -180,7 +216,7 @@ public final class MainActivity extends Activity {
         card(hero);
         card(text("Editor kode\nTulis dan simpan berkas .nusantara di penyimpanan privat aplikasi.", 15, TEXT, false));
         card(text("Terminal\nGunakan perintah bantuan, info perangkat, dan pengelolaan sesi terminal.", 15, TEXT, false));
-        card(text("Status runtime\nEditor dan terminal dasar tersedia. Eksekusi program belum aktif karena interpreter NUSANTARA belum dipaketkan ke APK Android.", 14, MUTED, false));
+        card(text("Status runtime\nInterpreter resmi NUSANTARA tertanam secara lokal. Eksekusi kode berjalan di WebView tanpa akses jaringan dan dengan batas waktu serta ukuran keluaran.", 14, MUTED, false));
         content.addView(action("Buka Editor", () -> showShell("Editor")), lp(-1, -2));
         content.addView(action("Buka Terminal", () -> showShell("Terminal")), lp(-1, -2));
     }
@@ -209,7 +245,7 @@ public final class MainActivity extends Activity {
         editorParams.topMargin = dp(12);
         content.addView(editor, editorParams);
 
-        TextView note = text("Catatan: tombol Jalankan belum mengeksekusi kode. Integrasi interpreter Android harus diselesaikan dan diuji sebelum fitur eksekusi diaktifkan.", 12, MUTED, false);
+        TextView note = text("Runtime interpreter resmi NUSANTARA berjalan secara lokal. Program dibatasi 3 detik, 10.000 iterasi, sumber 256 KiB, dan keluaran 256 KiB.", 12, MUTED, false);
         note.setPadding(0, dp(12), 0, 0);
         content.addView(note, lp(-1, -2));
     }
@@ -219,12 +255,45 @@ public final class MainActivity extends Activity {
     }
 
     private void requestRun() {
-        new AlertDialog.Builder(this)
-            .setTitle("Runtime belum tersedia")
-            .setMessage("Editor sudah aktif, tetapi interpreter NUSANTARA belum terhubung ke APK Android. Kode tidak dijalankan dan tidak ada hasil palsu yang ditampilkan.")
-            .setPositiveButton("Buka Terminal", (d, w) -> showShell("Terminal"))
-            .setNegativeButton("Mengerti", null)
-            .show();
+        if (editor == null) return;
+        saveCurrentFile();
+        if (!runtimeReady || runtimeWebView == null) {
+            new AlertDialog.Builder(this)
+                .setTitle("Runtime sedang disiapkan")
+                .setMessage("Mesin interpreter masih dimuat. Tunggu beberapa detik lalu tekan Jalankan kembali.")
+                .setPositiveButton("Mengerti", null)
+                .show();
+            return;
+        }
+        final String source = editor.getText().toString();
+        final String fileName = activeFile;
+        String script = "window.NusantaraMobileRuntime.jalankan(" + JSONObject.quote(source) + ")";
+        runtimeWebView.evaluateJavascript(script, value -> {
+            try {
+                if (value == null || "null".equals(value)) {
+                    throw new IllegalStateException("Runtime tidak mengembalikan hasil.");
+                }
+                JSONObject result = new JSONObject(value);
+                boolean success = result.optBoolean("berhasil", false);
+                terminalLines.add("$ jalankan " + fileName);
+                JSONArray output = result.optJSONArray("keluaran");
+                if (success) {
+                    if (output != null) {
+                        for (int i = 0; i < output.length(); i++) {
+                            terminalLines.add(output.optString(i, ""));
+                        }
+                    }
+                    terminalLines.add("[Selesai] Eksekusi berhasil dalam " + result.optLong("durasiMs") + " ms.");
+                } else {
+                    terminalLines.add("[Galat Runtime] " + result.optString("galat", "Kesalahan tidak diketahui."));
+                }
+                while (terminalLines.size() > 100) terminalLines.remove(0);
+                showShell("Terminal");
+            } catch (Exception error) {
+                terminalLines.add("[Galat Host Android] " + error.getMessage());
+                showShell("Terminal");
+            }
+        });
     }
 
     private boolean isValidProjectFileName(String name) {
@@ -353,7 +422,17 @@ public final class MainActivity extends Activity {
     private void renderInfo() {
         section("Tentang NUSANTARA Mobile", "Informasi build dan kemampuan aplikasi.");
         card(text("Versi aplikasi: 0.50.0\nPackage: id.nusantara.aplikasi\nAndroid minimum: API 24\nPenyimpanan: privat aplikasi", 14, TEXT, false));
-        card(text("Tersedia: navigasi native, editor teks, simpan/buka .nusantara, terminal perintah dasar.\nBelum tersedia: eksekusi kode, debugger interaktif, integrasi API perangkat penuh.", 14, MUTED, false));
+        card(text("Tersedia: navigasi native, editor, simpan/buka .nusantara, terminal, dan interpreter resmi untuk eksekusi kode lokal terbatas.\nBelum tersedia: debugger interaktif dan integrasi API perangkat penuh.", 14, MUTED, false));
+    }
+
+    @Override protected void onDestroy() {
+        if (runtimeWebView != null) {
+            runtimeWebView.stopLoading();
+            runtimeWebView.loadUrl("about:blank");
+            runtimeWebView.destroy();
+            runtimeWebView = null;
+        }
+        super.onDestroy();
     }
 
     @Override public void onBackPressed() {
