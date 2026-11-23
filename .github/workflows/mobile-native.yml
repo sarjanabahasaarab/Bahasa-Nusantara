@@ -47,6 +47,9 @@ jobs:
           sdkmanager "platform-tools" "build-tools;35.0.0" "platforms;android-35" "emulator" "system-images;android-35;google_apis;x86_64"
           echo "$ANDROID_HOME/build-tools/35.0.0" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
+          test -x "$ANDROID_HOME/emulator/emulator"
+          emulator -version
           echo "no" | avdmanager create avd --force --name nusantara-api35 --package "system-images;android-35;google_apis;x86_64"
       - name: Build real APK and AAB with ephemeral release key
         id: android_build
