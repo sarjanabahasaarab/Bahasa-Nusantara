@@ -23,7 +23,11 @@ await build({
     "node:crypto": shim("crypto"),
     "crypto": shim("crypto"),
     "node:http": shim("http"),
-    "http": shim("http")
+    "http": shim("http"),
+    "node:https": shim("http"),
+    "https": shim("http"),
+    "node:child_process": shim("child_process"),
+    "child_process": shim("child_process")
   },
   logLevel: "info"
 });
