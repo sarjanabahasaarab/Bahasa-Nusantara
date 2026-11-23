@@ -37,7 +37,25 @@
 ## 3. Kondisi & Kendala yang Terverifikasi Jujur (`BELUM DIVERIFIKASI`)
 - **Test `3.2` (`test:build-v23`) & `8.1`/`10.1` (`test:llvm-v44`, `test:linker-v45`)**: Memerlukan `clang` & `lld` untuk kompilasi objek + tautan biner mesin nyata.
 - **Test `5.3` & `5.4` (`test:build-v23`)**: Memerlukan `pwsh` / Windows PowerShell dan compiler PE32+ Windows.
-- **Sertifikasi 6 Target (`CERTIFIED`)**: Memerlukan eksekusi job matriks multi-OS pada `.github/workflows/ci.yml` (`windows-latest`, `windows-11-arm`, `ubuntu-latest`, `ubuntu-24.04-arm`, `macos-latest`).
+- **Sertifikasi 6 Target (`CERTIFIED`)**: Telah diselesaikan pada GitHub Actions dengan enam target native. Target macOS x86_64 menggunakan `macos-15-intel`, sedangkan macOS ARM64 menggunakan `macos-latest`; bukti host dan mode eksekusi dicatat per target.
 
 ## 4. Klasifikasi Status Akhir Phase 23
-- **Status Lokal (Container Linux x86_64 tanpa Clang/PowerShell):** **`PARTIAL`** *(Seluruh unit, kontrak preflight, arsip, keamanan, installer POSIX, dan parser biner LULUS 100% tanpa mock palsu; 3 uji toolchain/OS eksternal dan agregasi 6 target berstatus jujur `BELUM DIVERIFIKASI` / `NOT_VERIFIED` sampai dijalankan pada runner CI GitHub Actions).*
+- **Status Lokal (Container Linux x86_64 tanpa Clang/PowerShell):** **`PARTIAL`** *(Keterbatasan toolchain lokal tetap berlaku; hasil lokal tidak disamakan dengan validasi runner CI.)*
+- **Status CI lintas platform (23 November 2026):** **`PASS`** untuk keenam target native, berdasarkan evidence GitHub Actions dan agregasi sertifikasi Phase 23. Rincian bukti CI terbaru dicatat pada bagian 5.
+
+
+## 5. Pembaruan Evidence GitHub Actions — 23 November 2026
+
+**Hasil matriks native enam target:** `PASS=6/6`, `NOT_VERIFIED=0`, `FAIL=0`, `MISSING=0`, `CORRUPT=0`. Gerbang Phase 23 melaporkan `unitTestStatus=PASS`, `nativeVerificationStatus=PASS`, dan `status=PASS`.
+
+Validasi ini berasal dari workflow PR #49 yang memperbaiki runner macOS x86_64. PR tersebut kemudian tercatat telah masuk ke `main` pada merge commit `31beb4c1bd68659441e87f98b937840c84d2c213`.
+
+**Bukti khusus macOS x86_64** dari artifact `phase23-evidence-macos-x86_64`:
+- Runner workflow: `macos-15-intel`.
+- `hostArchitecture=x86_64`, `isCross=false`.
+- `executionMode=native`, `emulator.used=false`.
+- Binary format `Mach-O`, arsitektur `x86_64`.
+- Native execution sentinel `NUSANTARA_NATIVE_CI_OK` cocok dan exit code `0`.
+- Install, upgrade, tamper rejection, dan uninstall distribusi semuanya `PASS`.
+
+**Pemisahan status:** hasil CI enam target ini tidak mengubah status lokal container Linux dan tidak otomatis menyatakan Phase 36–42 selesai. Sertifikasi keseluruhan tetap mengikuti laporan gerbang terpusat; kebutuhan display fisik, perangkat mobile fisik, signing iOS, dan integrasi SDK toko tetap harus dibuktikan secara terpisah.

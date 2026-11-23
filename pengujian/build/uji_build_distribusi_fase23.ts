@@ -1556,7 +1556,7 @@ uji('7.7 Bukti eksekusi gagal atau sentinel hilang/palsu terdeteksi (EKSEKUSI_GA
   }
 });
 
-uji('7.8 Enam target PASS lintas OS (Windows, macOS + Rosetta 2, Linux + ARM64) di agregator Linux -> CERTIFIED', () => {
+uji('7.8 Enam target PASS lintas OS (Windows, macOS Intel native, Linux + ARM64) di agregator Linux -> CERTIFIED', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cert-78-'));
   try {
     const evDir = writeAll6Fixtures(tmp);
