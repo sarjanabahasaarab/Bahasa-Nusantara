@@ -897,7 +897,7 @@ jobs:
           }
           with open("artifacts/cert-evidence/phase37-42-android.json", "w", encoding="utf-8") as output:
               json.dump(payload, output, ensure_ascii=False, indent=2)
-              output.write("\\n")
+              output.write("\n")
           PY
       - name: Unggah Evidence Android SDK
         if: always()
@@ -980,7 +980,6 @@ jobs:
               "workflowRunId": os.environ["GITHUB_RUN_ID"],
               "evidenceScope": "ci-workflow",
               "isNativeHardware": False,
-              "toolchains": {"xcodebuild": os.popen("xcodebuild -version 2>&1").read().splitlines()[0] if os.system("xcodebuild -version >/dev/null 2>&1") == 0 else None},
               "details": {
                   "machOCompiled": os.environ.get("IOS_MACHO_COMPILED") == "true",
                   "simulatorLaunched": os.environ.get("IOS_SIMULATOR_LAUNCHED") == "true",
@@ -996,7 +995,7 @@ jobs:
           }
           with open("artifacts/cert-evidence/phase37-42-apple.json", "w", encoding="utf-8") as output:
               json.dump(payload, output, ensure_ascii=False, indent=2)
-              output.write("\\n")
+              output.write("\n")
           PY
       - name: Unggah Evidence Apple/Xcode
         if: always()
