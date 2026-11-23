@@ -38,5 +38,7 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Typecheck Phase 51 ABI module
+        run: npm run typecheck:abi-v51
       - name: Run Phase 51 ABI suite
         run: npm run test:abi-v51
