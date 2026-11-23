@@ -68,13 +68,16 @@ jobs:
           export PATH="$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
           test -x "$ANDROID_HOME/emulator/emulator"
           "$ANDROID_HOME/emulator/emulator" -version
-          # Keep AVD creation and emulator lookup on the same explicit directory.
-          AVD_HOME="$HOME/.android/avd"
+          # Pin preferences and AVD storage so avdmanager and emulator share the same home.
+          export ANDROID_USER_HOME="$HOME/.android"
+          AVD_HOME="$ANDROID_USER_HOME/avd"
           mkdir -p "$AVD_HOME"
           export ANDROID_AVD_HOME="$AVD_HOME"
-          echo "ANDROID_AVD_HOME=$AVD_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_USER_HOME=$ANDROID_USER_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
           "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --force --name nusantara-api35 --package "system-images;android-35;google_apis;x86_64" --path "$AVD_HOME/nusantara-api35.avd" <<< "no"
           test -s "$AVD_HOME/nusantara-api35.ini"
+          test -d "$AVD_HOME/nusantara-api35.avd"
           emulator -list-avds | grep -Fx nusantara-api35
       - name: Run Android interpreter runtime tests
         id: android_runtime_tests
