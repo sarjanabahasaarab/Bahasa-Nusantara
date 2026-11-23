@@ -1023,6 +1023,7 @@ export function muatDanEvaluasiDariDisk(options: {
   dryRun?: boolean;
   requireCiProvenance?: boolean;
   maxEvidenceAgeMs?: number;
+  testSuiteStatuses?: InputEvaluasiGerbangSertifikasi['testSuiteStatuses'];
 }): { report: LaporanGerbangSertifikasiTerpusat; corruptEvidenceFiles: string[] } {
   const phase23Summary = readJsonSafe<Phase23AggregationResult>(options.phase23SummaryPath);
   const { evidences, files, corruptFiles } = readAllJobEvidencesFromDir(options.evidenceDir);
@@ -1044,6 +1045,7 @@ export function muatDanEvaluasiDariDisk(options: {
     demoBundleDir: options.demoBundleDir,
     jobEvidences: evidences,
     jobEvidenceFiles: files,
+    testSuiteStatuses: options.testSuiteStatuses,
   });
 
   if (corruptFiles.length > 0) {

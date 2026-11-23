@@ -1126,6 +1126,9 @@ jobs:
             --evidence-dir artifacts/cert-evidence \
             --commit "${{ github.sha }}" \
             --run-id "${{ github.run_id }}" \
+            --static-checks-status "${{ needs.static-checks.result == 'success' && 'PASS' || needs.static-checks.result == 'failure' && 'FAIL' || 'NOT_VERIFIED' }}" \
+            --test-suite-status "${{ needs.test-suite.result == 'success' && 'PASS' || needs.test-suite.result == 'failure' && 'FAIL' || 'NOT_VERIFIED' }}" \
+            --quality-gate-status "${{ needs.quality-gate.result == 'success' && 'PASS' || needs.quality-gate.result == 'failure' && 'FAIL' || 'NOT_VERIFIED' }}" \
             --require-ci-provenance \
             --dry-run \
             --json-out artifacts/certification/CERTIFICATION-GATE-REPORT.json \

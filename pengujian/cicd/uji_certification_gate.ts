@@ -351,6 +351,19 @@ try {
     pastikan(Boolean(report.toolchainVersions.node), 'Versi node harus terdeteksi di toolchainVersions');
   });
 
+  uji('8B. Status suite CI diteruskan ke Phase 23 saat evaluasi dari disk', () => {
+    const summaryPath = path.join(tmpBase, 'phase23-summary-ci.json');
+    fs.writeFileSync(summaryPath, JSON.stringify(buatPhase23PassSummary()), 'utf-8');
+    const { report, corruptEvidenceFiles } = muatDanEvaluasiDariDisk({
+      phase23SummaryPath: summaryPath,
+      testSuiteStatuses: { staticChecks: 'PASS', testSuite: 'PASS', qualityGate: 'PASS' },
+    });
+    pastikan(corruptEvidenceFiles.length === 0, 'Tidak boleh ada evidence rusak');
+    pastikan(report.phases['23'].unitTestStatus === 'PASS', 'Phase 23 harus memakai status test-suite CI yang diteruskan');
+    pastikan(report.phases['23'].nativeVerificationStatus === 'PASS', 'Matriks 6 target PASS harus tetap dipertahankan');
+    pastikan(report.phases['23'].status === 'PASS', 'Phase 23 harus PASS ketika unit suite dan native matrix sama-sama PASS');
+  });
+
   uji('9. Status SKIPPED pada job wajib tidak pernah dihitung PASS & selalu gagalkan gate', () => {
     const demoDir = path.join(tmpBase, 'demo-skipped');
     buatBundelDummy(demoDir);
