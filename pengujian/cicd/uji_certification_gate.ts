@@ -295,6 +295,9 @@ try {
     // Buat Android job hanya punya structural APK (tanpa classes.dex / emulator)
     jobs[3].details!.apkCompiledWithDex = false;
     jobs[3].details!.physicalDeviceHardwareVerified = false;
+    // APK DEX tersedia untuk Phase 37, tetapi bukti AAB/apksigner belum lengkap untuk Phase 40/41.
+    jobs[3].details!.aabBuiltWithBundletool = false;
+    jobs[3].details!.apksignerVerified = false;
     jobs[4].details!.physicalDeviceHardwareVerified = false;
     // Buat Phase 36 hanya Xvfb virtual (bukan physical display)
     jobs[0].isNativeHardware = false;
