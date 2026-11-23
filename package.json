@@ -72,7 +72,8 @@
     "test:regression": "tsx skrip/uji_regresi.ts",
     "build:android-runtime": "node native/android/runtime/build.mjs",
     "test:android-runtime": "tsx pengujian/mobile/uji_android_interpreter_runtime.ts",
-    "test:abi-v51": "tsx pengujian/os/uji_abi_ruang_pengguna_fase51.ts"
+    "test:abi-v51": "tsx pengujian/os/uji_abi_ruang_pengguna_fase51.ts",
+    "typecheck:abi-v51": "tsc --noEmit --target ES2022 --module ESNext --moduleResolution bundler --skipLibCheck --strict --types node src/runtime/os/abi/userland-abi.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
