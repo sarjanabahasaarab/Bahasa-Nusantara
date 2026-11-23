@@ -458,10 +458,10 @@ try {
     pastikan(lap.phases['37'].status === 'PASS', 'APK/emulator dan Mach-O/Simulator yang tervalidasi harus meluluskan Phase 37');
     pastikan(lap.phases['38'].status === 'NOT_VERIFIED', 'Simulator tidak boleh mengklaim sensor perangkat fisik');
     pastikan(lap.phases['40'].status === 'NOT_VERIFIED', 'Tanpa .ipa nyata, Phase 40 harus tetap NOT_VERIFIED');
-    pastikan(Boolean(ios40?.catatan?.includes('xcarchiveBuilt=true') && ios40.catatan?.includes('ipaProduced=false')), 'Unsigned .xcarchive harus tercatat tetapi tidak boleh menggantikan IPA');
     const android40 = lap.phases['40'].criteria.find((c) => c.id === 'p40-android-dex-aab-apksigner');
     const ios40 = lap.phases['40'].criteria.find((c) => c.id === 'p40-ios-xcarchive-macho-ipa');
     const signing41 = lap.phases['41'].criteria.find((c) => c.id === 'p41-ephemeral-signing-sandbox');
+    pastikan(Boolean(ios40?.catatan?.includes('xcarchiveBuilt=true') && ios40.catatan?.includes('ipaProduced=false')), 'Unsigned .xcarchive harus tercatat tetapi tidak boleh menggantikan IPA');
     pastikan(Boolean(android40?.catatan?.includes('apkCompiledWithDex=')), 'Diagnostik Android harus menampilkan bukti DEX/AAB/apksigner aktual');
     pastikan(Boolean(ios40?.catatan?.includes('xcarchiveBuilt=') && ios40.catatan?.includes('ipaProduced=')), 'Diagnostik iOS harus membedakan Simulator .app dari archive/IPA');
     pastikan(Boolean(signing41?.catatan?.includes('apksignerVerified=') && signing41.catatan?.includes('adHocOrDevSigned=')), 'Diagnostik signing harus melaporkan bukti kedua platform secara terpisah');
