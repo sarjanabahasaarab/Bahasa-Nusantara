@@ -5,3 +5,4 @@
 
 export * from './types';
 export * from './kernel-abi';
+export * from './userland-abi';
