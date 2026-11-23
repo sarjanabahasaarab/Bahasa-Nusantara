@@ -210,11 +210,31 @@ jobs:
           xcrun simctl launch "$SIM_UDID" id.nusantara.mobile
           echo "IOS_MACHO_COMPILED=true" >> "$GITHUB_ENV"
           echo "IOS_SIMULATOR_LAUNCHED=true" >> "$GITHUB_ENV"
+      - name: Build unsigned iOS device .xcarchive (Phase 40 evidence)
+        id: ios_device_archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARCHIVE_PATH="$RUNNER_TEMP/NUSANTARA-device.xcarchive"
+          xcodebuild archive \
+            -project native/ios/NusantaraMobile.xcodeproj \
+            -scheme NusantaraMobile \
+            -destination "generic/platform=iOS" \
+            -archivePath "$ARCHIVE_PATH" \
+            CODE_SIGNING_ALLOWED=NO
+          APP_PATH="$ARCHIVE_PATH/Products/Applications/NUSANTARA.app"
+          test -d "$APP_PATH"
+          EXECUTABLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_PATH/Info.plist")
+          test -s "$APP_PATH/$EXECUTABLE"
+          file "$APP_PATH/$EXECUTABLE" | grep -E 'Mach-O'
+          lipo -info "$APP_PATH/$EXECUTABLE" | grep -q 'arm64'
+          echo "IOS_XCARCHIVE_BUILT=true" >> "$GITHUB_ENV"
       - name: Write iOS evidence
         if: always()
         env:
           IOS_TESTS_OUTCOME: ${{ steps.ios_mobile_tests.outcome }}
           IOS_BUILD_OUTCOME: ${{ steps.ios_simulator_build.outcome }}
+          IOS_ARCHIVE_OUTCOME: ${{ steps.ios_device_archive.outcome }}
         shell: bash
         run: |
           mkdir -p artifacts/mobile-evidence
@@ -239,7 +259,7 @@ jobs:
             "details": {
               "machOCompiled": os.environ.get("IOS_MACHO_COMPILED") == "true",
               "simulatorLaunched": os.environ.get("IOS_SIMULATOR_LAUNCHED") == "true",
-              "xcarchiveBuilt": False,
+              "xcarchiveBuilt": os.environ.get("IOS_XCARCHIVE_BUILT") == "true",
               "ipaProduced": False,
               "adHocOrDevSigned": False,
               "physicalDeviceHardwareVerified": False,
@@ -260,6 +280,7 @@ jobs:
           name: nusantara-ios-simulator-app
           path: |
             ${{ runner.temp }}/nusantara-ios-derived/Build/Products/Debug-iphonesimulator/NUSANTARA.app
+            ${{ runner.temp }}/NUSANTARA-device.xcarchive
             native/ios/NusantaraMobile.xcodeproj
             artifacts/mobile-evidence/
           retention-days: 30
