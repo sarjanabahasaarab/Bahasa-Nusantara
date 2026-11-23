@@ -206,8 +206,18 @@ jobs:
           for attempt in 1 2 3; do
             echo "iOS Simulator attempt $attempt/3"
             xcrun simctl boot "$SIM_UDID" 2>/dev/null || true
-            xcrun simctl bootstatus "$SIM_UDID" -b
-            xcrun simctl list devices booted -j | python3 -c 'import json,sys; d=json.load(sys.stdin); raise SystemExit(0 if any(x["udid"] == sys.argv[1] for group in d["devices"].values() for x in group) else 1)' "$SIM_UDID"
+            if ! xcrun simctl bootstatus "$SIM_UDID" -b; then
+              echo "Simulator boot did not complete; retrying."
+              xcrun simctl shutdown "$SIM_UDID" 2>/dev/null || true
+              sleep 10
+              continue
+            fi
+            if ! xcrun simctl list devices booted -j | python3 -c 'import json,sys; d=json.load(sys.stdin); raise SystemExit(0 if any(x["udid"] == sys.argv[1] for group in d["devices"].values() for x in group) else 1)' "$SIM_UDID"; then
+              echo "Simulator is not registered as booted; retrying."
+              xcrun simctl shutdown "$SIM_UDID" 2>/dev/null || true
+              sleep 10
+              continue
+            fi
             set +e
             xcodebuild test -project native/ios/NusantaraMobile.xcodeproj -scheme NusantaraMobile -destination "platform=iOS Simulator,id=$SIM_UDID" -derivedDataPath "$RUNNER_TEMP/nusantara-ios-derived" CODE_SIGNING_ALLOWED=NO 2>&1 | tee "$RUNNER_TEMP/ios-xcodebuild.log"
             IOS_TEST_EXIT=${PIPESTATUS[0]}
