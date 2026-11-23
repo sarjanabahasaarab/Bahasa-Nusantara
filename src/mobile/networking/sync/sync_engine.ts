@@ -26,6 +26,7 @@ export class MesinSinkronisasiMobile {
   private klienAPI?: KlienAPIMobile;
   private riwayatSinkronisasi: HasilSinkronisasi[] = [];
   private sedangSinkronisasi: boolean = false;
+  private janjiSinkronisasiAktif?: Promise<HasilSinkronisasi>;
   private strategiDefault: StrategiKonflik = 'tulis_terakhir_menang';
   private toleransiDriftMs: number = 5000;
   private penyelesaiKustom?: (konflik: ButirKonflikSinkronisasi) => Promise<any>;
@@ -93,19 +94,27 @@ export class MesinSinkronisasiMobile {
   /**
    * Menjalankan siklus sinkronisasi data lokal ke server
    */
-  public async sinkronkan(): Promise<HasilSinkronisasi> {
-    if (this.sedangSinkronisasi) {
-      return {
-        sukses: false,
-        jumlahTerkirim: 0,
-        jumlahGagal: 0,
-        konflik: [],
-        stempelWaktuSinkronisasi: Date.now(),
-        durasiMs: 0,
-        catatan: 'Sinkronisasi sebelumnya sedang berlangsung.',
-      };
+  public sinkronkan(): Promise<HasilSinkronisasi> {
+    // Auto-sync dan pemanggilan manual harus menunggu siklus yang sama.
+    // Hasil sementara kosong akan menyembunyikan konflik yang sedang diproses.
+    if (this.janjiSinkronisasiAktif) {
+      return this.janjiSinkronisasiAktif;
     }
 
+    const janji = this.jalankanSiklusSinkronisasi();
+    this.janjiSinkronisasiAktif = janji;
+    void janji.then(
+      () => {
+        if (this.janjiSinkronisasiAktif === janji) this.janjiSinkronisasiAktif = undefined;
+      },
+      () => {
+        if (this.janjiSinkronisasiAktif === janji) this.janjiSinkronisasiAktif = undefined;
+      }
+    );
+    return janji;
+  }
+
+  private async jalankanSiklusSinkronisasi(): Promise<HasilSinkronisasi> {
     const mulai = Date.now();
     this.sedangSinkronisasi = true;
 

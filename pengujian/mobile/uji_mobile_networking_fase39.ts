@@ -671,16 +671,18 @@ async function jalankanSemuaUji() {
       const sync = MesinSinkronisasiMobile.dapatkanInstance();
       sync.aturKlienAPI(api);
       monitor.perbaruiStatusFisik(true, 'wifi', false);
-      // Tunggu sebentar jika auto-sync terpanggil listener
-      await new Promise((r) => setTimeout(r, 80));
-      if (antrean.hitung().tertunda > 0) {
-        await sync.sinkronkan();
-      }
+      // Listener pemulihan koneksi memulai auto-sync secara sinkron. Panggilan
+      // manual berikutnya harus bergabung ke Promise yang sama dan menunggu hasilnya.
+      const hasilSinkronisasi = await sync.sinkronkan();
 
       pastikan(dbCatatan['c1']?.judul === 'Catatan Offline', 'Catatan c1 harus terkirim ke server loopback');
       samaDengan(antrean.hitung().tertunda, 0, 'Antrean tertunda harus terkuras habis setelah sync');
+      pastikan(
+        hasilSinkronisasi.konflik.length >= 1,
+        'Hasil sinkronisasi yang ditunggu harus memuat konflik HTTP 409 yang diselesaikan LWW'
+      );
       const riwayatTerbaru = sync.dapatkanRiwayat()[0];
-      pastikan(riwayatTerbaru && riwayatTerbaru.konflik.length >= 1, 'Konflik HTTP 409 harus tercatat dan diselesaikan LWW');
+      pastikan(riwayatTerbaru && riwayatTerbaru.konflik.length >= 1, 'Riwayat harus mencatat konflik HTTP 409 yang diselesaikan LWW');
     } finally {
       PengelolaOperasiOffline.dapatkanInstance().aturJalurPersistensi(undefined);
       PengelolaOperasiOffline.dapatkanInstance().reset();
