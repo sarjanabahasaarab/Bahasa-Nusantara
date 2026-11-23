@@ -49,6 +49,7 @@ jobs:
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
           echo "no" | avdmanager create avd --force --name nusantara-api35 --package "system-images;android-35;google_apis;x86_64"
       - name: Build real APK and AAB with ephemeral release key
+        id: android_build
         shell: bash
         run: |
           set -euo pipefail
@@ -75,6 +76,7 @@ jobs:
           echo "APK_DEBUG=$APK_DEBUG" >> "$GITHUB_ENV"
           echo "EPHEMERAL_SIGNING_VERIFIED=true" >> "$GITHUB_ENV"
       - name: Boot emulator, install and launch native APK
+        id: android_emulator
         shell: bash
         run: |
           set -euo pipefail
@@ -91,6 +93,7 @@ jobs:
           adb shell pidof id.nusantara.aplikasi
           echo "ANDROID_EMULATOR_LAUNCHED=true" >> "$GITHUB_ENV"
       - name: Run mobile regression suites Phase 37–42
+        id: android_mobile_tests
         run: |
           npm run test:mobile-v37
           npm run test:native-api-v38
@@ -101,11 +104,28 @@ jobs:
           echo "MOBILE_TESTS_PASS=true" >> "$GITHUB_ENV"
       - name: Write Android evidence
         if: always()
+        env:
+          ANDROID_BUILD_OUTCOME: ${{ steps.android_build.outcome }}
+          ANDROID_EMULATOR_OUTCOME: ${{ steps.android_emulator.outcome }}
+          ANDROID_TESTS_OUTCOME: ${{ steps.android_mobile_tests.outcome }}
         shell: bash
         run: |
           mkdir -p artifacts/mobile-evidence
           python3 - <<'PY'
-          import datetime, json, os, platform
+          import datetime, json, os, platform, zipfile
+          outcomes = [os.environ.get("ANDROID_BUILD_OUTCOME"), os.environ.get("ANDROID_EMULATOR_OUTCOME"), os.environ.get("ANDROID_TESTS_OUTCOME")]
+          failed = "failure" in outcomes
+          complete = all(value == "success" for value in outcomes)
+          apk = "native/android/app/build/outputs/apk/debug/app-debug.apk"
+          aab = "native/android/app/build/outputs/bundle/release/app-release.aab"
+          def has_entry(archive, predicate):
+            try:
+              with zipfile.ZipFile(archive) as zf:
+                return any(predicate(name) for name in zf.namelist())
+            except (OSError, zipfile.BadZipFile):
+              return False
+          apk_has_dex = has_entry(apk, lambda name: name == "classes.dex")
+          aab_has_bundle = has_entry(aab, lambda name: name == "BundleConfig.pb") and has_entry(aab, lambda name: name.startswith("base/dex/classes") and name.endswith(".dex"))
           payload = {
             "schemaVersion": 1,
             "jobId": "phase37-42-android-native-ci",
@@ -113,15 +133,15 @@ jobs:
             "runner": "ubuntu-latest",
             "os": "Linux",
             "arch": platform.machine(),
-            "status": "NOT_VERIFIED",
-            "unitTestStatus": "PASS" if os.environ.get("MOBILE_TESTS_PASS") == "true" else "NOT_VERIFIED",
+            "status": "FAIL" if failed else "PASS" if complete else "NOT_VERIFIED",
+            "unitTestStatus": "PASS" if os.environ.get("MOBILE_TESTS_PASS") == "true" else "FAIL" if os.environ.get("ANDROID_TESTS_OUTCOME") == "failure" else "NOT_VERIFIED",
             "commitSha": os.environ["GITHUB_SHA"],
             "workflowRunId": os.environ["GITHUB_RUN_ID"],
             "evidenceScope": "ci-workflow",
             "isNativeHardware": False,
             "details": {
-              "apkCompiledWithDex": os.path.exists("native/android/app/build/outputs/apk/debug/app-debug.apk"),
-              "aabBuiltWithBundletool": os.path.exists("native/android/app/build/outputs/bundle/release/app-release.aab"),
+              "apkCompiledWithDex": apk_has_dex,
+              "aabBuiltWithBundletool": aab_has_bundle,
               "apksignerVerified": os.environ.get("EPHEMERAL_SIGNING_VERIFIED") == "true",
               "emulatorBooted": os.environ.get("ANDROID_EMULATOR_LAUNCHED") == "true",
               "physicalDeviceHardwareVerified": False,
@@ -161,6 +181,7 @@ jobs:
           node-version: 22
           cache: npm
       - name: Run mobile regression suites Phase 37–42
+        id: ios_mobile_tests
         run: |
           npm ci
           npm run test:mobile-v37
@@ -170,6 +191,7 @@ jobs:
           npm run test:publikasi-v41
           npm run test:pembaruan-v42
       - name: Build SwiftUI app and launch iOS Simulator
+        id: ios_simulator_build
         shell: bash
         run: |
           set -euo pipefail
@@ -186,7 +208,52 @@ jobs:
           file "$APP_PATH/$EXECUTABLE" | grep -E 'Mach-O'
           xcrun simctl install "$SIM_UDID" "$APP_PATH"
           xcrun simctl launch "$SIM_UDID" id.nusantara.mobile
-      - name: Upload iOS Simulator app
+          echo "IOS_MACHO_COMPILED=true" >> "$GITHUB_ENV"
+          echo "IOS_SIMULATOR_LAUNCHED=true" >> "$GITHUB_ENV"
+      - name: Write iOS evidence
+        if: always()
+        env:
+          IOS_TESTS_OUTCOME: ${{ steps.ios_mobile_tests.outcome }}
+          IOS_BUILD_OUTCOME: ${{ steps.ios_simulator_build.outcome }}
+        shell: bash
+        run: |
+          mkdir -p artifacts/mobile-evidence
+          python3 - <<'PY'
+          import datetime, json, os, platform
+          outcomes = [os.environ.get("IOS_TESTS_OUTCOME"), os.environ.get("IOS_BUILD_OUTCOME")]
+          failed = "failure" in outcomes
+          complete = all(value == "success" for value in outcomes)
+          payload = {
+            "schemaVersion": 1,
+            "jobId": "phase37-42-ios-native-ci",
+            "phase": "37,38,40,41",
+            "runner": "macos-latest",
+            "os": "macOS",
+            "arch": platform.machine(),
+            "status": "FAIL" if failed else "PASS" if complete else "NOT_VERIFIED",
+            "unitTestStatus": "PASS" if os.environ.get("IOS_TESTS_OUTCOME") == "success" else "FAIL" if os.environ.get("IOS_TESTS_OUTCOME") == "failure" else "NOT_VERIFIED",
+            "commitSha": os.environ["GITHUB_SHA"],
+            "workflowRunId": os.environ["GITHUB_RUN_ID"],
+            "evidenceScope": "ci-workflow",
+            "isNativeHardware": False,
+            "details": {
+              "machOCompiled": os.environ.get("IOS_MACHO_COMPILED") == "true",
+              "simulatorLaunched": os.environ.get("IOS_SIMULATOR_LAUNCHED") == "true",
+              "xcarchiveBuilt": False,
+              "ipaProduced": False,
+              "adHocOrDevSigned": False,
+              "physicalDeviceHardwareVerified": False,
+              "nativeSpkiPinningVerified": False,
+              "playCoreAndStoreKitVerified": False
+            },
+            "blockers": ["iOS Simulator is not a physical iPhone/iPad. This job does not create a device-signed .xcarchive or .ipa; physical sensors, device signing, native SPKI, and production StoreKit remain unverified."],
+            "generatedAt": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+          }
+          with open("artifacts/mobile-evidence/phase37-42-ios.json", "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2)
+            f.write("\n")
+          PY
+      - name: Upload iOS Simulator app and evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -194,5 +261,6 @@ jobs:
           path: |
             ${{ runner.temp }}/nusantara-ios-derived/Build/Products/Debug-iphonesimulator/NUSANTARA.app
             native/ios/NusantaraMobile.xcodeproj
+            artifacts/mobile-evidence/
           retention-days: 30
           if-no-files-found: warn
