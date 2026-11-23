@@ -32,20 +32,26 @@ export class PenulisOutputAndroidTerbatas implements OutputWriter {
 
   public tulisBaris(teks: string): void {
     if (this.dipotong) return;
-    if (this.baris.length >= BATAS_BARIS_OUTPUT || this.totalKarakter >= BATAS_KARAKTER_OUTPUT) {
+
+    const nilai = String(teks);
+    const ruangPenanda = PENANDA_OUTPUT_DIPOTONG.length;
+    const batasIsi = BATAS_KARAKTER_OUTPUT - ruangPenanda;
+
+    // Sisakan satu slot baris dan ruang karakter untuk penanda truncation.
+    if (this.baris.length >= BATAS_BARIS_OUTPUT - 1 ||
+        this.totalKarakter >= batasIsi) {
       this.tambahkanPenanda();
       return;
     }
 
-    const nilai = String(teks);
-    const sisa = BATAS_KARAKTER_OUTPUT - this.totalKarakter;
-    const aman = nilai.slice(0, sisa);
+    const sisaIsi = batasIsi - this.totalKarakter;
+    const aman = nilai.slice(0, sisaIsi);
     this.baris.push(aman);
     this.totalKarakter += aman.length;
 
     if (aman.length < nilai.length ||
-        this.baris.length >= BATAS_BARIS_OUTPUT ||
-        this.totalKarakter >= BATAS_KARAKTER_OUTPUT) {
+        this.baris.length >= BATAS_BARIS_OUTPUT - 1 ||
+        this.totalKarakter >= batasIsi) {
       this.tambahkanPenanda();
     }
   }
@@ -53,12 +59,13 @@ export class PenulisOutputAndroidTerbatas implements OutputWriter {
   private tambahkanPenanda(): void {
     if (this.dipotong) return;
     this.dipotong = true;
-    const ruangBaris = this.baris.length < BATAS_BARIS_OUTPUT;
-    const ruangKarakter = BATAS_KARAKTER_OUTPUT - this.totalKarakter;
-    if (ruangBaris && ruangKarakter > 0) {
-      const penanda = PENANDA_OUTPUT_DIPOTONG.slice(0, ruangKarakter);
-      this.baris.push(penanda);
-      this.totalKarakter += penanda.length;
+    if (this.baris.length < BATAS_BARIS_OUTPUT) {
+      const ruangKarakter = BATAS_KARAKTER_OUTPUT - this.totalKarakter;
+      if (ruangKarakter > 0) {
+        const penanda = PENANDA_OUTPUT_DIPOTONG.slice(0, ruangKarakter);
+        this.baris.push(penanda);
+        this.totalKarakter += penanda.length;
+      }
     }
   }
 
