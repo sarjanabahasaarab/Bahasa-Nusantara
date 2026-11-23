@@ -37,7 +37,7 @@
 ## 3. Kondisi & Kendala yang Terverifikasi Jujur (`BELUM DIVERIFIKASI`)
 - **Test `3.2` (`test:build-v23`) & `8.1`/`10.1` (`test:llvm-v44`, `test:linker-v45`)**: Memerlukan `clang` & `lld` untuk kompilasi objek + tautan biner mesin nyata.
 - **Test `5.3` & `5.4` (`test:build-v23`)**: Memerlukan `pwsh` / Windows PowerShell dan compiler PE32+ Windows.
-- **Sertifikasi 6 Target (`CERTIFIED`)**: Memerlukan eksekusi job matriks multi-OS pada `.github/workflows/ci.yml` (`windows-latest`, `windows-11-arm`, `ubuntu-latest`, `ubuntu-24.04-arm`, `macos-latest`).
+- **Sertifikasi 6 Target (`CERTIFIED`)**: Telah diselesaikan pada GitHub Actions dengan enam target native. Target macOS x86_64 menggunakan `macos-15-intel`, sedangkan macOS ARM64 menggunakan `macos-latest`; bukti host dan mode eksekusi dicatat per target.
 
 ## 4. Klasifikasi Status Akhir Phase 23
 - **Status Lokal (Container Linux x86_64 tanpa Clang/PowerShell):** **`PARTIAL`** *(Keterbatasan toolchain lokal tetap berlaku; hasil lokal tidak disamakan dengan validasi runner CI.)*
