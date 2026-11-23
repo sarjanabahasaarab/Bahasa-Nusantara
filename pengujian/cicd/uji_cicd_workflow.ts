@@ -179,8 +179,8 @@ uji('5.2 Runner GitHub Actions CI dan release dipetakan ke arsitektur native yan
   pastikan(kontenCI.includes('ubuntu-latest'), 'Runner Linux sah');
   pastikan(kontenCI.includes('os: macos-15-intel'), 'Runner macOS x64 CI harus memakai runner Intel native');
   pastikan(kontenCI.includes('macos-latest'), 'Runner macOS ARM64 CI sah');
-  pastikan(kontenRelease.includes('target: macos-x86_64\\n            os: macos-15-intel'), 'Release macOS x64 harus memakai runner Intel native');
-  pastikan(kontenRelease.includes('target: macos-arm64\\n            os: macos-latest'), 'Release macOS ARM64 harus memakai runner Apple Silicon');
+  pastikan(kontenRelease.includes('target: macos-x86_64\n            os: macos-15-intel'), 'Release macOS x64 harus memakai runner Intel native');
+  pastikan(kontenRelease.includes('target: macos-arm64\n            os: macos-latest'), 'Release macOS ARM64 harus memakai runner Apple Silicon');
   pastikan(kontenRelease.includes('Validasi arsitektur runner macOS native'), 'Release wajib menolak translasi Rosetta sebagai bukti native');
 });
 
