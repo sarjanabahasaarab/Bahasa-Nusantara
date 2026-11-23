@@ -128,6 +128,10 @@ function main(): void {
   const newQemuRow =
     '| **Eksekusi QEMU Bare-Metal (18 Sentinel)** | **NOT EXECUTED** (QEMU tidak tersedia di kontainer lokal) | **PASS — 18/18 sentinel** (GitHub Actions run ' + runId + ') | Log UART aktual, exit code 1, anti-timeout, anti-panic, urutan sentinel, dan checksum artefak telah diverifikasi. |';
   certification = certification.replace(oldQemuRow, newQemuRow);
+  certification = certification.replace(
+    'Status akhir baru boleh dinyatakan COMPLETE setelah workflow GitHub Actions pada runner Ubuntu menghasilkan exit code QEMU `1` bersama log serial UART mentah dari ke-18 sentinel.',
+    'Syarat eksekusi QEMU CI kini telah terpenuhi pada workflow run yang tercantum dalam bagian bukti di bawah; status lokal tetap PARTIAL karena toolchain QEMU tidak tersedia di kontainer lokal.',
+  );
 
   const insertionPoint = certification.indexOf('---\n');
   if (insertionPoint >= 0) {
