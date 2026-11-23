@@ -58,6 +58,8 @@ jobs:
         run: |
           set -euo pipefail
           npm ci
+          npm run build:android-runtime
+          npm run test:android-runtime
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platform-tools" "build-tools;35.0.0" "platforms;android-35" "emulator" "system-images;android-35;google_apis;x86_64"
           echo "$ANDROID_HOME/build-tools/35.0.0" >> "$GITHUB_PATH"
