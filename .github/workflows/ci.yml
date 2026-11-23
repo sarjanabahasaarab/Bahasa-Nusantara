@@ -161,6 +161,8 @@ jobs:
 
   # ============================================================================
   # 2. AUTOMATED TEST SUITE (PHASE 1 - 50) & CROSS-PLATFORM DEMO TERPADU
+  # macOS regression suite uses the Intel runner pool; native ARM64 remains independently
+  # required and verified by the macos-arm64 Phase 23 build-matrix target.
   # ============================================================================
   test-suite:
     name: NUSANTARA / Pengujian Otomatis (${{ matrix.os }})
@@ -170,7 +172,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest, macos-15-intel]
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
