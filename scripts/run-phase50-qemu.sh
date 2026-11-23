@@ -135,6 +135,9 @@ if [ "$QEMU_EXIT" -ne 1 ] || [ "$VALIDATOR_EXIT" -ne 0 ]; then
     exit 1
 fi
 
+echo "[8/8] Menyinkronkan laporan sertifikasi dari bukti QEMU aktual..."
+npx tsx scripts/finalize-phase50-certification.ts --artifacts-dir "$ARTIFACTS_DIR"
+
 echo "======================================================================"
 echo "     [QEMU_CERTIFICATION_PASS] SELURUH TAHAPAN KERNEL & USER MODE OK! "
 echo "======================================================================"
