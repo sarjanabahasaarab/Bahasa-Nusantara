@@ -421,6 +421,45 @@ try {
     });
     pastikan(lapLocal.overallStatus === 'FAIL' && lapLocal.exitCode === 1, 'Snapshot lokal tanpa commitSha/runId CI tidak boleh lolos mode CI provenance');
   });
+
+  uji('11. Bukti Android APK/AAB dan iOS Simulator lulus hanya untuk cakupan CI, bukan hardware/store', () => {
+    const demoDir = path.join(tmpBase, 'demo-simulator-only');
+    buatBundelDummy(demoDir);
+    const jobs = buatJobEvidencesFullPass();
+
+    // Linux Xvfb bukan monitor fisik.
+    jobs[0].isNativeHardware = false;
+
+    // Android APK/AAB dan emulator valid, tetapi bukan perangkat ponsel fisik.
+    jobs[3].details!.physicalDeviceHardwareVerified = false;
+
+    // iOS Mach-O dan Simulator valid; tidak ada archive/IPA atau device signing.
+    jobs[4].details!.physicalDeviceHardwareVerified = false;
+    jobs[4].details!.xcarchiveBuilt = false;
+    jobs[4].details!.ipaProduced = false;
+    jobs[4].details!.adHocOrDevSigned = false;
+
+    // Loopback TLS dan OTA regression pass; native SPKI/store integration tetap belum diverifikasi.
+    jobs[5].details!.nativeSpkiPinningVerified = false;
+    jobs[5].details!.playCoreAndStoreKitVerified = false;
+
+    const lap = evaluasiGerbangSertifikasi({
+      commitSha: 'deadbeef1234',
+      workflowRunId: '999',
+      phase23Summary: buatPhase23PassSummary(),
+      demoBundleDir: demoDir,
+      jobEvidences: jobs,
+      testSuiteStatuses: { staticChecks: 'PASS', testSuite: 'PASS', qualityGate: 'PASS' },
+    });
+
+    pastikan(lap.phases['37'].status === 'PASS', 'APK/emulator dan Mach-O/Simulator yang tervalidasi harus meluluskan Phase 37');
+    pastikan(lap.phases['38'].status === 'NOT_VERIFIED', 'Simulator tidak boleh mengklaim sensor perangkat fisik');
+    pastikan(lap.phases['40'].status === 'NOT_VERIFIED', 'Tanpa .ipa nyata, Phase 40 harus tetap NOT_VERIFIED');
+    pastikan(lap.phases['41'].status === 'NOT_VERIFIED', 'Tanpa iOS device signing, Phase 41 harus tetap NOT_VERIFIED');
+    pastikan(lap.phases['39'].status === 'NOT_VERIFIED', 'Tanpa native SPKI, Phase 39 harus tetap NOT_VERIFIED');
+    pastikan(lap.phases['42'].status === 'NOT_VERIFIED', 'Tanpa Play Core/StoreKit, Phase 42 harus tetap NOT_VERIFIED');
+    pastikan(lap.overallStatus === 'PARTIAL' && lap.exitCode === 1, 'Bukti simulator saja tidak boleh membuat seluruh gate CERTIFIED');
+  });
 } finally {
   fs.rmSync(tmpBase, { recursive: true, force: true });
 }
