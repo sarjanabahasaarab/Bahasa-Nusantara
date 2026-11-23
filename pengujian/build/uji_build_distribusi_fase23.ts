@@ -1285,10 +1285,9 @@ function createValidEvidenceFixture(
   const exeRel = `artifacts/${target}/${path.basename(exeFile)}`;
   const arcRel = `artifacts/${target}/${path.basename(arcFile)}`;
 
-  const isRosetta = target === 'macos-x86_64';
   const hostOS = target.startsWith('windows') ? 'windows' : target.startsWith('macos') ? 'darwin' : 'linux';
-  const hostArchitecture = isRosetta ? 'aarch64' : arch;
-  const executionMode = isRosetta ? 'rosetta2' : 'native';
+  const hostArchitecture = arch;
+  const executionMode = 'native' as const;
   const status: 'PASS' | 'NOT_VERIFIED' | 'FAIL' = overrideStatus || 'PASS';
 
   return {
@@ -1311,8 +1310,10 @@ function createValidEvidenceFixture(
         ? 'ubuntu-latest'
         : target === 'linux-arm64'
         ? 'ubuntu-24.04-arm'
+        : target === 'macos-x86_64'
+        ? 'macos-15-intel'
         : 'macos-latest',
-    isCross: isRosetta,
+    isCross: false,
     compiler: 'clang',
     compilerVersion: 'clang version 18.1.8',
     compilerDetails: { name: 'clang', available: true, version: 'clang version 18.1.8' },
@@ -1320,9 +1321,7 @@ function createValidEvidenceFixture(
     linkerVersion: 'LLD 18.1.8',
     linkerDetails: { name: format === 'COFF' ? 'lld-link' : 'lld', lldAvailable: true, version: 'LLD 18.1.8' },
     sysroot: hostOS === 'darwin' ? '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk' : '/usr/lib',
-    emulator: isRosetta
-      ? { used: true, command: 'arch -x86_64', version: 'Rosetta 2' }
-      : { used: false },
+    emulator: { used: false },
     sdk: { name: 'SDK', available: true, linkerProbeVerified: true, missingRequirements: [] },
     llvmIR: { path: llRel, sha256: llSha },
     objectFile: { path: objRel, sha256: objSha },
@@ -1561,6 +1560,11 @@ uji('7.8 Enam target PASS lintas OS (Windows, macOS + Rosetta 2, Linux + ARM64) 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nusa-cert-78-'));
   try {
     const evDir = writeAll6Fixtures(tmp);
+    const macosX64 = JSON.parse(fs.readFileSync(path.join(evDir, 'macos-x86_64.json'), 'utf-8')) as Phase23TargetEvidence;
+    samaDengan(macosX64.hostArchitecture, 'x86_64', 'macOS x86_64 harus dibuktikan dari host Intel');
+    samaDengan(macosX64.isCross, false, 'macOS x86_64 tidak boleh memakai translasi arsitektur');
+    samaDengan(macosX64.executionMode, 'native', 'macOS x86_64 harus dieksekusi native');
+    pastikan(macosX64.emulator?.used !== true, 'Rosetta/emulator tidak boleh dipakai untuk bukti native macOS x86_64');
     const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
     samaDengan(agg.overallStatus, 'CERTIFIED', `Temuan: ${JSON.stringify(agg.findings)}`);
     samaDengan(agg.exitCode, 0);
