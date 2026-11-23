@@ -125,7 +125,7 @@ Berdasarkan audit kejujuran teknis repositori `v0.50.0`:
 6. **Biner Cross-Platform Phase 23 & Toolchain LLVM Host (Phase 23, 44, 45, 46):**
    - `NativeBuildPipeline` (+ preflight sysroot lintas OS), `TargetMatrixManager` (6 target desktop + linker probe Windows ARM64), `Phase23CertificationEngine`, `BinaryInspector.inspectStrict`, `DesktopInstallerGenerator` (`.NET` SHA-256 bebas `Get-FileHash`, receipt JSON bebas UTF-8 BOM `UTF8Encoding($false)`, POSIX `sed` portabel, sandbox POSIX & PowerShell `.cmd` vs `PE32+` `.exe`), `StandalonePackager` (Windows/Linux/macOS), dan `DesktopDistributionPackager` teruji pada `test:build-v23` (**44 lulus, 0 gagal, 3 `BELUM DIVERIFIKASI`** dari 47 skenario di container Linux tanpa `clang`/`pwsh`/cross-SDKs; snapshot lokal `artifacts/phase23/PHASE-23-CERTIFICATION-REPORT.md` berstatus jujur `PARTIAL`; `3` skenario `SKIPPED` pada LLVM/Linker/Actor). Matriks build penuh (`test:llvm-v44` + `test:linker-v45` + `test:build-v23`) & gerbang agregasi 6 target (`phase23-certification-gate`) aktif di `.github/workflows/ci.yml`.
 7. **Eksekusi Bare-Metal QEMU NusantaraOS (Phase 49 & 50):**
-   - Seluruh pengkode bootstrap x86_64, validator Multiboot2/ELF64, dan artefak ELF64 + `SHA256SUMS` (`artifacts/phase50/`) terverifikasi melalui `93` skenario uji (Phase 48: `42`, Phase 49: `23`, Phase 50: `28`). Karena container cloud saat ini tidak memiliki `qemu-system-x86_64`, `clang`, `ld.lld`, `grub-mkrescue`, dan `xorriso`, pembuatan ISO lokal berstatus **NOT_BUILT** dan eksekusi boot QEMU lokal berstatus **NOT EXECUTED / SIMULATION_ONLY** (`PARTIAL (CI_READY)`), siap dijalankan di Ubuntu runner via `.github/workflows/kernel-boot-qemu.yml` dan `.github/workflows/nusantara-os-ci.yml`.
+   - Seluruh pengkode bootstrap x86_64, validator Multiboot2/ELF64, dan artefak ELF64 + `SHA256SUMS` (`artifacts/phase50/`) terverifikasi melalui `93` skenario uji (Phase 48: `42`, Phase 49: `23`, Phase 50: `28`). Pembuatan ISO lokal dan eksekusi QEMU lokal tetap **NOT BUILT / NOT EXECUTED** karena toolchain tidak tersedia di container. Namun, eksekusi nyata GitHub Actions membuktikan Phase 49 (run `45087120364`) dan Phase 50 (run `45087120441`) berhasil; Phase 50 mencatat **18/18 sentinel PASS**, exit code `1` sesuai kontrak, tanpa timeout/panic, dan checksum artefak valid. Bukti CI ini memverifikasi boot dan user-mode pada runner QEMU; keterbatasan eksekusi lokal dicatat terpisah.
 
 ---
 
@@ -205,8 +205,8 @@ Daftar suite pengujian terverifikasi:
 
 - **Fase Teraudit Terbaru (Phase 1–50):**
   - **Phase 48 (v0.48.0)**: Nusantara OS: Minimal Kernel Interface (🟢 Selesai — 42/42 lulus).
-  - **Phase 49 (v0.49.0)**: Nusantara OS: Bootable Kernel & Hardware Validation (🟠 Selesai Sebagian — 23/23 uji integrasi lulus; QEMU lokal tidak tersedia pada container saat ini).
-  - **Phase 50 (v0.50.0)**: Nusantara OS: Process Isolation & User Mode (🟠 Selesai Sebagian / `PARTIAL (CI_READY)` — 28/28 skenario Quality Gate Suite 46 lulus 100%; siap dieksekusi di runner CI QEMU).
+  - **Phase 49 (v0.49.0)**: Nusantara OS: Bootable Kernel & Hardware Validation (🟢 Selesai — 23/23 uji integrasi lulus; eksekusi QEMU x86_64 nyata pada GitHub Actions run `45087120364` berhasil, termasuk 18 sentinel berurutan).
+  - **Phase 50 (v0.50.0)**: Nusantara OS: Process Isolation & User Mode (🟢 Selesai — 28/28 skenario Quality Gate lulus; QEMU nyata GitHub Actions run `45087120441`, 18/18 sentinel PASS, exit code `1` sesuai kontrak, tanpa timeout/panic, checksum lulus).
 - **Garis Besar Master Roadmap 150 Phase (Phase 51–150):**
   - **Phase 51–60**: Nusantara OS Shell, Window Manager, & Aplikasi Sistem Desktop (🔵 Direncanakan — dimulai setelah Gate 1 QEMU/CI 6 target diverifikasi).
   - **Phase 61–75**: Penerjemah Sintaks Multi-Bahasa & Universal Language Bridge (Python, JS/TS, C/C++, Rust, Go, Java, Kotlin, Swift -> Nusantara & NIR).
