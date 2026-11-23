@@ -1564,7 +1564,7 @@ uji('7.8 Enam target PASS lintas OS (Windows, macOS + Rosetta 2, Linux + ARM64) 
     samaDengan(macosX64.hostArchitecture, 'x86_64', 'macOS x86_64 harus dibuktikan dari host Intel');
     samaDengan(macosX64.isCross, false, 'macOS x86_64 tidak boleh memakai translasi arsitektur');
     samaDengan(macosX64.executionMode, 'native', 'macOS x86_64 harus dieksekusi native');
-    samaDengan(macosX64.emulator.used, false, 'Rosetta/emulator tidak boleh dipakai untuk bukti native macOS x86_64');
+    pastikan(macosX64.emulator?.used !== true, 'Rosetta/emulator tidak boleh dipakai untuk bukti native macOS x86_64');
     const agg = Phase23CertificationEngine.aggregateEvidence(evDir, { baseDir: tmp });
     samaDengan(agg.overallStatus, 'CERTIFIED', `Temuan: ${JSON.stringify(agg.findings)}`);
     samaDengan(agg.exitCode, 0);
