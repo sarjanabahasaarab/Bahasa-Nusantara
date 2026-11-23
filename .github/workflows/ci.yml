@@ -794,7 +794,18 @@ jobs:
           sdkmanager "platform-tools" "build-tools;35.0.0" "platforms;android-35" "emulator" "system-images;android-35;google_apis;x86_64"
           echo "$ANDROID_HOME/build-tools/35.0.0" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
-          echo "no" | avdmanager create avd --force --name nusantara-api35 --package "system-images;android-35;google_apis;x86_64"
+          echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
+          # Keep AVD metadata and device files in one stable location across steps.
+          export ANDROID_USER_HOME="$HOME/.android"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo "ANDROID_USER_HOME=$ANDROID_USER_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
+          # Create non-interactively and verify persistence before continuing.
+          printf 'no\n' | avdmanager create avd --force --name nusantara-api35 --package "system-images;android-35;google_apis;x86_64"
+          test -s "$ANDROID_AVD_HOME/nusantara-api35.ini"
+          test -d "$ANDROID_AVD_HOME/nusantara-api35.avd"
+          emulator -list-avds | grep -Fx nusantara-api35
       - name: Build APK/AAB native dan verifikasi DEX + tanda tangan ephemeral
         id: android_build
         shell: bash
