@@ -1,0 +1,42 @@
+name: Phase 51 — Kernel/Userland ABI
+on:
+  pull_request:
+    paths:
+      - "src/runtime/os/abi/**"
+      - "pengujian/os/uji_abi_ruang_pengguna_fase51.ts"
+      - "package.json"
+      - ".github/workflows/phase-51-abi.yml"
+  push:
+    branches:
+      - "feature/phase-51-kernel-userland-abi"
+    paths:
+      - "src/runtime/os/abi/**"
+      - "pengujian/os/uji_abi_ruang_pengguna_fase51.ts"
+      - "package.json"
+      - ".github/workflows/phase-51-abi.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase-51-abi-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  abi-contract:
+    name: Phase 51 ABI Contract Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run Phase 51 ABI suite
+        run: npm run test:abi-v51
