@@ -47,8 +47,25 @@ public final class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        showShell("Beranda");
+        if (state != null) {
+            activeFile = state.getString("activeFile", activeFile);
+        }
+        showShell(state == null ? "Beranda" : state.getString("activePage", "Beranda"));
     }
+
+    @Override protected void onSaveInstanceState(Bundle outState) {
+        persistEditorDraft();
+        outState.putString("activeFile", activeFile);
+        outState.putString("activePage", currentPage);
+        super.onSaveInstanceState(outState);
+    }
+
+    @Override protected void onPause() {
+        persistEditorDraft();
+        super.onPause();
+    }
+
+    private String currentPage = "Beranda";
 
     private int dp(float value) {
         return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
@@ -81,6 +98,8 @@ public final class MainActivity extends Activity {
     }
 
     private void showShell(String page) {
+        persistEditorDraft();
+        currentPage = page;
         root = column();
         root.setBackgroundColor(BG);
         setContentView(root);
@@ -208,28 +227,60 @@ public final class MainActivity extends Activity {
             .show();
     }
 
+    private boolean isValidProjectFileName(String name) {
+        return name != null
+            && !name.isEmpty()
+            && !name.equals(".nusantara")
+            && !name.contains("/")
+            && !name.contains("\\")
+            && !name.contains("..")
+            && name.length() <= 120;
+    }
+
+    private void persistEditorDraft() {
+        if (editor == null) return;
+        String name = activeFile.endsWith(".nusantara") ? activeFile : activeFile + ".nusantara";
+        if (!isValidProjectFileName(name)) return;
+        writeProjectFile(name, editor.getText().toString());
+        activeFile = name;
+    }
+
     private void saveCurrentFile() {
         if (editor == null) return;
         String name = activeFile.trim();
         if (!name.endsWith(".nusantara")) name += ".nusantara";
-        if (name.contains("/") || name.contains("\\") || name.equals(".nusantara")) {
+        if (!isValidProjectFileName(name)) {
             Toast.makeText(this, "Nama berkas tidak valid.", Toast.LENGTH_SHORT).show();
             return;
         }
-        try (FileOutputStream output = openFileOutput(name, MODE_PRIVATE)) {
-            output.write(editor.getText().toString().getBytes(StandardCharsets.UTF_8));
+        if (writeProjectFile(name, editor.getText().toString())) {
             activeFile = name;
             Toast.makeText(this, "Berkas tersimpan: " + name, Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, "Gagal menyimpan berkas.", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private boolean writeProjectFile(String name, String contents) {
+        try (FileOutputStream output = openFileOutput(name, MODE_PRIVATE)) {
+            output.write(contents.getBytes(StandardCharsets.UTF_8));
+            output.flush();
+            return true;
         } catch (Exception error) {
-            Toast.makeText(this, "Gagal menyimpan: " + error.getMessage(), Toast.LENGTH_LONG).show();
+            android.util.Log.e("NusantaraMobile", "Tidak dapat menyimpan " + name, error);
+            return false;
         }
     }
 
     private String readFile(String name) {
         try (FileInputStream input = openFileInput(name)) {
-            byte[] data = new byte[input.available()];
-            int count = input.read(data);
-            return new String(data, 0, Math.max(0, count), StandardCharsets.UTF_8);
+            java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+            byte[] buffer = new byte[4096];
+            int count;
+            while ((count = input.read(buffer)) != -1) {
+                output.write(buffer, 0, count);
+            }
+            return new String(output.toByteArray(), StandardCharsets.UTF_8);
         } catch (Exception ignored) {
             return "";
         }
