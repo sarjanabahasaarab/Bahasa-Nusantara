@@ -267,8 +267,8 @@ jobs:
 
   # ============================================================================
   # 4. BUILD VALIDATION MATRIX (6 Target Desktop Resmi)
-  # Kompatibilitas Fase 24 aliases: windows-x64, linux-x64, macos-x64, macos-arm64 (ref runner: macos-13)
-  # Catatan Runner: macos-x86_64 berjalan di macos-latest via Rosetta 2 karena macos-13 sudah retired.
+  # Kompatibilitas Fase 24 aliases: windows-x64, linux-x64, macos-x64, macos-arm64.
+  # macos-x86_64 memakai runner Intel macos-15-intel agar bukti Phase 23 benar-benar native, bukan Rosetta 2.
   # ============================================================================
   build-matrix-validation:
     name: NUSANTARA / Validasi Build (${{ matrix.target }})
@@ -306,8 +306,8 @@ jobs:
           - target: macos-x86_64
             legacy_target: macos-x64
             triple: x86_64-apple-darwin
-            os: macos-latest
-            is_native: 'false'
+            os: macos-15-intel
+            is_native: 'true'
             require_clang: '1'
           - target: macos-arm64
             legacy_target: macos-arm64
@@ -431,13 +431,13 @@ jobs:
           elif [ "${{ runner.os }}" = "macOS" ]; then
             xcrun --show-sdk-path || true
             ld -v 2>&1 || true
-            if [ "${{ matrix.target }}" = "macos-x86_64" ] && [ "$HOST_ARCH" = "arm64" ]; then
-              if arch -x86_64 /usr/bin/true 2>/dev/null; then
-                echo "[OK] Rosetta 2 aktif untuk eksekusi macos-x86_64 pada Apple Silicon."
-              else
-                echo "[GALAT] Rosetta 2 tidak aktif pada runner Apple Silicon."
-                exit 1
-              fi
+            if [ "${{ matrix.target }}" = "macos-x86_64" ] && [ "$HOST_ARCH" != "x86_64" ]; then
+              echo "[GALAT] Target macos-x86_64 wajib berjalan pada host Intel x86_64; emulasi Rosetta tidak diterima sebagai bukti native."
+              exit 1
+            fi
+            if [ "${{ matrix.target }}" = "macos-arm64" ] && [ "$HOST_ARCH" != "arm64" ] && [ "$HOST_ARCH" != "aarch64" ]; then
+              echo "[GALAT] Target macos-arm64 wajib berjalan pada host Apple Silicon ARM64."
+              exit 1
             fi
           fi
           clang --version
