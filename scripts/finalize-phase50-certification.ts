@@ -48,9 +48,10 @@ function main(): void {
   wajib((report.duplicateSentinels?.length ?? 0) === 0, 'Ada sentinel duplikat.');
   wajib((report.outOfOrderSentinels?.length ?? 0) === 0, 'Ada sentinel di luar urutan.');
   wajib((report.violations?.length ?? 0) === 0, 'Laporan validator memiliki pelanggaran.');
-  wajib(report.stages?.length === 18, 'Rincian 18 tahapan sentinel tidak lengkap.');
+  const stages = report.stages ?? [];
+  wajib(stages.length === 18, 'Rincian 18 tahapan sentinel tidak lengkap.');
   wajib(
-    report.stages.every((stage) => stage.matchedInOrder === true && stage.occurrences === 1),
+    stages.every((stage) => stage.matchedInOrder === true && stage.occurrences === 1),
     'Setiap sentinel harus muncul tepat satu kali dan berurutan.',
   );
 
@@ -142,7 +143,32 @@ function main(): void {
   }
   fs.writeFileSync(certificationPath, certification, 'utf8');
 
-  console.log('[PHASE50_CERTIFICATION_FINALIZED] QEMU PASS; 18/18 sentinel; report and certification synchronized.');
+  const checksumFiles = [
+    'kernel.elf', 'user.elf', 'user-test.elf', 'user-fault-test.elf',
+    'nusantara-os.iso', 'nusantara-phase50.iso', 'boot.log', 'qemu.log',
+    'serial.log', 'qemu-debug.log', 'qemu-sentinel-report.json',
+    'qemu-exit-code.txt', 'elf-validation.txt', 'isolation-test-report.txt',
+    'toolchain-versions.txt', 'test-report.txt', 'test-results.txt',
+    'FINAL-CERTIFICATION.md',
+  ];
+  const checksumLines = checksumFiles.map((relativePath) => {
+    const artifactPath = path.join(artifactsDir, relativePath);
+    wajib(fs.existsSync(artifactPath), 'Artefak wajib untuk SHA256SUMS tidak ditemukan: ' + relativePath);
+    const digest = crypto.createHash('sha256').update(fs.readFileSync(artifactPath)).digest('hex');
+    return digest + '  ' + relativePath;
+  });
+  const checksumPath = path.join(artifactsDir, 'SHA256SUMS');
+  fs.writeFileSync(checksumPath, checksumLines.join('\\n') + '\\n', 'utf8');
+  for (const line of checksumLines) {
+    const separator = line.indexOf('  ');
+    const expected = line.slice(0, separator);
+    const relativePath = line.slice(separator + 2);
+    const actual = crypto.createHash('sha256')
+      .update(fs.readFileSync(path.join(artifactsDir, relativePath))).digest('hex');
+    wajib(actual === expected, 'Verifikasi SHA256SUMS gagal: ' + relativePath);
+  }
+
+  console.log('[PHASE50_CERTIFICATION_FINALIZED] QEMU PASS; 18/18 sentinel; reports and SHA256SUMS synchronized.');
   console.log('Run: ' + runId + ' | Commit: ' + sha + ' | Report: ' + reportPath);
 }
 
