@@ -240,7 +240,7 @@ jobs:
           mkdir -p artifacts/mobile-evidence
           python3 - <<'PY'
           import datetime, json, os, platform
-          outcomes = [os.environ.get("IOS_TESTS_OUTCOME"), os.environ.get("IOS_BUILD_OUTCOME")]
+          outcomes = [os.environ.get("IOS_TESTS_OUTCOME"), os.environ.get("IOS_BUILD_OUTCOME"), os.environ.get("IOS_ARCHIVE_OUTCOME")]
           failed = "failure" in outcomes
           complete = all(value == "success" for value in outcomes)
           payload = {
@@ -266,7 +266,7 @@ jobs:
               "nativeSpkiPinningVerified": False,
               "playCoreAndStoreKitVerified": False
             },
-            "blockers": ["iOS Simulator is not a physical iPhone/iPad. This job does not create a device-signed .xcarchive or .ipa; physical sensors, device signing, native SPKI, and production StoreKit remain unverified."],
+            "blockers": ["CI builds an unsigned device .xcarchive only. It does not produce a signed IPA or verify physical iPhone/iPad hardware, device signing, native SPKI, or production StoreKit."],
             "generatedAt": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
           }
           with open("artifacts/mobile-evidence/phase37-42-ios.json", "w", encoding="utf-8") as f:
