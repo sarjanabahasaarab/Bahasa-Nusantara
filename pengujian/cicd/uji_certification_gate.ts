@@ -436,9 +436,9 @@ try {
     // Android APK/AAB dan emulator valid, tetapi bukan perangkat ponsel fisik.
     jobs[3].details!.physicalDeviceHardwareVerified = false;
 
-    // iOS Mach-O dan Simulator valid; tidak ada archive/IPA atau device signing.
+    // iOS Simulator dan unsigned device .xcarchive valid; tidak ada signed IPA/device signing.
     jobs[4].details!.physicalDeviceHardwareVerified = false;
-    jobs[4].details!.xcarchiveBuilt = false;
+    jobs[4].details!.xcarchiveBuilt = true;
     jobs[4].details!.ipaProduced = false;
     jobs[4].details!.adHocOrDevSigned = false;
 
@@ -458,6 +458,7 @@ try {
     pastikan(lap.phases['37'].status === 'PASS', 'APK/emulator dan Mach-O/Simulator yang tervalidasi harus meluluskan Phase 37');
     pastikan(lap.phases['38'].status === 'NOT_VERIFIED', 'Simulator tidak boleh mengklaim sensor perangkat fisik');
     pastikan(lap.phases['40'].status === 'NOT_VERIFIED', 'Tanpa .ipa nyata, Phase 40 harus tetap NOT_VERIFIED');
+    pastikan(Boolean(ios40?.catatan?.includes('xcarchiveBuilt=true') && ios40.catatan?.includes('ipaProduced=false')), 'Unsigned .xcarchive harus tercatat tetapi tidak boleh menggantikan IPA');
     const android40 = lap.phases['40'].criteria.find((c) => c.id === 'p40-android-dex-aab-apksigner');
     const ios40 = lap.phases['40'].criteria.find((c) => c.id === 'p40-ios-xcarchive-macho-ipa');
     const signing41 = lap.phases['41'].criteria.find((c) => c.id === 'p41-ephemeral-signing-sandbox');

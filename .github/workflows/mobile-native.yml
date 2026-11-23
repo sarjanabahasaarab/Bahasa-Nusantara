@@ -210,17 +210,37 @@ jobs:
           xcrun simctl launch "$SIM_UDID" id.nusantara.mobile
           echo "IOS_MACHO_COMPILED=true" >> "$GITHUB_ENV"
           echo "IOS_SIMULATOR_LAUNCHED=true" >> "$GITHUB_ENV"
+      - name: Build unsigned iOS device .xcarchive (Phase 40 evidence)
+        id: ios_device_archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARCHIVE_PATH="$RUNNER_TEMP/NUSANTARA-device.xcarchive"
+          xcodebuild archive \
+            -project native/ios/NusantaraMobile.xcodeproj \
+            -scheme NusantaraMobile \
+            -destination "generic/platform=iOS" \
+            -archivePath "$ARCHIVE_PATH" \
+            CODE_SIGNING_ALLOWED=NO
+          APP_PATH="$ARCHIVE_PATH/Products/Applications/NUSANTARA.app"
+          test -d "$APP_PATH"
+          EXECUTABLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_PATH/Info.plist")
+          test -s "$APP_PATH/$EXECUTABLE"
+          file "$APP_PATH/$EXECUTABLE" | grep -E 'Mach-O'
+          lipo -info "$APP_PATH/$EXECUTABLE" | grep -q 'arm64'
+          echo "IOS_XCARCHIVE_BUILT=true" >> "$GITHUB_ENV"
       - name: Write iOS evidence
         if: always()
         env:
           IOS_TESTS_OUTCOME: ${{ steps.ios_mobile_tests.outcome }}
           IOS_BUILD_OUTCOME: ${{ steps.ios_simulator_build.outcome }}
+          IOS_ARCHIVE_OUTCOME: ${{ steps.ios_device_archive.outcome }}
         shell: bash
         run: |
           mkdir -p artifacts/mobile-evidence
           python3 - <<'PY'
           import datetime, json, os, platform
-          outcomes = [os.environ.get("IOS_TESTS_OUTCOME"), os.environ.get("IOS_BUILD_OUTCOME")]
+          outcomes = [os.environ.get("IOS_TESTS_OUTCOME"), os.environ.get("IOS_BUILD_OUTCOME"), os.environ.get("IOS_ARCHIVE_OUTCOME")]
           failed = "failure" in outcomes
           complete = all(value == "success" for value in outcomes)
           payload = {
@@ -239,14 +259,14 @@ jobs:
             "details": {
               "machOCompiled": os.environ.get("IOS_MACHO_COMPILED") == "true",
               "simulatorLaunched": os.environ.get("IOS_SIMULATOR_LAUNCHED") == "true",
-              "xcarchiveBuilt": False,
+              "xcarchiveBuilt": os.environ.get("IOS_XCARCHIVE_BUILT") == "true",
               "ipaProduced": False,
               "adHocOrDevSigned": False,
               "physicalDeviceHardwareVerified": False,
               "nativeSpkiPinningVerified": False,
               "playCoreAndStoreKitVerified": False
             },
-            "blockers": ["iOS Simulator is not a physical iPhone/iPad. This job does not create a device-signed .xcarchive or .ipa; physical sensors, device signing, native SPKI, and production StoreKit remain unverified."],
+            "blockers": ["CI builds an unsigned device .xcarchive only. It does not produce a signed IPA or verify physical iPhone/iPad hardware, device signing, native SPKI, or production StoreKit."],
             "generatedAt": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
           }
           with open("artifacts/mobile-evidence/phase37-42-ios.json", "w", encoding="utf-8") as f:
@@ -260,6 +280,7 @@ jobs:
           name: nusantara-ios-simulator-app
           path: |
             ${{ runner.temp }}/nusantara-ios-derived/Build/Products/Debug-iphonesimulator/NUSANTARA.app
+            ${{ runner.temp }}/NUSANTARA-device.xcarchive
             native/ios/NusantaraMobile.xcodeproj
             artifacts/mobile-evidence/
           retention-days: 30
