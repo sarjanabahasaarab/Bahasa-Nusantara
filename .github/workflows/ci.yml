@@ -760,67 +760,115 @@ jobs:
   # 7. PHASE 37–42 — ANDROID TOOLCHAIN (JDK 17, SDK, AAPT2, D8, APKSIGNER, KVM)
   # ============================================================================
   phase37-42-android-sdk:
-    name: NUSANTARA / Validasi Toolchain & SDK Android (Phase 37–42)
+    name: NUSANTARA / Validasi APK/AAB & Android Emulator (Phase 37–42)
     needs: quality-gate
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
-
       - name: Pasang Lingkungan Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: 'npm'
-
       - name: Pasang JDK 17 (Temurin)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-
-      - name: Pasang Android SDK Command-line Tools
+      - name: Pasang Android SDK & Gradle
         uses: android-actions/setup-android@v4
-
-      - name: Pasang Dependensi Node & Android Build-Tools / Platform-Tools
+      - name: Siapkan Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Instal SDK, emulator, dan system image Android 35
+        shell: bash
         run: |
+          set -euo pipefail
           npm ci
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platform-tools" "build-tools;35.0.0" "platforms;android-35"
-
-      - name: Audit Toolchain Android, Suite Mobile (37, 38, 40, 41) & Bukti Kejujuran
+          sdkmanager "platform-tools" "build-tools;35.0.0" "platforms;android-35" "emulator" "system-images;android-35;google_apis;x86_64"
+          echo "$ANDROID_HOME/build-tools/35.0.0" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "no" | avdmanager create avd --force --name nusantara-api35 --package "system-images;android-35;google_apis;x86_64"
+      - name: Build APK/AAB native dan verifikasi DEX + tanda tangan ephemeral
+        id: android_build
+        shell: bash
         run: |
-          mkdir -p artifacts/cert-evidence
+          set -euo pipefail
+          KEYSTORE="$RUNNER_TEMP/nusantara-ephemeral.jks"
+          STORE_PASS="$(openssl rand -hex 24)"
+          KEY_PASS="$STORE_PASS"
+          keytool -genkeypair -noprompt -storetype JKS -keystore "$KEYSTORE" -storepass "$STORE_PASS" -keypass "$KEY_PASS" -alias nusantara_ci -keyalg RSA -keysize 2048 -validity 2 -dname "CN=Nusantara CI,O=Nusantara,C=ID"
+          export NUSANTARA_ANDROID_KEYSTORE="$KEYSTORE"
+          export NUSANTARA_ANDROID_KEY_ALIAS=nusantara_ci
+          export NUSANTARA_ANDROID_STORE_PASSWORD="$STORE_PASS"
+          export NUSANTARA_ANDROID_KEY_PASSWORD="$KEY_PASS"
+          gradle --no-daemon -p native/android -PapplicationId=id.nusantara.aplikasi :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:bundleRelease
+          APK_DEBUG="native/android/app/build/outputs/apk/debug/app-debug.apk"
+          APK_RELEASE="native/android/app/build/outputs/apk/release/app-release.apk"
+          AAB="native/android/app/build/outputs/bundle/release/app-release.aab"
+          test -s "$APK_DEBUG"
+          test -s "$APK_RELEASE"
+          test -s "$AAB"
+          unzip -Z1 "$APK_DEBUG" | grep -Fx classes.dex
+          unzip -Z1 "$AAB" | grep -Fx BundleConfig.pb
+          unzip -Z1 "$AAB" | grep "base/dex/classes" | grep ".dex"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK_DEBUG"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK_RELEASE"
+          echo "APK_DEBUG=$APK_DEBUG" >> "$GITHUB_ENV"
+          echo "EPHEMERAL_SIGNING_VERIFIED=true" >> "$GITHUB_ENV"
+      - name: Boot Android Emulator, install APK, dan launch aplikasi
+        id: android_emulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          emulator -avd nusantara-api35 -no-snapshot -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          adb wait-for-device
+          for attempt in $(seq 1 120); do
+            if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)" = "1" ]; then break; fi
+            sleep 5
+          done
+          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
+          adb install -r "$APK_DEBUG"
+          adb shell am start -n id.nusantara.aplikasi/id.nusantara.mobile.MainActivity
+          sleep 5
+          adb shell pidof id.nusantara.aplikasi
+          echo "ANDROID_EMULATOR_LAUNCHED=true" >> "$GITHUB_ENV"
+      - name: Jalankan suite regresi Phase 37–42
+        id: android_mobile_tests
+        run: |
           npm run test:mobile-v37
           npm run test:native-api-v38
+          npm run test:mobile-networking-v39
           npm run test:distribusi-v40
           npm run test:publikasi-v41
-
-          BT_DIR="$ANDROID_HOME/build-tools/35.0.0"
-          AAPT2_VER=$($BT_DIR/aapt2 version 2>&1 | head -n 1 || echo "")
-          APKSIGNER_VER=$($BT_DIR/apksigner version 2>&1 | head -n 1 || echo "")
-          ADB_VER=$(adb --version 2>&1 | head -n 1 || echo "")
-          JAVA_VER=$(java -version 2>&1 | head -n 1 || echo "")
-          KVM_OK=false
-          if [ -e /dev/kvm ]; then KVM_OK=true; fi
-
-          # Uji tanda tangan keystore uji ephemeral (bukan APK produksi) & deteksi ketiadaan proyek Gradle penuh
-          TMP_KS=$(mktemp -d)
-          keytool -genkeypair -v -keystore "$TMP_KS/ephemeral-test.jks" -storepass testpass123 \
-            -keypass testpass123 -alias nusa_test -keyalg RSA -keysize 2048 -validity 1 \
-            -dname "CN=Nusantara CI Ephemeral,O=Nusantara,C=ID" >/dev/null 2>&1
-          KS_OK=false
-          if [ -s "$TMP_KS/ephemeral-test.jks" ]; then KS_OK=true; fi
-          rm -rf "$TMP_KS"
-
-          export JAVA_VER AAPT2_VER APKSIGNER_VER ADB_VER KS_OK KVM_OK
+          npm run test:pembaruan-v42
+          echo "MOBILE_TESTS_PASS=true" >> "$GITHUB_ENV"
+      - name: Tulis evidence Android yang sesuai hasil aktual
+        if: always()
+        env:
+          ANDROID_BUILD_OUTCOME: ${{ steps.android_build.outcome }}
+          ANDROID_EMULATOR_OUTCOME: ${{ steps.android_emulator.outcome }}
+          ANDROID_TESTS_OUTCOME: ${{ steps.android_mobile_tests.outcome }}
+        shell: bash
+        run: |
+          mkdir -p artifacts/cert-evidence
           python3 - <<'PY'
-          import datetime
-          import json
-          import os
-          import platform
-
+          import datetime, json, os, platform, zipfile
+          outcomes = [os.environ.get("ANDROID_BUILD_OUTCOME"), os.environ.get("ANDROID_EMULATOR_OUTCOME"), os.environ.get("ANDROID_TESTS_OUTCOME")]
+          failed = "failure" in outcomes
+          complete = all(value == "success" for value in outcomes)
+          def has_entry(archive, predicate):
+              try:
+                  with zipfile.ZipFile(archive) as zf:
+                      return any(predicate(name) for name in zf.namelist())
+              except (OSError, zipfile.BadZipFile):
+                  return False
+          apk = "native/android/app/build/outputs/apk/debug/app-debug.apk"
+          aab = "native/android/app/build/outputs/bundle/release/app-release.aab"
           payload = {
               "schemaVersion": 1,
               "jobId": "phase37-42-android-sdk",
@@ -828,39 +876,29 @@ jobs:
               "runner": "ubuntu-latest",
               "os": "Linux",
               "arch": platform.machine(),
-              "status": "NOT_VERIFIED",
-              "unitTestStatus": "PASS",
+              "status": "FAIL" if failed else "PASS" if complete else "NOT_VERIFIED",
+              "unitTestStatus": "PASS" if os.environ.get("MOBILE_TESTS_PASS") == "true" else "FAIL" if os.environ.get("ANDROID_TESTS_OUTCOME") == "failure" else "NOT_VERIFIED",
               "commitSha": os.environ["GITHUB_SHA"],
               "workflowRunId": os.environ["GITHUB_RUN_ID"],
               "evidenceScope": "ci-workflow",
               "isNativeHardware": False,
-              "toolchains": {
-                  "java": os.environ.get("JAVA_VER", ""),
-                  "aapt2": os.environ.get("AAPT2_VER", ""),
-                  "apksigner": os.environ.get("APKSIGNER_VER", ""),
-                  "adb": os.environ.get("ADB_VER", ""),
-              },
               "details": {
-                  "sdkInstalled": True,
-                  "ephemeralKeystoreGenerated": os.environ.get("KS_OK") == "true",
-                  "kvmAvailable": os.environ.get("KVM_OK") == "true",
-                  "apkCompiledWithDex": False,
-                  "aabBuiltWithBundletool": False,
-                  "apksignerVerified": False,
-                  "emulatorBooted": False,
+                  "apkCompiledWithDex": has_entry(apk, lambda name: name == "classes.dex"),
+                  "aabBuiltWithBundletool": has_entry(aab, lambda name: name == "BundleConfig.pb") and has_entry(aab, lambda name: name.startswith("base/dex/classes") and name.endswith(".dex")),
+                  "apksignerVerified": os.environ.get("EPHEMERAL_SIGNING_VERIFIED") == "true",
+                  "emulatorBooted": os.environ.get("ANDROID_EMULATOR_LAUNCHED") == "true",
                   "physicalDeviceHardwareVerified": False,
-                  "neverClaimStructuralAsNative": True,
+                  "ephemeralKeystoreSigned": os.environ.get("EPHEMERAL_SIGNING_VERIFIED") == "true",
+                  "nativeSpkiPinningVerified": False,
+                  "playCoreAndStoreKitVerified": False
               },
-              "blockers": [
-                  "Proyek Gradle Android penuh, kompilasi classes.dex/bundletool .aab nyata, dan peluncuran Android Emulator KVM + sensor perangkat fisik belum terpenuhi (NOT_VERIFIED)."
-              ],
-              "generatedAt": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
+              "blockers": ["Runner Android Emulator is not a physical handset; camera/GNSS/IMU/BLE/TEE, cellular SPKI, and Play Core production testing remain unverified."],
+              "generatedAt": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
           }
-          with open("artifacts/cert-evidence/phase37-42-android.json", "w", encoding="utf-8", newline="\n") as output:
+          with open("artifacts/cert-evidence/phase37-42-android.json", "w", encoding="utf-8") as output:
               json.dump(payload, output, ensure_ascii=False, indent=2)
-              output.write("\n")
+              output.write("\\n")
           PY
-
       - name: Unggah Evidence Android SDK
         if: always()
         uses: actions/upload-artifact@v4
@@ -874,66 +912,92 @@ jobs:
   # 8. PHASE 37–42 — APPLE / XCODE / SIMULATOR AUDIT (macOS-latest)
   # ============================================================================
   phase37-42-apple:
-    name: NUSANTARA / Validasi Xcode & Apple Toolchain (Phase 37–42)
+    name: NUSANTARA / Build Mach-O & iOS Simulator (Phase 37–42)
     needs: quality-gate
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
-
       - name: Pasang Lingkungan Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: 'npm'
-
-      - name: Pasang Dependensi & Audit Xcode / Simulator / Mach-O
+      - name: Jalankan suite regresi Phase 37–42
+        id: apple_mobile_tests
         run: |
           npm ci
-          mkdir -p artifacts/cert-evidence
           npm run test:mobile-v37
           npm run test:native-api-v38
+          npm run test:mobile-networking-v39
           npm run test:distribusi-v40
           npm run test:publikasi-v41
-
-          XCODE_VER=$(xcodebuild -version 2>&1 | tr '\n' ' ' | sed 's/  */ /g' || echo "")
-          SIM_COUNT=$(xcrun simctl list runtimes 2>/dev/null | grep -c "iOS" || echo "0")
-
-          cat <<EOF > artifacts/cert-evidence/phase37-42-apple.json
-          {
-            "schemaVersion": 1,
-            "jobId": "phase37-42-apple",
-            "phase": "37,38,40,41",
-            "runner": "macos-latest",
-            "os": "macOS",
-            "arch": "$(uname -m)",
-            "status": "NOT_VERIFIED",
-            "unitTestStatus": "PASS",
-            "commitSha": "${{ github.sha }}",
-            "workflowRunId": "${{ github.run_id }}",
-            "evidenceScope": "ci-workflow",
-            "isNativeHardware": false,
-            "toolchains": {
-              "xcodebuild": "$XCODE_VER",
-              "iosSimulatorRuntimesFound": "$SIM_COUNT"
-            },
-            "details": {
-              "machOCompiled": false,
-              "xcarchiveBuilt": false,
-              "ipaProduced": false,
-              "simulatorLaunched": false,
-              "adHocOrDevSigned": false,
-              "physicalDeviceHardwareVerified": false,
-              "neverClaimStructuralPlistAsIpa": true
-            },
-            "blockers": [
-              "Belum ada proyek Xcode .app Mach-O terkompilasi, peluncuran iOS Simulator, atau ekspor .ipa nyata (baru .xcarchive/Info.plist struktural)."
-            ],
-            "generatedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          npm run test:pembaruan-v42
+      - name: Build SwiftUI app dan jalankan iOS Simulator
+        id: apple_simulator_build
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install xcodegen
+          xcodegen generate --spec native/ios/project.yml --project native/ios
+          SIM_UDID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for group in d["devices"].values() for x in group if x.get("isAvailable") and x["name"].startswith("iPhone")))')
+          xcrun simctl boot "$SIM_UDID" 2>/dev/null || true
+          xcrun simctl bootstatus "$SIM_UDID" -b
+          xcodebuild test -project native/ios/NusantaraMobile.xcodeproj -scheme NusantaraMobile -destination "platform=iOS Simulator,id=$SIM_UDID" -derivedDataPath "$RUNNER_TEMP/nusantara-ios-derived" CODE_SIGNING_ALLOWED=NO
+          APP_PATH="$RUNNER_TEMP/nusantara-ios-derived/Build/Products/Debug-iphonesimulator/NUSANTARA.app"
+          test -d "$APP_PATH"
+          EXECUTABLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_PATH/Info.plist")
+          test -s "$APP_PATH/$EXECUTABLE"
+          file "$APP_PATH/$EXECUTABLE" | grep -E 'Mach-O'
+          xcrun simctl install "$SIM_UDID" "$APP_PATH"
+          xcrun simctl launch "$SIM_UDID" id.nusantara.mobile
+          echo "IOS_MACHO_COMPILED=true" >> "$GITHUB_ENV"
+          echo "IOS_SIMULATOR_LAUNCHED=true" >> "$GITHUB_ENV"
+      - name: Tulis evidence Apple berdasarkan hasil aktual
+        if: always()
+        env:
+          APPLE_TESTS_OUTCOME: ${{ steps.apple_mobile_tests.outcome }}
+          APPLE_BUILD_OUTCOME: ${{ steps.apple_simulator_build.outcome }}
+        shell: bash
+        run: |
+          mkdir -p artifacts/cert-evidence
+          python3 - <<'PY'
+          import datetime, json, os, platform
+          outcomes = [os.environ.get("APPLE_TESTS_OUTCOME"), os.environ.get("APPLE_BUILD_OUTCOME")]
+          failed = "failure" in outcomes
+          complete = all(value == "success" for value in outcomes)
+          payload = {
+              "schemaVersion": 1,
+              "jobId": "phase37-42-apple",
+              "phase": "37,38,40,41",
+              "runner": "macos-latest",
+              "os": "macOS",
+              "arch": platform.machine(),
+              "status": "FAIL" if failed else "PASS" if complete else "NOT_VERIFIED",
+              "unitTestStatus": "PASS" if os.environ.get("APPLE_TESTS_OUTCOME") == "success" else "FAIL" if os.environ.get("APPLE_TESTS_OUTCOME") == "failure" else "NOT_VERIFIED",
+              "commitSha": os.environ["GITHUB_SHA"],
+              "workflowRunId": os.environ["GITHUB_RUN_ID"],
+              "evidenceScope": "ci-workflow",
+              "isNativeHardware": False,
+              "toolchains": {"xcodebuild": os.popen("xcodebuild -version 2>&1").read().splitlines()[0] if os.system("xcodebuild -version >/dev/null 2>&1") == 0 else None},
+              "details": {
+                  "machOCompiled": os.environ.get("IOS_MACHO_COMPILED") == "true",
+                  "simulatorLaunched": os.environ.get("IOS_SIMULATOR_LAUNCHED") == "true",
+                  "xcarchiveBuilt": False,
+                  "ipaProduced": False,
+                  "adHocOrDevSigned": False,
+                  "physicalDeviceHardwareVerified": False,
+                  "nativeSpkiPinningVerified": False,
+                  "playCoreAndStoreKitVerified": False
+              },
+              "blockers": ["iOS Simulator is not a physical iPhone/iPad. This CI job does not create a device-signed .xcarchive or .ipa; physical sensors, device signing, native SPKI, and production StoreKit remain unverified."],
+              "generatedAt": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
           }
-          EOF
-
+          with open("artifacts/cert-evidence/phase37-42-apple.json", "w", encoding="utf-8") as output:
+              json.dump(payload, output, ensure_ascii=False, indent=2)
+              output.write("\\n")
+          PY
       - name: Unggah Evidence Apple/Xcode
         if: always()
         uses: actions/upload-artifact@v4
