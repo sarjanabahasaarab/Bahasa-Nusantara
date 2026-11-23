@@ -778,7 +778,7 @@ export function evaluasiGerbangSertifikasi(
         catatan:
           androidDexStatus === 'PASS'
             ? 'APK ber-classes.dex & AAB terverifikasi apksigner.'
-            : 'Artefak saat ini hanya kontainer PKZIP struktural (tanpa classes.dex / .aab native / apksigner pass).',
+            : `Android CI evidence: apkCompiledWithDex=${String(Boolean(androidJob?.details?.apkCompiledWithDex))}, aabBuiltWithBundletool=${String(Boolean(androidJob?.details?.aabBuiltWithBundletool))}, apksignerVerified=${String(Boolean(androidJob?.details?.apksignerVerified))}; seluruh pemeriksaan wajib harus PASS.`,
       },
       {
         id: 'p40-ios-xcarchive-macho-ipa',
@@ -788,7 +788,7 @@ export function evaluasiGerbangSertifikasi(
         catatan:
           iosIpaStatus === 'PASS'
             ? '.xcarchive Mach-O & .ipa terverifikasi.'
-            : 'Belum ada .app Mach-O maupun .ipa nyata (baru Info.plist struktural).',
+            : `iOS CI evidence: machOCompiled=${String(Boolean(appleJob?.details?.machOCompiled))}, xcarchiveBuilt=${String(Boolean(appleJob?.details?.xcarchiveBuilt))}, ipaProduced=${String(Boolean(appleJob?.details?.ipaProduced))}; Phase 40 memerlukan .xcarchive dan .ipa, bukan hanya Simulator .app.`,
       },
     ];
     const nativeStatus = computeWorstStatus(criteria.map((c) => c.status));
@@ -827,7 +827,7 @@ export function evaluasiGerbangSertifikasi(
         catatan:
           sandboxSignOk === 'PASS'
             ? 'Signing biner uji non-produksi terverifikasi.'
-            : 'Belum menjalankan signing native apksigner & codesign pada APK/IPA terkompilasi.',
+            : `Signing evidence: Android apksignerVerified=${String(Boolean(androidJob?.details?.apksignerVerified))}, ephemeralKeystoreSigned=${String(Boolean(androidJob?.details?.ephemeralKeystoreSigned))}; iOS adHocOrDevSigned=${String(Boolean(appleJob?.details?.adHocOrDevSigned))}. Phase 41 mensyaratkan penandatanganan kedua platform.`,
       },
       {
         id: 'p41-no-auto-store-publish',
