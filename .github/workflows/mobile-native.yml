@@ -67,7 +67,17 @@ jobs:
           export PATH="$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
           test -x "$ANDROID_HOME/emulator/emulator"
           "$ANDROID_HOME/emulator/emulator" -version
-          "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --force --name nusantara-api35 --package "system-images;android-35;google_apis;x86_64" <<< "no"
+          # Pin AVD storage to one stable location shared by this and later steps.
+          export ANDROID_USER_HOME="$HOME/.android"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo "ANDROID_USER_HOME=$ANDROID_USER_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
+          # Create non-interactively, then fail here if avdmanager did not persist it.
+          printf 'no\n' | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --force --name nusantara-api35 --package "system-images;android-35;google_apis;x86_64"
+          test -s "$ANDROID_AVD_HOME/nusantara-api35.ini"
+          test -d "$ANDROID_AVD_HOME/nusantara-api35.avd"
+          "$ANDROID_HOME/emulator/emulator" -list-avds | grep -Fx nusantara-api35
       - name: Build real APK and AAB with ephemeral release key
         id: android_build
         shell: bash
