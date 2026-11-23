@@ -198,9 +198,32 @@ jobs:
           brew install xcodegen
           xcodegen generate --spec native/ios/project.yml --project native/ios
           SIM_UDID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for group in d["devices"].values() for x in group if x.get("isAvailable") and x["name"].startswith("iPhone")))')
-          xcrun simctl boot "$SIM_UDID" 2>/dev/null || true
-          xcrun simctl bootstatus "$SIM_UDID" -b
-          xcodebuild test -project native/ios/NusantaraMobile.xcodeproj -scheme NusantaraMobile -destination "platform=iOS Simulator,id=$SIM_UDID" -derivedDataPath "$RUNNER_TEMP/nusantara-ios-derived" CODE_SIGNING_ALLOWED=NO
+          echo "Selected iOS Simulator: $SIM_UDID"
+          # Simulator services can finish booting while CoreSimulator/Xcode still
+          # temporarily reports the device as unavailable. Retry only that
+          # infrastructure condition; genuine build/test failures fail immediately.
+          IOS_TEST_OK=false
+          for attempt in 1 2 3; do
+            echo "iOS Simulator attempt $attempt/3"
+            xcrun simctl boot "$SIM_UDID" 2>/dev/null || true
+            xcrun simctl bootstatus "$SIM_UDID" -b
+            xcrun simctl list devices booted -j | python3 -c 'import json,sys; d=json.load(sys.stdin); raise SystemExit(0 if any(x["udid"] == sys.argv[1] for group in d["devices"].values() for x in group) else 1)' "$SIM_UDID"
+            set +e
+            xcodebuild test -project native/ios/NusantaraMobile.xcodeproj -scheme NusantaraMobile -destination "platform=iOS Simulator,id=$SIM_UDID" -derivedDataPath "$RUNNER_TEMP/nusantara-ios-derived" CODE_SIGNING_ALLOWED=NO 2>&1 | tee "$RUNNER_TEMP/ios-xcodebuild.log"
+            IOS_TEST_EXIT=${PIPESTATUS[0]}
+            set -e
+            if [ "$IOS_TEST_EXIT" -eq 0 ]; then
+              IOS_TEST_OK=true
+              break
+            fi
+            if ! grep -Eqi "Unable to find a device matching|no available devices matched|device is not available" "$RUNNER_TEMP/ios-xcodebuild.log"; then
+              exit "$IOS_TEST_EXIT"
+            fi
+            echo "Xcode temporarily cannot resolve the booted simulator; restarting CoreSimulator before retry."
+            xcrun simctl shutdown "$SIM_UDID" 2>/dev/null || true
+            sleep 10
+          done
+          test "$IOS_TEST_OK" = true
           APP_PATH="$RUNNER_TEMP/nusantara-ios-derived/Build/Products/Debug-iphonesimulator/NUSANTARA.app"
           test -d "$APP_PATH"
           EXECUTABLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_PATH/Info.plist")
