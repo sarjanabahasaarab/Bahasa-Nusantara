@@ -1,7 +1,7 @@
 # Laporan Penyelesaian Program Phase 23 & Phase 36–42
 
 - **Proyek**: NUSANTARA Programming Language (`Bahasa-Nusantara`, branch `main`, baseline `v0.50.0`)
-- **Tanggal Pembaruan**: 18 November 2026 (Phase 23.16 — Pre-PR Audit, CI Workflow Integration & Certification Gate)
+- **Tanggal Pembaruan**: 23 November 2026 (pembaruan bukti CI lintas target, GUI desktop, TLS/OTA, dan QEMU Phase 49–50)
 - **Verdict Implementasi**: **`IMPLEMENTATION COMPLETE`**
 - **Verdict Sertifikasi Lintas Platform**: **`PARTIAL`** *(menunggu eksekusi GitHub Actions multi-runner + Android Emulator/iOS Simulator + perangkat fisik sebelum berstatus **`CROSS-PLATFORM CERTIFIED`**)*
 - **Status Rilis Publik & Toko Aplikasi**: **`BLOCKED`**
@@ -10,7 +10,7 @@
 
 | Fase | Nama | Hasil Uji Lokal Faktual | Status Sertifikasi Gate | Lingkup Belum Terverifikasi di Kontainer |
 |:---:|---|---|---:|---|
-| **23** | Build System & Desktop Distribution | `test:build-v23`: **46 PASS, 0 FAIL, 3 NOT_VERIFIED** (Total 49); `verify-artifacts`: **20/20 OK** | **`PARTIAL`** (`NOT_VERIFIED`) | Native build/exec 6 target tanpa `clang`/`lld`/`pwsh`/SDK pada host kontainer |
+| **23** | Build System & Desktop Distribution | Lokal `test:build-v23`: **46 PASS, 0 FAIL, 3 NOT_VERIFIED** (Total 49); `verify-artifacts`: **20/20 OK**; CI gerbang 6 target: **6 PASS, 0 NOT_VERIFIED, 0 FAIL** (run `45087120554`) | **`CERTIFIED` pada matriks CI 6 target; snapshot lokal tetap `PARTIAL`** | Native build/exec pada host kontainer lokal tetap terbatas tanpa seluruh toolchain; status lokal tidak disamakan dengan hasil runner CI |
 | **36** | Desktop GUI Framework | `test:gui-v36`: **22/22 PASS** | **`PARTIAL`** (`NOT_VERIFIED`) | Sesi `Xvfb` GTK3 Linux (di CI `phase36-gui-matrix`) & monitor fisik X11/Wayland/Win32/Cocoa |
 | **37** | Mobile Framework | `test:mobile-v37`: **40/40 PASS** | **`PARTIAL`** (`NOT_VERIFIED`) | Kompilasi proyek Android Gradle / `xcodebuild` & launch Emulator / iOS Simulator |
 | **38** | Native Device API | `test:native-api-v38`: **24/24 PASS** | **`PARTIAL`** (`NOT_VERIFIED`) | Kamera, GPS GNSS, IMU, BLE, & biometrik TEE/FaceID di ponsel fisik |
@@ -28,3 +28,24 @@
   - `release.yml`: Menghapus runner retired `macos-13` (ke `macos-latest`) serta hardcoded timestamp `'2026-10-25T00:00:00.000Z'`; menambahkan `verify-certification-gate`, mode `dry_run` default `true`, dan blokir rilis otomatis saat tag push atau bila ada status `FAIL`/`SKIPPED`/`NOT_VERIFIED`/`BLOCKED`.
   - `kernel-boot-qemu.yml` & `nusantara-os-ci.yml`: Penambahan `permissions: contents: read`, `concurrency`, dan `timeout-minutes` di seluruh job.
 - **Laporan Audit Terkait**: `docs/PRE-PR-AUDIT-PHASE-23-36-42.md` & `docs/CERTIFICATION-READINESS-PHASE-23-36-42.md`.
+
+
+## 3. Bukti CI Terbaru (23 November 2026)
+
+Bagian ini melengkapi hasil uji lokal di atas. Status lokal dan status runner CI dipisahkan agar tidak ada klaim sertifikasi yang berlebihan.
+
+| Area | Bukti GitHub Actions | Hasil yang benar-benar terverifikasi | Batasan yang masih berlaku |
+|---|---|---|---|
+| Phase 23 — matriks desktop | Run `45087120554`, job gerbang sertifikasi 6 target | **6/6 PASS**, `NOT_VERIFIED=0`, `FAIL=0`, artefak dan checksum tervalidasi | Tidak mengubah fakta bahwa 3 skenario pada snapshot lokal tetap `NOT_VERIFIED` |
+| Phase 36 — GUI desktop | Run `45087120554`, job GUI Windows/Linux/macOS | Ketiga job GUI CI berhasil; Linux memakai Xvfb | Layar fisik, sesi Win32/WebView2 interaktif, dan sesi Cocoa/Aqua fisik belum dibuktikan |
+| Phase 37–42 — toolchain | Run `45087120554`, audit Android SDK dan Apple/Xcode toolchain | Audit toolchain Android dan Apple berhasil; regresi TLS X.509 dan OTA Phase 39/42 juga berhasil | Audit toolchain bukan bukti APK/IPA native berhasil dipasang dan dijalankan pada perangkat fisik |
+| Phase 48 — kernel interface | Run `45089555103`, job Phase 48 | **42/42 PASS**, 0 gagal, 0 skipped | Uji unit/integrasi tidak menggantikan uji perangkat keras |
+| Phase 49 — bootable kernel | Run `45089555103`, job Phase 49; QEMU runner pada run `45089555103` | **23/23 PASS** dan eksekusi QEMU headless pada runner berhasil | Boot pada perangkat keras fisik belum diklaim |
+| Phase 50 — process isolation/user mode | Run `45089555103`, job Phase 50 dan QEMU headless | **29/29 PASS**; artefak ELF/ISO dibuat; 18 sentinel berurutan tervalidasi; SHA-256 seluruh artefak lulus | Tidak menyatakan sertifikasi semua arsitektur CPU atau perangkat fisik |
+
+### Status keseluruhan
+
+- Phase 23 memiliki sertifikasi matriks CI 6 target yang lulus; hasil lokal tetap dicatat terpisah.
+- Phase 36–42 **belum** berstatus `CROSS-PLATFORM CERTIFIED`. GUI fisik, sensor ponsel, eksekusi native pada perangkat, penandatanganan/distribusi produksi, dan integrasi toko aplikasi masih membutuhkan bukti target yang sesuai.
+- Phase 48–50 telah lulus rangkaian CI OS dan QEMU sebagaimana run yang dicantumkan.
+- Workflow Mobile Native Validation terbaru pada commit laporan ini masih berjalan ketika laporan diperbarui; hasil Android Emulator dan iOS Simulator belum dinyatakan lulus di sini.
