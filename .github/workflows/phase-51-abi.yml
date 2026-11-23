@@ -5,6 +5,8 @@ on:
       - "src/runtime/os/abi/**"
       - "pengujian/os/uji_abi_ruang_pengguna_fase51.ts"
       - "package.json"
+      - "ROADMAP.md"
+      - "docs/phase-51/**"
       - ".github/workflows/phase-51-abi.yml"
   push:
     branches:
