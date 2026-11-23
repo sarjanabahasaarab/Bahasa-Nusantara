@@ -68,10 +68,10 @@ function main(): void {
     ? 'https://github.com/' + repository + '/actions/runs/' + runId
     : 'Tidak tersedia (eksekusi lokal).';
   const exitText = fs.readFileSync(path.join(artifactsDir, 'qemu-exit-code.txt'), 'utf8');
-  wajib(/QEMU_RAW_EXIT_CODE:\\s*1/.test(exitText), 'qemu-exit-code.txt tidak mencatat raw exit code 1.');
+  wajib(/QEMU_RAW_EXIT_CODE:\s*1/.test(exitText), 'qemu-exit-code.txt tidak mencatat raw exit code 1.');
 
   const isoLine = fs.readFileSync(path.join(artifactsDir, 'toolchain-versions.txt'), 'utf8')
-    .split('\\n').find((line) => line.startsWith('Status ISO Bootable :')) ??
+    .split('\n').find((line) => line.startsWith('Status ISO Bootable :')) ??
     'Status ISO Bootable : tidak tercatat';
 
   const summary = [
@@ -90,7 +90,7 @@ function main(): void {
     '10. Workflow Run                 : ' + runId,
     '11. Commit                       : ' + sha,
     '======================================================================',
-  ].join('\\n') + '\\n';
+  ].join('\n') + '\n';
   fs.writeFileSync(path.join(artifactsDir, 'test-report.txt'), summary, 'utf8');
   fs.writeFileSync(path.join(artifactsDir, 'test-results.txt'), summary, 'utf8');
 
@@ -102,7 +102,7 @@ function main(): void {
   const end = certification.indexOf(markerEnd);
   if (start !== -1 && end !== -1 && end > start) {
     certification = certification.slice(0, start) +
-      certification.slice(end + markerEnd.length).replace(/^\\s*\\n/, '');
+      certification.slice(end + markerEnd.length).replace(/^\s*\n/, '');
   }
 
   const evidence = [
@@ -121,7 +121,7 @@ function main(): void {
     'Catatan: status lokal tetap menggambarkan keterbatasan toolchain pada kontainer lokal. Bukti ini secara khusus menyatakan hasil eksekusi CI; bukti CI tidak diklaim sebagai pengujian pada perangkat fisik.',
     markerEnd,
     '',
-  ].join('\\n');
+  ].join('\n');
 
   const oldQemuRow =
     '| **Eksekusi QEMU Bare-Metal (18 Sentinel)** | **NOT EXECUTED** (`qemu-system-x86_64` **MISSING**) | **Menunggu Eksekusi `ubuntu-latest`** | Sertifikasi final hanya boleh dinyatakan COMPLETE setelah QEMU keluar `1` dan log serial UART aktual memuat 18 sentinel berurutan. |';
@@ -129,12 +129,12 @@ function main(): void {
     '| **Eksekusi QEMU Bare-Metal (18 Sentinel)** | **NOT EXECUTED** (QEMU tidak tersedia di kontainer lokal) | **PASS — 18/18 sentinel** (GitHub Actions run ' + runId + ') | Log UART aktual, exit code 1, anti-timeout, anti-panic, urutan sentinel, dan checksum artefak telah diverifikasi. |';
   certification = certification.replace(oldQemuRow, newQemuRow);
 
-  const insertionPoint = certification.indexOf('---\\n');
+  const insertionPoint = certification.indexOf('---\n');
   if (insertionPoint >= 0) {
     certification = certification.slice(0, insertionPoint) + evidence +
       certification.slice(insertionPoint);
   } else {
-    certification += '\\n' + evidence;
+    certification += '\n' + evidence;
   }
   fs.writeFileSync(certificationPath, certification, 'utf8');
 
