@@ -172,12 +172,16 @@ uji('5.1 ci.yml dan release.yml mendefinisikan target matriks 4 platform resmi',
   pastikan(kontenCI.includes('macos-arm64'), 'Harus mencakup macos-arm64');
 });
 
-uji('5.2 Runner GitHub Actions dipetakan dengan tepat tanpa runner fiktif', () => {
+uji('5.2 Runner GitHub Actions CI dan release dipetakan ke arsitektur native yang tepat', () => {
   const kontenCI = pembacaReal.baca('.github/workflows/ci.yml');
+  const kontenRelease = pembacaReal.baca('.github/workflows/release.yml');
   pastikan(kontenCI.includes('windows-latest'), 'Runner Windows sah');
   pastikan(kontenCI.includes('ubuntu-latest'), 'Runner Linux sah');
-  pastikan(kontenCI.includes('os: macos-15-intel'), 'Runner macOS x64 harus memakai runner Intel native yang masih didukung');
-  pastikan(kontenCI.includes('macos-latest'), 'Runner macOS ARM64 sah');
+  pastikan(kontenCI.includes('os: macos-15-intel'), 'Runner macOS x64 CI harus memakai runner Intel native');
+  pastikan(kontenCI.includes('macos-latest'), 'Runner macOS ARM64 CI sah');
+  pastikan(kontenRelease.includes('target: macos-x86_64\\n            os: macos-15-intel'), 'Release macOS x64 harus memakai runner Intel native');
+  pastikan(kontenRelease.includes('target: macos-arm64\\n            os: macos-latest'), 'Release macOS ARM64 harus memakai runner Apple Silicon');
+  pastikan(kontenRelease.includes('Validasi arsitektur runner macOS native'), 'Release wajib menolak translasi Rosetta sebagai bukti native');
 });
 
 uji('5.3 ci.yml mendeteksi provider QEMU apt secara dinamis & memverifikasi binding native + verify-dist', () => {
