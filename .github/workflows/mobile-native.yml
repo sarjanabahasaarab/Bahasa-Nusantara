@@ -122,6 +122,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # GitHub-hosted Linux runners may expose /dev/kvm with a restrictive group.
+          # Grant the ephemeral runner process access when the device exists.
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm || true
+            ls -l /dev/kvm || true
+          fi
+          emulator -accel-check || true
           emulator -avd nusantara-api35 -no-snapshot -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect > "$RUNNER_TEMP/emulator.log" 2>&1 &
           if ! timeout 180 adb wait-for-device; then
             echo "[ERROR] ADB tidak melihat emulator dalam 180 detik."
