@@ -540,6 +540,7 @@ export class X86BootstrapEncoder {
     a.emit(0x8b, 0x6e, 0x04); // mov ebp, [esi+4] base high
     a.emit(0x05, 0xff, 0x0f, 0x00, 0x00); // add eax, 4095
     a.emit(0x83, 0xd5, 0x00); // adc ebp, 0
+    a.jb('panic32'); // reject overflow while rounding the 64-bit base upward
     a.emit(0x25, 0x00, 0xf0, 0xff, 0xff); // and eax, 0xfffff000 (align start up)
     a.emit(0x8b, 0x16); // mov edx, [esi] base low
     a.emit(0x03, 0x56, 0x08); // add edx, [esi+8] length low
