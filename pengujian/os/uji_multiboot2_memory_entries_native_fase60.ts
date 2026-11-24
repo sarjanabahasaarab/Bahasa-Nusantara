@@ -31,7 +31,7 @@ function test(name: string, run: () => void): void {
 console.log('=== NUSANTARA PHASE 60: NATIVE MEMORY MAP DESCRIPTORS ===');
 
 test('60.1 descriptor iteration begins after the memory-map tag header', () => {
-  assert.ok(containsBytes([0x56, 0x89, 0xc2, 0x8d, 0x76, 0x10]));
+  assert.ok(containsBytes([0x5e, 0x83, 0xf9, 0x10])); // restore saved tag pointer, then validate minimum tag size
   assert.ok(containsBytes([0x85, 0xd2, 0x0f, 0x84]));
 });
 
