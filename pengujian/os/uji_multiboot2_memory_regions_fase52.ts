@@ -29,7 +29,7 @@ console.log('=== NUSANTARA PHASE 52: NORMALISASI RAM FIRMWARE ===');
 
 test('52.58 hanya mengeluarkan halaman penuh dan melewati RAM di bawah 1 MiB', () => {
   const result = normalizeMultiboot2MemoryRegions([region(0n, 0x500123n)]);
-  assert.deepEqual(result, [{ base: 0x101000n, length: 0x3ff000n, endExclusive: 0x500000n }]);
+  assert.deepEqual(result, [{ base: 0x100000n, length: 0x400000n, endExclusive: 0x500000n }]);
 });
 
 test('52.59 memotong halaman yang disentuh region reserved', () => {
@@ -39,7 +39,7 @@ test('52.59 memotong halaman yang disentuh region reserved', () => {
   ]);
   assert.deepEqual(result, [
     { base: 0x100000n, length: 0x202000n, endExclusive: 0x302000n },
-    { base: 0x305000n, length: 0x5fb000n, endExclusive: 0x900000n },
+    { base: 0x304000n, length: 0x5fc000n, endExclusive: 0x900000n },
   ]);
 });
 
