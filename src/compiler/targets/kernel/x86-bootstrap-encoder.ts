@@ -728,9 +728,10 @@ export class X86BootstrapEncoder {
     // -------------------------------------------------------------------------
     a.label('after_proc_a');
     a.emit(0xfc); // cld
-    // Verifikasi bahwa user-test.elf benar-benar mengeksekusi SYS_PROCESS_ID (1) & SYS_CONSOLE_WRITE (2)
+    // Bit 0=PROCESS_ID, bit 1=CONSOLE_WRITE valid, bit 2=CONSOLE_WRITE invalid ditolak.
+    // Ketiganya wajib terjadi sebelum proses dianggap lulus.
     a.loadMem64Abs(Reg64.RAX, this.STATE_SYSCALL_FLAGS);
-    a.emit(0x48, 0x83, 0xf8, 0x03); // cmp rax, 3
+    a.emit(0x48, 0x83, 0xf8, 0x07); // cmp rax, 0b111
     a.jne('panic64_proc');
     a.printLabel64('msg_process_exit_ok', 'print_serial64');
 
@@ -838,15 +839,24 @@ export class X86BootstrapEncoder {
     a.jmp('syscall_return');
 
     a.label('sys_write');
-    // Validasi user pointer RDI: >= 0x1000 && < 0x0000800000000000, len RSI <= 4096
-    a.movRegImm64(Reg64.RBX, 0x1000n);
+    // Guard hardware bootstrap: hanya buffer di halaman kode user yang dipetakan
+    // (0x00400000..0x00401000) boleh dibaca. Periksa batas akhir dengan carry
+    // agar pointer+panjang tidak overflow atau melintasi halaman yang belum dipetakan.
+    a.movRegImm64(Reg64.RBX, 0x0040_0000n);
     a.emit(0x48, 0x39, 0xdf); // cmp rdi, rbx
     a.jb('sys_write_efault');
-    a.movRegImm64(Reg64.RBX, 0x0000_8000_0000_0000n);
+    a.movRegImm64(Reg64.RBX, 0x0040_1000n);
     a.emit(0x48, 0x39, 0xdf); // cmp rdi, rbx
     a.jae('sys_write_efault');
     a.movRegImm64(Reg64.RBX, 4096n);
     a.emit(0x48, 0x39, 0xde); // cmp rsi, rbx
+    a.ja('sys_write_efault');
+    a.emit(0x48, 0x89, 0xdf); // mov rdi, rbx -- overwritten below; keep source pointer separately
+    a.emit(0x48, 0x89, 0xfb); // mov rbx, rdi
+    a.emit(0x48, 0x01, 0xf3); // add rbx, rsi
+    a.jb('sys_write_efault'); // carry => overflow
+    a.movRegImm64(Reg64.RDI, 0x0040_1000n);
+    a.emit(0x48, 0x39, 0xfb); // cmp rbx, rdi
     a.ja('sys_write_efault');
 
     // Tulis byte langsung dari buffer User Space [RDI .. RDI+RSI] ke UART COM1 (0x3F8)!
@@ -883,6 +893,10 @@ export class X86BootstrapEncoder {
     a.jmp('syscall_return');
 
     a.label('sys_write_efault');
+    // Catat bahwa pointer tidak valid benar-benar ditolak oleh jalur hardware.
+    a.loadMem64Abs(Reg64.RAX, this.STATE_SYSCALL_FLAGS);
+    a.emit(0x48, 0x83, 0xc8, 0x04); // or rax, 4
+    a.storeMem64Abs(this.STATE_SYSCALL_FLAGS, Reg64.RAX);
     a.movRegImm64(Reg64.RAX, -14n); // -EFAULT
     a.jmp('syscall_return');
 
