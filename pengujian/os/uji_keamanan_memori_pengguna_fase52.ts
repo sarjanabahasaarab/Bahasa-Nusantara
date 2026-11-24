@@ -19,6 +19,14 @@ function test(name: string, run: () => void): void {
 
 console.log('=== NUSANTARA PHASE 52: KEAMANAN MEMORI PENGGUNA ===');
 
+async function asyncTest(name: string, run: () => Promise<void>): Promise<void> {
+  try { await run(); passed++; console.log('[LULUS] ' + name); }
+  catch (error) { failed++; console.error('[GAGAL] ' + name + ': ' + (error instanceof Error ? error.message : String(error))); }
+}
+
+async function runAsyncDispatcherTests(): Promise<void> {
+
+
 test('52.1 menolak panjang NaN', () => {
   const r = UserPointerSecurity.validateUserBuffer(0x10000n, Number.NaN);
   assert.equal(r.valid, false);
@@ -114,7 +122,7 @@ test('52.17 address space tetap mengizinkan READ pada halaman READ-only', () => 
 });
 
 
-test('52.18 dispatcher memberikan copy_from_user ke handler dengan data kernel hasil salin lintas halaman', async () => {
+await asyncTest('52.18 dispatcher memberikan copy_from_user ke handler dengan data kernel hasil salin lintas halaman', async () => {
   const space = new AddressSpace();
   space.mapPage(0x0050_0000n, 0x0110_0000n, PagePermissions.USER_READ_WRITE, true);
   space.mapPage(0x0050_1000n, 0x0110_1000n, PagePermissions.USER_READ_WRITE, true);
@@ -140,7 +148,7 @@ test('52.18 dispatcher memberikan copy_from_user ke handler dengan data kernel h
   assert.equal(received, 'ABCD');
 });
 
-test('52.19 copy_from_user handler gagal tertutup jika reader tidak dipasang', async () => {
+await asyncTest('52.19 copy_from_user handler gagal tertutup jika reader tidak dipasang', async () => {
   const table = new SyscallTable();
   table.register({
     number: 9002, name: 'test_copy_from_user_without_reader', minArgs: 2,
@@ -155,7 +163,7 @@ test('52.19 copy_from_user handler gagal tertutup jika reader tidak dipasang', a
   assert.equal(result, -1n);
 });
 
-test('52.20 copy_to_user handler menulis hanya melalui writer yang dipasang', async () => {
+await asyncTest('52.20 copy_to_user handler menulis hanya melalui writer yang dipasang', async () => {
   const table = new SyscallTable();
   let written = '';
   table.register({
@@ -176,5 +184,9 @@ test('52.20 copy_to_user handler menulis hanya melalui writer yang dipasang', as
   assert.equal(written, 'OK');
 });
 
+}
+
+void runAsyncDispatcherTests().then(() => {
 console.log('Phase 52: LULUS=' + passed + ', GAGAL=' + failed + ', TOTAL=' + (passed + failed));
 if (failed > 0) process.exitCode = 1;
+});
