@@ -36,10 +36,10 @@ test('65.1 emits the first boot sentinel immediately after UART initialization',
     break;
   }
   assert.ok(at >= 0, 'UART initialization sequence must exist');
-  const boot = Array.from(new TextEncoder().encode('NUSANTARA_BOOT_START'));
+  const bootMarker = Array.from(new TextEncoder().encode('NUSANTARA_BOOT_START'));
   let bootAt = -1;
-  outerBoot: for (let i = at + uart.length; i <= code.length - boot.length; i++) {
-    for (let j = 0; j < boot.length; j++) if (code[i + j] !== boot[j]) continue outerBoot;
+  outerBoot: for (let i = at + uart.length; i <= code.length - bootMarker.length; i++) {
+    for (let j = 0; j < bootMarker.length; j++) if (code[i + j] !== bootMarker[j]) continue outerBoot;
     bootAt = i;
     break;
   }
@@ -47,8 +47,8 @@ test('65.1 emits the first boot sentinel immediately after UART initialization',
 });
 
 test('65.2 includes memory-map entry begin and completion diagnostic markers', () => {
-  assert.ok(source.includes('NUSANTARA_DIAG_MMAP_BEGIN'));
-  assert.ok(source.includes('NUSANTARA_DIAG_MMAP_DONE'));
+  assert.ok(containsBytes(Array.from(new TextEncoder().encode('NUSANTARA_DIAG_MMAP_BEGIN\\r\\n'))));
+  assert.ok(containsBytes(Array.from(new TextEncoder().encode('NUSANTARA_DIAG_MMAP_DONE\\r\\n'))));
 });
 
 test('65.3 preserves the tag pointer around diagnostic serial output', () => {
