@@ -795,6 +795,13 @@ jobs:
           echo "$ANDROID_HOME/build-tools/35.0.0" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
+          # GITHUB_PATH is applied only to later steps. avdmanager may invoke
+          # the emulator binary while creating/validating an AVD, so expose
+          # the installed SDK tools in this shell before calling either tool.
+          export PATH="$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+          test -x "$ANDROID_HOME/emulator/emulator"
+          test -x "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager"
+          "$ANDROID_HOME/emulator/emulator" -version
           # Keep AVD metadata and device files in one stable location across steps.
           export ANDROID_USER_HOME="$HOME/.android"
           export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
@@ -802,10 +809,10 @@ jobs:
           echo "ANDROID_USER_HOME=$ANDROID_USER_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
           # Create non-interactively and verify persistence before continuing.
-          printf 'no\n' | avdmanager create avd --force --name nusantara-api35 --package "system-images;android-35;google_apis;x86_64"
+          printf 'no\n' | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --force --name nusantara-api35 --package "system-images;android-35;google_apis;x86_64"
           test -s "$ANDROID_AVD_HOME/nusantara-api35.ini"
           test -d "$ANDROID_AVD_HOME/nusantara-api35.avd"
-          emulator -list-avds | grep -Fx nusantara-api35
+          "$ANDROID_HOME/emulator/emulator" -list-avds | grep -Fx nusantara-api35
       - name: Build APK/AAB native dan verifikasi DEX + tanda tangan ephemeral
         id: android_build
         shell: bash
@@ -838,7 +845,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          emulator -avd nusantara-api35 -no-snapshot -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          "$ANDROID_HOME/emulator/emulator" -avd nusantara-api35 -no-snapshot -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect > "$RUNNER_TEMP/emulator.log" 2>&1 &
           adb wait-for-device
           for attempt in $(seq 1 120); do
             if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)" = "1" ]; then break; fi
