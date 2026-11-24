@@ -28,6 +28,39 @@ export const BOOTSTRAP_CPU_LOCAL_RESERVATIONS: readonly PhysicalMemoryReservatio
   { base: 0x251000n, length: 0x1000n, reason: 'bootstrap CPU-local GS data page' },
 ]);
 
+
+/**
+ * Lowest physical address the bootstrap PMM may consider for allocation.
+ * The fixed kernel image/low bootstrap area is excluded below this boundary.
+ * Dynamic Multiboot2 information, modules, framebuffer and DMA buffers must
+ * still be discovered and reserved separately by the native PMM initializer.
+ */
+export const BOOTSTRAP_MINIMUM_ALLOCATABLE_ADDRESS = 0x200000n;
+
+/**
+ * Complete known physical footprint of the current single-CPU x86 bootstrap.
+ *
+ * These reservations cover page tables, kernel state/descriptor tables,
+ * a conservative 64 KiB kernel/IST stack arena, CPU-local syscall stack/data,
+ * boot page tables, and the four 4 KiB user code/stack frames.
+ *
+ * This remains a model-side manifest: the future native PMM initializer must
+ * pass both this list and BOOTSTRAP_MINIMUM_ALLOCATABLE_ADDRESS to the
+ * normalizer. Stack arena size is a conservative reservation, not a measured
+ * runtime stack high-water mark. No AP/SMP memory is included.
+ */
+export const BOOTSTRAP_PHYSICAL_MEMORY_RESERVATIONS: readonly PhysicalMemoryReservation[] = Object.freeze([
+  { base: 0x200000n, length: 0x18000n, reason: 'bootstrap process/direct-map page tables (96 KiB)' },
+  { base: 0x218000n, length: 0x4000n, reason: 'kernel state, TSS, IDT and IDTR (16 KiB)' },
+  { base: 0x220000n, length: 0x10000n, reason: 'bootstrap kernel and IST stack arena (64 KiB)' },
+  ...BOOTSTRAP_CPU_LOCAL_RESERVATIONS,
+  { base: 0x2f0000n, length: 0x4000n, reason: 'early boot page tables (16 KiB)' },
+  { base: 0x600000n, length: 0x1000n, reason: 'process A user code frame (4 KiB)' },
+  { base: 0x610000n, length: 0x1000n, reason: 'process A user stack frame (4 KiB)' },
+  { base: 0x620000n, length: 0x1000n, reason: 'process B user code frame (4 KiB)' },
+  { base: 0x630000n, length: 0x1000n, reason: 'process B user stack frame (4 KiB)' },
+]);
+
 export interface UsablePhysicalMemoryExtent {
   base: bigint;
   length: bigint;
