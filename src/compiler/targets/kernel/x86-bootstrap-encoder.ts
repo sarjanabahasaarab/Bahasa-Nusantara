@@ -593,6 +593,7 @@ export class X86BootstrapEncoder {
     a.printLabel32('msg_mb2_ok', 'print_serial32');
     a.printLabel32('msg_mb2_copy_ok', 'print_serial32');
     a.printLabel32('msg_mb2_parse_ok', 'print_serial32');
+    a.printLabel32('msg_mb2_ranges_ok', 'print_serial32');
 
     // =========================================================================
     // BAGIAN 2: CEK CPUID DAN DUKUNGAN 64-BIT LONG MODE
@@ -1404,6 +1405,7 @@ export class X86BootstrapEncoder {
     a.label('msg_mb2_ok');               a.emitCString(this.STAGE_2_MULTIBOOT2);
     a.label('msg_mb2_copy_ok');          a.emitCString(this.STAGE_2B_MULTIBOOT2_COPY);
     a.label('msg_mb2_parse_ok');         a.emitCString('NUSANTARA_MULTIBOOT2_PARSE_OK\r\n');
+    a.label('msg_mb2_ranges_ok');        a.emitCString('NUSANTARA_MULTIBOOT2_RANGES_OK\\r\\n');
     a.label('msg_cpu_ok');               a.emitCString(this.STAGE_3_LONG_MODE);
     a.label('msg_paging_ok');            a.emitCString(this.STAGE_4_PAGING);
     a.label('msg_gdt_ok');               a.emitCString(this.STAGE_5_GDT64);
