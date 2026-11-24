@@ -19,10 +19,21 @@ export enum SyscallError {
   K_ENOSYS = -38,  // System call tidak diimplementasikan
 }
 
+export interface UserMemoryAccess {
+  /** Salin data dari alamat pengguna ke buffer milik kernel. Null berarti gagal. */
+  copyFromUser(address: bigint, length: number): Uint8Array | null;
+  /** Salin buffer milik kernel ke alamat pengguna. False berarti gagal. */
+  copyToUser(address: bigint, data: Uint8Array, length?: number): boolean;
+}
+
 export interface SyscallContext {
   callingProcessId: number;
   callingThreadId: number;
   isKernelCaller: boolean;
+  /** Address space milik proses pemanggil; wajib dipasok oleh lapisan process manager. */
+  addressSpace?: AddressSpace;
+  /** API copyin/copyout yang disediakan dispatcher untuk handler syscall. */
+  userMemory?: UserMemoryAccess;
 }
 
 export interface SyscallEntry {
