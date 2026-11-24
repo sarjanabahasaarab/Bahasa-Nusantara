@@ -217,6 +217,26 @@ async function jalankanSemuaPengujian() {
     samaDengan(pmm.getFreeFrameCount(), 2, 'Rentang lintas batas harus mereservasi frame kedua yang beririsan');
   });
 
+  uji('2.8 PMM menolak konfigurasi bitmap melebihi batas aman sebelum alokasi', () => {
+    let rejected = false;
+    try {
+      new PhysicalMemoryManager(2 * 1024 * 1024 * 1024 * 1024 + 4096);
+    } catch (error) {
+      rejected = error instanceof RangeError;
+    }
+    samaDengan(rejected, true, 'RAM 2 TiB lebih satu halaman harus ditolak secara terkontrol');
+  });
+
+  uji('2.9 PMM menolak base fisik dengan tipe runtime yang tidak valid', () => {
+    let rejected = false;
+    try {
+      new PhysicalMemoryManager(4096, 0x100000 as unknown as bigint);
+    } catch (error) {
+      rejected = error instanceof RangeError;
+    }
+    samaDengan(rejected, true, 'Base non-bigint harus ditolak sebagai RangeError');
+  });
+
   // ---------------------------------------------------------------------------
   // KELOMPOK 3: VIRTUAL MEMORY MANAGER (VMM) & 4-LEVEL PAGING
   // ---------------------------------------------------------------------------
