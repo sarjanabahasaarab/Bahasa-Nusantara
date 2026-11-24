@@ -24,7 +24,8 @@ Memastikan fondasi bahasa, compiler, toolchain, runtime, dan kernel yang akan di
 - Bangun kernel dari source pada clean runner; jangan hanya memercayai artefak yang tersimpan.
 - Boot QEMU dengan log serial yang dapat diperiksa dan exit contract yang jelas.
 - Uji Ring 3, pemetaan memori, pointer validation, fault isolation, syscall entry/return, register preservation dan context switch.
-- Periksa Phase 51: kontrak ABI telah digabung melalui PR #68, tetapi jalur assembly entry/return dan konfigurasi MSR harus dibuktikan sebelum syscall disebut berjalan secara hardware.
+- Jalur syscall hardware bootstrap kini terbukti pada source dan QEMU: konfigurasi IA32_EFER.SCE, IA32_STAR, IA32_LSTAR, IA32_FMASK, entry syscall_entry, dan return SYSRETQ. Generalisasi untuk banyak proses/thread, state per-CPU, dan dispatcher ABI bersama tetap belum selesai.
+- Periksa Phase 51: kontrak ABI telah digabung melalui PR #68, tetapi jangan menyamakan kontrak TypeScript dengan dispatcher hardware bootstrap.
 
 ### D. Bukti lintas platform dan perangkat
 - Linux/Windows/macOS CI membuktikan toolchain yang dijalankan pada runner tersebut, bukan dukungan hardware NUSANTARA OS pada ketiga sistem itu.
@@ -69,3 +70,27 @@ Temuan berikut adalah hasil inspeksi berkas repositori, bukan hasil menjalankan 
 - Pisahkan secara eksplisit **model OS TypeScript**, **generator biner kernel**, **kode yang benar-benar masuk ke ELF**, dan **layanan OS yang benar-benar berjalan di Ring 0/Ring 3**.
 - Prioritaskan pembuktian jalur syscall hardware, context switch, memory map, driver, dan hubungan antara source OS dengan image boot.
 - Jangan menaikkan status keseluruhan Phase 48–51 menjadi "kernel lengkap" sebelum seluruh hubungan tersebut terbukti.
+
+## Bukti teknis syscall dan isolasi hardware bootstrap (24 November 2026)
+
+### Yang sudah dibuktikan
+
+Berdasarkan inspeksi source encoder x86-64 dan workflow QEMU setelah PR #71:
+
+1. Kernel mengaktifkan IA32_EFER.SCE dan menulis IA32_STAR, IA32_LSTAR (alamat label syscall_entry), serta IA32_FMASK.
+2. Handler syscall_entry menyimpan RSP pengguna, berpindah ke stack syscall kernel, menyimpan RCX/R11 dan RBX, lalu mengembalikan hasil melalui SYSRETQ.
+3. Proses A dan B memakai PML4 serta page table kode/stack yang berbeda. Kode user dipetakan read-only, stack user read/write dan NX bila didukung CPU.
+4. Ring 3 dimasuki melalui IRETQ; fault page dari Proses B diverifikasi sebagai fault pengguna, lalu kernel memulihkan CR3 kernel dan kembali ke kelanjutan kernel tanpa panic.
+5. PR #71 menambah uji pointer tidak terpetakan yang harus menghasilkan -EFAULT sebelum buffer dibaca. Workflow QEMU pada commit d9c536fc36c9e47b560a81067b4ed8524911a374 menyelesaikan build ELF/ISO dan verifikasi 18 sentinel dengan status sukses.
+
+### Batasan yang masih terbuka
+
+- Jalur hardware masih dispatcher bootstrap dengan syscall terbatas (process ID, console write, process exit); ia belum memanggil SyscallDispatcher.dispatchFromRegisters TypeScript.
+- Stack syscall dan STATE_SYSCALL_USER_RSP masih berupa state global statis, bukan state per-CPU/per-thread.
+- Proses A lalu B dijalankan berurutan; ini belum membuktikan scheduler preemptive atau context switch antar-thread.
+- Pemeriksaan buffer assembly PR #71 dibatasi pada satu halaman kode user bootstrap (0x00400000..0x00401000). Ini bukan pengganti validasi generik yang menelusuri page table proses aktif.
+- Fault isolation saat ini menguji satu jenis page fault pengguna yang disengaja. Belum ada bukti pemulihan umum untuk semua exception, nested fault, SMP, atau perangkat fisik.
+
+### Keputusan
+
+Status yang tepat adalah **hardware bootstrap syscall dan isolasi Ring 3: terbukti pada QEMU untuk skenario terbatas**. Status **kernel syscall ABI umum, scheduler, dan manajemen proses multi-thread: belum terbukti / belum lengkap**. Pekerjaan berikutnya harus menggeneralisasi jalur ini, bukan menulis ulang atau mengklaim dispatcher TypeScript sudah menjadi kernel native.
