@@ -1,0 +1,88 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * NUSANTARA OS - Address-space aware user memory transfer backend.
+ *
+ * This is an adapter over explicitly supplied physical-memory I/O callbacks.
+ * It does not dereference physical addresses itself and is not a hardware
+ * kernel mapping implementation.
+ */
+import { AddressSpace } from './address-space';
+import { PAGE_SIZE } from './types';
+
+export type PhysicalMemoryReader = (physicalAddress: bigint, length: number) => Uint8Array | null;
+export type PhysicalMemoryWriter = (physicalAddress: bigint, data: Uint8Array) => boolean;
+
+export class AddressSpaceMemoryAccessor {
+  constructor(
+    private readonly readPhysical: PhysicalMemoryReader,
+    private readonly writePhysical: PhysicalMemoryWriter,
+  ) {}
+
+  public copyFromUser(
+    addressSpace: AddressSpace,
+    virtualAddress: bigint,
+    length: number,
+  ): Uint8Array | null {
+    if (!Number.isSafeInteger(length) || length < 0) return null;
+    if (length === 0) return new Uint8Array(0);
+    if (!this.validateRange(addressSpace, virtualAddress, length, 'READ')) return null;
+
+    const result = new Uint8Array(length);
+    let copied = 0;
+    while (copied < length) {
+      const current = virtualAddress + BigInt(copied);
+      const pageOffset = Number(current % BigInt(PAGE_SIZE));
+      const chunkLength = Math.min(PAGE_SIZE - pageOffset, length - copied);
+      const physical = addressSpace.translate(current);
+      if (physical === null) return null;
+      const bytes = this.readPhysical(physical, chunkLength);
+      if (!bytes || bytes.length < chunkLength) return null;
+      result.set(bytes.subarray(0, chunkLength), copied);
+      copied += chunkLength;
+    }
+    return result;
+  }
+
+  public copyToUser(
+    addressSpace: AddressSpace,
+    virtualAddress: bigint,
+    source: Uint8Array,
+    length: number = source.length,
+  ): boolean {
+    if (!Number.isSafeInteger(length) || length < 0 || length > source.length) return false;
+    if (length === 0) return true;
+    if (!this.validateRange(addressSpace, virtualAddress, length, 'WRITE')) return false;
+
+    let copied = 0;
+    while (copied < length) {
+      const current = virtualAddress + BigInt(copied);
+      const pageOffset = Number(current % BigInt(PAGE_SIZE));
+      const chunkLength = Math.min(PAGE_SIZE - pageOffset, length - copied);
+      const physical = addressSpace.translate(current);
+      if (physical === null) return false;
+      if (!this.writePhysical(physical, source.subarray(copied, copied + chunkLength))) return false;
+      copied += chunkLength;
+    }
+    return true;
+  }
+
+  private validateRange(
+    addressSpace: AddressSpace,
+    virtualAddress: bigint,
+    length: number,
+    operation: 'READ' | 'WRITE',
+  ): boolean {
+    if (!AddressSpace.isCanonical(virtualAddress) || virtualAddress < 0n) return false;
+    const end = virtualAddress + BigInt(length) - 1n;
+    if (end < virtualAddress || !AddressSpace.isCanonical(end)) return false;
+    const firstPage = virtualAddress - (virtualAddress % BigInt(PAGE_SIZE));
+    const lastPage = end - (end % BigInt(PAGE_SIZE));
+    for (let page = firstPage; page <= lastPage; page += BigInt(PAGE_SIZE)) {
+      if (!addressSpace.checkAccess(page, operation, true).allowed) return false;
+      if (addressSpace.translate(page) === null) return false;
+    }
+    return true;
+  }
+}
