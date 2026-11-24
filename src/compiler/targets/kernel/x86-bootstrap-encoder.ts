@@ -450,12 +450,9 @@ export class X86BootstrapEncoder {
     // structurally valid non-empty memory-map tag before accepting End.
     a.emit(0x89, 0xfe); // mov esi, edi
     a.emit(0x83, 0xc6, 0x08); // add esi, 8 (first tag)
-    a.emit(0x8b, 0x3d); a.emit32(this.MULTIBOOT2_COPY_BUFFER_ADDR); // mov edi, [buffer]
-    a.emit(0x01, 0xc7); // add edi, eax -- replaced below by bounded end calculation
-    a.emit(0x8b, 0x05); a.emit32(this.MULTIBOOT2_COPY_BUFFER_ADDR); // mov eax, [buffer]
-    a.emit(0x89, 0xc7); // mov edi, eax
-    a.movRegImm32(Reg64.RAX, this.MULTIBOOT2_COPY_BUFFER_ADDR);
-    a.emit(0x03, 0x3d); a.emit32(this.MULTIBOOT2_COPY_BUFFER_ADDR); // add edi, [buffer]
+    a.emit(0xa1); a.emit32(this.MULTIBOOT2_COPY_BUFFER_ADDR); // mov eax, [buffer] (total_size)
+    a.movRegImm32(Reg64.RDI, this.MULTIBOOT2_COPY_BUFFER_ADDR);
+    a.emit(0x01, 0xc7); // add edi, eax (exclusive end of copied MBI)
     a.emit(0x31, 0xdb); // xor ebx, ebx (memory-map seen flag)
 
     a.label('mb2_native_tag_loop');
@@ -503,12 +500,8 @@ export class X86BootstrapEncoder {
     a.jne('panic32');
     a.emit(0x85, 0xc0); // require at least one entry
     a.je('panic32');
-    a.emit(0x5b); // pop ebx -- discard? tag-size stack must be restored to ecx
-    a.emit(0x59); // pop ecx (balanced by a dedicated push below)
-    a.emit(0x53); // push ebx (memory map flag scratch)
+    a.emit(0x59); // pop ecx (restore tag size)
     a.emit(0xbb, 0x01, 0x00, 0x00, 0x00); // mov ebx, 1 (memory map present)
-    a.emit(0x5b); // pop ebx (restore prior flag)
-    a.emit(0x43); // inc ebx -- mark memory map present
     a.jmp('mb2_native_advance');
 
     a.label('mb2_native_module');
