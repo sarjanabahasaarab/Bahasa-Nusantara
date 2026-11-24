@@ -5,6 +5,8 @@
  */
 import assert from 'node:assert/strict';
 import { UserPointerSecurity, UserSecurityError } from '../../src/runtime/os/security/user-pointer.js';
+import { AddressSpace } from '../../src/runtime/os/memory/address-space.js';
+import { PagePermissions } from '../../src/runtime/os/memory/types.js';
 
 let passed = 0;
 let failed = 0;
@@ -92,6 +94,21 @@ test('52.15 string menerima data yang benar-benar dibaca dan null-terminated', (
   assert.equal(r.length, 2);
   assert.equal(r.str, 'AB');
   assert.equal(r.error, UserSecurityError.OK);
+});
+
+test('52.16 address space menolak READ pada halaman tanpa izin baca', () => {
+  const space = new AddressSpace();
+  space.mapPage(0x0040_0000n, 0x0100_0000n, PagePermissions.NONE, true);
+  const result = space.checkAccess(0x0040_0000n, 'READ', true);
+  assert.equal(result.allowed, false);
+  assert.equal(result.faultReason, 'READ_PROTECTION_VIOLATION');
+});
+
+test('52.17 address space tetap mengizinkan READ pada halaman READ-only', () => {
+  const space = new AddressSpace();
+  space.mapPage(0x0040_0000n, 0x0100_0000n, PagePermissions.READ, true);
+  const result = space.checkAccess(0x0040_0000n, 'READ', true);
+  assert.equal(result.allowed, true);
 });
 
 console.log('Phase 52: LULUS=' + passed + ', GAGAL=' + failed + ', TOTAL=' + (passed + failed));
