@@ -495,6 +495,12 @@ export class X86BootstrapEncoder {
     a.jmp('mb2_native_advance');
 
     a.label('mb2_native_memory_map');
+    // Snapshot the outer tag cursor context in reserved bootstrap scratch.
+    // The descriptor walker uses ESI/ECX heavily; restore all parser inputs
+    // explicitly before advancing beyond the memory-map tag.
+    a.emit(0x89, 0x0d); a.emit32(0x0021_8058); // mov [scratch_tag_size], ecx
+    a.emit(0x89, 0x35); a.emit32(0x0021_805c); // mov [scratch_tag_ptr], esi
+    a.emit(0x89, 0x3d); a.emit32(0x0021_8060); // mov [scratch_mbi_end], edi
     // Preserve every live tag-parser register across serial output.
     a.emit(0x60); // pushad
     a.printLabel32('msg_diag_mmap_begin', 'print_serial32');
@@ -598,6 +604,11 @@ export class X86BootstrapEncoder {
     a.emit(0xbb, 0x01, 0x00, 0x00, 0x00); // mov ebx, 1 (validated memory map present)
     // Phase 69: preserve all live registers around serial-only checkpoints.
     a.emit(0x60); a.printLabel32('msg_diag_after_mmap_restore', 'print_serial32'); a.emit(0x61);
+    // Restore parser cursor state from dedicated scratch, independent of the
+    // descriptor walk's stack/register usage.
+    a.emit(0x8b, 0x0d); a.emit32(0x0021_8058); // mov ecx, [scratch_tag_size]
+    a.emit(0x8b, 0x35); a.emit32(0x0021_805c); // mov esi, [scratch_tag_ptr]
+    a.emit(0x8b, 0x3d); a.emit32(0x0021_8060); // mov edi, [scratch_mbi_end]
     a.jmp('mb2_native_advance');
 
     a.label('mb2_native_module');
