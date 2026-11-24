@@ -8,6 +8,10 @@
 
 import { PAGE_SIZE, MemoryRegion, MemoryRegionType } from './types';
 
+// Bitmap dibatasi agar konfigurasi RAM yang sangat besar gagal secara terkontrol,
+// bukan memicu RangeError/OOM ketika Uint8Array dibuat.
+const MAX_BITMAP_SIZE_BYTES = 64 * 1024 * 1024;
+
 export class PhysicalMemoryManager {
   private readonly totalFrames: number;
   private readonly bitmap: Uint8Array;
@@ -18,12 +22,15 @@ export class PhysicalMemoryManager {
     if (!Number.isSafeInteger(totalBytes) || totalBytes < 0) {
       throw new RangeError('Ukuran memori fisik harus bilangan bulat aman non-negatif');
     }
-    if (memoryBase < 0n || memoryBase % BigInt(PAGE_SIZE) !== 0n) {
-      throw new RangeError('Base memori fisik harus non-negatif dan page-aligned');
+    if (typeof memoryBase !== 'bigint' || memoryBase < 0n || memoryBase % BigInt(PAGE_SIZE) !== 0n) {
+      throw new RangeError('Base memori fisik harus bigint non-negatif dan page-aligned');
     }
-    this.memoryBase = memoryBase;
     this.totalFrames = Math.floor(totalBytes / PAGE_SIZE);
     const bitmapSizeBytes = Math.ceil(this.totalFrames / 8);
+    if (!Number.isSafeInteger(bitmapSizeBytes) || bitmapSizeBytes > MAX_BITMAP_SIZE_BYTES) {
+      throw new RangeError(`Bitmap PMM melebihi batas aman ${MAX_BITMAP_SIZE_BYTES} byte`);
+    }
+    this.memoryBase = memoryBase;
     this.bitmap = new Uint8Array(bitmapSizeBytes);
     this.freeFrames = this.totalFrames;
   }
