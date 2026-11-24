@@ -529,6 +529,7 @@ export class X86BootstrapEncoder {
     a.label('mb2_native_memory_entry_loop');
     a.emit(0x85, 0xd2); // test edx, edx
     a.je('mb2_native_memory_entries_done');
+    a.emit(0x52); // push edx: preserve remaining-entry count across address arithmetic
     a.emit(0x8b, 0x46, 0x08); // mov eax, [esi+8] (length low)
     a.emit(0x0b, 0x46, 0x0c); // or eax, [esi+12] (length high)
     a.emit(0x85, 0xc0); // reject zero-length descriptor
@@ -584,6 +585,7 @@ export class X86BootstrapEncoder {
     a.label('mb2_native_memory_entry_classified');
     a.emit(0x01, 0xce); // add esi, ecx (advance by entry_size)
     a.jb('panic32'); // reject 32-bit descriptor pointer wrap
+    a.emit(0x5a); // pop edx (restore remaining-entry count after address arithmetic)
     a.emit(0x4a); // dec edx
     a.jmp('mb2_native_memory_entry_loop');
     a.label('mb2_native_memory_entries_done');
