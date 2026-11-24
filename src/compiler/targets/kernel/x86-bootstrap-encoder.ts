@@ -444,9 +444,134 @@ export class X86BootstrapEncoder {
     a.label('mb2_copy_done');
     a.movRegImm32(Reg64.RDI, this.MULTIBOOT2_COPY_BUFFER_ADDR);
     a.movRegImm32(Reg64.RSP, this.KERNEL_STACK_TOP);
+
+    // Native 32-bit Multiboot2 tag walker. It only reads the kernel-owned
+    // bounded copy, validates every tag boundary/alignment, and requires a
+    // structurally valid non-empty memory-map tag before accepting End.
+    a.emit(0x89, 0xfe); // mov esi, edi
+    a.emit(0x83, 0xc6, 0x08); // add esi, 8 (first tag)
+    a.emit(0x8b, 0x3d); a.emit32(this.MULTIBOOT2_COPY_BUFFER_ADDR); // mov edi, [buffer]
+    a.emit(0x01, 0xc7); // add edi, eax -- replaced below by bounded end calculation
+    a.emit(0x8b, 0x05); a.emit32(this.MULTIBOOT2_COPY_BUFFER_ADDR); // mov eax, [buffer]
+    a.emit(0x89, 0xc7); // mov edi, eax
+    a.movRegImm32(Reg64.RAX, this.MULTIBOOT2_COPY_BUFFER_ADDR);
+    a.emit(0x03, 0x3d); a.emit32(this.MULTIBOOT2_COPY_BUFFER_ADDR); // add edi, [buffer]
+    a.emit(0x31, 0xdb); // xor ebx, ebx (memory-map seen flag)
+
+    a.label('mb2_native_tag_loop');
+    a.emit(0x89, 0xf8); // mov eax, edi
+    a.emit(0x29, 0xf0); // sub eax, esi
+    a.emit(0x83, 0xf8, 0x08); // cmp eax, 8
+    a.jb('panic32');
+    a.emit(0x8b, 0x06); // mov eax, [esi] (tag type)
+    a.emit(0x8b, 0x4e, 0x04); // mov ecx, [esi+4] (tag size)
+    a.emit(0x83, 0xf9, 0x08); // cmp ecx, 8
+    a.jb('panic32');
+    a.emit(0x89, 0xfa); // mov edx, edi
+    a.emit(0x29, 0xf2); // sub edx, esi
+    a.emit(0x39, 0xd1); // cmp ecx, edx
+    a.ja('panic32');
+
+    a.emit(0x83, 0xf8, 0x00); // cmp eax, END
+    a.je('mb2_native_end');
+    a.emit(0x83, 0xf8, 0x06); // cmp eax, MEMORY_MAP
+    a.je('mb2_native_memory_map');
+    a.emit(0x83, 0xf8, 0x03); // cmp eax, MODULE
+    a.je('mb2_native_module');
+    a.emit(0x83, 0xf8, 0x08); // cmp eax, FRAMEBUFFER
+    a.je('mb2_native_framebuffer');
+    a.jmp('mb2_native_advance');
+
+    a.label('mb2_native_memory_map');
+    a.emit(0x83, 0xf9, 0x10); // cmp ecx, 16
+    a.jb('panic32');
+    a.emit(0x83, 0x7e, 0x0c, 0x00); // entry_version must be zero
+    a.jne('panic32');
+    a.emit(0x51); // push ecx (tag size)
+    a.emit(0x8b, 0x4e, 0x08); // mov ecx, [esi+8] (entry_size)
+    a.emit(0x83, 0xf9, 0x18); // cmp ecx, 24
+    a.jb('panic32');
+    a.emit(0xf6, 0xc1, 0x07); // test cl, 7
+    a.jne('panic32');
+    a.emit(0x8b, 0x46, 0x04); // mov eax, [esi+4] (tag size)
+    a.emit(0x83, 0xe8, 0x10); // sub eax, 16
+    a.emit(0x85, 0xc0); // test eax, eax
+    a.je('panic32');
+    a.emit(0x31, 0xd2); // xor edx, edx
+    a.emit(0xf7, 0xf1); // div ecx
+    a.emit(0x85, 0xd2); // test edx, edx
+    a.jne('panic32');
+    a.emit(0x85, 0xc0); // require at least one entry
+    a.je('panic32');
+    a.emit(0x5b); // pop ebx -- discard? tag-size stack must be restored to ecx
+    a.emit(0x59); // pop ecx (balanced by a dedicated push below)
+    a.emit(0x53); // push ebx (memory map flag scratch)
+    a.emit(0xbb, 0x01, 0x00, 0x00, 0x00); // mov ebx, 1 (memory map present)
+    a.emit(0x5b); // pop ebx (restore prior flag)
+    a.emit(0x43); // inc ebx -- mark memory map present
+    a.jmp('mb2_native_advance');
+
+    a.label('mb2_native_module');
+    a.emit(0x83, 0xf9, 0x11); // cmp ecx, 17
+    a.jb('panic32');
+    a.emit(0x8b, 0x46, 0x08); // mov eax, [esi+8] module start
+    a.emit(0x3b, 0x46, 0x0c); // cmp eax, [esi+12] module end
+    a.jae('panic32');
+    a.emit(0x57, 0x51); // push edi; push ecx
+    a.emit(0x8d, 0x7e, 0x10); // lea edi, [esi+16]
+    a.emit(0x8b, 0x4e, 0x04); // mov ecx, [esi+4]
+    a.emit(0x83, 0xe9, 0x10); // sub ecx, 16
+    a.emit(0x31, 0xc0); // xor eax, eax
+    a.emit(0xf2, 0xae); // repne scasb (NUL required within tag)
+    a.jne('panic32');
+    a.emit(0x59, 0x5f); // pop ecx; pop edi
+    a.jmp('mb2_native_advance');
+
+    a.label('mb2_native_framebuffer');
+    a.emit(0x83, 0xf9, 0x20); // cmp ecx, 32
+    a.jb('panic32');
+    a.emit(0x66, 0x83, 0x7e, 0x1e, 0x00); // reserved word must be zero
+    a.jne('panic32');
+    a.emit(0x8b, 0x46, 0x08); // framebuffer address low dword
+    a.emit(0x0b, 0x46, 0x0c); // or eax, address high dword
+    a.emit(0x85, 0xc0);
+    a.je('panic32');
+    a.emit(0x83, 0x7e, 0x10, 0x00); // pitch nonzero
+    a.je('panic32');
+    a.emit(0x83, 0x7e, 0x14, 0x00); // width nonzero
+    a.je('panic32');
+    a.emit(0x83, 0x7e, 0x18, 0x00); // height nonzero
+    a.je('panic32');
+    a.emit(0x80, 0x7e, 0x1c, 0x00); // bits_per_pixel nonzero
+    a.je('panic32');
+    a.jmp('mb2_native_advance');
+
+    a.label('mb2_native_end');
+    a.emit(0x83, 0xf9, 0x08); // End tag size must be exactly 8
+    a.jne('panic32');
+    a.emit(0x8d, 0x04, 0x0e); // lea eax, [esi+ecx]
+    a.emit(0x39, 0xf8); // cmp eax, edi (End must finish total_size)
+    a.jne('panic32');
+    a.emit(0x85, 0xdb); // memory-map tag required
+    a.je('panic32');
+    a.jmp('mb2_native_parse_done');
+
+    a.label('mb2_native_advance');
+    a.emit(0x89, 0xc8); // mov eax, ecx
+    a.emit(0x83, 0xc0, 0x07); // add eax, 7
+    a.jb('panic32');
+    a.emit(0x83, 0xe0, 0xf8); // align size to 8
+    a.emit(0x01, 0xc6); // add esi, eax
+    a.jb('panic32');
+    a.emit(0x39, 0xfe); // cmp esi, edi
+    a.ja('panic32');
+    a.jmp('mb2_native_tag_loop');
+
+    a.label('mb2_native_parse_done');
     a.printLabel32('msg_boot_start', 'print_serial32');
     a.printLabel32('msg_mb2_ok', 'print_serial32');
     a.printLabel32('msg_mb2_copy_ok', 'print_serial32');
+    a.printLabel32('msg_mb2_parse_ok', 'print_serial32');
 
     // =========================================================================
     // BAGIAN 2: CEK CPUID DAN DUKUNGAN 64-BIT LONG MODE
@@ -1257,6 +1382,7 @@ export class X86BootstrapEncoder {
     a.label('msg_boot_start');           a.emitCString(this.STAGE_1_START);
     a.label('msg_mb2_ok');               a.emitCString(this.STAGE_2_MULTIBOOT2);
     a.label('msg_mb2_copy_ok');          a.emitCString(this.STAGE_2B_MULTIBOOT2_COPY);
+    a.label('msg_mb2_parse_ok');         a.emitCString('NUSANTARA_MULTIBOOT2_PARSE_OK\\r\\n');
     a.label('msg_cpu_ok');               a.emitCString(this.STAGE_3_LONG_MODE);
     a.label('msg_paging_ok');            a.emitCString(this.STAGE_4_PAGING);
     a.label('msg_gdt_ok');               a.emitCString(this.STAGE_5_GDT64);
