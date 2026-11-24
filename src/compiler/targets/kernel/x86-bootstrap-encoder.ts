@@ -19,6 +19,23 @@
 
 import { UserELFBuilder } from './user-elf-builder.js';
 
+/**
+ * Fixed 32-bit bootstrap scratch slots inside the reserved 0x218000-0x21c000
+ * kernel-state region. Keep this layout synchronized with the boot reservation
+ * manifest; these words are diagnostics/parser scratch, not PMM metadata.
+ */
+export const X86_BOOTSTRAP_STATE_LAYOUT = Object.freeze({
+  usableDescriptorCount: 0x0021_8040,
+  blockedDescriptorCount: 0x0021_8044,
+  rawUsableBytesLow: 0x0021_8048,
+  rawUsableBytesHigh: 0x0021_804c,
+  alignedUsableBytesLow: 0x0021_8050,
+  alignedUsableBytesHigh: 0x0021_8054,
+  multibootTagSize: 0x0021_8058,
+  multibootTagPointer: 0x0021_805c,
+  multibootInfoEnd: 0x0021_8060,
+} as const);
+
 export interface BootstrapConfig {
   loadAddress?: number; // Default: 0x0010_0020
   kernelVirtualBase?: bigint; // Default: 0xFFFF_FFFF_8000_0000n (-2 GiB)
@@ -463,12 +480,12 @@ export class X86BootstrapEncoder {
     a.emit(0x31, 0xdb); // xor ebx, ebx (memory-map seen flag)
     // Bootstrap-only memory-map accounting in the reserved kernel state page.
     // These diagnostics are not allocator metadata.
-    a.storeMem32AbsImm32Mode32(0x0021_8040, 0);
-    a.storeMem32AbsImm32Mode32(0x0021_8044, 0);
-    a.storeMem32AbsImm32Mode32(0x0021_8048, 0);
-    a.storeMem32AbsImm32Mode32(0x0021_804c, 0);
-    a.storeMem32AbsImm32Mode32(0x0021_8050, 0);
-    a.storeMem32AbsImm32Mode32(0x0021_8054, 0);
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_STATE_LAYOUT.usableDescriptorCount, 0);
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_STATE_LAYOUT.blockedDescriptorCount, 0);
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_STATE_LAYOUT.rawUsableBytesLow, 0);
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_STATE_LAYOUT.rawUsableBytesHigh, 0);
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_STATE_LAYOUT.alignedUsableBytesLow, 0);
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_STATE_LAYOUT.alignedUsableBytesHigh, 0);
 
     a.label('mb2_native_tag_loop');
     a.emit(0x89, 0xf8); // mov eax, edi
@@ -498,9 +515,9 @@ export class X86BootstrapEncoder {
     // Snapshot the outer tag cursor context in reserved bootstrap scratch.
     // The descriptor walker uses ESI/ECX heavily; restore all parser inputs
     // explicitly before advancing beyond the memory-map tag.
-    a.emit(0x89, 0x0d); a.emit32(0x0021_8058); // mov [scratch_tag_size], ecx
-    a.emit(0x89, 0x35); a.emit32(0x0021_805c); // mov [scratch_tag_ptr], esi
-    a.emit(0x89, 0x3d); a.emit32(0x0021_8060); // mov [scratch_mbi_end], edi
+    a.emit(0x89, 0x0d); a.emit32(X86_BOOTSTRAP_STATE_LAYOUT.multibootTagSize); // mov [scratch_tag_size], ecx
+    a.emit(0x89, 0x35); a.emit32(X86_BOOTSTRAP_STATE_LAYOUT.multibootTagPointer); // mov [scratch_tag_ptr], esi
+    a.emit(0x89, 0x3d); a.emit32(X86_BOOTSTRAP_STATE_LAYOUT.multibootInfoEnd); // mov [scratch_mbi_end], edi
     // Preserve every live tag-parser register across serial output.
     a.emit(0x60); // pushad
     a.printLabel32('msg_diag_mmap_begin', 'print_serial32');
@@ -574,20 +591,20 @@ export class X86BootstrapEncoder {
     a.label('mb2_native_has_complete_pages');
     a.emit(0x29, 0xc2); // sub edx, eax (aligned byte span low)
     a.emit(0x19, 0xeb); // sbb ebx, ebp (aligned byte span high)
-    a.emit(0x01, 0x15); a.emit32(0x0021_8050); // add aligned bytes low
-    a.emit(0x11, 0x1d); a.emit32(0x0021_8054); // adc aligned bytes high
+    a.emit(0x01, 0x15); a.emit32(X86_BOOTSTRAP_STATE_LAYOUT.alignedUsableBytesLow); // add aligned bytes low
+    a.emit(0x11, 0x1d); a.emit32(X86_BOOTSTRAP_STATE_LAYOUT.alignedUsableBytesHigh); // adc aligned bytes high
     a.jb('panic32'); // checked 64-bit aligned-byte diagnostic
     a.label('mb2_native_no_complete_pages');
     a.emit(0x5b); // pop ebx (restore memory-map-present flag)
-    a.emit(0xff, 0x05); a.emit32(0x0021_8040); // inc usable descriptor count
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_STATE_LAYOUT.usableDescriptorCount); // inc usable descriptor count
     a.emit(0x8b, 0x46, 0x08); // mov eax, [esi+8] (length low)
     a.emit(0x8b, 0x6e, 0x0c); // mov ebp, [esi+12] (length high)
-    a.emit(0x01, 0x05); a.emit32(0x0021_8048); // add raw usable bytes low
-    a.emit(0x11, 0x2d); a.emit32(0x0021_804c); // adc raw usable bytes high
+    a.emit(0x01, 0x05); a.emit32(X86_BOOTSTRAP_STATE_LAYOUT.rawUsableBytesLow); // add raw usable bytes low
+    a.emit(0x11, 0x2d); a.emit32(X86_BOOTSTRAP_STATE_LAYOUT.rawUsableBytesHigh); // adc raw usable bytes high
     a.jb('panic32'); // reject overflow in diagnostic 64-bit sum
     a.jmp('mb2_native_memory_entry_classified');
     a.label('mb2_native_memory_entry_blocked');
-    a.emit(0xff, 0x05); a.emit32(0x0021_8044); // inc blocked descriptor count
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_STATE_LAYOUT.blockedDescriptorCount); // inc blocked descriptor count
     a.label('mb2_native_memory_entry_classified');
     a.emit(0x01, 0xce); // add esi, ecx (advance by entry_size)
     a.jb('panic32'); // reject 32-bit descriptor pointer wrap
@@ -606,9 +623,9 @@ export class X86BootstrapEncoder {
     a.emit(0x60); a.printLabel32('msg_diag_after_mmap_restore', 'print_serial32'); a.emit(0x61);
     // Restore parser cursor state from dedicated scratch, independent of the
     // descriptor walk's stack/register usage.
-    a.emit(0x8b, 0x0d); a.emit32(0x0021_8058); // mov ecx, [scratch_tag_size]
-    a.emit(0x8b, 0x35); a.emit32(0x0021_805c); // mov esi, [scratch_tag_ptr]
-    a.emit(0x8b, 0x3d); a.emit32(0x0021_8060); // mov edi, [scratch_mbi_end]
+    a.emit(0x8b, 0x0d); a.emit32(X86_BOOTSTRAP_STATE_LAYOUT.multibootTagSize); // mov ecx, [scratch_tag_size]
+    a.emit(0x8b, 0x35); a.emit32(X86_BOOTSTRAP_STATE_LAYOUT.multibootTagPointer); // mov esi, [scratch_tag_ptr]
+    a.emit(0x8b, 0x3d); a.emit32(X86_BOOTSTRAP_STATE_LAYOUT.multibootInfoEnd); // mov edi, [scratch_mbi_end]
     a.jmp('mb2_native_advance');
 
     a.label('mb2_native_module');
