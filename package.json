@@ -7,7 +7,8 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "test:mb2-native-page-extents-v76": "tsx pengujian/os/uji_multiboot2_native_page_extents_fase76.ts",
+    "test:mb2-native-extent-sort-v77": "tsx pengujian/os/uji_multiboot2_native_extent_sort_fase77.ts",
+    "test:mb2-native-page-extents-v76": "tsx pengujian/os/uji_multiboot2_native_page_extents_fase76.ts && tsx pengujian/os/uji_multiboot2_native_extent_sort_fase77.ts",
     "test:mb2-native-descriptor-catalog-v75": "tsx pengujian/os/uji_multiboot2_native_descriptor_catalog_fase75.ts && tsx pengujian/os/uji_multiboot2_native_page_extents_fase76.ts",
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
