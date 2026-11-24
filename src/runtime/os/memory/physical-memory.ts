@@ -15,6 +15,12 @@ export class PhysicalMemoryManager {
   private readonly memoryBase: bigint;
 
   constructor(totalBytes: number = 64 * 1024 * 1024, memoryBase: bigint = 0x100000n) {
+    if (!Number.isSafeInteger(totalBytes) || totalBytes < 0) {
+      throw new RangeError('Ukuran memori fisik harus bilangan bulat aman non-negatif');
+    }
+    if (memoryBase < 0n || memoryBase % BigInt(PAGE_SIZE) !== 0n) {
+      throw new RangeError('Base memori fisik harus non-negatif dan page-aligned');
+    }
     this.memoryBase = memoryBase;
     this.totalFrames = Math.floor(totalBytes / PAGE_SIZE);
     const bitmapSizeBytes = Math.ceil(this.totalFrames / 8);
@@ -73,7 +79,7 @@ export class PhysicalMemoryManager {
    * Alokasi beberapa frame fisik berurutan (kontigu)
    */
   public allocateContiguousFrames(count: number): bigint | null {
-    if (count <= 0 || count > this.freeFrames) return null;
+    if (!Number.isSafeInteger(count) || count <= 0 || count > this.freeFrames) return null;
 
     let consecutive = 0;
     let startIdx = -1;
@@ -108,6 +114,7 @@ export class PhysicalMemoryManager {
   public freeFrame(physAddr: bigint): boolean {
     if (physAddr < this.memoryBase) return false;
     const offset = physAddr - this.memoryBase;
+    if (offset % BigInt(PAGE_SIZE) !== 0n) return false;
     const frameIdx = Number(offset / BigInt(PAGE_SIZE));
 
     if (frameIdx < 0 || frameIdx >= this.totalFrames) {
@@ -133,21 +140,35 @@ export class PhysicalMemoryManager {
    */
   public reserveRegion(regionOrBase: MemoryRegion | bigint, length?: number): void {
     let base: bigint;
-    let len: number;
+    let len: bigint;
 
     if (typeof regionOrBase === 'bigint') {
       base = regionOrBase;
-      len = length ?? PAGE_SIZE;
+      const numericLength = length ?? PAGE_SIZE;
+      if (!Number.isSafeInteger(numericLength) || numericLength <= 0) return;
+      len = BigInt(numericLength);
     } else {
       base = regionOrBase.base;
-      len = Number(regionOrBase.length);
+      len = regionOrBase.length;
+      if (typeof len !== 'bigint' || len <= 0n) return;
     }
 
-    const startOffset = base > this.memoryBase ? base - this.memoryBase : 0n;
-    const startIdx = Number(startOffset / BigInt(PAGE_SIZE));
-    const count = Math.ceil(len / PAGE_SIZE);
+    if (base < 0n) return;
+    const regionEnd = base + len;
+    if (regionEnd <= base) return;
 
-    for (let i = startIdx; i < startIdx + count && i < this.totalFrames; i++) {
+    const managedStart = this.memoryBase;
+    const managedEnd = managedStart + BigInt(this.totalFrames * PAGE_SIZE);
+    const clippedStart = base > managedStart ? base : managedStart;
+    const clippedEnd = regionEnd < managedEnd ? regionEnd : managedEnd;
+    if (clippedStart >= clippedEnd) return;
+
+    const pageSize = BigInt(PAGE_SIZE);
+    const startIdx = Number((clippedStart - managedStart) / pageSize);
+    const endOffset = clippedEnd - managedStart;
+    const endIdx = Number((endOffset + pageSize - 1n) / pageSize);
+
+    for (let i = startIdx; i < endIdx; i++) {
       const byteIdx = i >> 3;
       const bitIdx = i & 7;
       if ((this.bitmap[byteIdx] & (1 << bitIdx)) === 0) {
