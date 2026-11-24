@@ -460,6 +460,8 @@ export class X86BootstrapEncoder {
     a.storeMem32AbsImm32Mode32(0x0021_8044, 0);
     a.storeMem32AbsImm32Mode32(0x0021_8048, 0);
     a.storeMem32AbsImm32Mode32(0x0021_804c, 0);
+    a.storeMem32AbsImm32Mode32(0x0021_8050, 0);
+    a.storeMem32AbsImm32Mode32(0x0021_8054, 0);
 
     a.label('mb2_native_tag_loop');
     a.emit(0x89, 0xf8); // mov eax, edi
@@ -530,6 +532,34 @@ export class X86BootstrapEncoder {
     // Overlaps and bootstrap reservations still require later normalization.
     a.emit(0x83, 0x7e, 0x10, 0x01); // cmp dword [esi+16], 1 (AVAILABLE)
     a.jne('mb2_native_memory_entry_blocked');
+    // Compute complete 4 KiB pages contained in this individual type-1
+    // descriptor. This is an audit counter only: overlapping descriptors and
+    // reserved ranges are intentionally not deduplicated/subtracted here.
+    a.emit(0x53); // push ebx (memory-map-present flag)
+    a.emit(0x8b, 0x06); // mov eax, [esi] base low
+    a.emit(0x8b, 0x6e, 0x04); // mov ebp, [esi+4] base high
+    a.emit(0x05, 0xff, 0x0f, 0x00, 0x00); // add eax, 4095
+    a.emit(0x83, 0xd5, 0x00); // adc ebp, 0
+    a.jb('panic32'); // reject overflow while rounding the 64-bit base upward
+    a.emit(0x25, 0x00, 0xf0, 0xff, 0xff); // and eax, 0xfffff000 (align start up)
+    a.emit(0x8b, 0x16); // mov edx, [esi] base low
+    a.emit(0x03, 0x56, 0x08); // add edx, [esi+8] length low
+    a.emit(0x8b, 0x5e, 0x04); // mov ebx, [esi+4] base high
+    a.emit(0x13, 0x5e, 0x0c); // adc ebx, [esi+12] length high
+    a.emit(0x81, 0xe2, 0x00, 0xf0, 0xff, 0xff); // align end down
+    a.emit(0x39, 0xeb); // cmp ebx, ebp (end high vs start high)
+    a.jb('mb2_native_no_complete_pages');
+    a.ja('mb2_native_has_complete_pages');
+    a.emit(0x39, 0xc2); // cmp edx, eax
+    a.jbe('mb2_native_no_complete_pages');
+    a.label('mb2_native_has_complete_pages');
+    a.emit(0x29, 0xc2); // sub edx, eax (aligned byte span low)
+    a.emit(0x19, 0xeb); // sbb ebx, ebp (aligned byte span high)
+    a.emit(0x01, 0x15); a.emit32(0x0021_8050); // add aligned bytes low
+    a.emit(0x11, 0x1d); a.emit32(0x0021_8054); // adc aligned bytes high
+    a.jb('panic32'); // checked 64-bit aligned-byte diagnostic
+    a.label('mb2_native_no_complete_pages');
+    a.emit(0x5b); // pop ebx (restore memory-map-present flag)
     a.emit(0xff, 0x05); a.emit32(0x0021_8040); // inc usable descriptor count
     a.emit(0x8b, 0x46, 0x08); // mov eax, [esi+8] (length low)
     a.emit(0x8b, 0x6e, 0x0c); // mov ebp, [esi+12] (length high)
@@ -615,6 +645,7 @@ export class X86BootstrapEncoder {
     a.printLabel32('msg_mb2_parse_ok', 'print_serial32');
     a.printLabel32('msg_mb2_ranges_ok', 'print_serial32');
     a.printLabel32('msg_mb2_classify_ok', 'print_serial32');
+    a.printLabel32('msg_mb2_page_audit_ok', 'print_serial32');
 
     // =========================================================================
     // BAGIAN 2: CEK CPUID DAN DUKUNGAN 64-BIT LONG MODE
@@ -1428,6 +1459,7 @@ export class X86BootstrapEncoder {
     a.label('msg_mb2_parse_ok');         a.emitCString('NUSANTARA_MULTIBOOT2_PARSE_OK\r\n');
     a.label('msg_mb2_ranges_ok');        a.emitCString('NUSANTARA_MULTIBOOT2_RANGES_OK\r\n');
     a.label('msg_mb2_classify_ok');      a.emitCString('NUSANTARA_MULTIBOOT2_CLASSIFY_OK\r\n');
+    a.label('msg_mb2_page_audit_ok');    a.emitCString('NUSANTARA_MULTIBOOT2_PAGE_AUDIT_OK\r\n');
     a.label('msg_cpu_ok');               a.emitCString(this.STAGE_3_LONG_MODE);
     a.label('msg_paging_ok');            a.emitCString(this.STAGE_4_PAGING);
     a.label('msg_gdt_ok');               a.emitCString(this.STAGE_5_GDT64);
