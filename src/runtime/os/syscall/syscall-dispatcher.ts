@@ -17,16 +17,16 @@ export class SyscallDispatcher {
   private readonly table: SyscallTable;
   private readonly traces: SyscallTraceEvent[] = [];
   private tracingEnabled: boolean = true;
-  private memoryReader?: (addr: bigint, len: number) => Uint8Array | null;
-  private memoryWriter?: (addr: bigint, data: Uint8Array) => boolean;
+  private memoryReader?: (addressSpace: NonNullable<SyscallContext['addressSpace']>, addr: bigint, len: number) => Uint8Array | null;
+  private memoryWriter?: (addressSpace: NonNullable<SyscallContext['addressSpace']>, addr: bigint, data: Uint8Array) => boolean;
 
   constructor(table?: SyscallTable) {
     this.table = table ?? SyscallTable.getInstance();
   }
 
   public setMemoryAccessors(
-    reader: (addr: bigint, len: number) => Uint8Array | null,
-    writer: (addr: bigint, data: Uint8Array) => boolean
+    reader: (addressSpace: NonNullable<SyscallContext['addressSpace']>, addr: bigint, len: number) => Uint8Array | null,
+    writer: (addressSpace: NonNullable<SyscallContext['addressSpace']>, addr: bigint, data: Uint8Array) => boolean
   ): void {
     this.memoryReader = reader;
     this.memoryWriter = writer;
@@ -133,14 +133,16 @@ export class SyscallDispatcher {
           if (!check.valid || !this.memoryReader) return null;
           const kernelBuffer = new Uint8Array(length);
           const copied = UserPointerSecurity.copyFromUser(
-            kernelBuffer, address, length, ctx.addressSpace, this.memoryReader
+            kernelBuffer, address, length, ctx.addressSpace,
+            (addr, len) => this.memoryReader!(ctx.addressSpace!, addr, len)
           );
           return copied ? kernelBuffer : null;
         },
         copyToUser: (address, data, length = data.length) => {
           if (!ctx.addressSpace || !this.memoryWriter) return false;
           return UserPointerSecurity.copyToUser(
-            address, data, length, ctx.addressSpace, this.memoryWriter
+            address, data, length, ctx.addressSpace,
+            (addr, bytes) => this.memoryWriter!(ctx.addressSpace!, addr, bytes)
           );
         },
       },

@@ -139,7 +139,7 @@ await asyncTest('52.18 dispatcher memberikan copy_from_user ke handler dengan da
   });
   const dispatcher = new SyscallDispatcher(table);
   dispatcher.setMemoryAccessors(
-    (_address, length) => new TextEncoder().encode('ABCD').subarray(0, length),
+    (_space, _address, length) => new TextEncoder().encode('ABCD').subarray(0, length),
     () => true,
   );
   const result = await dispatcher.dispatch(9001, [0x0050_0FFEn, 4n], {
@@ -174,7 +174,7 @@ await asyncTest('52.20 copy_to_user handler menulis hanya melalui writer yang di
   const dispatcher = new SyscallDispatcher(table);
   dispatcher.setMemoryAccessors(
     () => null,
-    (_address, data) => { written = new TextDecoder().decode(data); return true; },
+    (_space, _address, data) => { written = new TextDecoder().decode(data); return true; },
   );
   const space = new AddressSpace();
   space.mapPage(0x0070_0000n, 0x0130_0000n, PagePermissions.USER_READ_WRITE, true);
@@ -189,13 +189,41 @@ await asyncTest('52.20 copy_to_user handler menulis hanya melalui writer yang di
 await asyncTest('52.21 syscall pointer ditolak jika konteks proses tidak membawa address space', async () => {
   const dispatcher = new SyscallDispatcher(new SyscallTable());
   dispatcher.setMemoryAccessors(
-    (_address, length) => new Uint8Array(length),
+    (_space, _address, length) => new Uint8Array(length),
     () => true,
   );
   const result = await dispatcher.dispatch(SyscallNumber.CONSOLE_WRITE, [0x0080_0000n, 4n], {
     callingProcessId: 7, callingThreadId: 1, isKernelCaller: false,
   });
   assert.equal(result, -14n);
+});
+
+
+await asyncTest('52.25 accessor memori menerima AddressSpace proses yang tepat untuk copyin dan copyout', async () => {
+  const space = new AddressSpace();
+  space.mapPage(0x0090_0000n, 0x0150_0000n, PagePermissions.USER_READ_WRITE, true);
+  let readerSpace: AddressSpace | undefined;
+  let writerSpace: AddressSpace | undefined;
+  const table = new SyscallTable();
+  table.register({
+    number: 9004, name: 'test_process_scoped_accessors', minArgs: 0,
+    handler: (_args, ctx) => {
+      const input = ctx.userMemory?.copyFromUser(0x0090_0000n, 2);
+      const output = ctx.userMemory?.copyToUser(0x0090_0000n, new TextEncoder().encode('OK'));
+      return BigInt(input?.length === 2 && output ? 1 : 0);
+    },
+  });
+  const dispatcher = new SyscallDispatcher(table);
+  dispatcher.setMemoryAccessors(
+    (addressSpace, _address, length) => { readerSpace = addressSpace; return new Uint8Array(length); },
+    (addressSpace) => { writerSpace = addressSpace; return true; },
+  );
+  const result = await dispatcher.dispatch(9004, [], {
+    callingProcessId: 9, callingThreadId: 1, isKernelCaller: false, addressSpace: space,
+  });
+  assert.equal(result, 1n);
+  assert.equal(readerSpace, space);
+  assert.equal(writerSpace, space);
 });
 
 }
