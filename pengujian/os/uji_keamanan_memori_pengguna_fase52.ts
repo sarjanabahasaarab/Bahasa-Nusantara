@@ -10,6 +10,7 @@ import { PagePermissions } from '../../src/runtime/os/memory/types.js';
 import { SyscallDispatcher } from '../../src/runtime/os/syscall/syscall-dispatcher.js';
 import { SyscallTable } from '../../src/runtime/os/syscall/syscall-table.js';
 import { SyscallNumber } from '../../src/runtime/os/syscall/syscall-numbers.js';
+import { AddressSpaceMemoryAccessor, installAddressSpaceMemoryAccessor } from '../../src/runtime/os/memory/address-space-memory-accessor.js';
 
 let passed = 0;
 let failed = 0;
@@ -224,6 +225,112 @@ await asyncTest('52.25 accessor memori menerima AddressSpace proses yang tepat u
   assert.equal(result, 1n);
   assert.equal(readerSpace, space);
   assert.equal(writerSpace, space);
+});
+
+
+await asyncTest('52.26 accessor menyalin buffer lintas dua halaman melalui translasi fisik', async () => {
+  const space = new AddressSpace();
+  space.mapPage(0x00A0_0000n, 0x0160_0000n, PagePermissions.USER_READ_WRITE, true);
+  space.mapPage(0x00A0_1000n, 0x0160_1000n, PagePermissions.USER_READ_WRITE, true);
+  const accessor = new AddressSpaceMemoryAccessor(
+    (address, length) => {
+      const bytes = new Uint8Array(length);
+      for (let i = 0; i < length; i++) bytes[i] = address + BigInt(i) < 0x0160_1000n ? 0x41 : 0x42;
+      return bytes;
+    },
+    () => true,
+  );
+  const read = accessor.copyFromUser(space, 0x00A0_0FFEn, 4);
+  assert.ok(read);
+  assert.equal(new TextDecoder().decode(read), 'AABB');
+  const writes: bigint[] = [];
+  const writer = new AddressSpaceMemoryAccessor(
+    () => null,
+    (address) => { writes.push(address); return true; },
+  );
+  assert.equal(writer.copyToUser(space, 0x00A0_0FFEn, new TextEncoder().encode('WXYZ')), true);
+  assert.deepEqual(writes, [0x0160_0FFEn, 0x0160_1000n]);
+});
+
+await asyncTest('52.27 accessor menolak READ jika izin halaman tidak memuat READ', async () => {
+  const space = new AddressSpace();
+  space.mapPage(0x00B0_0000n, 0x0170_0000n, PagePermissions.WRITE, true);
+  const accessor = new AddressSpaceMemoryAccessor(() => new Uint8Array(8), () => true);
+  assert.equal(accessor.copyFromUser(space, 0x00B0_0000n, 8), null);
+});
+
+await asyncTest('52.28 accessor menolak WRITE ke halaman READ-only', async () => {
+  const space = new AddressSpace();
+  space.mapPage(0x00C0_0000n, 0x0180_0000n, PagePermissions.READ, true);
+  const accessor = new AddressSpaceMemoryAccessor(() => new Uint8Array(8), () => true);
+  assert.equal(accessor.copyToUser(space, 0x00C0_0000n, new Uint8Array(8)), false);
+});
+
+await asyncTest('52.29 accessor menolak rentang jika halaman kedua tidak terpetakan', async () => {
+  const space = new AddressSpace();
+  space.mapPage(0x00D0_0000n, 0x0190_0000n, PagePermissions.USER_READ_WRITE, true);
+  const accessor = new AddressSpaceMemoryAccessor(() => new Uint8Array(8), () => true);
+  assert.equal(accessor.copyFromUser(space, 0x00D0_0FF0n, 32), null);
+});
+
+
+await asyncTest('52.30 adapter memori terpasang pada dispatcher dan handler menerima byte hasil translasi', async () => {
+  const space = new AddressSpace();
+  space.mapPage(0x00E0_0000n, 0x01A0_0000n, PagePermissions.USER_READ_WRITE, true);
+  const table = new SyscallTable();
+  let observed = '';
+  table.register({
+    number: 9005, name: 'test_address_space_accessor_in_dispatcher', minArgs: 2,
+    handler: (args, ctx) => {
+      const data = ctx.userMemory?.copyFromUser(args[0], Number(args[1]));
+      observed = data ? new TextDecoder().decode(data) : '';
+      return BigInt(data?.length ?? -1);
+    },
+  });
+  const physicalBytes = new Map<bigint, number>();
+  new TextEncoder().encode('NUSA').forEach((value, index) => physicalBytes.set(0x01A0_0000n + BigInt(index), value));
+  const accessor = new AddressSpaceMemoryAccessor(
+    (physical, length) => {
+      const bytes = new Uint8Array(length);
+      for (let i = 0; i < length; i++) bytes[i] = physicalBytes.get(physical + BigInt(i)) ?? 0;
+      return bytes;
+    },
+    () => true,
+  );
+  const dispatcher = new SyscallDispatcher(table);
+  installAddressSpaceMemoryAccessor(dispatcher, accessor);
+  const result = await dispatcher.dispatch(9005, [0x00E0_0000n, 4n], {
+    callingProcessId: 10, callingThreadId: 1, isKernelCaller: false, addressSpace: space,
+  });
+  assert.equal(result, 4n);
+  assert.equal(observed, 'NUSA');
+});
+
+
+await asyncTest('52.31 accessor menolak pointer null-page dan rentang melewati batas user space', async () => {
+  const space = new AddressSpace();
+  space.mapPage(0x0000_0000n, 0x01B0_0000n, PagePermissions.USER_READ_WRITE, true);
+  space.mapPage(0x0000_0001_0000n, 0x01B0_1000n, PagePermissions.USER_READ_WRITE, true);
+  const accessor = new AddressSpaceMemoryAccessor(() => new Uint8Array(4), () => true);
+  assert.equal(accessor.copyFromUser(space, 0n, 4), null);
+  assert.equal(accessor.copyFromUser(space, 0x0000_7FFF_FFFF_FFFEn, 4), null);
+});
+
+await asyncTest('52.32 accessor menolak transfer lebih besar dari batas 16 MiB', async () => {
+  const space = new AddressSpace();
+  const accessor = new AddressSpaceMemoryAccessor(() => new Uint8Array(0), () => true);
+  assert.equal(accessor.copyFromUser(space, 0x0001_0000n, 16 * 1024 * 1024 + 1), null);
+  assert.equal(accessor.copyToUser(space, 0x0001_0000n, new Uint8Array(16 * 1024 * 1024 + 1)), false);
+});
+
+
+await asyncTest('52.33 accessor gagal tertutup jika backend fisik melempar exception', async () => {
+  const space = new AddressSpace();
+  space.mapPage(0x00F0_0000n, 0x01C0_0000n, PagePermissions.USER_READ_WRITE, true);
+  const readerThrows = new AddressSpaceMemoryAccessor(() => { throw new Error('physical read fault'); }, () => true);
+  const writerThrows = new AddressSpaceMemoryAccessor(() => null, () => { throw new Error('physical write fault'); });
+  assert.equal(readerThrows.copyFromUser(space, 0x00F0_0000n, 4), null);
+  assert.equal(writerThrows.copyToUser(space, 0x00F0_0000n, new Uint8Array(4)), false);
 });
 
 }
