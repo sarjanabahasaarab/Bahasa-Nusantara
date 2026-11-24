@@ -12,4 +12,6 @@ assert.ok(has([0x25,0x00,0xf0,0xff,0xff]),'reservation starts rounded down');
 assert.ok(has([0x05,0xff,0x0f,0x00,0x00]),'reservation ends rounded up');
 assert.ok(has([0x3b,0x56,0x04]),'uint64 high-word comparison exists');
 assert.ok(has([0x3b,0x06]),'uint64 low-word comparison exists');
+const marker=new TextEncoder().encode('NUSANTARA_MULTIBOOT2_RESERVATIONS_NORMALIZED_OK');
+assert.ok(code.some((_,i)=>marker.every((v,j)=>code[i+j]===v)),'normalization completion marker is embedded');
 console.log('Phase 80: native reservation page-rounding, uint64 sort and merge contract passed.');
