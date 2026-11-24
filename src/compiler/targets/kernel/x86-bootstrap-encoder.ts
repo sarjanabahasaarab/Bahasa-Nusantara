@@ -636,20 +636,30 @@ export class X86BootstrapEncoder {
     a.emit(0x39, 0xc2); // cmp edx, eax
     a.jbe('mb2_native_no_complete_pages');
     a.label('mb2_native_has_complete_pages');
-    // Preserve the Multiboot2 entry_size in ECX; the outer walker needs it
-    // after this descriptor has been classified.
-    a.emit(0x51); // push ecx
+    // Preserve the aligned 64-bit start/end and the outer entry_size while
+    // computing a bounded destination slot. EDI is scratch here; the MBI end
+    // pointer is restored from the Phase 73 context after the map walk.
+    a.emit(0x50); // push eax (start low)
+    a.emit(0x55); // push ebp (start high)
+    a.emit(0x52); // push edx (end low)
+    a.emit(0x53); // push ebx (end high)
+    a.emit(0x51); // push ecx (entry_size)
     a.emit(0xa1); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_COUNT_ADDRESS); // mov eax, [extent_count]
     a.emit(0x3d); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_CAPACITY); // cmp eax, capacity
     a.jae('panic32');
     a.emit(0x6b, 0xc0, X86_BOOTSTRAP_PAGE_EXTENT_SIZE); // imul eax, eax, 16
     a.emit(0x05); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_TABLE_BASE); // add eax, table base
-    a.emit(0x89, 0xc7); // mov edi, eax
-    a.emit(0x89, 0x07); // mov [edi], eax (start low) -- overwritten below from preserved start
-    // Reload aligned start/end from registers saved to scratch before using
-    // EAX as the table offset. EBP and EDX/EBX still carry the range; EAX start
-    // was saved immediately before calculating the slot.
-    a.emit(0x59); // pop ecx
+    a.emit(0x89, 0xc7); // mov edi, eax (destination slot)
+    a.emit(0x59); // pop ecx (entry_size)
+    a.emit(0x5b); // pop ebx (end high)
+    a.emit(0x5a); // pop edx (end low)
+    a.emit(0x5d); // pop ebp (start high)
+    a.emit(0x58); // pop eax (start low)
+    a.emit(0x89, 0x07); // mov [edi], eax
+    a.emit(0x89, 0x6f, 0x04); // mov [edi+4], ebp
+    a.emit(0x89, 0x57, 0x08); // mov [edi+8], edx
+    a.emit(0x89, 0x5f, 0x0c); // mov [edi+12], ebx
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_COUNT_ADDRESS); // extent_count++
     a.emit(0x29, 0xc2); // sub edx, eax (aligned byte span low)
     a.emit(0x19, 0xeb); // sbb ebx, ebp (aligned byte span high)
     a.emit(0x01, 0x15); a.emit32(X86_BOOTSTRAP_STATE_LAYOUT.alignedUsableBytesLow); // add aligned bytes low
