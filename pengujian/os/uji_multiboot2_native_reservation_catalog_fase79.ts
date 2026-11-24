@@ -47,7 +47,7 @@ const has = (needle: number[]) => code.some((_, i) =>
 const addr = (value: number) => [
   value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff,
 ];
-assert.ok(has([0xa3, ...addr(X86_BOOTSTRAP_RESERVATION_CATALOG_COUNT_ADDRESS)]),
+assert.ok(has([0xc7, 0x05, ...addr(X86_BOOTSTRAP_RESERVATION_CATALOG_COUNT_ADDRESS), 0x00, 0x00, 0x00, 0x00]),
   'Native bootstrap initializes the reservation catalog count');
 assert.ok(has([0xa1, ...addr(X86_BOOTSTRAP_RESERVATION_CATALOG_COUNT_ADDRESS)]),
   'Native parser reads catalog count before bounded appends');
