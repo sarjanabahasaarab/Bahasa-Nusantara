@@ -24,6 +24,20 @@ import { UserELFBuilder } from './user-elf-builder.js';
  * kernel-state region. Keep this layout synchronized with the boot reservation
  * manifest; these words are diagnostics/parser scratch, not PMM metadata.
  */
+/**
+ * Bounded native Multiboot2 usable-descriptor catalog in the otherwise-unused
+ * first kernel-state page. The page is already covered by the 0x218000-0x21c000
+ * bootstrap reservation; TSS/IDT/IDTR start at 0x219000.
+ *
+ * Each entry stores the six 32-bit words of the Multiboot2 24-byte base
+ * descriptor (base, length, type, reserved). This is a raw catalog, not yet
+ * a normalized allocator-ready extent list.
+ */
+export const X86_BOOTSTRAP_USABLE_DESCRIPTOR_COUNT_ADDRESS = 0x0021_8064;
+export const X86_BOOTSTRAP_USABLE_DESCRIPTOR_TABLE_BASE = 0x0021_8100;
+export const X86_BOOTSTRAP_USABLE_DESCRIPTOR_CAPACITY = 160;
+export const X86_BOOTSTRAP_USABLE_DESCRIPTOR_SIZE = 24;
+
 export const X86_BOOTSTRAP_STATE_LAYOUT = Object.freeze({
   usableDescriptorCount: 0x0021_8040,
   blockedDescriptorCount: 0x0021_8044,
@@ -486,6 +500,9 @@ export class X86BootstrapEncoder {
     a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_STATE_LAYOUT.rawUsableBytesHigh, 0);
     a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_STATE_LAYOUT.alignedUsableBytesLow, 0);
     a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_STATE_LAYOUT.alignedUsableBytesHigh, 0);
+    // Native catalog count starts empty. The fixed table is bounded to 160
+    // descriptors (3,840 bytes) inside the reserved 0x218000 state page.
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_USABLE_DESCRIPTOR_COUNT_ADDRESS, 0);
 
     a.label('mb2_native_tag_loop');
     a.emit(0x89, 0xf8); // mov eax, edi
@@ -568,6 +585,22 @@ export class X86BootstrapEncoder {
     // Overlaps and bootstrap reservations still require later normalization.
     a.emit(0x83, 0x7e, 0x10, 0x01); // cmp dword [esi+16], 1 (AVAILABLE)
     a.jne('mb2_native_memory_entry_blocked');
+    // Copy the raw 24-byte type-1 descriptor into the bounded native catalog.
+    // EDI is the outer MBI end pointer, saved in Phase 73 scratch and restored
+    // after this descriptor walk. Overflow is fail-closed: never truncate.
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_USABLE_DESCRIPTOR_COUNT_ADDRESS); // mov eax, [count]
+    a.emit(0x3d); a.emit32(X86_BOOTSTRAP_USABLE_DESCRIPTOR_CAPACITY); // cmp eax, capacity
+    a.jae('panic32');
+    a.emit(0x6b, 0xc0, X86_BOOTSTRAP_USABLE_DESCRIPTOR_SIZE); // imul eax, eax, 24
+    a.emit(0x05); a.emit32(X86_BOOTSTRAP_USABLE_DESCRIPTOR_TABLE_BASE); // add eax, table base
+    a.emit(0x89, 0xc7); // mov edi, eax (destination)
+    a.emit(0x8b, 0x06, 0x89, 0x07); // base low
+    a.emit(0x8b, 0x46, 0x04, 0x89, 0x47, 0x04); // base high
+    a.emit(0x8b, 0x46, 0x08, 0x89, 0x47, 0x08); // length low
+    a.emit(0x8b, 0x46, 0x0c, 0x89, 0x47, 0x0c); // length high
+    a.emit(0x8b, 0x46, 0x10, 0x89, 0x47, 0x10); // type
+    a.emit(0x8b, 0x46, 0x14, 0x89, 0x47, 0x14); // reserved
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_USABLE_DESCRIPTOR_COUNT_ADDRESS); // count++
     // Compute complete 4 KiB pages contained in this individual type-1
     // descriptor. This is an audit counter only: overlapping descriptors and
     // reserved ranges are intentionally not deduplicated/subtracted here.
