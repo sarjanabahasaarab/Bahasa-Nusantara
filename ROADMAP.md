@@ -208,7 +208,7 @@ Daftar suite pengujian terverifikasi:
   - **Phase 49 (v0.49.0)**: Nusantara OS: Bootable Kernel & Hardware Validation (🟢 Selesai — 23/23 uji integrasi lulus; eksekusi QEMU x86_64 nyata pada GitHub Actions run `45087120364` berhasil, termasuk 18 sentinel berurutan).
   - **Phase 50 (v0.50.0)**: Nusantara OS: Process Isolation & User Mode (🟢 Selesai — 29/29 skenario Quality Gate lulus; QEMU nyata GitHub Actions run `45087120441`, 18/18 sentinel PASS, exit code `1` sesuai kontrak, tanpa timeout/panic, checksum lulus).
 - **Garis Besar Master Roadmap 150 Phase (Phase 51–150):**
-  - **Phase 51–60**: Nusantara OS Shell, Window Manager, & Aplikasi Sistem Desktop (🔵 Direncanakan — dimulai setelah Gate 1 QEMU/CI 6 target diverifikasi).
+  - **Phase 51**: Kernel–Userland ABI (🟡 Implementasi diajukan melalui PR #68; isolated strict typecheck PASS dan 23/23 tes Phase 51 PASS; sertifikasi penuh menunggu perbaikan baseline typecheck Phase 23 dan gerbang regresi repositori).\n  - **Phase 52–60**: Init System, Nusantara Shell, Terminal/TTY, Graphics, Window Manager, Desktop UI Toolkit, System Applications, dan Desktop Environment (🔵 Direncanakan).
   - **Phase 61–75**: Penerjemah Sintaks Multi-Bahasa & Universal Language Bridge (Python, JS/TS, C/C++, Rust, Go, Java, Kotlin, Swift -> Nusantara & NIR).
   - **Phase 76–95**: Universal Runtime, Cross-Platform App Framework (Desktop, Web, Server) & Registri Paket Global.
   - **Phase 96–115**: Nusantara Studio IDE Lintas Platform, Visual Debugger & Toolchain Terpadu.
