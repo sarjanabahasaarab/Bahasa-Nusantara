@@ -10,6 +10,7 @@ import { PagePermissions } from '../../src/runtime/os/memory/types.js';
 import { SyscallDispatcher } from '../../src/runtime/os/syscall/syscall-dispatcher.js';
 import { SyscallTable } from '../../src/runtime/os/syscall/syscall-table.js';
 import { SyscallNumber } from '../../src/runtime/os/syscall/syscall-numbers.js';
+import { AddressSpaceMemoryAccessor } from '../../src/runtime/os/memory/address-space-memory-accessor.js';
 
 let passed = 0;
 let failed = 0;
