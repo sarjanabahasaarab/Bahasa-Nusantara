@@ -59,6 +59,11 @@ export const X86_BOOTSTRAP_RESERVATION_CATALOG_COUNT_ADDRESS = 0x0027_1000;
 export const X86_BOOTSTRAP_RESERVATION_CATALOG_TABLE_BASE = 0x0027_1100;
 export const X86_BOOTSTRAP_RESERVATION_CATALOG_CAPACITY = 160;
 export const X86_BOOTSTRAP_RESERVATION_CATALOG_RECORD_SIZE = 16;
+export const X86_BOOTSTRAP_RESERVATION_NORMALIZE_INDEX_ADDRESS = 0x0027_2000;
+export const X86_BOOTSTRAP_RESERVATION_SORT_INDEX_ADDRESS = 0x0027_2004;
+export const X86_BOOTSTRAP_RESERVATION_SORT_CURSOR_ADDRESS = 0x0027_2008;
+export const X86_BOOTSTRAP_RESERVATION_MERGE_READ_ADDRESS = 0x0027_200c;
+export const X86_BOOTSTRAP_RESERVATION_MERGE_WRITE_ADDRESS = 0x0027_2010;
 /** End-exclusive fixed bootstrap exclusions; dynamic entries are appended at boot. */
 export const X86_BOOTSTRAP_FIXED_RESERVATIONS = Object.freeze([
   { start: 0x00000000, end: 0x00200000, reason: 'low memory and kernel image' },
@@ -70,6 +75,7 @@ export const X86_BOOTSTRAP_FIXED_RESERVATIONS = Object.freeze([
   { start: 0x00260000, end: 0x00270000, reason: 'copied Multiboot2 information' },
   { start: 0x00270000, end: 0x00271000, reason: 'native extent workspace' },
   { start: 0x00271000, end: 0x00272000, reason: 'native reservation catalog workspace' },
+  { start: 0x00272000, end: 0x00273000, reason: 'native reservation normalization workspace' },
   { start: 0x002f0000, end: 0x002f4000, reason: 'early boot page tables' },
   { start: 0x00600000, end: 0x00601000, reason: 'process A user code' },
   { start: 0x00610000, end: 0x00611000, reason: 'process A user stack' },
@@ -1025,8 +1031,86 @@ export class X86BootstrapEncoder {
     a.emit(0x60); a.printLabel32('msg_diag_tag_bounds_fail', 'print_serial32'); a.emit(0x61);
     a.jmp('panic32');
 
-    a.label('mb2_native_parse_done');
-    // All fixed and tag-derived exclusions must be catalogued before boot continues.
+
+    // Phase 80: round exclusions to 4 KiB pages, sort by uint64 start, merge.
+    a.emit(0x60);
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_RESERVATION_NORMALIZE_INDEX_ADDRESS, 0);
+    a.label('phase80_round_loop');
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_RESERVATION_NORMALIZE_INDEX_ADDRESS);
+    a.emit(0x8b, 0x15); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_COUNT_ADDRESS);
+    a.emit(0x39, 0xd0); a.jae('phase80_round_done');
+    a.emit(0x89, 0xc1); a.emit(0x6b, 0xc9, 16);
+    a.emit(0x81, 0xc1); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_TABLE_BASE);
+    a.emit(0x89, 0xce);
+    a.emit(0x8b, 0x06); a.emit(0x25, 0x00, 0xf0, 0xff, 0xff); a.emit(0x89, 0x06);
+    a.emit(0x8b, 0x46, 0x08); a.emit(0x05, 0xff, 0x0f, 0x00, 0x00);
+    a.emit(0x8b, 0x56, 0x0c); a.emit(0x83, 0xd2, 0x00); a.jb('panic32');
+    a.emit(0x25, 0x00, 0xf0, 0xff, 0xff); a.emit(0x89, 0x46, 0x08); a.emit(0x89, 0x56, 0x0c);
+    a.emit(0x8b, 0x56, 0x04); a.emit(0x3b, 0x56, 0x0c); a.ja('panic32'); a.jb('phase80_round_next');
+    a.emit(0x8b, 0x06); a.emit(0x3b, 0x46, 0x08); a.jae('panic32');
+    a.label('phase80_round_next');
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_RESERVATION_NORMALIZE_INDEX_ADDRESS); a.jmp('phase80_round_loop');
+    a.label('phase80_round_done');
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_RESERVATION_SORT_INDEX_ADDRESS, 1);
+    a.label('phase80_sort_outer');
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_RESERVATION_SORT_INDEX_ADDRESS);
+    a.emit(0x8b, 0x15); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_COUNT_ADDRESS);
+    a.emit(0x39, 0xd0); a.jae('phase80_sort_done');
+    a.emit(0xa3); a.emit32(X86_BOOTSTRAP_RESERVATION_SORT_CURSOR_ADDRESS);
+    a.label('phase80_sort_inner');
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_RESERVATION_SORT_CURSOR_ADDRESS);
+    a.emit(0x85, 0xc0); a.je('phase80_sort_outer_next');
+    a.emit(0x89, 0xc1); a.emit(0x6b, 0xc9, 16);
+    a.emit(0x81, 0xc1); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_TABLE_BASE);
+    a.emit(0x89, 0xce); a.emit(0x8d, 0x79, 0xf0);
+    a.emit(0x8b, 0x57, 0x04); a.emit(0x3b, 0x56, 0x04);
+    a.ja('phase80_sort_swap'); a.jb('phase80_sort_outer_next');
+    a.emit(0x8b, 0x07); a.emit(0x3b, 0x06); a.jbe('phase80_sort_outer_next');
+    a.label('phase80_sort_swap');
+    a.emit(0xff, 0x76, 0x00); a.emit(0xff, 0x76, 0x04); a.emit(0xff, 0x76, 0x08); a.emit(0xff, 0x76, 0x0c);
+    a.emit(0x8b, 0x07, 0x89, 0x46, 0x00);
+    a.emit(0x8b, 0x47, 0x04, 0x89, 0x46, 0x04);
+    a.emit(0x8b, 0x47, 0x08, 0x89, 0x46, 0x08);
+    a.emit(0x8b, 0x47, 0x0c, 0x89, 0x46, 0x0c);
+    a.emit(0x58, 0x89, 0x47, 0x0c); a.emit(0x58, 0x89, 0x47, 0x08);
+    a.emit(0x58, 0x89, 0x47, 0x04); a.emit(0x58, 0x89, 0x07);
+    a.emit(0xff, 0x0d); a.emit32(X86_BOOTSTRAP_RESERVATION_SORT_CURSOR_ADDRESS); a.jmp('phase80_sort_inner');
+    a.label('phase80_sort_outer_next');
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_RESERVATION_SORT_INDEX_ADDRESS); a.jmp('phase80_sort_outer');
+    a.label('phase80_sort_done');
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_RESERVATION_MERGE_READ_ADDRESS, 0);
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_RESERVATION_MERGE_WRITE_ADDRESS, 0);
+    a.label('phase80_merge_loop');
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_RESERVATION_MERGE_READ_ADDRESS);
+    a.emit(0x8b, 0x15); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_COUNT_ADDRESS);
+    a.emit(0x39, 0xd0); a.jae('phase80_merge_done');
+    a.emit(0x89, 0xc1); a.emit(0x6b, 0xc9, 16);
+    a.emit(0x81, 0xc1); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_TABLE_BASE); a.emit(0x89, 0xce);
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_RESERVATION_MERGE_WRITE_ADDRESS);
+    a.emit(0x85, 0xc0); a.je('phase80_merge_append');
+    a.emit(0x48); a.emit(0x6b, 0xc0, 16); a.emit(0x05); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_TABLE_BASE); a.emit(0x89, 0xc7);
+    a.emit(0x8b, 0x56, 0x04); a.emit(0x3b, 0x57, 0x0c);
+    a.ja('phase80_merge_append'); a.jb('phase80_merge_overlap');
+    a.emit(0x8b, 0x06); a.emit(0x3b, 0x47, 0x08); a.ja('phase80_merge_append');
+    a.label('phase80_merge_overlap');
+    a.emit(0x8b, 0x56, 0x0c); a.emit(0x3b, 0x57, 0x0c);
+    a.ja('phase80_merge_update'); a.jb('phase80_merge_advance');
+    a.emit(0x8b, 0x56, 0x08); a.emit(0x3b, 0x47, 0x08); a.jbe('phase80_merge_advance');
+    a.label('phase80_merge_update');
+    a.emit(0x8b, 0x46, 0x08, 0x89, 0x47, 0x08); a.emit(0x8b, 0x46, 0x0c, 0x89, 0x47, 0x0c); a.jmp('phase80_merge_advance');
+    a.label('phase80_merge_append');
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_RESERVATION_MERGE_WRITE_ADDRESS);
+    a.emit(0x6b, 0xc0, 16); a.emit(0x05); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_TABLE_BASE); a.emit(0x89, 0xc7);
+    a.emit(0x8b, 0x06, 0x89, 0x07); a.emit(0x8b, 0x46, 0x04, 0x89, 0x47, 0x04);
+    a.emit(0x8b, 0x46, 0x08, 0x89, 0x47, 0x08); a.emit(0x8b, 0x46, 0x0c, 0x89, 0x47, 0x0c);
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_RESERVATION_MERGE_WRITE_ADDRESS);
+    a.label('phase80_merge_advance');
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_RESERVATION_MERGE_READ_ADDRESS); a.jmp('phase80_merge_loop');
+    a.label('phase80_merge_done');
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_RESERVATION_MERGE_WRITE_ADDRESS);
+    a.emit(0xa3); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_COUNT_ADDRESS);
+    a.emit(0x61);
+    a.emit(0x60); a.printLabel32('msg_mb2_reservations_normalized', 'print_serial32'); a.emit(0x61);
     a.emit(0x60); a.printLabel32('msg_mb2_reservations_catalogued', 'print_serial32'); a.emit(0x61);
     // Restore the copied-MBI base expected by the existing boot continuation.
     a.movRegImm32(Reg64.RDI, this.MULTIBOOT2_COPY_BUFFER_ADDR);
@@ -1853,6 +1937,7 @@ export class X86BootstrapEncoder {
     a.label('msg_mb2_extents_sorted');  a.emitCString('NUSANTARA_MULTIBOOT2_EXTENTS_SORTED_OK\r\n');
     a.label('msg_mb2_extents_merged');  a.emitCString('NUSANTARA_MULTIBOOT2_EXTENTS_MERGED_OK\r\n');
     a.label('msg_mb2_reservations_catalogued'); a.emitCString('NUSANTARA_MULTIBOOT2_RESERVATIONS_CATALOGUED_OK\r\n');
+    a.label('msg_mb2_reservations_normalized'); a.emitCString('NUSANTARA_MULTIBOOT2_RESERVATIONS_NORMALIZED_OK\\r\\n');
     a.label('msg_diag_mmap_begin');      a.emitCString('NUSANTARA_DIAG_MMAP_BEGIN\r\n');
     a.label('msg_diag_mmap_done');       a.emitCString('NUSANTARA_DIAG_MMAP_DONE\r\n');
     a.label('msg_diag_module_begin');    a.emitCString('NUSANTARA_DIAG_MODULE_BEGIN\r\n');
