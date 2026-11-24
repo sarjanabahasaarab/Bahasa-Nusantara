@@ -31,7 +31,9 @@ export const BOOTSTRAP_CPU_LOCAL_RESERVATIONS: readonly PhysicalMemoryReservatio
 
 /**
  * Lowest physical address the bootstrap PMM may consider for allocation.
- * The kernel ELF and all low-memory boot artifacts live below this boundary.
+ * The fixed kernel image/low bootstrap area is excluded below this boundary.
+ * Dynamic Multiboot2 information, modules, framebuffer and DMA buffers must
+ * still be discovered and reserved separately by the native PMM initializer.
  */
 export const BOOTSTRAP_MINIMUM_ALLOCATABLE_ADDRESS = 0x200000n;
 
