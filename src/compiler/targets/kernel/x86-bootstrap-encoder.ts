@@ -495,10 +495,10 @@ export class X86BootstrapEncoder {
     a.jmp('mb2_native_advance');
 
     a.label('mb2_native_memory_map');
-    // Preserve the active tag pointer while writing a diagnostic checkpoint.
-    a.emit(0x56); // push esi
+    // Preserve every live tag-parser register across serial output.
+    a.emit(0x60); // pushad
     a.printLabel32('msg_diag_mmap_begin', 'print_serial32');
-    a.emit(0x5e); // pop esi
+    a.emit(0x61); // popad
     a.emit(0x83, 0xf9, 0x10); // cmp ecx, 16
     a.jb('panic32');
     a.emit(0x83, 0x7e, 0x0c, 0x00); // entry_version must be zero
@@ -592,16 +592,16 @@ export class X86BootstrapEncoder {
     a.emit(0x5e); // pop esi (restore tag pointer)
     a.emit(0x5d); // pop ebp (restore original Multiboot2 magic)
     a.emit(0x59); // pop ecx (restore tag size)
-    a.emit(0x56); // push esi while printing the completion checkpoint
+    a.emit(0x60); // pushad while printing the completion checkpoint
     a.printLabel32('msg_diag_mmap_done', 'print_serial32');
-    a.emit(0x5e); // pop esi
+    a.emit(0x61); // popad
     a.emit(0xbb, 0x01, 0x00, 0x00, 0x00); // mov ebx, 1 (validated memory map present)
     // Phase 69: preserve all live registers around serial-only checkpoints.
     a.emit(0x60); a.printLabel32('msg_diag_after_mmap_restore', 'print_serial32'); a.emit(0x61);
     a.jmp('mb2_native_advance');
 
     a.label('mb2_native_module');
-    a.emit(0x56); a.printLabel32('msg_diag_module_begin', 'print_serial32'); a.emit(0x5e);
+    a.emit(0x60); a.printLabel32('msg_diag_module_begin', 'print_serial32'); a.emit(0x61);
     a.emit(0x83, 0xf9, 0x11); // cmp ecx, 17
     a.jb('panic32');
     a.emit(0x8b, 0x46, 0x08); // mov eax, [esi+8] module start
@@ -615,11 +615,11 @@ export class X86BootstrapEncoder {
     a.emit(0xf2, 0xae); // repne scasb (NUL required within tag)
     a.jne('panic32');
     a.emit(0x59, 0x5f); // pop ecx; pop edi
-    a.emit(0x56); a.printLabel32('msg_diag_module_done', 'print_serial32'); a.emit(0x5e);
+    a.emit(0x60); a.printLabel32('msg_diag_module_done', 'print_serial32'); a.emit(0x61);
     a.jmp('mb2_native_advance');
 
     a.label('mb2_native_framebuffer');
-    a.emit(0x56); a.printLabel32('msg_diag_fb_begin', 'print_serial32'); a.emit(0x5e);
+    a.emit(0x60); a.printLabel32('msg_diag_fb_begin', 'print_serial32'); a.emit(0x61);
     a.emit(0x83, 0xf9, 0x20); // cmp ecx, 32
     a.jb('panic32');
     a.emit(0x66, 0x83, 0x7e, 0x1e, 0x00); // reserved word must be zero
@@ -636,7 +636,7 @@ export class X86BootstrapEncoder {
     a.je('panic32');
     a.emit(0x80, 0x7e, 0x1c, 0x00); // bits_per_pixel nonzero
     a.je('panic32');
-    a.emit(0x56); a.printLabel32('msg_diag_fb_done', 'print_serial32'); a.emit(0x5e);
+    a.emit(0x60); a.printLabel32('msg_diag_fb_done', 'print_serial32'); a.emit(0x61);
     a.jmp('mb2_native_advance');
 
     a.label('mb2_native_end');
@@ -647,7 +647,7 @@ export class X86BootstrapEncoder {
     a.jne('panic32');
     a.emit(0x85, 0xdb); // memory-map tag required
     a.je('panic32');
-    a.emit(0x56); a.printLabel32('msg_diag_end_tag_ok', 'print_serial32'); a.emit(0x5e);
+    a.emit(0x60); a.printLabel32('msg_diag_end_tag_ok', 'print_serial32'); a.emit(0x61);
     a.jmp('mb2_native_parse_done');
 
     a.label('mb2_native_advance');
