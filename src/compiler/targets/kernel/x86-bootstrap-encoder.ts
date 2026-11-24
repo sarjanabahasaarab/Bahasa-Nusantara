@@ -389,6 +389,8 @@ export class X86BootstrapEncoder {
     a.emit(0x66, 0xba, 0xfb, 0x03, 0xb0, 0x03, 0xee); // outb(0x3FB, 0x03) 8N1
     a.emit(0x66, 0xba, 0xfa, 0x03, 0xb0, 0xc7, 0xee); // outb(0x3FA, 0xC7) FIFO
     a.emit(0x66, 0xba, 0xfc, 0x03, 0xb0, 0x0b, 0xee); // outb(0x3FC, 0x0B) MCR RTS/DTR
+    // Emit the first boot sentinel before parsing MBI so early failures are diagnosable.
+    a.printLabel32('msg_boot_start', 'print_serial32');
 
     // Verifikasi Multiboot2 magic tanpa memakai stack yang belum aman.
     a.emit(0x81, 0xfd, 0x89, 0x62, 0xd7, 0x36); // cmp ebp, 0x36D76289
@@ -488,6 +490,10 @@ export class X86BootstrapEncoder {
     a.jmp('mb2_native_advance');
 
     a.label('mb2_native_memory_map');
+    // Preserve the active tag pointer while writing a diagnostic checkpoint.
+    a.emit(0x56); // push esi
+    a.printLabel32('msg_diag_mmap_begin', 'print_serial32');
+    a.emit(0x5e); // pop esi
     a.emit(0x83, 0xf9, 0x10); // cmp ecx, 16
     a.jb('panic32');
     a.emit(0x83, 0x7e, 0x0c, 0x00); // entry_version must be zero
@@ -512,6 +518,7 @@ export class X86BootstrapEncoder {
     // nonzero length, reserved dword zero, and checked uint64 base + length.
     // Preserve tag size and tag pointer; ECX=entry_size, EDX=entry count.
     a.emit(0x56); // push esi (tag pointer)
+    a.emit(0x55); // push ebp (preserve Multiboot2 magic for long-mode state)
     a.emit(0x89, 0xc2); // mov edx, eax (entry count)
     a.emit(0x8d, 0x76, 0x10); // lea esi, [esi+16] (first descriptor)
     a.label('mb2_native_memory_entry_loop');
@@ -576,7 +583,11 @@ export class X86BootstrapEncoder {
     a.jmp('mb2_native_memory_entry_loop');
     a.label('mb2_native_memory_entries_done');
     a.emit(0x5e); // pop esi (restore tag pointer)
+    a.emit(0x5d); // pop ebp (restore original Multiboot2 magic)
     a.emit(0x59); // pop ecx (restore tag size)
+    a.emit(0x56); // push esi while printing the completion checkpoint
+    a.printLabel32('msg_diag_mmap_done', 'print_serial32');
+    a.emit(0x5e); // pop esi
     a.emit(0xbb, 0x01, 0x00, 0x00, 0x00); // mov ebx, 1 (validated memory map present)
     a.jmp('mb2_native_advance');
 
@@ -639,7 +650,6 @@ export class X86BootstrapEncoder {
     a.label('mb2_native_parse_done');
     // Restore the copied-MBI base expected by the existing boot continuation.
     a.movRegImm32(Reg64.RDI, this.MULTIBOOT2_COPY_BUFFER_ADDR);
-    a.printLabel32('msg_boot_start', 'print_serial32');
     a.printLabel32('msg_mb2_ok', 'print_serial32');
     a.printLabel32('msg_mb2_copy_ok', 'print_serial32');
     a.printLabel32('msg_mb2_parse_ok', 'print_serial32');
@@ -1460,6 +1470,8 @@ export class X86BootstrapEncoder {
     a.label('msg_mb2_ranges_ok');        a.emitCString('NUSANTARA_MULTIBOOT2_RANGES_OK\r\n');
     a.label('msg_mb2_classify_ok');      a.emitCString('NUSANTARA_MULTIBOOT2_CLASSIFY_OK\r\n');
     a.label('msg_mb2_page_audit_ok');    a.emitCString('NUSANTARA_MULTIBOOT2_PAGE_AUDIT_OK\r\n');
+    a.label('msg_diag_mmap_begin');      a.emitCString('NUSANTARA_DIAG_MMAP_BEGIN\r\n');
+    a.label('msg_diag_mmap_done');       a.emitCString('NUSANTARA_DIAG_MMAP_DONE\r\n');
     a.label('msg_cpu_ok');               a.emitCString(this.STAGE_3_LONG_MODE);
     a.label('msg_paging_ok');            a.emitCString(this.STAGE_4_PAGING);
     a.label('msg_gdt_ok');               a.emitCString(this.STAGE_5_GDT64);
