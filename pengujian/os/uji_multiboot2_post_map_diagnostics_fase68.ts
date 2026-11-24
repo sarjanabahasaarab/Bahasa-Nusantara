@@ -16,12 +16,12 @@ function has(value: string): boolean {
   return false;
 }
 const markers = [
-  'NUSANTARA_DIAG_MODULE_BEGIN\\r\\n',
-  'NUSANTARA_DIAG_MODULE_DONE\\r\\n',
-  'NUSANTARA_DIAG_FRAMEBUFFER_BEGIN\\r\\n',
-  'NUSANTARA_DIAG_FRAMEBUFFER_DONE\\r\\n',
-  'NUSANTARA_DIAG_END_TAG_OK\\r\\n',
-  'NUSANTARA_DIAG_TAG_ADVANCE_OK\\r\\n',
+  'NUSANTARA_DIAG_MODULE_BEGIN',
+  'NUSANTARA_DIAG_MODULE_DONE',
+  'NUSANTARA_DIAG_FRAMEBUFFER_BEGIN',
+  'NUSANTARA_DIAG_FRAMEBUFFER_DONE',
+  'NUSANTARA_DIAG_END_TAG_OK',
+  'NUSANTARA_DIAG_TAG_ADVANCE_OK',
 ];
 for (const marker of markers) assert.ok(has(marker), 'Missing checkpoint: ' + marker.trim());
 console.log('HASIL PHASE 68.1–68.6: 6 LULUS, 0 GAGAL');
