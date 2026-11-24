@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * CLI Entrypoint untuk Validasi Strict 18 Sentinel QEMU (Phase 23.10)
+ * CLI Entrypoint untuk Validasi Strict 19 Sentinel QEMU (Phase 23.10)
  */
 
 import * as fs from 'fs';
