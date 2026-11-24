@@ -561,6 +561,8 @@ export class X86BootstrapEncoder {
     a.jmp('mb2_native_tag_loop');
 
     a.label('mb2_native_parse_done');
+    // Restore the copied-MBI base expected by the existing boot continuation.
+    a.movRegImm32(Reg64.RDI, this.MULTIBOOT2_COPY_BUFFER_ADDR);
     a.printLabel32('msg_boot_start', 'print_serial32');
     a.printLabel32('msg_mb2_ok', 'print_serial32');
     a.printLabel32('msg_mb2_copy_ok', 'print_serial32');
