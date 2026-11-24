@@ -454,6 +454,12 @@ export class X86BootstrapEncoder {
     a.movRegImm32(Reg64.RDI, this.MULTIBOOT2_COPY_BUFFER_ADDR);
     a.emit(0x01, 0xc7); // add edi, eax (exclusive end of copied MBI)
     a.emit(0x31, 0xdb); // xor ebx, ebx (memory-map seen flag)
+    // Bootstrap-only memory-map accounting in the reserved kernel state page.
+    // These diagnostics are not allocator metadata.
+    a.storeMem32AbsImm32Mode32(0x0021_8040, 0);
+    a.storeMem32AbsImm32Mode32(0x0021_8044, 0);
+    a.storeMem32AbsImm32Mode32(0x0021_8048, 0);
+    a.storeMem32AbsImm32Mode32(0x0021_804c, 0);
 
     a.label('mb2_native_tag_loop');
     a.emit(0x89, 0xf8); // mov eax, edi
@@ -520,6 +526,20 @@ export class X86BootstrapEncoder {
     a.emit(0x8b, 0x46, 0x04); // mov eax, [esi+4] (base high; preserves CF)
     a.emit(0x13, 0x46, 0x0c); // adc eax, [esi+12] (length high)
     a.jb('panic32'); // carry means uint64 base + length overflow
+    // Type 1 is firmware-reported available RAM. Other types are blocked.
+    // Overlaps and bootstrap reservations still require later normalization.
+    a.emit(0x83, 0x7e, 0x10, 0x01); // cmp dword [esi+16], 1 (AVAILABLE)
+    a.jne('mb2_native_memory_entry_blocked');
+    a.emit(0xff, 0x05); a.emit32(0x0021_8040); // inc usable descriptor count
+    a.emit(0x8b, 0x46, 0x08); // mov eax, [esi+8] (length low)
+    a.emit(0x8b, 0x6e, 0x0c); // mov ebp, [esi+12] (length high)
+    a.emit(0x01, 0x05); a.emit32(0x0021_8048); // add raw usable bytes low
+    a.emit(0x11, 0x2d); a.emit32(0x0021_804c); // adc raw usable bytes high
+    a.jb('panic32'); // reject overflow in diagnostic 64-bit sum
+    a.jmp('mb2_native_memory_entry_classified');
+    a.label('mb2_native_memory_entry_blocked');
+    a.emit(0xff, 0x05); a.emit32(0x0021_8044); // inc blocked descriptor count
+    a.label('mb2_native_memory_entry_classified');
     a.emit(0x01, 0xce); // add esi, ecx (advance by entry_size)
     a.jb('panic32'); // reject 32-bit descriptor pointer wrap
     a.emit(0x4a); // dec edx
