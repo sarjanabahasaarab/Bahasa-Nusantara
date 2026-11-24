@@ -15,7 +15,7 @@
 | Phase | Target hasil |
 |---:|---|
 | 51 | Kernel–Userland ABI v1: kontrak ABI, syscall manifest, validasi argumen, versi ABI. Implementasi helper yang sudah ada harus disambungkan ke jalur CPU nyata. |
-| 52 | Entri dan keluar syscall x86-64: assembly stub, konfigurasi MSR yang diperlukan, penyimpanan/pemulihan register, validasi privilege transition. |
+| 52 | Generalisasi jalur syscall x86-64 yang sudah terbukti pada bootstrap: stub ABI reusable, penyimpanan state per-thread/per-CPU, validasi privilege transition, dispatcher syscall bersama dan copyin/copyout berbasis page table. |
 | 53 | Init process dan urutan boot layanan: kernel memulai proses pertama, kegagalan init ditangani secara aman. |
 | 54 | Interrupt controller dan timer yang dapat dipilih: PIC/APIC, timer, interrupt routing, pengujian interrupt nyata pada QEMU. |
 | 55 | Context switch dan scheduler: pergantian proses/thread nyata, preemption terukur, uji starvation dan fault. |

@@ -89,11 +89,13 @@ export class UserPointerSecurity {
     isWrite: boolean = false,
     addressSpace?: AddressSpace
   ): { valid: boolean; error: UserSecurityError; message: string } {
-    if (length < 0) {
+    // Panjang harus berupa integer aman agar konversi Number -> BigInt tidak
+    // melempar dan tidak membuka celah pada nilai NaN/Infinity/fractional/unsafe.
+    if (!Number.isSafeInteger(length) || length < 0) {
       return {
         valid: false,
         error: UserSecurityError.BUFFER_OVERFLOW,
-        message: 'Ukuran buffer tidak boleh negatif',
+        message: 'Ukuran buffer harus berupa integer aman non-negatif',
       };
     }
 
@@ -156,6 +158,13 @@ export class UserPointerSecurity {
     addressSpace?: AddressSpace,
     memoryReader?: (addr: bigint, len: number) => Uint8Array | null
   ): { valid: boolean; length: number; str?: string; error: UserSecurityError } {
+    if (!Number.isSafeInteger(maxLen) || maxLen <= 0) {
+      return { valid: false, length: 0, error: UserSecurityError.BUFFER_OVERFLOW };
+    }
+    if (maxLen > this.MAX_USER_STRING_BYTES) {
+      return { valid: false, length: 0, error: UserSecurityError.BUFFER_TOO_LARGE };
+    }
+
     const check = this.validateUserAddress(ptr, false, addressSpace);
     if (!check.valid) {
       return { valid: false, length: 0, error: check.error };
@@ -198,6 +207,10 @@ export class UserPointerSecurity {
       return false;
     }
 
+    if (destKernelBuffer.length < length) {
+      return false;
+    }
+
     if (memoryReader) {
       const data = memoryReader(srcUserPtr, length);
       if (!data || data.length < length) {
@@ -207,7 +220,8 @@ export class UserPointerSecurity {
       return true;
     }
 
-    return true;
+    // Tanpa reader tidak ada data yang benar-benar disalin; jangan laporkan sukses.
+    return false;
   }
 
   /**
@@ -225,10 +239,15 @@ export class UserPointerSecurity {
       return false;
     }
 
+    if (srcKernelBuffer.length < length) {
+      return false;
+    }
+
     if (memoryWriter) {
       return memoryWriter(destUserPtr, srcKernelBuffer.subarray(0, length));
     }
 
-    return true;
+    // Tanpa writer tidak ada data yang benar-benar disalin; jangan laporkan sukses.
+    return false;
   }
 }
