@@ -100,6 +100,26 @@ uji('1.1 Multiboot2 Header Builder membentuk magic, arsitektur, dan checksum yan
   samaDengan(sum, 0, 'Jumlah (magic + arch + length + checksum) harus sama dengan 0');
 });
 
+uji('1.1b Information request meminta memory map sebagai informasi wajib dengan ukuran tag mentah', () => {
+  const header = new Multiboot2HeaderBuilder().addMemoryMapRequestTag(true).build();
+  const view = new DataView(header.buffer, header.byteOffset, header.byteLength);
+  samaDengan(view.getUint16(16, true), 1, 'Tag harus bertipe INFORMATION_REQUEST');
+  samaDengan(view.getUint16(18, true), 1, 'Memory map harus diminta sebagai informasi wajib');
+  samaDengan(view.getUint32(20, true), 12, 'Ukuran tag harus 12 byte sebelum padding');
+  samaDengan(view.getUint32(24, true), 6, 'Tipe informasi yang diminta harus memory map (6)');
+  samaDengan(view.getUint16(32, true), 0, 'End tag harus dimulai setelah padding 8-byte');
+});
+
+uji('1.1c KernelELFBuilder default menyertakan permintaan memory map wajib', () => {
+  const elf = new KernelELFBuilder({ kernelName: 'uji-memory-map-request' }).build();
+  const view = new DataView(elf.buffer, elf.byteOffset, elf.byteLength);
+  const headerOffset = 0x1000;
+  samaDengan(view.getUint16(headerOffset + 16, true), 1, 'Kernel harus menyertakan INFORMATION_REQUEST');
+  samaDengan(view.getUint16(headerOffset + 18, true), 1, 'Kernel harus meminta memory map secara wajib');
+  samaDengan(view.getUint32(headerOffset + 20, true), 12, 'Ukuran tag information request harus 12 byte');
+  samaDengan(view.getUint32(headerOffset + 24, true), 6, 'Kernel harus meminta tag memory map');
+});
+
 uji('1.2 Multiboot2Validator mendeteksi header valid di dalam biner', () => {
   const elf = new KernelELFBuilder({ kernelName: 'uji-os' }).build();
   const hasil = Multiboot2Validator.inspect(elf);
