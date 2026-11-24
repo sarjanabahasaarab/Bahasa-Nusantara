@@ -10,6 +10,8 @@
 export const MULTIBOOT2_INFO_TAG = {
   END: 0,
   MEMORY_MAP: 6,
+  MODULE: 3,
+  FRAMEBUFFER: 8,
 } as const;
 
 export type Multiboot2MemoryKind =
@@ -35,10 +37,29 @@ export interface Multiboot2InfoTag {
   offset: number;
 }
 
+export interface Multiboot2Module {
+  start: bigint;
+  endExclusive: bigint;
+  commandLine: string;
+}
+
+export interface Multiboot2Framebuffer {
+  address: bigint;
+  pitch: number;
+  width: number;
+  height: number;
+  bitsPerPixel: number;
+  framebufferType: number;
+  length: bigint;
+  endExclusive: bigint;
+}
+
 export interface Multiboot2BootInformation {
   totalSize: number;
   tags: Multiboot2InfoTag[];
   memoryMap: Multiboot2MemoryRegion[];
+  modules: Multiboot2Module[];
+  framebuffers: Multiboot2Framebuffer[];
 }
 
 const UINT64_LIMIT = 1n << 64n;
@@ -81,6 +102,8 @@ export class Multiboot2InfoParser {
 
     const tags: Multiboot2InfoTag[] = [];
     const memoryMap: Multiboot2MemoryRegion[] = [];
+    const modules: Multiboot2Module[] = [];
+    const framebuffers: Multiboot2Framebuffer[] = [];
     let offset = 8;
     let foundEndTag = false;
 
@@ -105,6 +128,39 @@ export class Multiboot2InfoParser {
         foundEndTag = true;
         offset += size;
         break;
+      }
+
+
+      if (type === MULTIBOOT2_INFO_TAG.MODULE) {
+        if (size < 17) throw new RangeError('Module tag Multiboot2 terlalu pendek.');
+        const start = BigInt(view.getUint32(offset + 8, true));
+        const endExclusive = BigInt(view.getUint32(offset + 12, true));
+        if (endExclusive <= start) throw new RangeError('Rentang module Multiboot2 harus positif dan berurutan.');
+        const commandBytes = bytes.subarray(offset + 16, offset + size);
+        const terminator = commandBytes.indexOf(0);
+        if (terminator < 0) throw new RangeError('Command line module Multiboot2 tidak diakhiri NUL.');
+        const commandLine = new TextDecoder('utf-8', { fatal: true }).decode(commandBytes.subarray(0, terminator));
+        modules.push({ start, endExclusive, commandLine });
+      }
+
+      if (type === MULTIBOOT2_INFO_TAG.FRAMEBUFFER) {
+        if (size < 32) throw new RangeError('Framebuffer tag Multiboot2 harus minimal 32 byte.');
+        const address = view.getBigUint64(offset + 8, true);
+        const pitch = view.getUint32(offset + 16, true);
+        const width = view.getUint32(offset + 20, true);
+        const height = view.getUint32(offset + 24, true);
+        const bitsPerPixel = view.getUint8(offset + 28);
+        const framebufferType = view.getUint8(offset + 29);
+        const reserved = view.getUint16(offset + 30, true);
+        const minimumPitch = Math.ceil(width * bitsPerPixel / 8);
+        const length = BigInt(pitch) * BigInt(height);
+        const endExclusive = address + length;
+        if (reserved !== 0 || address === 0n || pitch === 0 || width === 0 ||
+            height === 0 || bitsPerPixel === 0 || pitch < minimumPitch ||
+            length === 0n || endExclusive <= address || endExclusive > UINT64_LIMIT) {
+          throw new RangeError('Rentang atau metadata framebuffer Multiboot2 tidak valid.');
+        }
+        framebuffers.push({ address, pitch, width, height, bitsPerPixel, framebufferType, length, endExclusive });
       }
 
       if (type === MULTIBOOT2_INFO_TAG.MEMORY_MAP) {
@@ -162,6 +218,59 @@ export class Multiboot2InfoParser {
       throw new RangeError('End tag Multiboot2 tidak ditemukan pada akhir struktur.');
     }
 
-    return { totalSize, tags, memoryMap };
+    return { totalSize, tags, memoryMap, modules, framebuffers };
   }
+}
+
+
+/**
+ * Convert runtime bootloader-owned physical ranges into PMM exclusions.
+ * Pure model helper only: the native kernel must safely copy MBI bytes and
+ * reserve these ranges before making any firmware RAM available to allocation.
+ */
+export function createMultiboot2BootReservations(
+  info: Multiboot2BootInformation,
+  infoPhysicalAddress: bigint,
+): Array<{ base: bigint; length: bigint; reason: string }> {
+  if (!info || !Number.isSafeInteger(info.totalSize) || info.totalSize < 16 ||
+      typeof infoPhysicalAddress !== 'bigint' || infoPhysicalAddress < 0n ||
+      infoPhysicalAddress % 8n !== 0n) {
+    throw new RangeError('Alamat fisik atau metadata Multiboot2 tidak valid.');
+  }
+  const limit = 1n << 64n;
+  const infoEnd = infoPhysicalAddress + BigInt(info.totalSize);
+  if (infoEnd <= infoPhysicalAddress || infoEnd > limit) {
+    throw new RangeError('Rentang blok informasi Multiboot2 melampaui uint64.');
+  }
+
+  const reservations: Array<{ base: bigint; length: bigint; reason: string }> = [{
+    base: infoPhysicalAddress,
+    length: BigInt(info.totalSize),
+    reason: 'Multiboot2 information structure',
+  }];
+
+  for (const [index, module] of info.modules.entries()) {
+    if (module.start < 0n || module.endExclusive <= module.start || module.endExclusive > limit) {
+      throw new RangeError('Rentang module Multiboot2 #' + index + ' tidak valid.');
+    }
+    reservations.push({
+      base: module.start,
+      length: module.endExclusive - module.start,
+      reason: 'Multiboot2 module #' + index + ': ' + module.commandLine,
+    });
+  }
+
+  for (const [index, framebuffer] of info.framebuffers.entries()) {
+    if (framebuffer.address < 0n || framebuffer.length <= 0n ||
+        framebuffer.endExclusive !== framebuffer.address + framebuffer.length ||
+        framebuffer.endExclusive > limit) {
+      throw new RangeError('Rentang framebuffer Multiboot2 #' + index + ' tidak valid.');
+    }
+    reservations.push({
+      base: framebuffer.address,
+      length: framebuffer.length,
+      reason: 'Multiboot2 framebuffer #' + index,
+    });
+  }
+  return reservations;
 }
