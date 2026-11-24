@@ -242,7 +242,14 @@ export class AddressSpace {
       return { allowed: false, faultReason: 'SUPERVISOR_PRIVILEGE_VIOLATION' };
     }
 
-    // 3. Write Protection: Menulis ke halaman Read-Only
+    // 3. Read Protection: halaman tanpa izin READ tidak boleh dibaca.
+    // x86 tidak memiliki bit "no-read" umum untuk halaman present, tetapi
+    // model permission NUSANTARA tetap harus menghormati kontrak READ.
+    if (operation === 'READ' && (entry.permissions & PagePermissions.READ) === 0) {
+      return { allowed: false, faultReason: 'READ_PROTECTION_VIOLATION' };
+    }
+
+    // 4. Write Protection: Menulis ke halaman Read-Only
     if (operation === 'WRITE' && !entry.writable) {
       return { allowed: false, faultReason: 'WRITE_PROTECTION_VIOLATION' };
     }
