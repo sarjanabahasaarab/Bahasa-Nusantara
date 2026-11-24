@@ -74,5 +74,25 @@ test('52.12 copy_to_user gagal tertutup jika writer belum dipasang', () => {
   assert.equal(ok, false);
 });
 
+test('52.13 string gagal tertutup jika reader belum dipasang', () => {
+  const r = UserPointerSecurity.validateUserString(0x10000n, 16);
+  assert.equal(r.valid, false);
+  assert.equal(r.error, UserSecurityError.UNMAPPED_MEMORY);
+});
+
+test('52.14 string menolak hasil pembacaan yang lebih pendek dari batas', () => {
+  const r = UserPointerSecurity.validateUserString(0x10000n, 4, undefined, () => new Uint8Array([65, 0]));
+  assert.equal(r.valid, false);
+  assert.equal(r.error, UserSecurityError.UNMAPPED_MEMORY);
+});
+
+test('52.15 string menerima data yang benar-benar dibaca dan null-terminated', () => {
+  const r = UserPointerSecurity.validateUserString(0x10000n, 4, undefined, () => new Uint8Array([65, 66, 0, 0]));
+  assert.equal(r.valid, true);
+  assert.equal(r.length, 2);
+  assert.equal(r.str, 'AB');
+  assert.equal(r.error, UserSecurityError.OK);
+});
+
 console.log('Phase 52: LULUS=' + passed + ', GAGAL=' + failed + ', TOTAL=' + (passed + failed));
 if (failed > 0) process.exitCode = 1;
