@@ -1110,6 +1110,7 @@ export class X86BootstrapEncoder {
     a.emit(0xa1); a.emit32(X86_BOOTSTRAP_RESERVATION_MERGE_WRITE_ADDRESS);
     a.emit(0xa3); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_COUNT_ADDRESS);
     a.emit(0x61);
+    a.emit(0x60); a.printLabel32('msg_mb2_reservations_normalized', 'print_serial32'); a.emit(0x61);
     a.emit(0x60); a.printLabel32('msg_mb2_reservations_catalogued', 'print_serial32'); a.emit(0x61);
     // Restore the copied-MBI base expected by the existing boot continuation.
     a.movRegImm32(Reg64.RDI, this.MULTIBOOT2_COPY_BUFFER_ADDR);
@@ -1936,6 +1937,7 @@ export class X86BootstrapEncoder {
     a.label('msg_mb2_extents_sorted');  a.emitCString('NUSANTARA_MULTIBOOT2_EXTENTS_SORTED_OK\r\n');
     a.label('msg_mb2_extents_merged');  a.emitCString('NUSANTARA_MULTIBOOT2_EXTENTS_MERGED_OK\r\n');
     a.label('msg_mb2_reservations_catalogued'); a.emitCString('NUSANTARA_MULTIBOOT2_RESERVATIONS_CATALOGUED_OK\r\n');
+    a.label('msg_mb2_reservations_normalized'); a.emitCString('NUSANTARA_MULTIBOOT2_RESERVATIONS_NORMALIZED_OK\\r\\n');
     a.label('msg_diag_mmap_begin');      a.emitCString('NUSANTARA_DIAG_MMAP_BEGIN\r\n');
     a.label('msg_diag_mmap_done');       a.emitCString('NUSANTARA_DIAG_MMAP_DONE\r\n');
     a.label('msg_diag_module_begin');    a.emitCString('NUSANTARA_DIAG_MODULE_BEGIN\r\n');
