@@ -269,7 +269,7 @@ jobs:
   # 8. REAL QEMU BARE-METAL EXECUTION & HARDWARE VALIDATION
   # ============================================================================
   qemu-hardware-validation:
-    name: "8. Eksekusi Nyata QEMU Headless & Validasi 18 Sentinel"
+    name: "8. Eksekusi Nyata QEMU Headless & Validasi 19 Sentinel"
     needs: kernel-build-and-iso
     runs-on: ubuntu-latest
     timeout-minutes: 20
