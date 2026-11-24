@@ -25,15 +25,15 @@ import { UserELFBuilder } from './user-elf-builder.js';
  * manifest; these words are diagnostics/parser scratch, not PMM metadata.
  */
 export const X86_BOOTSTRAP_STATE_LAYOUT = Object.freeze({
-  usableDescriptorCount: X86_BOOTSTRAP_STATE_LAYOUT.usableDescriptorCount,
-  blockedDescriptorCount: X86_BOOTSTRAP_STATE_LAYOUT.blockedDescriptorCount,
-  rawUsableBytesLow: X86_BOOTSTRAP_STATE_LAYOUT.rawUsableBytesLow,
-  rawUsableBytesHigh: X86_BOOTSTRAP_STATE_LAYOUT.rawUsableBytesHigh,
-  alignedUsableBytesLow: X86_BOOTSTRAP_STATE_LAYOUT.alignedUsableBytesLow,
-  alignedUsableBytesHigh: X86_BOOTSTRAP_STATE_LAYOUT.alignedUsableBytesHigh,
-  multibootTagSize: X86_BOOTSTRAP_STATE_LAYOUT.multibootTagSize,
-  multibootTagPointer: X86_BOOTSTRAP_STATE_LAYOUT.multibootTagPointer,
-  multibootInfoEnd: X86_BOOTSTRAP_STATE_LAYOUT.multibootInfoEnd,
+  usableDescriptorCount: 0x0021_8040,
+  blockedDescriptorCount: 0x0021_8044,
+  rawUsableBytesLow: 0x0021_8048,
+  rawUsableBytesHigh: 0x0021_804c,
+  alignedUsableBytesLow: 0x0021_8050,
+  alignedUsableBytesHigh: 0x0021_8054,
+  multibootTagSize: 0x0021_8058,
+  multibootTagPointer: 0x0021_805c,
+  multibootInfoEnd: 0x0021_8060,
 } as const);
 
 export interface BootstrapConfig {
