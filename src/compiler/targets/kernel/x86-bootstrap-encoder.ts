@@ -409,7 +409,7 @@ export class X86BootstrapEncoder {
     a.emit(0x8b, 0x0b); // mov ecx, [ebx] (total_size)
     a.emit(0x83, 0xf9, 0x10); // cmp ecx, 16
     a.jb('panic32');
-    a.emit(0x81, 0xf9, 0x00, 0x00, 0x01, 0x00); // cmp ecx, 64 KiB
+    a.emit(0x81, 0xf9); a.emit32(this.MULTIBOOT2_COPY_BUFFER_SIZE); // cmp ecx, reserved copy-buffer capacity
     a.ja('panic32');
     a.emit(0xf6, 0xc1, 0x07); // test cl, 7
     a.jne('panic32');
