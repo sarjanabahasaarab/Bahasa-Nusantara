@@ -1938,7 +1938,7 @@ export class X86BootstrapEncoder {
     a.label('msg_mb2_extents_sorted');  a.emitCString('NUSANTARA_MULTIBOOT2_EXTENTS_SORTED_OK\r\n');
     a.label('msg_mb2_extents_merged');  a.emitCString('NUSANTARA_MULTIBOOT2_EXTENTS_MERGED_OK\r\n');
     a.label('msg_mb2_reservations_catalogued'); a.emitCString('NUSANTARA_MULTIBOOT2_RESERVATIONS_CATALOGUED_OK\r\n');
-    a.label('msg_mb2_reservations_normalized'); a.emitCString('NUSANTARA_MULTIBOOT2_RESERVATIONS_NORMALIZED_OK\\r\\n');
+    a.label('msg_mb2_reservations_normalized'); a.emitCString('NUSANTARA_MULTIBOOT2_RESERVATIONS_NORMALIZED_OK\r\n');
     a.label('msg_diag_mmap_begin');      a.emitCString('NUSANTARA_DIAG_MMAP_BEGIN\r\n');
     a.label('msg_diag_mmap_done');       a.emitCString('NUSANTARA_DIAG_MMAP_DONE\r\n');
     a.label('msg_diag_module_begin');    a.emitCString('NUSANTARA_DIAG_MODULE_BEGIN\r\n');
