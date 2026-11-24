@@ -398,6 +398,7 @@ export class X86BootstrapEncoder {
     a.jmp('panic32');
 
     a.label('mb2_magic_ok');
+    a.printLabel32('msg_diag_magic_ok', 'print_serial32');
     // Validate and copy MBI while paging is off. The early identity-access
     // contract is intentionally limited to the first 8 MiB; unsupported
     // higher addresses fail closed instead of being dereferenced blindly.
@@ -408,6 +409,7 @@ export class X86BootstrapEncoder {
     a.jne('panic32');
     a.emit(0x81, 0xfb, 0xf0, 0xff, 0x7f, 0x00); // cmp ebx, 0x007FFFF0
     a.ja('panic32');
+    a.printLabel32('msg_diag_mbi_pointer_ok', 'print_serial32');
     a.emit(0x8b, 0x0b); // mov ecx, [ebx] (total_size)
     a.emit(0x83, 0xf9, 0x10); // cmp ecx, 16
     a.jb('panic32');
@@ -417,11 +419,13 @@ export class X86BootstrapEncoder {
     a.jne('panic32');
     a.emit(0x83, 0x7b, 0x04, 0x00); // cmp dword [ebx+4], 0
     a.jne('panic32');
+    a.printLabel32('msg_diag_mbi_header_ok', 'print_serial32');
     a.emit(0x89, 0xd8); // mov eax, ebx
     a.emit(0x01, 0xc8); // add eax, ecx
     a.jb('panic32'); // carry means pointer + total_size overflowed
     a.emit(0x3d, 0x00, 0x00, 0x80, 0x00); // cmp eax, 8 MiB identity-map limit
     a.ja('panic32');
+    a.printLabel32('msg_diag_mbi_range_ok', 'print_serial32');
 
     // Overlap-safe memmove into the reserved kernel-owned copy buffer.
     a.emit(0x89, 0xde); // mov esi, ebx
@@ -444,6 +448,7 @@ export class X86BootstrapEncoder {
     a.label('mb2_copy_forward');
     a.emit(0xf3, 0xa4); // rep movsb
     a.label('mb2_copy_done');
+    a.printLabel32('msg_diag_mbi_copy_ok', 'print_serial32');
     a.movRegImm32(Reg64.RDI, this.MULTIBOOT2_COPY_BUFFER_ADDR);
     a.movRegImm32(Reg64.RSP, this.KERNEL_STACK_TOP);
 
@@ -1472,6 +1477,11 @@ export class X86BootstrapEncoder {
     a.label('msg_mb2_page_audit_ok');    a.emitCString('NUSANTARA_MULTIBOOT2_PAGE_AUDIT_OK\r\n');
     a.label('msg_diag_mmap_begin');      a.emitCString('NUSANTARA_DIAG_MMAP_BEGIN\r\n');
     a.label('msg_diag_mmap_done');       a.emitCString('NUSANTARA_DIAG_MMAP_DONE\r\n');
+    a.label('msg_diag_magic_ok');       a.emitCString('NUSANTARA_DIAG_MAGIC_OK\r\n');
+    a.label('msg_diag_mbi_pointer_ok'); a.emitCString('NUSANTARA_DIAG_MBI_POINTER_OK\r\n');
+    a.label('msg_diag_mbi_header_ok');  a.emitCString('NUSANTARA_DIAG_MBI_HEADER_OK\r\n');
+    a.label('msg_diag_mbi_range_ok');   a.emitCString('NUSANTARA_DIAG_MBI_RANGE_OK\r\n');
+    a.label('msg_diag_mbi_copy_ok');    a.emitCString('NUSANTARA_DIAG_MBI_COPY_OK\r\n');
     a.label('msg_cpu_ok');               a.emitCString(this.STAGE_3_LONG_MODE);
     a.label('msg_paging_ok');            a.emitCString(this.STAGE_4_PAGING);
     a.label('msg_gdt_ok');               a.emitCString(this.STAGE_5_GDT64);
