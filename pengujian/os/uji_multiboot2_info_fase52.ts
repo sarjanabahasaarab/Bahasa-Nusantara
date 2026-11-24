@@ -148,7 +148,7 @@ test('52.54 menolak payload memory map yang tidak habis dibagi entry_size', () =
   malformed.set(tag);
   const view = new DataView(malformed.buffer);
   view.setUint32(4, tag.length + 8, true);
-  view.setUint32(8, 32, true);
+  view.setUint32(8, 24, true);
   const data = makeInfo([malformed]);
   assert.throws(() => Multiboot2InfoParser.parse(data), /Payload memory map/);
 });
