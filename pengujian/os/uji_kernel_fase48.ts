@@ -175,10 +175,10 @@ async function jalankanSemuaPengujian() {
     samaDengan(baseAddr! % 4096n, 0n, 'Base address harus 4K aligned');
   });
 
-  uji('2.3 Reservasi region memori perangkat keras (VGA/BIOS)', () => {
+  uji('2.3 Reservasi region kernel yang berada dalam rentang managed RAM', () => {
     const pmm = new PhysicalMemoryManager(16 * 1024 * 1024);
-    // Reservasi VGA buffer 0xA0000 s/d 0xC0000 (128 KB)
-    pmm.reserveRegion(0x000A_0000n, 128 * 1024);
+    // Reservasi region 128 KiB yang berada dalam managed RAM (base default 1 MiB)
+    pmm.reserveRegion(0x0010_0000n, 128 * 1024);
     const freeCountBefore = pmm.getFreeFrameCount();
     pastikan(freeCountBefore < pmm.getTotalFrameCount(), 'Free frame count harus berkurang setelah reservasi');
   });
