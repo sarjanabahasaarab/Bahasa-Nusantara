@@ -22,7 +22,7 @@ export class KernelELFBuilder {
   constructor(options: KernelELFOptions = {}) {
     this.entryPoint = options.entryPoint;
     this.kernelName = options.kernelName ?? 'nusantara-kernel';
-    this.multibootBytes = options.multibootHeader ?? new Multiboot2HeaderBuilder().build();
+    this.multibootBytes = options.multibootHeader ?? new Multiboot2HeaderBuilder().addMemoryMapRequestTag(true).build();
     this.textPayload = options.textPayload;
   }
 
