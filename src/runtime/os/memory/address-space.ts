@@ -57,6 +57,12 @@ export class AddressSpace {
   public readonly pml4Address: bigint;
   private readonly regions: Map<string, UserMemoryRegion> = new Map();
   private readonly pageTable: Map<bigint, PageMapping> = new Map();
+  private mappingGeneration = 0;
+
+  /** Monotonically increases whenever a page mapping changes. */
+  public getMappingGeneration(): number {
+    return this.mappingGeneration;
+  }
   private readonly pmm: PhysicalMemoryManager;
 
   constructor(pmm?: PhysicalMemoryManager, explicitCr3?: bigint) {
@@ -151,6 +157,7 @@ export class AddressSpace {
       writable: isWritable,
       executable: isExecutable,
     });
+    this.mappingGeneration++;
 
     return true;
   }
@@ -213,6 +220,7 @@ export class AddressSpace {
     }
 
     this.pageTable.delete(vpn);
+    this.mappingGeneration++;
     return true;
   }
 
@@ -296,5 +304,6 @@ export class AddressSpace {
     }
     this.pageTable.clear();
     this.regions.clear();
+    this.mappingGeneration++;
   }
 }
