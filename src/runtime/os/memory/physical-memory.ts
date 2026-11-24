@@ -23,7 +23,6 @@ export class PhysicalMemoryManager {
   private readonly totalFrames: number;
   private readonly bitmap: Uint8Array;
   private freeFrames: number;
-  private readonly memoryBase: bigint;
   private readonly frameRanges: readonly FrameRange[];
 
   /**
@@ -50,7 +49,6 @@ export class PhysicalMemoryManager {
       if (totalFrames > 0) {
         ranges.push({ base: memoryBase, frameCount: totalFrames, firstFrame: 0 });
       }
-      this.memoryBase = memoryBase;
     } else {
       if (!Array.isArray(totalBytesOrExtents)) {
         throw new TypeError('Firmware memory extents harus berupa array.');
@@ -83,7 +81,6 @@ export class PhysicalMemoryManager {
         totalFrames += frameCount;
         previousEnd = end;
       }
-      this.memoryBase = ranges[0]?.base ?? 0n;
     }
 
     const bitmapSizeBytes = Math.ceil(totalFrames / 8);
