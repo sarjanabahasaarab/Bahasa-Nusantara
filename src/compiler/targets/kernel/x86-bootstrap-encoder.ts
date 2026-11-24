@@ -1495,10 +1495,9 @@ export class X86BootstrapEncoder {
     a.label('msg_diag_fb_done');         a.emitCString('NUSANTARA_DIAG_FRAMEBUFFER_DONE\r\n');
     a.label('msg_diag_end_tag_ok');      a.emitCString('NUSANTARA_DIAG_END_TAG_OK\r\n');
     a.label('msg_diag_tag_advance_ok'); a.emitCString('NUSANTARA_DIAG_TAG_ADVANCE_OK\r\n');
-    a.label('msg_diag_after_mmap_restore'); a.emitCString('NUSANTARA_DIAG_AFTER_MMAP_RESTORE\\r\\n');
-a.label('msg_diag_after_mmap_restore');       a.emitCString('NUSANTARA_DIAG_AFTER_MMAP_RESTORE\r\n');
-a.label('msg_diag_tag_pointer_add_ok');       a.emitCString('NUSANTARA_DIAG_TAG_POINTER_ADD_OK\r\n');
-a.label('msg_diag_tag_bounds_ok');       a.emitCString('NUSANTARA_DIAG_TAG_BOUNDS_OK\r\n');
+    a.label('msg_diag_after_mmap_restore');       a.emitCString('NUSANTARA_DIAG_AFTER_MMAP_RESTORE\r\n');
+    a.label('msg_diag_tag_pointer_add_ok');       a.emitCString('NUSANTARA_DIAG_TAG_POINTER_ADD_OK\r\n');
+    a.label('msg_diag_tag_bounds_ok');       a.emitCString('NUSANTARA_DIAG_TAG_BOUNDS_OK\r\n');
     a.label('msg_diag_mbi_pointer_ok'); a.emitCString('NUSANTARA_DIAG_MBI_POINTER_OK\r\n');
     a.label('msg_diag_mbi_header_ok');  a.emitCString('NUSANTARA_DIAG_MBI_HEADER_OK\r\n');
     a.label('msg_diag_mbi_range_ok');   a.emitCString('NUSANTARA_DIAG_MBI_RANGE_OK\r\n');
