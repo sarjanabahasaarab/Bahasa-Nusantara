@@ -596,6 +596,8 @@ export class X86BootstrapEncoder {
     a.printLabel32('msg_diag_mmap_done', 'print_serial32');
     a.emit(0x5e); // pop esi
     a.emit(0xbb, 0x01, 0x00, 0x00, 0x00); // mov ebx, 1 (validated memory map present)
+    // Phase 69: preserve all live registers around serial-only checkpoints.
+    a.emit(0x60); a.printLabel32('msg_diag_after_mmap_restore', 'print_serial32'); a.emit(0x61);
     a.jmp('mb2_native_advance');
 
     a.label('mb2_native_module');
@@ -655,9 +657,11 @@ export class X86BootstrapEncoder {
     a.emit(0x83, 0xe0, 0xf8); // align size to 8
     a.emit(0x01, 0xc6); // add esi, eax
     a.jb('panic32');
+    a.emit(0x60); a.printLabel32('msg_diag_tag_pointer_add_ok', 'print_serial32'); a.emit(0x61);
     a.emit(0x39, 0xfe); // cmp esi, edi
     a.ja('panic32');
-    a.emit(0x56); a.printLabel32('msg_diag_tag_advance_ok', 'print_serial32'); a.emit(0x5e);
+    a.emit(0x60); a.printLabel32('msg_diag_tag_bounds_ok', 'print_serial32'); a.emit(0x61);
+    a.emit(0x60); a.printLabel32('msg_diag_tag_advance_ok', 'print_serial32'); a.emit(0x61);
     a.jmp('mb2_native_tag_loop');
 
     a.label('mb2_native_parse_done');
@@ -1491,7 +1495,9 @@ export class X86BootstrapEncoder {
     a.label('msg_diag_fb_done');         a.emitCString('NUSANTARA_DIAG_FRAMEBUFFER_DONE\r\n');
     a.label('msg_diag_end_tag_ok');      a.emitCString('NUSANTARA_DIAG_END_TAG_OK\r\n');
     a.label('msg_diag_tag_advance_ok'); a.emitCString('NUSANTARA_DIAG_TAG_ADVANCE_OK\r\n');
-    a.label('msg_diag_magic_ok');       a.emitCString('NUSANTARA_DIAG_MAGIC_OK\r\n');
+    a.label('msg_diag_after_mmap_restore');       a.emitCString('NUSANTARA_DIAG_AFTER_MMAP_RESTORE\r\n');
+    a.label('msg_diag_tag_pointer_add_ok');       a.emitCString('NUSANTARA_DIAG_TAG_POINTER_ADD_OK\r\n');
+    a.label('msg_diag_tag_bounds_ok');       a.emitCString('NUSANTARA_DIAG_TAG_BOUNDS_OK\r\n');
     a.label('msg_diag_mbi_pointer_ok'); a.emitCString('NUSANTARA_DIAG_MBI_POINTER_OK\r\n');
     a.label('msg_diag_mbi_header_ok');  a.emitCString('NUSANTARA_DIAG_MBI_HEADER_OK\r\n');
     a.label('msg_diag_mbi_range_ok');   a.emitCString('NUSANTARA_DIAG_MBI_RANGE_OK\r\n');
