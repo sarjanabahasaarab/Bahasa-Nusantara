@@ -117,8 +117,8 @@ if [ -s "$DEBUG_LOG_FILE" ]; then
     tail -n 80 "$DEBUG_LOG_FILE"
 fi
 
-# 7. Validasi Strict 18 Sentinel, Anti-Duplikasi, Urutan, Panic, & SHA-256 Artefak
-echo "[7/7] Menjalankan Strict 18-Sentinel Validator ($SENTINEL_REPORT_FILE)..."
+# 7. Validasi Strict 19 Sentinel, Anti-Duplikasi, Urutan, Panic, & SHA-256 Artefak
+echo "[7/7] Menjalankan Strict 19-Sentinel Validator ($SENTINEL_REPORT_FILE)..."
 VALIDATOR_EXIT=0
 npx tsx scripts/validate-qemu-sentinels.ts \
     --serial "$LOG_FILE" \
