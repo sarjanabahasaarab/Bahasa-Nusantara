@@ -10,6 +10,7 @@ import { PagePermissions } from '../../src/runtime/os/memory/types.js';
 import { SyscallDispatcher } from '../../src/runtime/os/syscall/syscall-dispatcher.js';
 import { SyscallTable } from '../../src/runtime/os/syscall/syscall-table.js';
 import { SyscallNumber } from '../../src/runtime/os/syscall/syscall-numbers.js';
+import { ProcessManager } from '../../src/runtime/os/process/manager.js';
 
 let passed = 0;
 let failed = 0;
@@ -196,6 +197,45 @@ await asyncTest('52.21 syscall pointer ditolak jika konteks proses tidak membawa
     callingProcessId: 7, callingThreadId: 1, isKernelCaller: false,
   });
   assert.equal(result, -14n);
+});
+
+
+await asyncTest('52.22 ProcessManager membangun konteks syscall dari AddressSpace proses yang terdaftar', async () => {
+  ProcessManager.resetInstance();
+  const manager = ProcessManager.getInstance();
+  const process = manager.process_create('phase52-context');
+  const thread = manager.thread_create(process.pid);
+  assert.ok(thread);
+  const context = manager.createSyscallContext(process.pid, thread.tid);
+  assert.ok(context);
+  assert.equal(context.callingProcessId, process.pid);
+  assert.equal(context.callingThreadId, thread.tid);
+  assert.equal(context.addressSpace, process.addressSpace);
+  assert.equal(context.isKernelCaller, false);
+});
+
+await asyncTest('52.23 ProcessManager menolak PID atau TID yang tidak terdaftar', async () => {
+  ProcessManager.resetInstance();
+  const manager = ProcessManager.getInstance();
+  assert.equal(manager.createSyscallContext(9999, 1), null);
+  const process = manager.process_create('phase52-missing-thread');
+  assert.equal(manager.createSyscallContext(process.pid, 9999), null);
+});
+
+await asyncTest('52.24 ProcessManager menurunkan hak kernel hanya dari identitas proses kernel', async () => {
+  ProcessManager.resetInstance();
+  const manager = ProcessManager.getInstance();
+  const kernelContext = manager.createSyscallContext(0, 0);
+  assert.ok(kernelContext);
+  assert.equal(kernelContext.isKernelCaller, true);
+  assert.equal(kernelContext.addressSpace, manager.process_lookup(0)?.addressSpace);
+
+  const userProcess = manager.process_create('phase52-user');
+  const userThread = manager.thread_create(userProcess.pid);
+  assert.ok(userThread);
+  const userContext = manager.createSyscallContext(userProcess.pid, userThread.tid);
+  assert.ok(userContext);
+  assert.equal(userContext.isKernelCaller, false);
 });
 
 }
