@@ -323,7 +323,6 @@ export class X86BootstrapEncoder {
   private static readonly STATE_MB2_MAGIC = 0x0021_8004;
   private static readonly STATE_RESUME_RSP = 0x0021_8008;
   private static readonly STATE_RESUME_RIP = 0x0021_8010;
-  private static readonly STATE_SYSCALL_USER_RSP = 0x0021_8018;
   private static readonly STATE_CURRENT_PID = 0x0021_8020;
   private static readonly STATE_FAULT_COUNT = 0x0021_8028;
   private static readonly STATE_SYSCALL_FLAGS = 0x0021_8030;
@@ -335,7 +334,9 @@ export class X86BootstrapEncoder {
 
   private static readonly KERNEL_STACK_TOP = 0x0022_8000;
   private static readonly KERNEL_IST1_TOP = 0x0022_C000;
-  private static readonly KERNEL_SYSCALL_STACK_TOP = 0x0023_0000;
+  // CPU-local area for the bootstrap CPU. AP/SMP initialization must provision one per CPU.
+  private static readonly CPU_LOCAL_BASE = 0x0025_1000;
+  private static readonly CPU_LOCAL_SYSCALL_STACK_TOP = 0x0025_0000;
 
   private static readonly BOOT_PML4_ADDR = 0x002F_0000;
   private static readonly BOOT_PDPT_ADDR = 0x002F_1000;
@@ -625,6 +626,16 @@ export class X86BootstrapEncoder {
     a.emit(0x0f, 0x30); // wrmsr
 
     a.label('efer_done');
+    // Bootstrap CPU-local syscall context (GS base is kernel-local; KERNEL_GS_BASE is user GS=0).
+    // User entry performs SWAPGS; syscall/exception entry swaps back to this kernel-local area.
+    a.movRegImm32(Reg64.RCX, 0xc000_0101); // IA32_GS_BASE
+    a.movRegImm32(Reg64.RAX, this.CPU_LOCAL_BASE);
+    a.emit(0x31, 0xd2, 0x0f, 0x30); // xor edx, edx; wrmsr
+    a.movRegImm32(Reg64.RCX, 0xc000_0102); // IA32_KERNEL_GS_BASE = user GS base 0
+    a.emit(0x31, 0xc0, 0x31, 0xd2, 0x0f, 0x30); // xor eax, eax; xor edx, edx; wrmsr
+    a.movRegImm64(Reg64.RAX, BigInt(this.CPU_LOCAL_SYSCALL_STACK_TOP));
+    a.emit(0x65, 0x48, 0x89, 0x04, 0x25, 0x00, 0x00, 0x00, 0x00); // mov gs:[0], rax (syscall stack top)
+
     // IA32_STAR (0xC0000081): EDX = 0x0010_0008 (SYSRET base 0x0010, SYSCALL base 0x0008), EAX = 0
     a.movRegImm32(Reg64.RCX, 0xc000_0081);
     a.emit(0x31, 0xc0); // xor eax, eax
@@ -746,6 +757,7 @@ export class X86BootstrapEncoder {
     a.emit(0x50);                                      // push rax (e_entry)
     // Bersihkan register GP sebelum masuk Ring 3
     a.emit(0x31, 0xc0, 0x31, 0xdb, 0x31, 0xc9, 0x31, 0xd2, 0x31, 0xf6, 0x31, 0xff);
+    a.emit(0x0f, 0x01, 0xf8); // swapgs: expose user GS=0 before IRETQ
     a.emit(0x48, 0xcf); // iretq!
 
     // -------------------------------------------------------------------------
@@ -788,6 +800,7 @@ export class X86BootstrapEncoder {
     a.emit(0x68); a.emit32(0x23);                      // push USER_CODE
     a.emit(0x50);                                      // push rax
     a.emit(0x31, 0xc0, 0x31, 0xdb, 0x31, 0xc9, 0x31, 0xd2, 0x31, 0xf6, 0x31, 0xff);
+    a.emit(0x0f, 0x01, 0xf8); // swapgs: expose user GS=0 before IRETQ
     a.emit(0x48, 0xcf); // iretq -> Process B membaca 0xFFFFFFFF80000000 -> Hardware #PF!
 
     // -------------------------------------------------------------------------
@@ -828,9 +841,10 @@ export class X86BootstrapEncoder {
     // Input: RAX=num, RDI=arg1, RSI=arg2, RCX=user_rip, R11=user_rflags
     // -------------------------------------------------------------------------
     a.label('syscall_entry');
+    a.emit(0x0f, 0x01, 0xf8); // swapgs: switch from user GS to bootstrap CPU-local GS
     a.emit(0xfc); // cld
-    a.storeMem64Abs(this.STATE_SYSCALL_USER_RSP, Reg64.RSP);
-    a.movRegImm64(Reg64.RSP, BigInt(this.KERNEL_SYSCALL_STACK_TOP));
+    a.emit(0x65, 0x48, 0x89, 0x24, 0x25, 0x08, 0x00, 0x00, 0x00); // mov gs:[8], rsp (user RSP)
+    a.emit(0x65, 0x48, 0x8b, 0x24, 0x25, 0x00, 0x00, 0x00, 0x00); // mov rsp, gs:[0] (CPU-local syscall stack)
     a.emit(0x50); // push rax (syscall num)
     // Reload kernel DS=ES=0x10 karena IRETQ ke Ring 3 menolkan DS/ES
     a.emit(0x66, 0xb8, 0x10, 0x00, 0x8e, 0xd8, 0x8e, 0xc0);
@@ -933,7 +947,8 @@ export class X86BootstrapEncoder {
     a.emit(0x5b);             // pop rbx
     a.emit(0x41, 0x5b);       // pop r11
     a.emit(0x59);             // pop rcx
-    a.loadMem64Abs(Reg64.RSP, this.STATE_SYSCALL_USER_RSP);
+    a.emit(0x65, 0x48, 0x8b, 0x24, 0x25, 0x08, 0x00, 0x00, 0x00); // mov rsp, gs:[8] (restore user RSP)
+    a.emit(0x0f, 0x01, 0xf8); // swapgs: restore user GS before SYSRETQ
     a.emit(0x48, 0x0f, 0x07); // sysretq (Ring 0 -> Ring 3, CS=0x23, SS=0x1B)
 
     // -------------------------------------------------------------------------
@@ -952,6 +967,7 @@ export class X86BootstrapEncoder {
     a.emit(0x48, 0x83, 0xe3, 0x03);       // and rbx, 3
     a.emit(0x48, 0x83, 0xfb, 0x03);       // cmp rbx, 3
     a.jne('panic64_pf_ring0');
+    a.emit(0x0f, 0x01, 0xf8); // swapgs: user-origin fault now runs with kernel CPU-local GS
 
     // Pulihkan DS=ES=SS=0x10 & Page Table Kernel (CR3 = PML4_A) sebelum mengakses/mencetak lebih lanjut
     a.emit(0x66, 0xb8, 0x10, 0x00, 0x8e, 0xd8, 0x8e, 0xc0, 0x8e, 0xd0);
