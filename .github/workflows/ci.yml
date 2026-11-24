@@ -785,6 +785,24 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Pasang pustaka runtime emulator Android pada Ubuntu
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -y
+          PULSE_PACKAGE=""
+          for candidate in libpulse0t64 libpulse0; do
+            if apt-cache show "$candidate" >/dev/null 2>&1; then
+              PULSE_PACKAGE="$candidate"
+              break
+            fi
+          done
+          if [ -z "$PULSE_PACKAGE" ]; then
+            echo "[ERROR] Paket runtime PulseAudio (libpulse0t64/libpulse0) tidak tersedia."
+            exit 1
+          fi
+          sudo apt-get install -y --no-install-recommends "$PULSE_PACKAGE"
+          echo "[OK] Runtime PulseAudio terpasang: $PULSE_PACKAGE"
       - name: Instal SDK, emulator, dan system image Android 35
         shell: bash
         run: |
