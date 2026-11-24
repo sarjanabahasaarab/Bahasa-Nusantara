@@ -54,6 +54,7 @@ jobs:
         with:
           gradle-version: '8.9'
       - name: Install Android SDK components
+        id: android_sdk_components
         shell: bash
         run: |
           set -euo pipefail
@@ -78,7 +79,7 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --force --name nusantara-api35 --package "system-images;android-35;google_apis;x86_64" --path "$AVD_HOME/nusantara-api35.avd" <<< "no"
           test -s "$AVD_HOME/nusantara-api35.ini"
           test -d "$AVD_HOME/nusantara-api35.avd"
-          emulator -list-avds | grep -Fx nusantara-api35
+          "$ANDROID_HOME/emulator/emulator" -list-avds | grep -Fx nusantara-api35
       - name: Run Android interpreter runtime tests
         id: android_runtime_tests
         shell: bash
@@ -131,8 +132,8 @@ jobs:
             sudo chmod 666 /dev/kvm || true
             ls -l /dev/kvm || true
           fi
-          emulator -accel-check || true
-          emulator -avd nusantara-api35 -no-snapshot -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          "$ANDROID_HOME/emulator/emulator" -accel-check || true
+          "$ANDROID_HOME/emulator/emulator" -avd nusantara-api35 -no-snapshot -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect > "$RUNNER_TEMP/emulator.log" 2>&1 &
           if ! timeout 180 adb wait-for-device; then
             echo "[ERROR] ADB tidak melihat emulator dalam 180 detik."
             adb devices -l || true
@@ -173,6 +174,7 @@ jobs:
       - name: Write Android evidence
         if: always()
         env:
+          ANDROID_SDK_COMPONENTS_OUTCOME: ${{ steps.android_sdk_components.outcome }}
           ANDROID_BUILD_OUTCOME: ${{ steps.android_build.outcome }}
           ANDROID_RUNTIME_TEST_OUTCOME: ${{ steps.android_runtime_tests.outcome }}
           ANDROID_UNIT_TEST_OUTCOME: ${{ steps.android_unit_tests.outcome }}
@@ -183,14 +185,15 @@ jobs:
           mkdir -p artifacts/mobile-evidence
           python3 - <<'PY'
           import datetime, json, os, platform, zipfile
-          outcomes = [os.environ.get("ANDROID_BUILD_OUTCOME"), os.environ.get("ANDROID_EMULATOR_OUTCOME"), os.environ.get("ANDROID_TESTS_OUTCOME")]
+          outcomes = [os.environ.get("ANDROID_SDK_COMPONENTS_OUTCOME"), os.environ.get("ANDROID_RUNTIME_TEST_OUTCOME"), os.environ.get("ANDROID_UNIT_TEST_OUTCOME"), os.environ.get("ANDROID_BUILD_OUTCOME"), os.environ.get("ANDROID_EMULATOR_OUTCOME"), os.environ.get("ANDROID_TESTS_OUTCOME")]
+          sdk_ok = os.environ.get("ANDROID_SDK_COMPONENTS_OUTCOME") == "success"
           build_ok = os.environ.get("ANDROID_BUILD_OUTCOME") == "success"
           runtime_ok = os.environ.get("ANDROID_RUNTIME_TEST_OUTCOME") == "success"
           unit_ok = os.environ.get("ANDROID_UNIT_TEST_OUTCOME") == "success"
           mobile_ok = os.environ.get("ANDROID_TESTS_OUTCOME") == "success"
           emulator_ok = os.environ.get("ANDROID_EMULATOR_OUTCOME") == "success"
-          failed = not build_ok or not runtime_ok or not unit_ok or (os.environ.get("ANDROID_TESTS_OUTCOME") == "failure")
-          complete = build_ok and runtime_ok and unit_ok and mobile_ok and emulator_ok
+          failed = "failure" in outcomes
+          complete = sdk_ok and build_ok and runtime_ok and unit_ok and mobile_ok and emulator_ok
           apk = "native/android/app/build/outputs/apk/debug/app-debug.apk"
           aab = "native/android/app/build/outputs/bundle/release/app-release.aab"
           def has_entry(archive, predicate):
@@ -209,6 +212,7 @@ jobs:
             "os": "Linux",
             "arch": platform.machine(),
             "status": "FAIL" if failed else "PASS" if complete else "NOT_VERIFIED",
+            "sdkSetupStatus": "PASS" if sdk_ok else "FAIL" if os.environ.get("ANDROID_SDK_COMPONENTS_OUTCOME") == "failure" else "NOT_VERIFIED",
             "runtimeTestStatus": "PASS" if runtime_ok else "FAIL" if os.environ.get("ANDROID_RUNTIME_TEST_OUTCOME") == "failure" else "NOT_VERIFIED",
             "unitTestStatus": "PASS" if unit_ok and mobile_ok else "FAIL" if not unit_ok or os.environ.get("ANDROID_TESTS_OUTCOME") == "failure" else "NOT_VERIFIED",
             "commitSha": os.environ["GITHUB_SHA"],
