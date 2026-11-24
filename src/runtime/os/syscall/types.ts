@@ -6,6 +6,8 @@
  * Target Milestone: Phase 48 (v0.48.0)
  */
 
+import type { AddressSpace } from '../memory/address-space';
+
 export enum SyscallError {
   K_OK = 0,
   K_EPERM = -1,    // Operasi tidak diizinkan
