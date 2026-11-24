@@ -9,6 +9,7 @@
  * kernel mapping implementation.
  */
 import { AddressSpace } from './address-space';
+import { KernelABI } from '../abi/kernel-abi';
 import { PAGE_SIZE } from './types';
 import type { SyscallDispatcher } from '../syscall/syscall-dispatcher';
 
@@ -26,7 +27,7 @@ export class AddressSpaceMemoryAccessor {
     virtualAddress: bigint,
     length: number,
   ): Uint8Array | null {
-    if (!Number.isSafeInteger(length) || length < 0) return null;
+    if (!Number.isSafeInteger(length) || length < 0 || length > 16 * 1024 * 1024) return null;
     if (length === 0) return new Uint8Array(0);
     if (!this.validateRange(addressSpace, virtualAddress, length, 'READ')) return null;
 
@@ -52,7 +53,7 @@ export class AddressSpaceMemoryAccessor {
     source: Uint8Array,
     length: number = source.length,
   ): boolean {
-    if (!Number.isSafeInteger(length) || length < 0 || length > source.length) return false;
+    if (!Number.isSafeInteger(length) || length < 0 || length > source.length || length > 16 * 1024 * 1024) return false;
     if (length === 0) return true;
     if (!this.validateRange(addressSpace, virtualAddress, length, 'WRITE')) return false;
 
@@ -75,9 +76,9 @@ export class AddressSpaceMemoryAccessor {
     length: number,
     operation: 'READ' | 'WRITE',
   ): boolean {
-    if (!AddressSpace.isCanonical(virtualAddress) || virtualAddress < 0n) return false;
+    if (!AddressSpace.isCanonical(virtualAddress) || virtualAddress < KernelABI.MEMORY_LAYOUT.userSpaceStart || virtualAddress > KernelABI.MEMORY_LAYOUT.userSpaceEnd) return false;
     const end = virtualAddress + BigInt(length) - 1n;
-    if (end < virtualAddress || !AddressSpace.isCanonical(end)) return false;
+    if (end < virtualAddress || !AddressSpace.isCanonical(end) || end > KernelABI.MEMORY_LAYOUT.userSpaceEnd) return false;
     const firstPage = virtualAddress - (virtualAddress % BigInt(PAGE_SIZE));
     const lastPage = end - (end % BigInt(PAGE_SIZE));
     for (let page = firstPage; page <= lastPage; page += BigInt(PAGE_SIZE)) {
