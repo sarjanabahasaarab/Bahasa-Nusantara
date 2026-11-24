@@ -175,12 +175,46 @@ async function jalankanSemuaPengujian() {
     samaDengan(baseAddr! % 4096n, 0n, 'Base address harus 4K aligned');
   });
 
-  uji('2.3 Reservasi region memori perangkat keras (VGA/BIOS)', () => {
+  uji('2.3 Reservasi region kernel yang berada dalam rentang managed RAM', () => {
     const pmm = new PhysicalMemoryManager(16 * 1024 * 1024);
-    // Reservasi VGA buffer 0xA0000 s/d 0xC0000 (128 KB)
-    pmm.reserveRegion(0x000A_0000n, 128 * 1024);
+    // Reservasi region 128 KiB yang berada dalam managed RAM (base default 1 MiB)
+    pmm.reserveRegion(0x0010_0000n, 128 * 1024);
     const freeCountBefore = pmm.getFreeFrameCount();
     pastikan(freeCountBefore < pmm.getTotalFrameCount(), 'Free frame count harus berkurang setelah reservasi');
+  });
+
+  uji('2.4 freeFrame menolak alamat fisik yang tidak page-aligned', () => {
+    const pmm = new PhysicalMemoryManager(3 * 4096);
+    const frame = pmm.allocateFrame()!;
+    samaDengan(pmm.freeFrame(frame + 1n), false, 'Alamat dengan offset byte tidak boleh membebaskan frame');
+    samaDengan(pmm.getFreeFrameCount(), 2, 'Jumlah free frame tidak boleh berubah');
+    samaDengan(pmm.freeFrame(frame), true, 'Alamat frame tepat tetap dapat dibebaskan');
+  });
+
+  uji('2.5 alokasi contiguous menolak jumlah pecahan, NaN, dan tak aman', () => {
+    const pmm = new PhysicalMemoryManager(4 * 4096);
+    samaDengan(pmm.allocateContiguousFrames(1.5), null, 'Jumlah pecahan harus ditolak');
+    samaDengan(pmm.allocateContiguousFrames(Number.NaN), null, 'NaN harus ditolak');
+    samaDengan(pmm.allocateContiguousFrames(Number.MAX_SAFE_INTEGER + 1), null, 'Integer tidak aman harus ditolak');
+    samaDengan(pmm.getFreeFrameCount(), 4, 'Tidak ada frame yang boleh teralokasi');
+  });
+
+  uji('2.6 reservasi region di luar managed RAM tidak boleh merusak bitmap', () => {
+    const pmm = new PhysicalMemoryManager(4 * 4096, 0x100000n);
+    pmm.reserveRegion(0x0000_0000n, 0x80000);
+    samaDengan(pmm.getFreeFrameCount(), 4, 'Region di bawah base tidak boleh mereservasi frame pertama');
+    pmm.reserveRegion(0x200000n, 0x1000);
+    samaDengan(pmm.getFreeFrameCount(), 4, 'Region di atas batas tidak boleh mengubah bitmap');
+  });
+
+  uji('2.7 reservasi region parsial membulatkan ke frame yang beririsan dan tidak double-reserve', () => {
+    const pmm = new PhysicalMemoryManager(4 * 4096, 0x100000n);
+    pmm.reserveRegion(0x100001n, 1);
+    samaDengan(pmm.getFreeFrameCount(), 3, 'Satu byte yang beririsan harus mereservasi satu frame');
+    pmm.reserveRegion(0x100001n, 1);
+    samaDengan(pmm.getFreeFrameCount(), 3, 'Reservasi ulang tidak boleh mengurangi free count');
+    pmm.reserveRegion(0x103FFFn, 2);
+    samaDengan(pmm.getFreeFrameCount(), 2, 'Rentang lintas batas harus mereservasi frame kedua yang beririsan');
   });
 
   // ---------------------------------------------------------------------------
