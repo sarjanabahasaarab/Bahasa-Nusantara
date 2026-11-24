@@ -227,6 +227,52 @@ await asyncTest('52.25 accessor memori menerima AddressSpace proses yang tepat u
   assert.equal(writerSpace, space);
 });
 
+
+await asyncTest('52.26 accessor menyalin buffer lintas dua halaman melalui translasi fisik', async () => {
+  const space = new AddressSpace();
+  space.mapPage(0x00A0_0000n, 0x0160_0000n, PagePermissions.USER_READ_WRITE, true);
+  space.mapPage(0x00A0_1000n, 0x0160_1000n, PagePermissions.USER_READ_WRITE, true);
+  const accessor = new AddressSpaceMemoryAccessor(
+    (address, length) => {
+      const bytes = new Uint8Array(length);
+      for (let i = 0; i < length; i++) bytes[i] = address + BigInt(i) < 0x0160_1000n ? 0x41 : 0x42;
+      return bytes;
+    },
+    () => true,
+  );
+  const read = accessor.copyFromUser(space, 0x00A0_0FFEn, 4);
+  assert.ok(read);
+  assert.equal(new TextDecoder().decode(read), 'AABB');
+  const writes: bigint[] = [];
+  const writer = new AddressSpaceMemoryAccessor(
+    () => null,
+    (address) => { writes.push(address); return true; },
+  );
+  assert.equal(writer.copyToUser(space, 0x00A0_0FFEn, new TextEncoder().encode('WXYZ')), true);
+  assert.deepEqual(writes, [0x0160_0FFEn, 0x0160_1000n]);
+});
+
+await asyncTest('52.27 accessor menolak READ jika izin halaman tidak memuat READ', async () => {
+  const space = new AddressSpace();
+  space.mapPage(0x00B0_0000n, 0x0170_0000n, PagePermissions.WRITE, true);
+  const accessor = new AddressSpaceMemoryAccessor(() => new Uint8Array(8), () => true);
+  assert.equal(accessor.copyFromUser(space, 0x00B0_0000n, 8), null);
+});
+
+await asyncTest('52.28 accessor menolak WRITE ke halaman READ-only', async () => {
+  const space = new AddressSpace();
+  space.mapPage(0x00C0_0000n, 0x0180_0000n, PagePermissions.READ, true);
+  const accessor = new AddressSpaceMemoryAccessor(() => new Uint8Array(8), () => true);
+  assert.equal(accessor.copyToUser(space, 0x00C0_0000n, new Uint8Array(8)), false);
+});
+
+await asyncTest('52.29 accessor menolak rentang jika halaman kedua tidak terpetakan', async () => {
+  const space = new AddressSpace();
+  space.mapPage(0x00D0_0000n, 0x0190_0000n, PagePermissions.USER_READ_WRITE, true);
+  const accessor = new AddressSpaceMemoryAccessor(() => new Uint8Array(8), () => true);
+  assert.equal(accessor.copyFromUser(space, 0x00D0_0FF0n, 32), null);
+});
+
 }
 
 void runAsyncDispatcherTests().then(() => {
