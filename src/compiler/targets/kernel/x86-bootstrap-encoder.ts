@@ -54,6 +54,29 @@ export const X86_BOOTSTRAP_PAGE_EXTENT_SORT_CURSOR_ADDRESS = 0x0027_0c04;
 /** Phase 78 in-place merge cursors in the reserved workspace. */
 export const X86_BOOTSTRAP_PAGE_EXTENT_MERGE_READ_ADDRESS = 0x0027_0c08;
 export const X86_BOOTSTRAP_PAGE_EXTENT_MERGE_WRITE_ADDRESS = 0x0027_0c0c;
+/** Phase 79: bounded native exclusion catalog in its own reserved page. */
+export const X86_BOOTSTRAP_RESERVATION_CATALOG_COUNT_ADDRESS = 0x0027_1000;
+export const X86_BOOTSTRAP_RESERVATION_CATALOG_TABLE_BASE = 0x0027_1100;
+export const X86_BOOTSTRAP_RESERVATION_CATALOG_CAPACITY = 160;
+export const X86_BOOTSTRAP_RESERVATION_CATALOG_RECORD_SIZE = 16;
+/** End-exclusive fixed bootstrap exclusions; dynamic entries are appended at boot. */
+export const X86_BOOTSTRAP_FIXED_RESERVATIONS = Object.freeze([
+  { start: 0x00000000, end: 0x00200000, reason: 'low memory and kernel image' },
+  { start: 0x00200000, end: 0x00218000, reason: 'bootstrap page tables' },
+  { start: 0x00218000, end: 0x0021c000, reason: 'kernel state and descriptor tables' },
+  { start: 0x00220000, end: 0x00230000, reason: 'kernel and IST stacks' },
+  { start: 0x0024c000, end: 0x00250000, reason: 'CPU syscall stack' },
+  { start: 0x00251000, end: 0x00252000, reason: 'CPU-local GS data' },
+  { start: 0x00260000, end: 0x00270000, reason: 'copied Multiboot2 information' },
+  { start: 0x00270000, end: 0x00271000, reason: 'native extent workspace' },
+  { start: 0x00271000, end: 0x00272000, reason: 'native reservation catalog workspace' },
+  { start: 0x002f0000, end: 0x002f4000, reason: 'early boot page tables' },
+  { start: 0x00600000, end: 0x00601000, reason: 'process A user code' },
+  { start: 0x00610000, end: 0x00611000, reason: 'process A user stack' },
+  { start: 0x00620000, end: 0x00621000, reason: 'process B user code' },
+  { start: 0x00630000, end: 0x00631000, reason: 'process B user stack' },
+] as const);
+
 
 
 
@@ -525,6 +548,22 @@ export class X86BootstrapEncoder {
     a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_USABLE_DESCRIPTOR_COUNT_ADDRESS, 0);
     // Phase 76: bounded page-extent candidate output starts empty.
     a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_PAGE_EXTENT_COUNT_ADDRESS, 0);
+    // Phase 79: initialize the bounded native exclusion catalog.
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_RESERVATION_CATALOG_COUNT_ADDRESS, 0);
+    for (let i = 0; i < X86_BOOTSTRAP_FIXED_RESERVATIONS.length; i++) {
+      const reservation = X86_BOOTSTRAP_FIXED_RESERVATIONS[i];
+      const slot = X86_BOOTSTRAP_RESERVATION_CATALOG_TABLE_BASE +
+        i * X86_BOOTSTRAP_RESERVATION_CATALOG_RECORD_SIZE;
+      a.storeMem32AbsImm32Mode32(slot, reservation.start);
+      a.storeMem32AbsImm32Mode32(slot + 4, 0);
+      a.storeMem32AbsImm32Mode32(slot + 8, reservation.end);
+      a.storeMem32AbsImm32Mode32(slot + 12, 0);
+    }
+    a.storeMem32AbsImm32Mode32(
+      X86_BOOTSTRAP_RESERVATION_CATALOG_COUNT_ADDRESS,
+      X86_BOOTSTRAP_FIXED_RESERVATIONS.length,
+    );
+
 
     a.label('mb2_native_tag_loop');
     a.emit(0x89, 0xf8); // mov eax, edi
@@ -683,6 +722,22 @@ export class X86BootstrapEncoder {
     a.jb('panic32'); // reject overflow in diagnostic 64-bit sum
     a.jmp('mb2_native_memory_entry_classified');
     a.label('mb2_native_memory_entry_blocked');
+    // Preserve parser registers while appending the raw blocked uint64 interval.
+    a.emit(0x60);
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_COUNT_ADDRESS);
+    a.emit(0x3d); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_CAPACITY);
+    a.jae('panic32');
+    a.emit(0x6b, 0xc0, X86_BOOTSTRAP_RESERVATION_CATALOG_RECORD_SIZE);
+    a.emit(0x05); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_TABLE_BASE);
+    a.emit(0x89, 0xc7);
+    a.emit(0x8b, 0x06, 0x89, 0x07);
+    a.emit(0x8b, 0x46, 0x04, 0x89, 0x47, 0x04);
+    a.emit(0x8b, 0x06); a.emit(0x03, 0x46, 0x08); a.emit(0x89, 0x47, 0x08);
+    a.emit(0x8b, 0x46, 0x04); a.emit(0x13, 0x46, 0x0c);
+    a.jb('panic32');
+    a.emit(0x89, 0x47, 0x0c);
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_COUNT_ADDRESS);
+    a.emit(0x61);
     a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_STATE_LAYOUT.blockedDescriptorCount); // inc blocked descriptor count
     a.label('mb2_native_memory_entry_classified');
     a.emit(0x01, 0xce); // add esi, ecx (advance by entry_size)
@@ -878,6 +933,20 @@ export class X86BootstrapEncoder {
     a.jne('panic32');
     a.emit(0x59, 0x5f); // pop ecx; pop edi
     a.emit(0x60); a.printLabel32('msg_diag_module_done', 'print_serial32'); a.emit(0x61);
+    // Catalog module physical [start,end) for later page-rounded subtraction.
+    a.emit(0x60);
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_COUNT_ADDRESS);
+    a.emit(0x3d); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_CAPACITY);
+    a.jae('panic32');
+    a.emit(0x6b, 0xc0, X86_BOOTSTRAP_RESERVATION_CATALOG_RECORD_SIZE);
+    a.emit(0x05); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_TABLE_BASE);
+    a.emit(0x89, 0xc7);
+    a.emit(0x8b, 0x46, 0x08, 0x89, 0x07);
+    a.emit(0x31, 0xc0, 0x89, 0x47, 0x04);
+    a.emit(0x8b, 0x46, 0x0c, 0x89, 0x47, 0x08);
+    a.emit(0x31, 0xc0, 0x89, 0x47, 0x0c);
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_COUNT_ADDRESS);
+    a.emit(0x61);
     a.jmp('mb2_native_advance');
 
     a.label('mb2_native_framebuffer');
@@ -899,6 +968,32 @@ export class X86BootstrapEncoder {
     a.emit(0x80, 0x7e, 0x1c, 0x00); // bits_per_pixel nonzero
     a.je('panic32');
     a.emit(0x60); a.printLabel32('msg_diag_fb_done', 'print_serial32'); a.emit(0x61);
+    // Catalog framebuffer [address, address + pitch*height), checked uint64.
+    a.emit(0x60);
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_COUNT_ADDRESS);
+    a.emit(0x3d); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_CAPACITY);
+    a.jae('panic32');
+    a.emit(0x6b, 0xc0, X86_BOOTSTRAP_RESERVATION_CATALOG_RECORD_SIZE);
+    a.emit(0x05); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_TABLE_BASE);
+    a.emit(0x89, 0xc7);
+    a.emit(0x8b, 0x46, 0x10);
+    a.emit(0xf7, 0x66, 0x18); // mul dword [height] => edx:eax
+    a.emit(0x85, 0xd2);
+    a.jne('phase79_fb_size_ok');
+    a.emit(0x85, 0xc0);
+    a.je('panic32');
+    a.label('phase79_fb_size_ok');
+    a.emit(0x8b, 0x5e, 0x08);
+    a.emit(0x8b, 0x4e, 0x0c);
+    a.emit(0x89, 0x5f, 0x00);
+    a.emit(0x89, 0x4f, 0x04);
+    a.emit(0x01, 0xc3);
+    a.emit(0x11, 0xd1);
+    a.jb('panic32');
+    a.emit(0x89, 0x5f, 0x08);
+    a.emit(0x89, 0x4f, 0x0c);
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_COUNT_ADDRESS);
+    a.emit(0x61);
     a.jmp('mb2_native_advance');
 
     a.label('mb2_native_end');
@@ -1755,6 +1850,7 @@ export class X86BootstrapEncoder {
     a.label('msg_mb2_page_audit_ok');    a.emitCString('NUSANTARA_MULTIBOOT2_PAGE_AUDIT_OK\r\n');
     a.label('msg_mb2_extents_sorted');  a.emitCString('NUSANTARA_MULTIBOOT2_EXTENTS_SORTED_OK\r\n');
     a.label('msg_mb2_extents_merged');  a.emitCString('NUSANTARA_MULTIBOOT2_EXTENTS_MERGED_OK\r\n');
+    a.label('msg_mb2_reservations_catalogued'); a.emitCString('NUSANTARA_MULTIBOOT2_RESERVATIONS_CATALOGUED_OK\r\n');
     a.label('msg_diag_mmap_begin');      a.emitCString('NUSANTARA_DIAG_MMAP_BEGIN\r\n');
     a.label('msg_diag_mmap_done');       a.emitCString('NUSANTARA_DIAG_MMAP_DONE\r\n');
     a.label('msg_diag_module_begin');    a.emitCString('NUSANTARA_DIAG_MODULE_BEGIN\r\n');
