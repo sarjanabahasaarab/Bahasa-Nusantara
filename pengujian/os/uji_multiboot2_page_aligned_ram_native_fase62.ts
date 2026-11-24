@@ -43,7 +43,7 @@ test('62.3 rounds descriptor end downward to a 4 KiB boundary', () => {
 test('62.4 excludes descriptors with no complete page', () => {
   assert.ok(containsBytes([0x39, 0xeb]));
   assert.ok(containsBytes([0x39, 0xc2]));
-  assert.ok(containsBytes([0x76])); // short JBE branch emitted by assembler
+  assert.ok(containsBytes([0x0f, 0x86])); // near JBE branch emitted by assembler
 });
 
 test('62.5 accumulates complete-page byte spans with checked uint64 arithmetic', () => {
