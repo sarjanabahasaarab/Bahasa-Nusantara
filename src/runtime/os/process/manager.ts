@@ -177,9 +177,9 @@ export class ProcessManager {
   }
 
   /**
-   * Construye el contexto de syscall desde el PCB/TCB real.
-   * El llamador no puede inyectar un AddressSpace ajeno ni elevar privilegios:
-   * ambos datos se derivan del proceso registrado.
+   * Membangun konteks syscall dari PCB/TCB yang terdaftar.
+   * Pemanggil tidak dapat menyisipkan AddressSpace milik proses lain atau
+   * menaikkan hak akses: kedua nilai diturunkan dari proses terdaftar.
    */
   public createSyscallContext(pid: ProcessID, tid: ThreadID): SyscallContext | null {
     const process = this.processes.get(pid);
