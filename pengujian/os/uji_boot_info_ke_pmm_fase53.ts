@@ -100,10 +100,13 @@ test('53.2 alokasi tidak pernah mengambil halaman kernel, reserved, ACPI, MBI, a
 
 test('53.3 alokasi kontigu tidak dapat melintasi halaman firmware yang diblokir', () => {
   const pmm = createFirmwarePMM();
-  assert.equal(pmm.allocateContiguousFrames(3), null);
+  // No physical run of four frames exists: every candidate run crosses
+  // a reserved/ACPI/unknown page or an explicit kernel/MBI reservation.
+  assert.equal(pmm.allocateContiguousFrames(4), null);
   assert.equal(pmm.getFreeFrameCount(), 10);
-  assert.equal(pmm.allocateContiguousFrames(2), 0x102000n);
-  assert.equal(pmm.getFreeFrameCount(), 8);
+  // The first valid three-frame run is 0x105000–0x107000.
+  assert.equal(pmm.allocateContiguousFrames(3), 0x105000n);
+  assert.equal(pmm.getFreeFrameCount(), 7);
 });
 
 test('53.4 parser menolak ukuran struktur firmware yang dipotong sebelum PMM dibuat', () => {
