@@ -10,7 +10,7 @@ import { PagePermissions } from '../../src/runtime/os/memory/types.js';
 import { SyscallDispatcher } from '../../src/runtime/os/syscall/syscall-dispatcher.js';
 import { SyscallTable } from '../../src/runtime/os/syscall/syscall-table.js';
 import { SyscallNumber } from '../../src/runtime/os/syscall/syscall-numbers.js';
-import { AddressSpaceMemoryAccessor } from '../../src/runtime/os/memory/address-space-memory-accessor.js';
+import { AddressSpaceMemoryAccessor, installAddressSpaceMemoryAccessor } from '../../src/runtime/os/memory/address-space-memory-accessor.js';
 
 let passed = 0;
 let failed = 0;
@@ -271,6 +271,39 @@ await asyncTest('52.29 accessor menolak rentang jika halaman kedua tidak terpeta
   space.mapPage(0x00D0_0000n, 0x0190_0000n, PagePermissions.USER_READ_WRITE, true);
   const accessor = new AddressSpaceMemoryAccessor(() => new Uint8Array(8), () => true);
   assert.equal(accessor.copyFromUser(space, 0x00D0_0FF0n, 32), null);
+});
+
+
+await asyncTest('52.30 adapter memori terpasang pada dispatcher dan handler menerima byte hasil translasi', async () => {
+  const space = new AddressSpace();
+  space.mapPage(0x00E0_0000n, 0x01A0_0000n, PagePermissions.USER_READ_WRITE, true);
+  const table = new SyscallTable();
+  let observed = '';
+  table.register({
+    number: 9005, name: 'test_address_space_accessor_in_dispatcher', minArgs: 2,
+    handler: (args, ctx) => {
+      const data = ctx.userMemory?.copyFromUser(args[0], Number(args[1]));
+      observed = data ? new TextDecoder().decode(data) : '';
+      return BigInt(data?.length ?? -1);
+    },
+  });
+  const physicalBytes = new Map<bigint, number>();
+  new TextEncoder().encode('NUSA').forEach((value, index) => physicalBytes.set(0x01A0_0000n + BigInt(index), value));
+  const accessor = new AddressSpaceMemoryAccessor(
+    (physical, length) => {
+      const bytes = new Uint8Array(length);
+      for (let i = 0; i < length; i++) bytes[i] = physicalBytes.get(physical + BigInt(i)) ?? 0;
+      return bytes;
+    },
+    () => true,
+  );
+  const dispatcher = new SyscallDispatcher(table);
+  installAddressSpaceMemoryAccessor(dispatcher, accessor);
+  const result = await dispatcher.dispatch(9005, [0x00E0_0000n, 4n], {
+    callingProcessId: 10, callingThreadId: 1, isKernelCaller: false, addressSpace: space,
+  });
+  assert.equal(result, 4n);
+  assert.equal(observed, 'NUSA');
 });
 
 }
