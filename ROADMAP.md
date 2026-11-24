@@ -1,10 +1,10 @@
-# Peta Jalan Pengembangan (ROADMAP) Bahasa Pemrograman NUSANTARA
+# Peta Jalan Pengembangan NUSANTARA OS
 
-> **Peta Jalan Strategis, Hasil Audit Implementasi Nyata, dan Rencana Kerja Menuju NusantaraOS**  
+> **Roadmap sistem operasi mandiri, bahasa pemrograman, kompatibilitas aplikasi, dan ekosistem perangkat NUSANTARA**  
 > **Tanggal Audit Terakhir:** 24 November 2026
 > **Versi Rilis Saat Ini:** `v0.50.0` (Program penyelesaian & sertifikasi Phase 23 serta Phase 36–42; lihat [docs/PHASE-23-36-42-COMPLETION-REPORT.md](docs/PHASE-23-36-42-COMPLETION-REPORT.md))
 
-Dokumen ini memetakan seluruh pencapaian rekayasa piranti lunak (*engineering milestones*) bahasa pemrograman **NUSANTARA**, dari fondasi awal tata bahasa hingga terwujudnya sistem operasi **NusantaraOS**. Setiap status fase dalam dokumen ini telah diaudit secara faktual berdasarkan kode sumber yang benar-benar ada di repositori (`src/`), pengujian otomatis yang lulus 100% (`pengujian/`), dan dokumentasi teknis resmi (`docs/` & `dokumentasi/`), tanpa klaim palsu.
+Repositori ini kini berorientasi pada produk **NUSANTARA OS**, yaitu sistem operasi mandiri dengan kernel sendiri. Bahasa pemrograman NUSANTARA tetap menjadi toolchain resmi. Tabel Phase 1–50 di bawah merupakan catatan historis status implementasi dan wajib dibaca bersama bukti terbaru; dokumen arah resmi untuk pekerjaan selanjutnya adalah [Visi dan Arsitektur Induk](docs/os/00-visi-dan-arsitektur-induk.md), [Roadmap Phase 51–100](docs/os/ROADMAP-PHASE-51-100.md), [Rencana Audit Ulang Phase 1–50](docs/os/RENCANA-AUDIT-ULANG-PHASE-1-50.md), dan [Matriks Kompatibilitas](docs/os/MATRIKS-KOMPATIBILITAS.md). Status fase tidak otomatis lulus karena dokumentasi atau simulator tersedia.
 
 ---
 
@@ -201,19 +201,22 @@ Daftar suite pengujian terverifikasi:
 
 ---
 
-## 6. Jadwal & Prioritas Rilis Mendatang
+## 6. Arah Produk dan Prioritas Pembangunan Berikutnya
 
-- **Fase Teraudit Terbaru (Phase 1–50):**
-  - **Phase 48 (v0.48.0)**: Nusantara OS: Minimal Kernel Interface (🟢 Selesai — 42/42 lulus).
-  - **Phase 49 (v0.49.0)**: Nusantara OS: Bootable Kernel & Hardware Validation (🟢 Selesai — 23/23 uji integrasi lulus; eksekusi QEMU x86_64 nyata pada GitHub Actions run `45087120364` berhasil, termasuk 18 sentinel berurutan).
-  - **Phase 50 (v0.50.0)**: Nusantara OS: Process Isolation & User Mode (🟢 Selesai — 29/29 skenario Quality Gate lulus; QEMU nyata GitHub Actions run `45087120441`, 18/18 sentinel PASS, exit code `1` sesuai kontrak, tanpa timeout/panic, checksum lulus).
-- **Garis Besar Master Roadmap 150 Phase (Phase 51–150):**
-  - **Phase 51**: Kernel–Userland ABI (🟡 Implementasi diajukan melalui PR #68; isolated strict typecheck PASS dan 23/23 tes Phase 51 PASS; sertifikasi penuh menunggu perbaikan baseline typecheck Phase 23 dan gerbang regresi repositori).\n  - **Phase 52–60**: Init System, Nusantara Shell, Terminal/TTY, Graphics, Window Manager, Desktop UI Toolkit, System Applications, dan Desktop Environment (🔵 Direncanakan).
-  - **Phase 61–75**: Penerjemah Sintaks Multi-Bahasa & Universal Language Bridge (Python, JS/TS, C/C++, Rust, Go, Java, Kotlin, Swift -> Nusantara & NIR).
-  - **Phase 76–95**: Universal Runtime, Cross-Platform App Framework (Desktop, Web, Server) & Registri Paket Global.
-  - **Phase 96–115**: Nusantara Studio IDE Lintas Platform, Visual Debugger & Toolchain Terpadu.
-  - **Phase 116–135**: Runtime Native Android/Mobile & Profil Edge/Embedded NusantaraOS.
-  - **Phase 136–150**: Hardening Keamanan, Sertifikasi Produksi & Rilis **Nusantara OS 1.0 + Language Platform 1.0**.
+- **Phase 1–50:** dipertahankan sebagai fondasi historis bahasa, compiler, toolchain, runtime, dan kernel. Seluruhnya akan diaudit ulang berdasarkan source code, clean build, CI, artefak, dan pengujian aktual. Lihat [Rencana Audit Ulang Phase 1–50](docs/os/RENCANA-AUDIT-ULANG-PHASE-1-50.md).
+- **Phase 51:** Kernel–Userland ABI telah digabung melalui PR #68. Implementasi kontrak ABI harus tetap dibedakan dari pembuktian jalur assembly syscall dan konfigurasi MSR pada CPU.
+- **Perbaikan Phase 23:** pemulihan enam modul build melalui PR #69 telah digabung. Gerbang regresi repositori tetap menjadi syarat sebelum menyatakan baseline stabil.
+- **Phase 52–100:** diarahkan untuk menyelesaikan kernel, boot, syscall nyata, memori, scheduler, driver, penyimpanan, jaringan, grafis, desktop, layanan inti, aplikasi asli, port ARM64, integrasi smartphone, keamanan, dan Developer Preview. Rincian penerimaan ada di [ROADMAP-PHASE-51-100.md](docs/os/ROADMAP-PHASE-51-100.md).
+- **Phase 101–150:** direncanakan untuk kompatibilitas Linux, Windows, Android native, riset macOS, hardening, dan kesiapan produksi. Cakupan akan disesuaikan berdasarkan bukti teknis dan lisensi.
+- **Prinsip produk:** tidak mengklaim kompatibilitas seluruh aplikasi atau perangkat tanpa matriks uji nyata. Emulator/QEMU, simulator mobile, dan perangkat fisik dilaporkan sebagai lingkungan yang berbeda.
 
-*Dokumen ROADMAP ini dirilis secara berkala dan disinkronkan secara ketat dengan hasil pengujian aktual repositori NUSANTARA.*
+### Dokumen arsitektur resmi
 
+1. [Visi dan Arsitektur Induk NUSANTARA OS](docs/os/00-visi-dan-arsitektur-induk.md)
+2. [Roadmap Phase 51–100](docs/os/ROADMAP-PHASE-51-100.md)
+3. [Rencana Audit Ulang Phase 1–50](docs/os/RENCANA-AUDIT-ULANG-PHASE-1-50.md)
+4. [Matriks Kompatibilitas Aplikasi](docs/os/MATRIKS-KOMPATIBILITAS.md)
+
+> Instruksi kerja berkelanjutan: "Lanjutkan dan kerjakan" berarti lanjutkan tugas terdekat yang belum selesai menurut dependensi, periksa status GitHub terkini, buat perubahan pada branch khusus, jalankan pengujian, perbaiki kegagalan yang terbukti, dan laporkan commit/PR beserta bukti. Jangan melompati penghambat fondasi dan jangan menggabungkan PR tanpa persetujuan pemilik proyek.
+
+*Dokumen roadmap disinkronkan dengan hasil audit dan implementasi aktual. Status yang belum dibuktikan harus tetap dinyatakan belum diverifikasi.*

@@ -1,8 +1,10 @@
-# NUSANTARA
+# NUSANTARA OS
 
-> **Bahasa Pemrograman 100% Bahasa Indonesia untuk Komputasi Modern, Terbuka, dan Berkelanjutan.**
+> **Sistem operasi mandiri dengan kernel NUSANTARA, ekosistem aplikasi lintas-platform, dan pengalaman pengguna berbahasa Indonesia.**
+>
+> Bahasa pemrograman NUSANTARA adalah bahasa resmi dan toolchain utama untuk membangun ekosistem sistem operasi ini. Fokus produk repositori adalah mewujudkan OS mandiri, bukan berhenti pada bahasa pemrograman.
 
-[![Status](https://img.shields.io/badge/status-phase_50_qemu_verified-emerald.svg)](ROADMAP.md)
+[![Status](https://img.shields.io/badge/product-independent_NUSANTARA_OS-blue.svg)](ROADMAP.md)
 [![Versi](https://img.shields.io/badge/versi-v0.50.0-emerald.svg)](PERUBAHAN.md)
 [![CI/CD](https://github.com/sarjanabahasaarab/Bahasa-Nusantara/actions/workflows/ci.yml/badge.svg)](https://github.com/sarjanabahasaarab/Bahasa-Nusantara/actions/workflows/ci.yml)
 [![Lisensi](https://img.shields.io/badge/lisensi-Apache_2.0-blue.svg)](LISENSI)
@@ -27,23 +29,26 @@
 
 ---
 
-## 1. Tentang NUSANTARA
+## 1. Tentang NUSANTARA OS
 
-**NUSANTARA** adalah bahasa pemrograman serba guna (*general-purpose programming language*) tingkat tinggi yang dirancang dan dikembangkan dari nol menggunakan 100% tata bahasa, kata kunci teknis, dan leksikon Bahasa Indonesia.
+**NUSANTARA OS** adalah proyek sistem operasi mandiri yang menargetkan kernel, layanan inti, driver, sistem berkas, jaringan, antarmuka grafis, aplikasi bawaan, dan ekosistem pengembang yang dibangun untuk berjalan langsung pada perangkat keras yang didukung. Kernel NUSANTARA tidak menggunakan Linux, Windows, atau macOS sebagai kernel induk.
 
-NUSANTARA bukan sekadar terjemahan sintaksis atau praprosesor teks atas bahasa asing, melainkan rekayasa perangkat lunak mandiri yang mencakup arsitektur kompilasi lengkap: *Lexer*, *Parser (Recursive Descent AST)*, *Sistem Tipe Statis & Inferensi*, *Pohon Sintaksis Abstrak*, *Interpreter Eksekusi*, *CLI Toolkit*, *Pustaka Standar (std)*, *Ekosistem Aplikasi Web & Desktop*, *Platform Mobile Lintas-Platform (Android & iOS)*, *Nusantara Intermediate Representation (NIR) berbasis SSA & CFG*, *LLVM Backend & Kompilasi Native Ahead-of-Time (AOT)*, *Sistem Linker & Standalone Executable Generator*, *Sistem Konkurensi Performa Tinggi berbasis Actor Model*, *Nusantara Game Development Kit (Game SDK)*, hingga *Nusantara OS: Process Isolation & User Mode*.
+Bahasa pemrograman **NUSANTARA** tetap dikembangkan sebagai bahasa resmi dan toolchain utama untuk membuat aplikasi serta komponen sistem. Compiler, runtime, NIR, linker, SDK, dan pustaka yang sudah ada menjadi fondasi yang akan diaudit dan diintegrasikan sesuai kebutuhan OS.
+
+Kompatibilitas aplikasi Windows, Linux, Android, dan macOS merupakan sasaran bertahap melalui loader, ABI, API, runtime, pustaka, dan layanan kompatibilitas. Dukungan tidak dianggap tersedia sebelum aplikasi nyata diuji pada arsitektur dan perangkat yang dinyatakan. Menjalankan aplikasi Android tanpa emulator berarti membangun runtime dan layanan Android yang kompatibel langsung di atas NUSANTARA OS, bukan menghilangkan kebutuhan runtime.
 
 ### Visi & Misi Proyek
-- **Kedaulatan Teknologi & Bahasa:** Memberikan kemandirian dalam ekosistem perangkat lunak nasional melalui bahasa pemrograman formal berstandar internasional (ISO/IEC 14977 EBNF).
-- **Akselerasi Edukasi Komputasi:** Menghilangkan batasan bahasa asing bagi pelajar dan pengembang di seluruh Nusantara dalam memahami konsep algoritma, struktur data, dan rekayasa perangkat lunak.
-- **Produksi Industri & Multiplatform:** Mampu digunakan untuk membangun utilitas terminal, layanan API web, aplikasi desktop GUI, aplikasi seluler produksi, game 2D/3D deterministik, hingga biner kompilasi native yang dioptimalkan.
-- **Evolusi Menuju Sistem Operasi:** Menjadi fondasi runtime dan bahasa pemrograman utama bagi proyek jangka panjang **NusantaraOS**.
+- **Kemandirian sistem:** membangun kernel dan layanan OS sendiri, bukan sekadar distribusi Linux atau modifikasi Windows/macOS.
+- **Bahasa Indonesia sebagai pengalaman utama:** antarmuka, pengaturan, pesan, dokumentasi, installer, dan aplikasi resmi mengutamakan Bahasa Indonesia.
+- **Satu ekosistem lintas perangkat:** mengembangkan dukungan x86-64 dan ARM64 secara bertahap untuk PC, laptop, tablet, dan perangkat seluler yang dapat diport.
+- **Kompatibilitas terbuka:** menjalankan aplikasi dari ekosistem lain melalui lapisan kompatibilitas yang diuji, tanpa menjadikan kernel OS lain sebagai fondasi.
+- **Pengembang terbuka:** menyediakan Bahasa NUSANTARA, SDK, API, dokumentasi, dan alat kontribusi untuk membangun aplikasi asli.
 
 ---
 
 ## 2. Status Perkembangan Proyek & Roadmap
 
-- **Status Saat Ini:** **Phase 50 (v0.50.0) — implementasi kernel, isolasi proses, dan eksekusi QEMU CI telah lulus; pengujian pada perangkat keras fisik masih belum dilakukan.**
+- **Status Baseline:** **v0.50.0 + Phase 51 (Kernel–Userland ABI) telah tercatat di repositori; PR #68 dan pemulihan build Phase 23 melalui PR #69 sudah digabung. Ini bukan sertifikasi bahwa seluruh OS siap digunakan.**
 - **Total Fase Diaudit:** 50 Fase (Phase 1 s/d Phase 50).
   - 🟢 **Selesai Penuh (42 Fase):** Phase 1–2, Phase 4–35, dan Phase 43–50. Phase 23 telah memperoleh sertifikasi CI **6/6 target desktop** (`CERTIFIED`, PASS=6, NOT_VERIFIED=0, FAIL=0, MISSING=0, CORRUPT=0) pada workflow PR #66; Phase 49–50 telah dibuktikan melalui build ISO dan boot QEMU headless dengan 18 sentinel.
   - 🟠 **Selesai Sebagian (8 Fase):** Phase 3 (tata kelola dan perlindungan branch belum dapat disertifikasi), serta Phase 36–42 (fitur inti dan suite otomatis tersedia; GUI desktop serta build/launch Android Emulator dan iOS Simulator telah lulus CI, tetapi display server/perangkat fisik, sensor perangkat, layanan cloud dan toko produksi, serta OTA pada perangkat nyata masih memerlukan verifikasi eksternal).
@@ -54,7 +59,8 @@ NUSANTARA bukan sekadar terjemahan sintaksis atau praprosesor teks atas bahasa a
   - **Phase 36–42 — GUI & Mobile CI:** Job GUI desktop lintas OS lulus; workflow Mobile Native Validation (`45269752652`) lulus untuk build Android APK/AAB + Android Emulator serta iOS SwiftUI build + Simulator. Bukti simulator tidak disamakan dengan pengujian sensor atau penggunaan pada perangkat fisik.
   - **Build ISO & Eksekusi QEMU:** Build ISO dan boot kernel/user-mode telah lulus pada workflow OS CI dengan 18 sentinel; pengujian perangkat keras fisik tetap belum dilakukan.
 - **Audit Terakhir:** 24 November 2026.
-- **Dokumentasi Roadmap Lengkap:** Silakan baca [ROADMAP.md](ROADMAP.md) untuk tabel detail status fase 1 hingga 50, catatan verifikasi faktual, dan garis besar Master Roadmap 150 Fase.
+- **Dokumen arah produk:** [Visi dan Arsitektur Induk](docs/os/00-visi-dan-arsitektur-induk.md), [Roadmap Phase 51–100](docs/os/ROADMAP-PHASE-51-100.md), [Rencana Audit Ulang Phase 1–50](docs/os/RENCANA-AUDIT-ULANG-PHASE-1-50.md), dan [Matriks Kompatibilitas](docs/os/MATRIKS-KOMPATIBILITAS.md).
+- **Roadmap historis:** [ROADMAP.md](ROADMAP.md) memuat catatan fase terdahulu; status lama tetap harus dibaca bersama bukti CI dan laporan audit terkini.
 ---
 
 ## 3. Fitur yang Benar-Benar Sudah Tersedia
