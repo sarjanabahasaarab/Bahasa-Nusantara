@@ -55,6 +55,7 @@ export const BOOTSTRAP_PHYSICAL_MEMORY_RESERVATIONS: readonly PhysicalMemoryRese
   { base: 0x220000n, length: 0x10000n, reason: 'bootstrap kernel and IST stack arena (64 KiB)' },
   ...BOOTSTRAP_CPU_LOCAL_RESERVATIONS,
   { base: 0x260000n, length: 0x10000n, reason: 'copied Multiboot2 information buffer (64 KiB)' },
+  { base: 0x270000n, length: 0x1000n, reason: 'native Multiboot2 page-extent candidate workspace (4 KiB)' },
   { base: 0x2f0000n, length: 0x4000n, reason: 'early boot page tables (16 KiB)' },
   { base: 0x600000n, length: 0x1000n, reason: 'process A user code frame (4 KiB)' },
   { base: 0x610000n, length: 0x1000n, reason: 'process A user stack frame (4 KiB)' },
