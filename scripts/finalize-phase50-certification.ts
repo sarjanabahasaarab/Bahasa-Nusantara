@@ -125,7 +125,7 @@ function main(): void {
   ].join('\n');
 
   const oldQemuRow =
-    '| **Eksekusi QEMU Bare-Metal (19 Sentinel)** | **NOT EXECUTED** (`qemu-system-x86_64` **MISSING**) | **Menunggu Eksekusi `ubuntu-latest`** | Sertifikasi final hanya boleh dinyatakan COMPLETE setelah QEMU keluar `1` dan log serial UART aktual memuat 18 sentinel berurutan. |';
+    '| **Eksekusi QEMU Bare-Metal (18 Sentinel)** | **NOT EXECUTED** (`qemu-system-x86_64` **MISSING**) | **Menunggu Eksekusi `ubuntu-latest`** | Sertifikasi final hanya boleh dinyatakan COMPLETE setelah QEMU keluar `1` dan log serial UART aktual memuat 18 sentinel berurutan. |';
   const newQemuRow =
     '| **Eksekusi QEMU Bare-Metal (19 Sentinel)** | **NOT EXECUTED** (QEMU tidak tersedia di kontainer lokal) | **PASS — 19/19 sentinel** (GitHub Actions run ' + runId + ') | Log UART aktual, exit code 1, anti-timeout, anti-panic, urutan sentinel, dan checksum artefak telah diverifikasi. |';
   certification = certification.replace(oldQemuRow, newQemuRow);
