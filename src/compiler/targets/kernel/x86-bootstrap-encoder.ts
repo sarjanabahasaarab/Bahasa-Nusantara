@@ -659,10 +659,14 @@ export class X86BootstrapEncoder {
     a.jb('panic32');
     a.emit(0x60); a.printLabel32('msg_diag_tag_pointer_add_ok', 'print_serial32'); a.emit(0x61);
     a.emit(0x39, 0xfe); // cmp esi, edi
-    a.ja('panic32');
+    a.ja('mb2_native_tag_bounds_fail');
     a.emit(0x60); a.printLabel32('msg_diag_tag_bounds_ok', 'print_serial32'); a.emit(0x61);
     a.emit(0x60); a.printLabel32('msg_diag_tag_advance_ok', 'print_serial32'); a.emit(0x61);
     a.jmp('mb2_native_tag_loop');
+
+    a.label('mb2_native_tag_bounds_fail');
+    a.emit(0x60); a.printLabel32('msg_diag_tag_bounds_fail', 'print_serial32'); a.emit(0x61);
+    a.jmp('panic32');
 
     a.label('mb2_native_parse_done');
     // Restore the copied-MBI base expected by the existing boot continuation.
@@ -1498,6 +1502,7 @@ export class X86BootstrapEncoder {
     a.label('msg_diag_after_mmap_restore');       a.emitCString('NUSANTARA_DIAG_AFTER_MMAP_RESTORE\r\n');
     a.label('msg_diag_tag_pointer_add_ok');       a.emitCString('NUSANTARA_DIAG_TAG_POINTER_ADD_OK\r\n');
     a.label('msg_diag_tag_bounds_ok');       a.emitCString('NUSANTARA_DIAG_TAG_BOUNDS_OK\r\n');
+    a.label('msg_diag_tag_bounds_fail');       a.emitCString('NUSANTARA_DIAG_TAG_BOUNDS_FAIL\r\n');
     a.label('msg_diag_magic_ok');       a.emitCString('NUSANTARA_DIAG_MAGIC_OK\r\n');
     a.label('msg_diag_mbi_pointer_ok'); a.emitCString('NUSANTARA_DIAG_MBI_POINTER_OK\r\n');
     a.label('msg_diag_mbi_header_ok');  a.emitCString('NUSANTARA_DIAG_MBI_HEADER_OK\r\n');
