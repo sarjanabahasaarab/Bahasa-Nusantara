@@ -9,6 +9,7 @@ import { AddressSpace } from '../../src/runtime/os/memory/address-space.js';
 import { PagePermissions } from '../../src/runtime/os/memory/types.js';
 import { SyscallDispatcher } from '../../src/runtime/os/syscall/syscall-dispatcher.js';
 import { SyscallTable } from '../../src/runtime/os/syscall/syscall-table.js';
+import { SyscallNumber } from '../../src/runtime/os/syscall/syscall-numbers.js';
 
 let passed = 0;
 let failed = 0;
@@ -182,6 +183,19 @@ await asyncTest('52.20 copy_to_user handler menulis hanya melalui writer yang di
   });
   assert.equal(result, 1n);
   assert.equal(written, 'OK');
+});
+
+
+await asyncTest('52.21 syscall pointer ditolak jika konteks proses tidak membawa address space', async () => {
+  const dispatcher = new SyscallDispatcher(new SyscallTable());
+  dispatcher.setMemoryAccessors(
+    (_address, length) => new Uint8Array(length),
+    () => true,
+  );
+  const result = await dispatcher.dispatch(SyscallNumber.CONSOLE_WRITE, [0x0080_0000n, 4n], {
+    callingProcessId: 7, callingThreadId: 1, isKernelCaller: false,
+  });
+  assert.equal(result, -14n);
 });
 
 }
