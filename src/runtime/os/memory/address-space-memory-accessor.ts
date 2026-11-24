@@ -29,7 +29,9 @@ export class AddressSpaceMemoryAccessor {
   ): Uint8Array | null {
     if (!Number.isSafeInteger(length) || length < 0 || length > 16 * 1024 * 1024) return null;
     if (length === 0) return new Uint8Array(0);
+    const generation = addressSpace.getMappingGeneration();
     if (!this.validateRange(addressSpace, virtualAddress, length, 'READ')) return null;
+    if (addressSpace.getMappingGeneration() !== generation) return null;
 
     const result = new Uint8Array(length);
     let copied = 0;
@@ -37,11 +39,12 @@ export class AddressSpaceMemoryAccessor {
       const current = virtualAddress + BigInt(copied);
       const pageOffset = Number(current % BigInt(PAGE_SIZE));
       const chunkLength = Math.min(PAGE_SIZE - pageOffset, length - copied);
+      if (addressSpace.getMappingGeneration() !== generation || !addressSpace.checkAccess(current, 'READ', true).allowed) return null;
       const physical = addressSpace.translate(current);
       if (physical === null) return null;
       let bytes: Uint8Array | null;
       try { bytes = this.readPhysical(physical, chunkLength); } catch { return null; }
-      if (!(bytes instanceof Uint8Array) || bytes.length < chunkLength) return null;
+      if (!(bytes instanceof Uint8Array) || bytes.length < chunkLength || addressSpace.getMappingGeneration() !== generation) return null;
       result.set(bytes.subarray(0, chunkLength), copied);
       copied += chunkLength;
     }
@@ -56,17 +59,21 @@ export class AddressSpaceMemoryAccessor {
   ): boolean {
     if (!Number.isSafeInteger(length) || length < 0 || length > source.length || length > 16 * 1024 * 1024) return false;
     if (length === 0) return true;
+    const generation = addressSpace.getMappingGeneration();
     if (!this.validateRange(addressSpace, virtualAddress, length, 'WRITE')) return false;
+    if (addressSpace.getMappingGeneration() !== generation) return false;
 
     let copied = 0;
     while (copied < length) {
       const current = virtualAddress + BigInt(copied);
       const pageOffset = Number(current % BigInt(PAGE_SIZE));
       const chunkLength = Math.min(PAGE_SIZE - pageOffset, length - copied);
+      if (addressSpace.getMappingGeneration() !== generation || !addressSpace.checkAccess(current, 'WRITE', true).allowed) return false;
       const physical = addressSpace.translate(current);
       if (physical === null) return false;
       try {
         if (!this.writePhysical(physical, source.subarray(copied, copied + chunkLength))) return false;
+        if (addressSpace.getMappingGeneration() !== generation) return false;
       } catch { return false; }
       copied += chunkLength;
     }
