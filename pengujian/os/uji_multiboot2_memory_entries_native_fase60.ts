@@ -53,7 +53,7 @@ test('60.4 descriptor pointer advances by validated entry_size and rejects wrap'
 });
 
 test('60.5 preserves tag pointer and tag size after scanning every descriptor', () => {
-  assert.ok(containsBytes([0x5e, 0x5d, 0x59, 0x56])); // restore tag pointer, saved EBP, tag size; preserve pointer for diagnostic
+  assert.ok(containsBytes([0x5e, 0x5d, 0x59, 0x60])); // restore tag pointer, saved EBP and tag size; preserve parser registers with PUSHAD
 });
 
 test('60.6 emits a distinct serial marker only after native descriptor validation', () => {
