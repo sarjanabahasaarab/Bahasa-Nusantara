@@ -153,5 +153,25 @@ test('52.54 menolak payload memory map yang tidak habis dibagi entry_size', () =
   assert.throws(() => Multiboot2InfoParser.parse(data), /Payload memory map/);
 });
 
+test('52.55 menolak reserved field pada entri memory map yang tidak nol', () => {
+  const data = makeInfo([makeMemoryMap([{base: 0x100000n, length: 0x1000n, type: 1}])]);
+  new DataView(data.buffer).setUint32(44, 1, true);
+  assert.throws(() => Multiboot2InfoParser.parse(data), /Reserved field/);
+});
+
+test('52.56 menolak region memory map dengan panjang nol', () => {
+  const data = makeInfo([makeMemoryMap([{base: 0x100000n, length: 0x1000n, type: 1}])]);
+  new DataView(data.buffer).setBigUint64(32, 0n, true);
+  assert.throws(() => Multiboot2InfoParser.parse(data), /Rentang memori/);
+});
+
+test('52.57 mempertahankan tipe firmware yang tidak dikenal sebagai non-usable', () => {
+  const data = makeInfo([makeMemoryMap([{base: 0x900000n, length: 0x1000n, type: 99}])]);
+  const region = Multiboot2InfoParser.parse(data).memoryMap[0];
+  assert.equal(region.type, 99);
+  assert.equal(region.kind, 'UNKNOWN');
+  assert.equal(region.usable, false);
+});
+
 console.log(`HASIL PHASE 52.44–52.54: ${passed} LULUS, ${failed} GAGAL`);
 if (failed > 0) process.exit(1);
