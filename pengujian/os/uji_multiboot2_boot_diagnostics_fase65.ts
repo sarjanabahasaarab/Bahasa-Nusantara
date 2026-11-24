@@ -9,7 +9,6 @@ import assert from 'node:assert/strict';
 import { X86BootstrapEncoder } from '../../src/compiler/targets/kernel/x86-bootstrap-encoder.js';
 
 const code = X86BootstrapEncoder.generateBootstrapBinary().codeBytes;
-const source = new TextDecoder().decode(code);
 function containsBytes(needle: readonly number[]): boolean {
   outer: for (let i = 0; i <= code.length - needle.length; i++) {
     for (let j = 0; j < needle.length; j++) {
