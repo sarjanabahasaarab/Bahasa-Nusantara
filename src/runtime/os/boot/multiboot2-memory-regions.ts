@@ -90,6 +90,7 @@ export function normalizeMultiboot2MemoryRegions(
     throw new RangeError('minimumAddress harus berada dalam rentang uint64.');
   }
 
+  const effectiveMinimumAddress = alignUp(minimumAddress, pageSize);
   const usable: Interval[] = [];
   const blocked: Interval[] = [];
 
@@ -105,7 +106,7 @@ export function normalizeMultiboot2MemoryRegions(
     if (region.type === 1 && region.usable) {
       const start = alignUp(region.base, pageSize);
       const alignedEnd = alignDown(end, pageSize);
-      const clippedStart = start > minimumAddress ? start : minimumAddress;
+      const clippedStart = start > effectiveMinimumAddress ? start : effectiveMinimumAddress;
       if (clippedStart < alignedEnd) usable.push({ start: clippedStart, end: alignedEnd });
     } else {
       // Unknown/reserved/ACPI/bad regions are never handed to the allocator.
