@@ -824,9 +824,7 @@ export class X86BootstrapEncoder {
     a.emit(0x6b, 0xc9, X86_BOOTSTRAP_PAGE_EXTENT_SIZE);
     a.emit(0x81, 0xc1); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_TABLE_BASE);
     a.emit(0x89, 0xcf); // EDI = current record
-    a.emit(0x8b, 0x57, 0xf4); // previous start high not needed; previous end is [edi-4]
-    a.emit(0x8b, 0x57, 0xf8); // previous end low? corrected below by addressing
-    // Compare previous end (current record - 16 + 8/12) against current start.
+        // Compare previous end (current record - 16 + 8/12) against current start.
     a.emit(0x8b, 0x57, 0xfc); // previous end high at edi-4
     a.emit(0x3b, 0x57, 0x04); // current start high
     a.ja('panic32');
