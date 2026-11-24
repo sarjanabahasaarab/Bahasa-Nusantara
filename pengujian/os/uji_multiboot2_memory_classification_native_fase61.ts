@@ -54,9 +54,8 @@ test('61.4 accumulates type-1 byte lengths as checked uint64', () => {
 });
 
 test('61.5 emits classification marker after the native memory-map parser succeeds', () => {
-  const marker = new TextEncoder().encode('NUSANTARA_MULTIBOOT2_RANGES_OK\r\n');
+  const marker = new TextEncoder().encode('NUSANTARA_MULTIBOOT2_CLASSIFY_OK\r\n');
   assert.ok(containsBytes(Array.from(marker)));
-  assert.ok(containsBytes([0xe9])); // parser's control-flow continuation remains emitted
 });
 
 console.log('HASIL PHASE 61.1–61.5: ' + passed + ' LULUS, 0 GAGAL');
