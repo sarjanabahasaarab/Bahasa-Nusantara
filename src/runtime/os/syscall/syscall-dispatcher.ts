@@ -90,7 +90,8 @@ export class SyscallDispatcher {
         if (pointerError !== SyscallError.K_OK) {
           result = BigInt(pointerError);
         } else {
-          result = await entry.handler(args, ctx);
+          const handlerContext = this.createHandlerContext(ctx);
+          result = await entry.handler(args, handlerContext);
         }
       } catch (err: any) {
         result = BigInt(SyscallError.K_EIO);
@@ -117,6 +118,36 @@ export class SyscallDispatcher {
   }
 
   /**
+   * Berikan API copyin/copyout yang selalu memakai address space pemanggil dan
+   * accessor memori yang dipasang oleh lapisan machine/process memory.
+   * API ini tidak menganggap validasi alamat sebagai bukti bahwa byte telah disalin.
+   */
+  private createHandlerContext(ctx: SyscallContext): SyscallContext {
+    if (ctx.isKernelCaller) return ctx;
+    return {
+      ...ctx,
+      userMemory: {
+        copyFromUser: (address, length) => {
+          if (!ctx.addressSpace) return null;
+          const check = UserPointerSecurity.validateUserBuffer(address, length, false, ctx.addressSpace);
+          if (!check.valid || !this.memoryReader) return null;
+          const kernelBuffer = new Uint8Array(length);
+          const copied = UserPointerSecurity.copyFromUser(
+            kernelBuffer, address, length, ctx.addressSpace, this.memoryReader
+          );
+          return copied ? kernelBuffer : null;
+        },
+        copyToUser: (address, data, length = data.length) => {
+          if (!ctx.addressSpace || !this.memoryWriter) return false;
+          return UserPointerSecurity.copyToUser(
+            address, data, length, ctx.addressSpace, this.memoryWriter
+          );
+        },
+      },
+    };
+  }
+
+  /**
    * Validasi pointer pengguna untuk mencegah pointer injection ke ruang kernel (EFAULT)
    */
   private validatePointersForSyscall(
@@ -130,9 +161,10 @@ export class SyscallDispatcher {
 
     // CONSOLE_WRITE(bufferPtr, count)
     if (syscallNumber === SyscallNumber.CONSOLE_WRITE) {
+      if (!ctx.addressSpace) return SyscallError.K_EFAULT;
       const bufferPtr = args[0];
       const count = Number(args[1]);
-      const res = UserPointerSecurity.validateUserBuffer(bufferPtr, count, false);
+      const res = UserPointerSecurity.validateUserBuffer(bufferPtr, count, false, ctx.addressSpace);
       if (!res.valid) {
         return SyscallError.K_EFAULT;
       }
@@ -140,9 +172,10 @@ export class SyscallDispatcher {
 
     // FILE_WRITE(fd, bufferPtr, count)
     if (syscallNumber === SyscallNumber.FILE_WRITE) {
+      if (!ctx.addressSpace) return SyscallError.K_EFAULT;
       const bufferPtr = args[1];
       const count = Number(args[2]);
-      const res = UserPointerSecurity.validateUserBuffer(bufferPtr, count, false);
+      const res = UserPointerSecurity.validateUserBuffer(bufferPtr, count, false, ctx.addressSpace);
       if (!res.valid) {
         return SyscallError.K_EFAULT;
       }
@@ -150,9 +183,10 @@ export class SyscallDispatcher {
 
     // FILE_READ(fd, bufferPtr, count)
     if (syscallNumber === SyscallNumber.FILE_READ) {
+      if (!ctx.addressSpace) return SyscallError.K_EFAULT;
       const bufferPtr = args[1];
       const count = Number(args[2]);
-      const res = UserPointerSecurity.validateUserBuffer(bufferPtr, count, true);
+      const res = UserPointerSecurity.validateUserBuffer(bufferPtr, count, true, ctx.addressSpace);
       if (!res.valid) {
         return SyscallError.K_EFAULT;
       }
@@ -160,8 +194,9 @@ export class SyscallDispatcher {
 
     // FILE_OPEN(pathPtr, flags, mode)
     if (syscallNumber === SyscallNumber.FILE_OPEN) {
+      if (!ctx.addressSpace) return SyscallError.K_EFAULT;
       const pathPtr = args[0];
-      const res = UserPointerSecurity.validateUserAddress(pathPtr, false);
+      const res = UserPointerSecurity.validateUserAddress(pathPtr, false, ctx.addressSpace);
       if (!res.valid) {
         return SyscallError.K_EFAULT;
       }
@@ -169,9 +204,10 @@ export class SyscallDispatcher {
 
     // MEMORY_RELEASE(ptr, size)
     if (syscallNumber === SyscallNumber.MEMORY_RELEASE) {
+      if (!ctx.addressSpace) return SyscallError.K_EFAULT;
       const ptr = args[0];
       const size = Number(args[1]);
-      const res = UserPointerSecurity.validateUserBuffer(ptr, size, false);
+      const res = UserPointerSecurity.validateUserBuffer(ptr, size, false, ctx.addressSpace);
       if (!res.valid) {
         return SyscallError.K_EFAULT;
       }
