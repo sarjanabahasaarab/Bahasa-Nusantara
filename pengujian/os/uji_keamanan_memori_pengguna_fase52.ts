@@ -333,6 +333,35 @@ await asyncTest('52.33 accessor gagal tertutup jika backend fisik melempar excep
   assert.equal(writerThrows.copyToUser(space, 0x00F0_0000n, new Uint8Array(4)), false);
 });
 
+
+await asyncTest('52.34 accessor membatalkan copyin jika pemetaan berubah saat callback backend berjalan', async () => {
+  const space = new AddressSpace();
+  space.mapPage(0x0100_0000n, 0x0200_0000n, PagePermissions.USER_READ_WRITE, true);
+  space.mapPage(0x0100_1000n, 0x0200_1000n, PagePermissions.USER_READ_WRITE, true);
+  let calls = 0;
+  const accessor = new AddressSpaceMemoryAccessor((physical, length) => {
+    calls++;
+    if (calls === 1) space.mapPage(0x0100_1000n, 0x0300_1000n, PagePermissions.USER_READ_WRITE, true);
+    return new Uint8Array(length).fill(0x41);
+  }, () => true);
+  assert.equal(accessor.copyFromUser(space, 0x0100_0FFEn, 4), null);
+  assert.equal(calls, 1);
+});
+
+await asyncTest('52.35 accessor membatalkan copyout saat pemetaan berubah di tengah transfer', async () => {
+  const space = new AddressSpace();
+  space.mapPage(0x0110_0000n, 0x0210_0000n, PagePermissions.USER_READ_WRITE, true);
+  space.mapPage(0x0110_1000n, 0x0210_1000n, PagePermissions.USER_READ_WRITE, true);
+  let calls = 0;
+  const accessor = new AddressSpaceMemoryAccessor(() => null, () => {
+    calls++;
+    if (calls === 1) space.unmapPage(0x0110_1000n, false);
+    return true;
+  });
+  assert.equal(accessor.copyToUser(space, 0x0110_0FFEn, new Uint8Array([1, 2, 3, 4])), false);
+  assert.equal(calls, 1);
+});
+
 }
 
 void runAsyncDispatcherTests().then(() => {
