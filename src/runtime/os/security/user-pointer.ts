@@ -165,31 +165,36 @@ export class UserPointerSecurity {
       return { valid: false, length: 0, error: UserSecurityError.BUFFER_TOO_LARGE };
     }
 
-    const check = this.validateUserAddress(ptr, false, addressSpace);
+    // Validasi seluruh rentang, bukan hanya byte pertama. Ini juga memeriksa
+    // setiap halaman ketika addressSpace proses tersedia.
+    const check = this.validateUserBuffer(ptr, maxLen, false, addressSpace);
     if (!check.valid) {
       return { valid: false, length: 0, error: check.error };
     }
 
-    if (memoryReader) {
-      const bytes = memoryReader(ptr, maxLen);
-      if (!bytes) {
-        return { valid: false, length: 0, error: UserSecurityError.UNMAPPED_MEMORY };
-      }
-      let nullIdx = -1;
-      for (let i = 0; i < bytes.length; i++) {
-        if (bytes[i] === 0) {
-          nullIdx = i;
-          break;
-        }
-      }
-      if (nullIdx === -1) {
-        return { valid: false, length: maxLen, error: UserSecurityError.STRING_NOT_TERMINATED };
-      }
-      const str = new TextDecoder().decode(bytes.subarray(0, nullIdx));
-      return { valid: true, length: nullIdx, str, error: UserSecurityError.OK };
+    // Tanpa pembaca memori, isi string belum diperiksa. Jangan pernah
+    // mengembalikan sukses untuk data yang belum benar-benar dibaca.
+    if (!memoryReader) {
+      return { valid: false, length: 0, error: UserSecurityError.UNMAPPED_MEMORY };
     }
 
-    return { valid: true, length: 0, error: UserSecurityError.OK };
+    const bytes = memoryReader(ptr, maxLen);
+    if (!bytes || bytes.length < maxLen) {
+      return { valid: false, length: 0, error: UserSecurityError.UNMAPPED_MEMORY };
+    }
+
+    let nullIdx = -1;
+    for (let i = 0; i < maxLen; i++) {
+      if (bytes[i] === 0) {
+        nullIdx = i;
+        break;
+      }
+    }
+    if (nullIdx === -1) {
+      return { valid: false, length: maxLen, error: UserSecurityError.STRING_NOT_TERMINATED };
+    }
+    const str = new TextDecoder().decode(bytes.subarray(0, nullIdx));
+    return { valid: true, length: nullIdx, str, error: UserSecurityError.OK };
   }
 
   /**
