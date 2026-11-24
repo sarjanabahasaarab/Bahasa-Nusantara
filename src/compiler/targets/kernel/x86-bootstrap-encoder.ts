@@ -599,6 +599,7 @@ export class X86BootstrapEncoder {
     a.jmp('mb2_native_advance');
 
     a.label('mb2_native_module');
+    a.emit(0x56); a.printLabel32('msg_diag_module_begin', 'print_serial32'); a.emit(0x5e);
     a.emit(0x83, 0xf9, 0x11); // cmp ecx, 17
     a.jb('panic32');
     a.emit(0x8b, 0x46, 0x08); // mov eax, [esi+8] module start
@@ -612,9 +613,11 @@ export class X86BootstrapEncoder {
     a.emit(0xf2, 0xae); // repne scasb (NUL required within tag)
     a.jne('panic32');
     a.emit(0x59, 0x5f); // pop ecx; pop edi
+    a.emit(0x56); a.printLabel32('msg_diag_module_done', 'print_serial32'); a.emit(0x5e);
     a.jmp('mb2_native_advance');
 
     a.label('mb2_native_framebuffer');
+    a.emit(0x56); a.printLabel32('msg_diag_fb_begin', 'print_serial32'); a.emit(0x5e);
     a.emit(0x83, 0xf9, 0x20); // cmp ecx, 32
     a.jb('panic32');
     a.emit(0x66, 0x83, 0x7e, 0x1e, 0x00); // reserved word must be zero
@@ -631,6 +634,7 @@ export class X86BootstrapEncoder {
     a.je('panic32');
     a.emit(0x80, 0x7e, 0x1c, 0x00); // bits_per_pixel nonzero
     a.je('panic32');
+    a.emit(0x56); a.printLabel32('msg_diag_fb_done', 'print_serial32'); a.emit(0x5e);
     a.jmp('mb2_native_advance');
 
     a.label('mb2_native_end');
@@ -641,6 +645,7 @@ export class X86BootstrapEncoder {
     a.jne('panic32');
     a.emit(0x85, 0xdb); // memory-map tag required
     a.je('panic32');
+    a.emit(0x56); a.printLabel32('msg_diag_end_tag_ok', 'print_serial32'); a.emit(0x5e);
     a.jmp('mb2_native_parse_done');
 
     a.label('mb2_native_advance');
@@ -652,6 +657,7 @@ export class X86BootstrapEncoder {
     a.jb('panic32');
     a.emit(0x39, 0xfe); // cmp esi, edi
     a.ja('panic32');
+    a.emit(0x56); a.printLabel32('msg_diag_tag_advance_ok', 'print_serial32'); a.emit(0x5e);
     a.jmp('mb2_native_tag_loop');
 
     a.label('mb2_native_parse_done');
