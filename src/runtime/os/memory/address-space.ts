@@ -57,6 +57,8 @@ export class AddressSpace {
   public readonly pml4Address: bigint;
   private readonly regions: Map<string, UserMemoryRegion> = new Map();
   private readonly pageTable: Map<bigint, PageMapping> = new Map();
+  // Kepemilikan frame dilacak terpisah dari hak akses userAccessible.
+  private readonly ownedUserFrames: Map<bigint, bigint> = new Map();
   private mappingGeneration = 0;
 
   /** Monotonically increases whenever a page mapping changes. */
@@ -148,6 +150,12 @@ export class AddressSpace {
       finalPerms |= PagePermissions.USER;
     }
 
+    const previousOwnedFrame = this.ownedUserFrames.get(vpn);
+    if (previousOwnedFrame !== undefined && previousOwnedFrame !== ppn) {
+      this.pmm.freeFrame(previousOwnedFrame);
+      this.ownedUserFrames.delete(vpn);
+    }
+
     this.pageTable.set(vpn, {
       virtualAddress: vpn,
       physicalAddress: ppn,
@@ -177,6 +185,8 @@ export class AddressSpace {
     if (frame === null) return null;
 
     this.mapPage(virtualAddress, frame, permissions, true);
+    const vpn = virtualAddress & ~BigInt(PAGE_SIZE - 1);
+    this.ownedUserFrames.set(vpn, frame);
     return frame;
   }
 
@@ -215,8 +225,10 @@ export class AddressSpace {
     const entry = this.pageTable.get(vpn);
     if (!entry) return false;
 
-    if (freePhysicalFrame) {
-      this.pmm.freeFrame(entry.physicalAddress);
+    const ownedFrame = this.ownedUserFrames.get(vpn);
+    if (ownedFrame !== undefined) {
+      if (freePhysicalFrame) this.pmm.freeFrame(ownedFrame);
+      this.ownedUserFrames.delete(vpn);
     }
 
     this.pageTable.delete(vpn);
@@ -296,12 +308,10 @@ export class AddressSpace {
    * Pembersihan seluruh pemetaan saat proses diterminasi
    */
   public destroy(): void {
-    for (const entry of this.pageTable.values()) {
-      // Bebaskan hanya halaman fisik milik ruang pengguna
-      if (entry.userAccessible) {
-        this.pmm.freeFrame(entry.physicalAddress);
-      }
+    for (const frame of this.ownedUserFrames.values()) {
+      this.pmm.freeFrame(frame);
     }
+    this.ownedUserFrames.clear();
     this.pageTable.clear();
     this.regions.clear();
     this.mappingGeneration++;
