@@ -65,5 +65,14 @@ test('52.10 copy_to_user menolak sumber kernel lebih kecil dari panjang yang dim
   assert.equal(ok, false);
 });
 
+test('52.11 copy_from_user gagal tertutup jika reader belum dipasang', () => {
+  const ok = UserPointerSecurity.copyFromUser(new Uint8Array(4), 0x10000n, 4);
+  assert.equal(ok, false);
+});
+test('52.12 copy_to_user gagal tertutup jika writer belum dipasang', () => {
+  const ok = UserPointerSecurity.copyToUser(0x10000n, new Uint8Array([1,2,3,4]), 4);
+  assert.equal(ok, false);
+});
+
 console.log('Phase 52: LULUS=' + passed + ', GAGAL=' + failed + ', TOTAL=' + (passed + failed));
 if (failed > 0) process.exitCode = 1;
