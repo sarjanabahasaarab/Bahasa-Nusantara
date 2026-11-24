@@ -172,7 +172,7 @@ export class SyscallDispatcher {
     if (syscallNumber === SyscallNumber.FILE_WRITE) {
       const bufferPtr = args[1];
       const count = Number(args[2]);
-      const res = UserPointerSecurity.validateUserBuffer(bufferPtr, count, false);
+      const res = UserPointerSecurity.validateUserBuffer(bufferPtr, count, false, ctx.addressSpace);
       if (!res.valid) {
         return SyscallError.K_EFAULT;
       }
