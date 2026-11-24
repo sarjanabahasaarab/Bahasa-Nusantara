@@ -10,7 +10,7 @@ const bytes = Array.from(code);
 const contains = (needle: number[]) => bytes.some((_, i) =>
   needle.every((value, j) => bytes[i + j] === value)
 );
-const marker = Array.from(new TextEncoder().encode('NUSANTARA_DIAG_TAG_BOUNDS_FAIL\\r\\n'));
+const marker = Array.from(new TextEncoder().encode('NUSANTARA_DIAG_TAG_BOUNDS_FAIL\r\n'));
 
 assert.ok(contains([0x39, 0xfe, 0x0f, 0x87]),
   'Perbandingan ESI/EDI harus memiliki cabang khusus saat batas tag terlampaui');
