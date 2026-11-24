@@ -48,12 +48,12 @@ test('60.3 performs checked 64-bit base-plus-length arithmetic', () => {
 });
 
 test('60.4 descriptor pointer advances by validated entry_size and rejects wrap', () => {
-  assert.ok(containsBytes([0x01, 0xce, 0x0f, 0x82, 0x4a]));
+  assert.ok(containsBytes([0x01, 0xce, 0x0f, 0x82])); // add esi, ecx; near JB panic32
   assert.ok(containsBytes([0x4a, 0xe9]));
 });
 
 test('60.5 preserves tag pointer and tag size after scanning every descriptor', () => {
-  assert.ok(containsBytes([0x5e, 0x59, 0xbb, 0x01, 0x00, 0x00, 0x00]));
+  assert.ok(containsBytes([0x5e, 0x5d, 0x59, 0x56])); // restore tag pointer, saved EBP, tag size; preserve pointer for diagnostic
 });
 
 test('60.6 emits a distinct serial marker only after native descriptor validation', () => {
