@@ -39,8 +39,9 @@ export class AddressSpaceMemoryAccessor {
       const chunkLength = Math.min(PAGE_SIZE - pageOffset, length - copied);
       const physical = addressSpace.translate(current);
       if (physical === null) return null;
-      const bytes = this.readPhysical(physical, chunkLength);
-      if (!bytes || bytes.length < chunkLength) return null;
+      let bytes: Uint8Array | null;
+      try { bytes = this.readPhysical(physical, chunkLength); } catch { return null; }
+      if (!(bytes instanceof Uint8Array) || bytes.length < chunkLength) return null;
       result.set(bytes.subarray(0, chunkLength), copied);
       copied += chunkLength;
     }
@@ -64,7 +65,9 @@ export class AddressSpaceMemoryAccessor {
       const chunkLength = Math.min(PAGE_SIZE - pageOffset, length - copied);
       const physical = addressSpace.translate(current);
       if (physical === null) return false;
-      if (!this.writePhysical(physical, source.subarray(copied, copied + chunkLength))) return false;
+      try {
+        if (!this.writePhysical(physical, source.subarray(copied, copied + chunkLength))) return false;
+      } catch { return false; }
       copied += chunkLength;
     }
     return true;
