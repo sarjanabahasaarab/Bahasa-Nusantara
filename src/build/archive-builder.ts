@@ -2,38 +2,16 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * NUSANTARA ARCHIVE BUILDER (Phase 23)
- * Pembangun arsip PKZIP (.zip) CRC-32 nyata, POSIX USTAR (.tar.gz), & utilitas SHA-256
- * Kompatibel penuh di Node.js maupun peramban (browser-safe tanpa impor statis modul node:*).
+ * NUSANTARA BUILD SYSTEM - Archive Builder (PKZIP CRC-32 & POSIX USTAR .tar.gz) & SHA-256
+ * Target Milestone: Phase 23 (v0.23.0)
  */
 
+import * as crypto from 'crypto';
+import * as path from 'path';
+import * as zlib from 'zlib';
+import { safeFS, safePath } from '../compiler/llvm/node-compat';
 import { ArchiveEntryInput, Sha256SumEntry } from './types';
 
-declare const require: ((id: string) => any) | undefined;
-
-function getNodeBuiltin<T = any>(name: string): T | null {
-  if (
-    typeof window !== 'undefined' ||
-    typeof process === 'undefined' ||
-    !process?.versions?.node
-  ) {
-    return null;
-  }
-  try {
-    const proc = (globalThis as any).process;
-    if (proc && typeof proc.getBuiltinModule === 'function') {
-      return proc.getBuiltinModule(name);
-    }
-    if (typeof require === 'function') {
-      return require(name);
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
-// Tabel CRC-32 standar IEEE 802.3 (PKZIP & GZIP)
 const CRC32_TABLE = (() => {
   const tbl = new Uint32Array(256);
   for (let i = 0; i < 256; i++) {
@@ -46,477 +24,582 @@ const CRC32_TABLE = (() => {
   return tbl;
 })();
 
-export function computeCrc32(data: Uint8Array): number {
-  let crc = 0xffffffff;
-  for (let i = 0; i < data.length; i++) {
-    crc = CRC32_TABLE[(crc ^ data[i]) & 0xff] ^ (crc >>> 8);
-  }
-  return (crc ^ 0xffffffff) >>> 0;
+const REPRODUCIBLE_DATE = new Date('1970-01-01T00:00:00.000Z');
+
+export interface ArchiveExtractLimits {
+  maxEntries?: number;
+  maxEntryBytes?: number;
+  maxTotalBytes?: number;
+  maxCompressionRatio?: number;
 }
 
-// Implementasi SHA-256 FIPS 180-4 murni JS untuk lingkungan browser fallback
-const SHA256_K = new Uint32Array([
-  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
-]);
-
-function sha256PureJs(bytes: Uint8Array): string {
-  const len = bytes.length;
-  const bitLen = BigInt(len) * 8n;
-  const paddedLen = Math.ceil((len + 9) / 64) * 64;
-  const padded = new Uint8Array(paddedLen);
-  padded.set(bytes);
-  padded[len] = 0x80;
-  const view = new DataView(padded.buffer);
-  view.setUint32(paddedLen - 8, Number((bitLen >> 32n) & 0xffffffffn), false);
-  view.setUint32(paddedLen - 4, Number(bitLen & 0xffffffffn), false);
-
-  let h0 = 0x6a09e667;
-  let h1 = 0xbb67ae85;
-  let h2 = 0x3c6ef372;
-  let h3 = 0xa54ff53a;
-  let h4 = 0x510e527f;
-  let h5 = 0x9b05688c;
-  let h6 = 0x1f83d9ab;
-  let h7 = 0x5be0cd19;
-
-  const w = new Uint32Array(64);
-  const rotr = (x: number, n: number) => (x >>> n) | (x << (32 - n));
-
-  for (let offset = 0; offset < paddedLen; offset += 64) {
-    for (let i = 0; i < 16; i++) {
-      w[i] = view.getUint32(offset + i * 4, false);
-    }
-    for (let i = 16; i < 64; i++) {
-      const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
-      const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
-      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
-    }
-
-    let a = h0;
-    let b = h1;
-    let c = h2;
-    let d = h3;
-    let e = h4;
-    let f = h5;
-    let g = h6;
-    let h = h7;
-
-    for (let i = 0; i < 64; i++) {
-      const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
-      const ch = (e & f) ^ (~e & g);
-      const temp1 = (h + S1 + ch + SHA256_K[i] + w[i]) >>> 0;
-      const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
-      const maj = (a & b) ^ (a & c) ^ (b & c);
-      const temp2 = (S0 + maj) >>> 0;
-
-      h = g;
-      g = f;
-      f = e;
-      e = (d + temp1) >>> 0;
-      d = c;
-      c = b;
-      b = a;
-      a = (temp1 + temp2) >>> 0;
-    }
-
-    h0 = (h0 + a) >>> 0;
-    h1 = (h1 + b) >>> 0;
-    h2 = (h2 + c) >>> 0;
-    h3 = (h3 + d) >>> 0;
-    h4 = (h4 + e) >>> 0;
-    h5 = (h5 + f) >>> 0;
-    h6 = (h6 + g) >>> 0;
-    h7 = (h7 + h) >>> 0;
-  }
-
-  return [h0, h1, h2, h3, h4, h5, h6, h7]
-    .map((v) => v.toString(16).padStart(8, '0'))
-    .join('');
-}
-
-function toBytes(input: string | Uint8Array): Uint8Array {
-  return typeof input === 'string' ? new TextEncoder().encode(input) : input;
-}
-
-function normalizeEntryName(raw: string): string {
-  const cleaned = raw.replace(/\\/g, '/').replace(/^\/+/, '');
-  if (!cleaned || cleaned.split('/').some((seg) => seg === '..')) {
-    throw new Error(`Nama entri arsip tidak aman (path traversal): '${raw}'`);
-  }
-  return cleaned;
-}
-
-function concatUint8Arrays(chunks: Uint8Array[]): Uint8Array {
-  let total = 0;
-  for (const c of chunks) total += c.length;
-  const out = new Uint8Array(total);
-  let pos = 0;
-  for (const c of chunks) {
-    out.set(c, pos);
-    pos += c.length;
-  }
-  return out;
-}
-
-function encodeDosTimeDate(epochSec: number): { dosTime: number; dosDate: number } {
-  // Reproducible default: 1980-01-01 00:00:00 (DOS epoch)
-  if (epochSec <= 315532800) {
-    return { dosTime: 0, dosDate: (1 << 5) | 1 };
-  }
-  const d = new Date(epochSec * 1000);
-  const year = Math.max(1980, Math.min(2107, d.getUTCFullYear()));
-  const month = d.getUTCMonth() + 1;
-  const day = d.getUTCDate();
-  const hours = d.getUTCHours();
-  const mins = d.getUTCMinutes();
-  const secs = Math.floor(d.getUTCSeconds() / 2);
-  const dosTime = (hours << 11) | (mins << 5) | secs;
-  const dosDate = ((year - 1980) << 9) | (month << 5) | day;
-  return { dosTime, dosDate };
-}
-
-function writeOctalField(buf: Uint8Array, offset: number, length: number, value: number): void {
-  const oct = Math.max(0, Math.floor(value)).toString(8);
-  const padded = oct.padStart(length - 1, '0').slice(-(length - 1));
-  for (let i = 0; i < padded.length; i++) {
-    buf[offset + i] = padded.charCodeAt(i);
-  }
-  buf[offset + length - 1] = 0;
-}
-
-function writeAsciiField(buf: Uint8Array, offset: number, length: number, value: string): void {
-  const bytes = new TextEncoder().encode(value);
-  const n = Math.min(bytes.length, length);
-  for (let i = 0; i < n; i++) {
-    buf[offset + i] = bytes[i];
-  }
-}
-
-function gzipFallbackStore(data: Uint8Array): Uint8Array {
-  // Valid RFC 1952 GZIP stream menggunakan blok DEFLATE stored (BTYPE=00) untuk fallback peramban
-  const header = new Uint8Array([0x1f, 0x8b, 0x08, 0x00, 0, 0, 0, 0, 0x00, 0x03]);
-  const blocks: Uint8Array[] = [header];
-  const maxBlock = 65535;
-  let offset = 0;
-  do {
-    const chunkLen = Math.min(maxBlock, data.length - offset);
-    const isFinal = offset + chunkLen >= data.length ? 1 : 0;
-    const hdr = new Uint8Array(5);
-    hdr[0] = isFinal;
-    hdr[1] = chunkLen & 0xff;
-    hdr[2] = (chunkLen >>> 8) & 0xff;
-    const nlen = (~chunkLen) & 0xffff;
-    hdr[3] = nlen & 0xff;
-    hdr[4] = (nlen >>> 8) & 0xff;
-    blocks.push(hdr);
-    if (chunkLen > 0) {
-      blocks.push(data.subarray(offset, offset + chunkLen));
-    }
-    offset += chunkLen;
-  } while (offset < data.length);
-
-  const trailer = new Uint8Array(8);
-  const tv = new DataView(trailer.buffer);
-  tv.setUint32(0, computeCrc32(data), true);
-  tv.setUint32(4, data.length >>> 0, true);
-  blocks.push(trailer);
-  return concatUint8Arrays(blocks);
-}
+const DEFAULT_ARCHIVE_LIMITS: Required<ArchiveExtractLimits> = {
+  maxEntries: 10_000,
+  maxEntryBytes: 256 * 1024 * 1024,
+  maxTotalBytes: 512 * 1024 * 1024,
+  maxCompressionRatio: 500,
+};
 
 export class ArchiveBuilder {
-  /**
-   * Menghitung digest SHA-256 hex huruf kecil (menggunakan node:crypto di Node.js atau FIPS 180-4 JS di browser).
-   */
   public static computeSha256(data: string | Uint8Array): string {
-    const cryptoMod = getNodeBuiltin<any>('crypto');
-    if (cryptoMod && typeof cryptoMod.createHash === 'function') {
-      return cryptoMod.createHash('sha256').update(data).digest('hex');
+    return crypto.createHash('sha256').update(data).digest('hex');
+  }
+
+  public static computeCrc32(data: Uint8Array): number {
+    let crc = 0xffffffff;
+    for (let i = 0; i < data.length; i++) {
+      crc = CRC32_TABLE[(crc ^ data[i]) & 0xff] ^ (crc >>> 8);
     }
-    return sha256PureJs(toBytes(data));
+    return (crc ^ 0xffffffff) >>> 0;
   }
 
-  /**
-   * Memformat daftar entri checksum menjadi format standar GNU coreutils SHA256SUMS.
-   */
   public static formatSha256Sums(entries: Sha256SumEntry[]): string {
-    const sorted = [...entries].sort((a, b) => a.filename.localeCompare(b.filename));
-    return sorted.map((e) => `${e.sha256}  ${e.filename}`).join('\n') + (sorted.length > 0 ? '\n' : '');
+    if (entries.length === 0) return '';
+    return entries.map((e) => `${e.sha256}  ${e.filename}`).join('\n') + '\n';
   }
 
-  /**
-   * Mem-parsing isi teks SHA256SUMS menjadi daftar entri terstruktur.
-   */
-  public static parseSha256Sums(content: string): Sha256SumEntry[] {
-    const result: Sha256SumEntry[] = [];
-    for (const rawLine of content.split(/\r?\n/)) {
-      const line = rawLine.trim();
-      if (!line) continue;
-      const m = line.match(/^([a-fA-F0-9]{64})\s+\*?(.+)$/);
-      if (m) {
-        result.push({ sha256: m[1].toLowerCase(), filename: m[2].trim() });
+  public static verifySha256SumsFromDirectory(
+    directory: string,
+    sha256sumsContent: string
+  ): {
+    valid: boolean;
+    checkedCount: number;
+    mismatches: string[];
+    missingFiles: string[];
+  } {
+    const mismatches: string[] = [];
+    const missingFiles: string[] = [];
+    let checkedCount = 0;
+    const absRoot = safePath.resolve(directory);
+
+    const lines = sha256sumsContent
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0 && !l.startsWith('#'));
+
+    for (const line of lines) {
+      const m = line.match(/^([0-9a-fA-F]{64})\s+\*?(.+)$/);
+      if (!m) {
+        mismatches.push(`Baris SHA256SUMS tidak valid: '${line}'`);
+        continue;
+      }
+      const expectedHash = m[1].toLowerCase();
+      const relName = m[2].trim();
+      const safeTarget = this.resolveSafeSubpath(absRoot, relName);
+      if (!safeFS.existsSync(safeTarget)) {
+        missingFiles.push(relName);
+        continue;
+      }
+      const bytes = safeFS.readFileBufferSync(safeTarget);
+      const actualHash = this.computeSha256(bytes);
+      checkedCount++;
+      if (actualHash !== expectedHash) {
+        mismatches.push(`${relName} (diharapkan ${expectedHash}, aktual ${actualHash})`);
       }
     }
-    return result;
+
+    return {
+      valid: mismatches.length === 0 && missingFiles.length === 0 && checkedCount > 0,
+      checkedCount,
+      mismatches,
+      missingFiles,
+    };
   }
 
-  /**
-   * Membuat arsip PKZIP (.zip) valid dengan CRC-32 nyata, atribut izin UNIX, & urutan deterministik.
-   */
   public static createZip(
     entries: ArchiveEntryInput[],
     options: { reproducible?: boolean } = {}
   ): Uint8Array {
-    const reproducible = options.reproducible !== false;
-    const normalized = entries
-      .map((e) => ({
-        name: normalizeEntryName(e.name),
-        data: toBytes(e.content),
-        mode: e.mode ?? 0o644,
-        mtime: reproducible ? 315532800 : e.mtime ?? Math.floor(Date.now() / 1000),
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-    const zlibMod = getNodeBuiltin<any>('zlib');
-    const localChunks: Uint8Array[] = [];
-    const centralChunks: Uint8Array[] = [];
+    const normalized = this.normalizeEntries(entries, options.reproducible !== false);
+    const localChunks: Buffer[] = [];
+    const centralChunks: Buffer[] = [];
     let offset = 0;
 
-    for (const entry of normalized) {
-      const nameBytes = new TextEncoder().encode(entry.name);
-      const crc = computeCrc32(entry.data);
-      const { dosTime, dosDate } = encodeDosTimeDate(entry.mtime);
+    for (const item of normalized) {
+      const nameBytes = Buffer.from(item.name, 'utf-8');
+      const data = Buffer.from(item.bytes);
+      const crc = this.computeCrc32(data);
+      const deflated = zlib.deflateRawSync(data, { level: 6 });
+      const useDeflate = deflated.length < data.length;
+      const compData = useDeflate ? deflated : data;
+      const method = useDeflate ? 8 : 0;
 
-      let method = 0; // STORE
-      let payload = entry.data;
-      if (zlibMod && typeof zlibMod.deflateRawSync === 'function' && entry.data.length > 0) {
-        const deflated = new Uint8Array(zlibMod.deflateRawSync(entry.data, { level: 6 }));
-        if (deflated.length < entry.data.length) {
-          method = 8; // DEFLATE
-          payload = deflated;
-        }
-      }
+      const { dosTime, dosDate } = this.toDosTimeDate(item.mtime);
 
-      // Local File Header (30 bytes + name)
-      const localHdr = new Uint8Array(30 + nameBytes.length);
-      const lv = new DataView(localHdr.buffer);
-      lv.setUint32(0, 0x04034b50, true); // PK\x03\x04
-      lv.setUint16(4, 20, true); // version needed 2.0
-      lv.setUint16(6, 0x0800, true); // UTF-8 flag
-      lv.setUint16(8, method, true);
-      lv.setUint16(10, dosTime, true);
-      lv.setUint16(12, dosDate, true);
-      lv.setUint32(14, crc, true);
-      lv.setUint32(18, payload.length, true);
-      lv.setUint32(22, entry.data.length, true);
-      lv.setUint16(26, nameBytes.length, true);
-      lv.setUint16(28, 0, true);
-      localHdr.set(nameBytes, 30);
+      // Local File Header (30 bytes + filename)
+      const localHdr = Buffer.alloc(30);
+      localHdr.writeUInt32LE(0x04034b50, 0);
+      localHdr.writeUInt16LE(20, 4); // version needed
+      localHdr.writeUInt16LE(0x0800, 6); // UTF-8 bit
+      localHdr.writeUInt16LE(method, 8);
+      localHdr.writeUInt16LE(dosTime, 10);
+      localHdr.writeUInt16LE(dosDate, 12);
+      localHdr.writeUInt32LE(crc, 14);
+      localHdr.writeUInt32LE(compData.length, 18);
+      localHdr.writeUInt32LE(data.length, 22);
+      localHdr.writeUInt16LE(nameBytes.length, 26);
+      localHdr.writeUInt16LE(0, 28);
 
-      localChunks.push(localHdr, payload);
+      localChunks.push(localHdr, nameBytes, compData);
 
-      // Central Directory Header (46 bytes + name)
-      const cdHdr = new Uint8Array(46 + nameBytes.length);
-      const cv = new DataView(cdHdr.buffer);
-      cv.setUint32(0, 0x02014b50, true); // PK\x01\x02
-      cv.setUint16(4, (3 << 8) | 20, true); // version made by UNIX (3) + 2.0
-      cv.setUint16(6, 20, true);
-      cv.setUint16(8, 0x0800, true); // UTF-8
-      cv.setUint16(10, method, true);
-      cv.setUint16(12, dosTime, true);
-      cv.setUint16(14, dosDate, true);
-      cv.setUint32(16, crc, true);
-      cv.setUint32(20, payload.length, true);
-      cv.setUint32(24, entry.data.length, true);
-      cv.setUint16(28, nameBytes.length, true);
-      cv.setUint16(30, 0, true);
-      cv.setUint16(32, 0, true);
-      cv.setUint16(34, 0, true);
-      cv.setUint16(36, 0, true);
-      // External file attributes: UNIX regular file (0100000) | mode in upper 16 bits
-      cv.setUint32(38, ((0o100000 | (entry.mode & 0o777)) << 16) >>> 0, true);
-      cv.setUint32(42, offset, true);
-      cdHdr.set(nameBytes, 46);
-      centralChunks.push(cdHdr);
+      // Central Directory File Header (46 bytes + filename)
+      const cdHdr = Buffer.alloc(46);
+      cdHdr.writeUInt32LE(0x02014b50, 0);
+      cdHdr.writeUInt16LE((3 << 8) | 20, 4); // Unix creator + PKZIP 2.0
+      cdHdr.writeUInt16LE(20, 6);
+      cdHdr.writeUInt16LE(0x0800, 8);
+      cdHdr.writeUInt16LE(method, 10);
+      cdHdr.writeUInt16LE(dosTime, 12);
+      cdHdr.writeUInt16LE(dosDate, 14);
+      cdHdr.writeUInt32LE(crc, 16);
+      cdHdr.writeUInt32LE(compData.length, 20);
+      cdHdr.writeUInt32LE(data.length, 24);
+      cdHdr.writeUInt16LE(nameBytes.length, 28);
+      cdHdr.writeUInt16LE(0, 30);
+      cdHdr.writeUInt16LE(0, 32);
+      cdHdr.writeUInt16LE(0, 34);
+      cdHdr.writeUInt16LE(0, 36);
+      cdHdr.writeUInt32LE(((item.mode & 0xffff) << 16) >>> 0, 38);
+      cdHdr.writeUInt32LE(offset, 42);
 
-      offset += localHdr.length + payload.length;
+      centralChunks.push(cdHdr, nameBytes);
+      offset += 30 + nameBytes.length + compData.length;
     }
 
-    const centralBytes = concatUint8Arrays(centralChunks);
-    const eocd = new Uint8Array(22);
-    const ev = new DataView(eocd.buffer);
-    ev.setUint32(0, 0x06054b50, true); // PK\x05\x06
-    ev.setUint16(4, 0, true);
-    ev.setUint16(6, 0, true);
-    ev.setUint16(8, normalized.length, true);
-    ev.setUint16(10, normalized.length, true);
-    ev.setUint32(12, centralBytes.length, true);
-    ev.setUint32(16, offset, true);
-    ev.setUint16(20, 0, true);
+    const centralDirBuf = Buffer.concat(centralChunks);
+    const eocd = Buffer.alloc(22);
+    eocd.writeUInt32LE(0x06054b50, 0);
+    eocd.writeUInt16LE(0, 4);
+    eocd.writeUInt16LE(0, 6);
+    eocd.writeUInt16LE(normalized.length, 8);
+    eocd.writeUInt16LE(normalized.length, 10);
+    eocd.writeUInt32LE(centralDirBuf.length, 12);
+    eocd.writeUInt32LE(offset, 16);
+    eocd.writeUInt16LE(0, 20);
 
-    return concatUint8Arrays([...localChunks, centralBytes, eocd]);
+    return new Uint8Array(Buffer.concat([...localChunks, centralDirBuf, eocd]));
   }
 
-  /**
-   * Membuat arsip POSIX USTAR (.tar.gz) terkompresi GZIP deterministik.
-   */
+  public static extractZip(
+    zipBytes: Uint8Array,
+    destDir: string,
+    limits: ArchiveExtractLimits = {}
+  ): string[] {
+    const cfg = { ...DEFAULT_ARCHIVE_LIMITS, ...limits };
+    const buf = Buffer.from(zipBytes);
+    const absDest = safePath.resolve(destDir);
+    safeFS.mkdirSync(absDest, { recursive: true });
+
+    // Cari End of Central Directory (PK\x05\x06)
+    let eocdOff = -1;
+    const minSearch = Math.max(0, buf.length - 65558);
+    for (let i = buf.length - 22; i >= minSearch; i--) {
+      if (buf.readUInt32LE(i) === 0x06054b50) {
+        eocdOff = i;
+        break;
+      }
+    }
+    if (eocdOff < 0) {
+      throw new Error('Arsip ZIP tidak memiliki End of Central Directory yang valid.');
+    }
+
+    const totalEntries = buf.readUInt16LE(eocdOff + 10);
+    if (totalEntries > cfg.maxEntries) {
+      throw new Error(
+        `Archive bomb ZIP terdeteksi: jumlah entri (${totalEntries}) melebihi batas aman (${cfg.maxEntries}).`
+      );
+    }
+    const cdOffset = buf.readUInt32LE(eocdOff + 16);
+    const extracted: string[] = [];
+    let totalUncompressed = 0;
+
+    let cursor = cdOffset;
+    for (let i = 0; i < totalEntries; i++) {
+      if (cursor + 46 > buf.length || buf.readUInt32LE(cursor) !== 0x02014b50) {
+        throw new Error(`Central Directory ZIP korup pada entri ke-${i}.`);
+      }
+      const method = buf.readUInt16LE(cursor + 10);
+      const expectedCrc = buf.readUInt32LE(cursor + 16);
+      const compSize = buf.readUInt32LE(cursor + 20);
+      const uncompSize = buf.readUInt32LE(cursor + 24);
+      const nameLen = buf.readUInt16LE(cursor + 28);
+      const extraLen = buf.readUInt16LE(cursor + 30);
+      const commentLen = buf.readUInt16LE(cursor + 32);
+      const extAttr = buf.readUInt32LE(cursor + 38);
+      const localHdrOff = buf.readUInt32LE(cursor + 42);
+
+      const entryName = buf.subarray(cursor + 46, cursor + 46 + nameLen).toString('utf-8');
+      cursor += 46 + nameLen + extraLen + commentLen;
+
+      // Tolak symlink atau path traversal pada ZIP
+      const unixMode = (extAttr >>> 16) & 0xffff;
+      if ((unixMode & 0o170000) === 0o120000) {
+        throw new Error(`Entri symlink tidak diizinkan dalam arsip ZIP: '${entryName}'.`);
+      }
+
+      if (uncompSize > cfg.maxEntryBytes) {
+        throw new Error(
+          `Archive bomb ZIP terdeteksi pada '${entryName}': ukuran (${uncompSize} B) melebihi batas entri (${cfg.maxEntryBytes} B).`
+        );
+      }
+      if (totalUncompressed + uncompSize > cfg.maxTotalBytes) {
+        throw new Error(
+          `Archive bomb ZIP terdeteksi: total dekompresi melebihi batas aman (${cfg.maxTotalBytes} B).`
+        );
+      }
+
+      if (entryName.endsWith('/')) {
+        const dirPath = this.resolveSafeSubpath(absDest, entryName);
+        safeFS.mkdirSync(dirPath, { recursive: true });
+        continue;
+      }
+
+      if (localHdrOff + 30 > buf.length || buf.readUInt32LE(localHdrOff) !== 0x04034b50) {
+        throw new Error(`Local File Header ZIP korup untuk '${entryName}'.`);
+      }
+      const lNameLen = buf.readUInt16LE(localHdrOff + 26);
+      const lExtraLen = buf.readUInt16LE(localHdrOff + 28);
+      const dataStart = localHdrOff + 30 + lNameLen + lExtraLen;
+      if (dataStart + compSize > buf.length) {
+        throw new Error(`Data payload ZIP terpotong untuk '${entryName}'.`);
+      }
+      const compSlice = buf.subarray(dataStart, dataStart + compSize);
+
+      if (
+        method === 8 &&
+        compSize > 0 &&
+        uncompSize > 65536 &&
+        uncompSize / compSize > cfg.maxCompressionRatio
+      ) {
+        throw new Error(
+          `Archive bomb ZIP terdeteksi pada '${entryName}': rasio kompresi (${(uncompSize / compSize).toFixed(1)}x) melebihi batas (${cfg.maxCompressionRatio}x).`
+        );
+      }
+
+      let outBuf: Buffer;
+      if (method === 0) {
+        outBuf = Buffer.from(compSlice);
+      } else if (method === 8) {
+        try {
+          outBuf = zlib.inflateRawSync(compSlice, {
+            maxOutputLength: Math.min(cfg.maxEntryBytes, cfg.maxTotalBytes - totalUncompressed),
+          });
+        } catch (err: any) {
+          throw new Error(
+            `Archive bomb / kegagalan dekompresi ZIP untuk '${entryName}': ${err?.message || err}`
+          );
+        }
+      } else {
+        throw new Error(`Metode kompresi ZIP tidak didukung (${method}) untuk '${entryName}'.`);
+      }
+
+      if (
+        outBuf.length > cfg.maxEntryBytes ||
+        totalUncompressed + outBuf.length > cfg.maxTotalBytes ||
+        (method === 8 &&
+          compSize > 0 &&
+          outBuf.length > 65536 &&
+          outBuf.length / compSize > cfg.maxCompressionRatio)
+      ) {
+        throw new Error(
+          `Archive bomb ZIP terdeteksi pasca-inflasi pada '${entryName}' (${outBuf.length} B).`
+        );
+      }
+
+      if (outBuf.length !== uncompSize) {
+        throw new Error(`Ukuran ZIP tidak cocok untuk '${entryName}'.`);
+      }
+      const actualCrc = this.computeCrc32(outBuf);
+      if (actualCrc !== expectedCrc) {
+        throw new Error(`CRC-32 ZIP tidak cocok untuk '${entryName}'.`);
+      }
+
+      totalUncompressed += outBuf.length;
+
+      const outPath = this.resolveSafeSubpath(absDest, entryName);
+      safeFS.mkdirSync(safePath.dirname(outPath), { recursive: true });
+      safeFS.writeFileSync(outPath, outBuf);
+      if (typeof process !== 'undefined' && process.platform !== 'win32' && (unixMode & 0o111) !== 0) {
+        safeFS.chmodSync(outPath, unixMode & 0o777);
+      }
+      extracted.push(outPath);
+    }
+
+    return extracted;
+  }
+
   public static createTarGz(
     entries: ArchiveEntryInput[],
     options: { reproducible?: boolean } = {}
   ): Uint8Array {
-    const reproducible = options.reproducible !== false;
-    const normalized = entries
-      .map((e) => ({
-        name: normalizeEntryName(e.name),
-        data: toBytes(e.content),
-        mode: e.mode ?? 0o644,
-        mtime: reproducible ? 0 : e.mtime ?? Math.floor(Date.now() / 1000),
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    const normalized = this.normalizeEntries(entries, options.reproducible !== false);
+    const blocks: Buffer[] = [];
 
-    const tarChunks: Uint8Array[] = [];
+    for (const item of normalized) {
+      const { name, prefix } = this.splitTarName(item.name);
+      const data = Buffer.from(item.bytes);
+      const hdr = Buffer.alloc(512, 0);
 
-    for (const entry of normalized) {
-      const header = new Uint8Array(512);
-      let nameField = entry.name;
-      let prefixField = '';
-      if (new TextEncoder().encode(entry.name).length > 100) {
-        const slashIdx = entry.name.lastIndexOf('/');
-        if (slashIdx > 0) {
-          prefixField = entry.name.slice(0, slashIdx);
-          nameField = entry.name.slice(slashIdx + 1);
-        }
-      }
-      writeAsciiField(header, 0, 100, nameField);
-      writeOctalField(header, 100, 8, entry.mode & 0o7777);
-      writeOctalField(header, 108, 8, 0); // uid
-      writeOctalField(header, 116, 8, 0); // gid
-      writeOctalField(header, 124, 12, entry.data.length);
-      writeOctalField(header, 136, 12, entry.mtime);
-      for (let i = 148; i < 156; i++) header[i] = 0x20; // checksum placeholder
-      header[156] = 0x30; // '0' regular file
-      writeAsciiField(header, 257, 6, 'ustar\0');
-      writeAsciiField(header, 263, 2, '00');
-      writeAsciiField(header, 265, 32, 'nusantara');
-      writeAsciiField(header, 297, 32, 'nusantara');
-      if (prefixField) {
-        writeAsciiField(header, 345, 155, prefixField);
+      hdr.write(name, 0, Math.min(100, Buffer.byteLength(name)), 'utf-8');
+      this.writeOctal(hdr, 100, 8, item.mode & 0o777);
+      this.writeOctal(hdr, 108, 8, 0); // uid
+      this.writeOctal(hdr, 116, 8, 0); // gid
+      this.writeOctal(hdr, 124, 12, data.length);
+      this.writeOctal(hdr, 136, 12, Math.floor(item.mtime.getTime() / 1000));
+      hdr.fill(0x20, 148, 156); // checksum placeholder spaces
+      hdr.write('0', 156, 1, 'ascii'); // regular file
+      hdr.write('ustar\0', 257, 6, 'ascii');
+      hdr.write('00', 263, 2, 'ascii');
+      hdr.write('nusantara', 265, 9, 'ascii');
+      hdr.write('nusantara', 297, 9, 'ascii');
+      if (prefix) {
+        hdr.write(prefix, 345, Math.min(155, Buffer.byteLength(prefix)), 'utf-8');
       }
 
-      let chksum = 0;
-      for (let i = 0; i < 512; i++) chksum += header[i];
-      writeOctalField(header, 148, 7, chksum);
-      header[155] = 0x20;
+      let sum = 0;
+      for (let i = 0; i < 512; i++) {
+        sum += hdr[i];
+      }
+      const sumStr = sum.toString(8).padStart(6, '0') + '\0 ';
+      hdr.write(sumStr, 148, 8, 'ascii');
 
-      tarChunks.push(header);
-      if (entry.data.length > 0) {
-        tarChunks.push(entry.data);
-        const rem = entry.data.length % 512;
+      blocks.push(hdr);
+      if (data.length > 0) {
+        blocks.push(data);
+        const rem = data.length % 512;
         if (rem !== 0) {
-          tarChunks.push(new Uint8Array(512 - rem));
+          blocks.push(Buffer.alloc(512 - rem, 0));
         }
       }
     }
 
-    // End-of-archive marker: two 512-byte zero blocks
-    tarChunks.push(new Uint8Array(1024));
-    const tarBytes = concatUint8Arrays(tarChunks);
-
-    const zlibMod = getNodeBuiltin<any>('zlib');
-    if (zlibMod && typeof zlibMod.gzipSync === 'function') {
-      const gz = new Uint8Array(zlibMod.gzipSync(tarBytes, { level: 6 }));
-      if (reproducible && gz.length >= 10) {
-        // Nolkan MTIME & tetapkan OS=3 (Unix) pada header GZIP agar byte-for-byte deterministik
-        gz[4] = 0;
-        gz[5] = 0;
-        gz[6] = 0;
-        gz[7] = 0;
-        gz[9] = 3;
-      }
-      return gz;
-    }
-
-    return gzipFallbackStore(tarBytes);
+    // Two 512-byte EOF zero blocks
+    blocks.push(Buffer.alloc(1024, 0));
+    const tarBuf = Buffer.concat(blocks);
+    const gz = zlib.gzipSync(tarBuf, { level: 6 });
+    return new Uint8Array(gz);
   }
 
-  /**
-   * Memverifikasi struktur PKZIP, batas entri, CRC-32, dan proteksi Zip-Slip secara mandiri.
-   */
-  public static verifyZip(bytes: Uint8Array): {
-    valid: boolean;
-    entries: string[];
-    errors: string[];
-  } {
-    const entries: string[] = [];
-    const errors: string[] = [];
-    if (bytes.length < 22) {
-      return { valid: false, entries, errors: ['Ukuran berkas ZIP terlalu kecil (< 22 byte).'] };
-    }
-    if (bytes[0] !== 0x50 || bytes[1] !== 0x4b || bytes[2] !== 0x03 || bytes[3] !== 0x04) {
-      return { valid: false, entries, errors: ['Magic header PK\\x03\\x04 tidak ditemukan.'] };
+  public static extractTarGz(
+    tarGzBytes: Uint8Array,
+    destDir: string,
+    limits: ArchiveExtractLimits = {}
+  ): string[] {
+    const cfg = { ...DEFAULT_ARCHIVE_LIMITS, ...limits };
+    const maxTarBuf = Math.min(cfg.maxTotalBytes + Math.min(cfg.maxEntries, 4096) * 1024 + 8192, 512 * 1024 * 1024);
+    let tarBuf: Buffer;
+    try {
+      tarBuf = zlib.gunzipSync(Buffer.from(tarGzBytes), { maxOutputLength: maxTarBuf });
+    } catch (err: any) {
+      throw new Error(`Archive bomb / kegagalan dekompresi TAR.GZ: ${err?.message || err}`);
     }
 
-    const zlibMod = getNodeBuiltin<any>('zlib');
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    let pos = 0;
+    if (
+      tarGzBytes.length > 0 &&
+      tarBuf.length > 65536 &&
+      tarBuf.length / tarGzBytes.length > cfg.maxCompressionRatio
+    ) {
+      throw new Error(
+        `Archive bomb TAR.GZ terdeteksi: rasio kompresi (${(tarBuf.length / tarGzBytes.length).toFixed(1)}x) melebihi batas (${cfg.maxCompressionRatio}x).`
+      );
+    }
 
-    while (pos + 4 <= bytes.length) {
-      const sig = view.getUint32(pos, true);
-      if (sig === 0x02014b50 || sig === 0x06054b50) break;
-      if (sig !== 0x04034b50) {
-        errors.push(`Signature entri lokal ZIP tidak valid pada offset ${pos}.`);
-        break;
-      }
-      if (pos + 30 > bytes.length) {
-        errors.push('Local File Header ZIP terpotong.');
-        break;
-      }
-      const method = view.getUint16(pos + 8, true);
-      const expectedCrc = view.getUint32(pos + 14, true);
-      const compSize = view.getUint32(pos + 18, true);
-      const uncompSize = view.getUint32(pos + 22, true);
-      const nameLen = view.getUint16(pos + 26, true);
-      const extraLen = view.getUint16(pos + 28, true);
-      const dataStart = pos + 30 + nameLen + extraLen;
-      const dataEnd = dataStart + compSize;
+    const absDest = safePath.resolve(destDir);
+    safeFS.mkdirSync(absDest, { recursive: true });
+    const extracted: string[] = [];
 
-      if (dataEnd > bytes.length) {
-        errors.push(`Payload entri ZIP melebihi akhir berkas pada offset ${pos}.`);
+    let cursor = 0;
+    let entryCount = 0;
+    let totalPayloadBytes = 0;
+    while (cursor + 512 <= tarBuf.length) {
+      const hdr = tarBuf.subarray(cursor, cursor + 512);
+      cursor += 512;
+
+      if (hdr.every((b) => b === 0)) {
         break;
       }
 
-      const name = new TextDecoder().decode(bytes.subarray(pos + 30, pos + 30 + nameLen));
-      if (name.startsWith('/') || name.includes('..') || name.includes('\\')) {
-        errors.push(`Entri ZIP mengandung jalur tidak aman (Zip-Slip): '${name}'`);
+      entryCount++;
+      if (entryCount > cfg.maxEntries) {
+        throw new Error(
+          `Archive bomb TAR.GZ terdeteksi: jumlah entri melebihi batas aman (${cfg.maxEntries}).`
+        );
       }
-      entries.push(name);
 
-      const compData = bytes.subarray(dataStart, dataEnd);
-      if (method === 0) {
-        const crc = computeCrc32(compData);
-        if (crc !== expectedCrc || compData.length !== uncompSize) {
-          errors.push(`CRC-32/ukuran tidak cocok pada entri STORE '${name}'.`);
-        }
-      } else if (method === 8 && zlibMod && typeof zlibMod.inflateRawSync === 'function') {
-        try {
-          const raw = new Uint8Array(zlibMod.inflateRawSync(compData));
-          const crc = computeCrc32(raw);
-          if (crc !== expectedCrc || raw.length !== uncompSize) {
-            errors.push(`CRC-32/ukuran tidak cocok pada entri DEFLATE '${name}'.`);
-          }
-        } catch (err: any) {
-          errors.push(`Gagal dekompresi entri DEFLATE '${name}': ${err?.message || err}`);
-        }
+      const storedSum = this.readOctal(hdr.subarray(148, 156));
+      let calcSum = 0;
+      for (let i = 0; i < 512; i++) {
+        calcSum += i >= 148 && i < 156 ? 0x20 : hdr[i];
       }
-      pos = dataEnd;
+      if (storedSum !== calcSum) {
+        throw new Error('Checksum header TAR USTAR tidak valid.');
+      }
+
+      const rawName = this.readNullString(hdr.subarray(0, 100));
+      const rawPrefix = this.readNullString(hdr.subarray(345, 500));
+      const fullName = rawPrefix ? `${rawPrefix}/${rawName}` : rawName;
+      const typeFlag = String.fromCharCode(hdr[156]);
+      const mode = this.readOctal(hdr.subarray(100, 108));
+      const size = this.readOctal(hdr.subarray(124, 136));
+
+      if (typeFlag === '1' || typeFlag === '2') {
+        throw new Error(`Hardlink/symlink TAR tidak diizinkan demi keamanan: '${fullName}'.`);
+      }
+
+      if (size > cfg.maxEntryBytes) {
+        throw new Error(
+          `Archive bomb TAR.GZ terdeteksi pada '${fullName}': ukuran (${size} B) melebihi batas entri (${cfg.maxEntryBytes} B).`
+        );
+      }
+      if (totalPayloadBytes + size > cfg.maxTotalBytes) {
+        throw new Error(
+          `Archive bomb TAR.GZ terdeteksi: total ekstraksi melebihi batas aman (${cfg.maxTotalBytes} B).`
+        );
+      }
+
+      if (typeFlag === '5' || fullName.endsWith('/')) {
+        const dirPath = this.resolveSafeSubpath(absDest, fullName);
+        safeFS.mkdirSync(dirPath, { recursive: true });
+        continue;
+      }
+
+      if (cursor + size > tarBuf.length) {
+        throw new Error(`Payload TAR.GZ terpotong untuk '${fullName}'.`);
+      }
+      const payload = tarBuf.subarray(cursor, cursor + size);
+      const padded = size === 0 ? 0 : Math.ceil(size / 512) * 512;
+      cursor += padded;
+      totalPayloadBytes += size;
+
+      const outPath = this.resolveSafeSubpath(absDest, fullName);
+      safeFS.mkdirSync(safePath.dirname(outPath), { recursive: true });
+      safeFS.writeFileSync(outPath, payload);
+      if (typeof process !== 'undefined' && process.platform !== 'win32' && mode > 0) {
+        safeFS.chmodSync(outPath, mode & 0o777);
+      }
+      extracted.push(outPath);
     }
 
-    return { valid: errors.length === 0 && entries.length > 0, entries, errors };
+    return extracted;
+  }
+
+  public static resolveSafeSubpath(baseDir: string, entryName: string): string {
+    if (!entryName || entryName.includes('\0')) {
+      throw new Error(`Nama entri arsip tidak valid: '${entryName}'.`);
+    }
+    const cleaned = entryName.replace(/\\/g, '/').replace(/^\/+/, '');
+    if (entryName.startsWith('/') || entryName.startsWith('\\') || /^[A-Za-z]:/.test(entryName)) {
+      throw new Error(`Jalur absolut tidak diizinkan dalam arsip: '${entryName}'.`);
+    }
+    const parts = cleaned.split('/').filter((p) => p.length > 0);
+    const namaPerangkatWindows = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i;
+    if (parts.some((p) => p === '..' || p.includes(':') || namaPerangkatWindows.test(p))) {
+      throw new Error(`Path traversal ('..') terdeteksi dan ditolak: '${entryName}'.`);
+    }
+    const absBase = safePath.resolve(baseDir);
+    const resolved = safePath.resolve(absBase, ...parts);
+    const basePrefix = absBase.endsWith(path.sep) ? absBase : absBase + path.sep;
+    if (resolved !== absBase && !resolved.startsWith(basePrefix)) {
+      throw new Error(`Jalur target keluar dari batas direktori aman: '${entryName}'.`);
+    }
+    return resolved;
+  }
+
+  private static normalizeEntries(
+    entries: ArchiveEntryInput[],
+    reproducible: boolean
+  ): Array<{ name: string; bytes: Uint8Array; mode: number; mtime: Date }> {
+    const namaTerdaftar = new Set<string>();
+    const mapped = entries.map((e) => {
+      if (!e || typeof e.name !== 'string' || e.name.includes('\0')) {
+        throw new Error('Nama entri arsip tidak valid atau mengandung null byte.');
+      }
+      const cleanName = e.name.replace(/\\/g, '/');
+      const segmen = cleanName.split('/');
+      if (
+        !cleanName ||
+        cleanName.startsWith('/') ||
+        /^[A-Za-z]:/.test(cleanName) ||
+        segmen.some((bagian) =>
+          !bagian ||
+          bagian === '.' ||
+          bagian === '..' ||
+          bagian.includes(':') ||
+          /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i.test(bagian)
+        )
+      ) {
+        throw new Error(`Nama entri arsip tidak aman: '${e.name}'.`);
+      }
+      const namaKunci = cleanName.toLowerCase();
+      if (namaTerdaftar.has(namaKunci)) {
+        throw new Error(`Nama entri arsip duplikat atau bertabrakan lintas platform: '${cleanName}'.`);
+      }
+      namaTerdaftar.add(namaKunci);
+
+      if (typeof e.content !== 'string' && !(e.content instanceof Uint8Array)) {
+        throw new Error(`Konten entri arsip '${cleanName}' harus berupa teks atau byte.`);
+      }
+      const mode = e.mode ?? 0o644;
+      if (!Number.isSafeInteger(mode) || mode < 0 || mode > 0o777) {
+        throw new Error(`Mode izin entri arsip '${cleanName}' tidak valid.`);
+      }
+      const bytes = typeof e.content === 'string' ? Buffer.from(e.content, 'utf-8') : e.content;
+      return {
+        name: cleanName,
+        bytes,
+        mode,
+        mtime: reproducible ? REPRODUCIBLE_DATE : e.mtime ?? new Date(),
+      };
+    });
+    if (reproducible) {
+      mapped.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    }
+    return mapped;
+  }
+
+  private static splitTarName(fullName: string): { name: string; prefix: string } {
+    if (Buffer.byteLength(fullName, 'utf-8') <= 100) {
+      return { name: fullName, prefix: '' };
+    }
+    const parts = fullName.split('/');
+    for (let idx = 1; idx < parts.length; idx++) {
+      const prefix = parts.slice(0, idx).join('/');
+      const name = parts.slice(idx).join('/');
+      if (
+        Buffer.byteLength(name, 'utf-8') <= 100 &&
+        Buffer.byteLength(prefix, 'utf-8') <= 155
+      ) {
+        return { name, prefix };
+      }
+    }
+    throw new Error(`Jalur entri terlalu panjang untuk header TAR USTAR: '${fullName}'.`);
+  }
+
+  private static writeOctal(buf: Buffer, offset: number, length: number, value: number): void {
+    const oct = Math.max(0, Math.floor(value)).toString(8).padStart(length - 1, '0');
+    buf.write(oct.slice(-(length - 1)) + '\0', offset, length, 'ascii');
+  }
+
+  private static readOctal(slice: Buffer): number {
+    const str = slice.toString('ascii').replace(/\0.*$/, '').trim();
+    if (!str) return 0;
+    return parseInt(str, 8) || 0;
+  }
+
+  private static readNullString(slice: Buffer): string {
+    const idx = slice.indexOf(0);
+    return (idx >= 0 ? slice.subarray(0, idx) : slice).toString('utf-8');
+  }
+
+  private static toDosTimeDate(date: Date): { dosTime: number; dosDate: number } {
+    const y = Math.max(1980, date.getUTCFullYear());
+    const m = date.getUTCMonth() + 1;
+    const d = date.getUTCDate();
+    const hh = date.getUTCHours();
+    const mm = date.getUTCMinutes();
+    const ss = Math.floor(date.getUTCSeconds() / 2);
+    const dosDate = ((y - 1980) << 9) | (m << 5) | d;
+    const dosTime = (hh << 11) | (mm << 5) | ss;
+    return { dosTime, dosDate };
   }
 }
