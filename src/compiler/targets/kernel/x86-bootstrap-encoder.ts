@@ -283,6 +283,7 @@ export class X86BootstrapEncoder {
   // 10 Tahapan Diagnostik Boot Wajib (Phase 49)
   public static readonly STAGE_1_START = 'NUSANTARA_BOOT_START\r\n';
   public static readonly STAGE_2_MULTIBOOT2 = 'NUSANTARA_MULTIBOOT2_OK\r\n';
+  public static readonly STAGE_2B_MULTIBOOT2_COPY = 'NUSANTARA_MULTIBOOT2_COPY_OK\r\n';
   public static readonly STAGE_3_LONG_MODE = 'NUSANTARA_CPU_LONG_MODE_OK\r\n';
   public static readonly STAGE_4_PAGING = 'NUSANTARA_PAGING_OK\r\n';
   public static readonly STAGE_5_GDT64 = 'NUSANTARA_GDT64_OK\r\n';
@@ -337,6 +338,9 @@ export class X86BootstrapEncoder {
   // CPU-local area for the bootstrap CPU. AP/SMP initialization must provision one per CPU.
   private static readonly CPU_LOCAL_BASE = 0x0025_1000;
   private static readonly CPU_LOCAL_SYSCALL_STACK_TOP = 0x0025_0000;
+  // A bounded 64 KiB copy of the bootloader-owned MBI, reserved before PMM use.
+  private static readonly MULTIBOOT2_COPY_BUFFER_ADDR = 0x0026_0000;
+  private static readonly MULTIBOOT2_COPY_BUFFER_SIZE = 0x0001_0000;
 
   private static readonly BOOT_PML4_ADDR = 0x002F_0000;
   private static readonly BOOT_PDPT_ADDR = 0x002F_1000;
@@ -374,8 +378,8 @@ export class X86BootstrapEncoder {
 
     // Simpan flag perbandingan ZF lewat EBP: mov ebp, eax; mov edi, ebx; mov esp, 0x00228000
     a.emit(0x89, 0xc5); // mov ebp, eax
-    a.emit(0x89, 0xdf); // mov edi, ebx
-    a.movRegImm32(Reg64.RSP, this.KERNEL_STACK_TOP);
+    a.emit(0x89, 0xdf); // mov edi, ebx (preserve Multiboot2 information pointer)
+    // Do not touch the stack until the boot information has been copied safely.
 
     // Inisialisasi UART 16550 COM1 Port 0x3F8 sedini mungkin (115200 8N1)
     a.emit(0x66, 0xba, 0xf9, 0x03, 0x30, 0xc0, 0xee); // outb(0x3F9, 0x00) IER
@@ -386,17 +390,63 @@ export class X86BootstrapEncoder {
     a.emit(0x66, 0xba, 0xfa, 0x03, 0xb0, 0xc7, 0xee); // outb(0x3FA, 0xC7) FIFO
     a.emit(0x66, 0xba, 0xfc, 0x03, 0xb0, 0x0b, 0xee); // outb(0x3FC, 0x0B) MCR RTS/DTR
 
-    // Tahap 1: NUSANTARA_BOOT_START
-    a.printLabel32('msg_boot_start', 'print_serial32');
-
-    // Verifikasi ulang Multiboot2 Magic yang disimpan di EBP
+    // Verifikasi Multiboot2 magic tanpa memakai stack yang belum aman.
     a.emit(0x81, 0xfd, 0x89, 0x62, 0xd7, 0x36); // cmp ebp, 0x36D76289
     a.je('mb2_magic_ok');
-    a.printLabel32('msg_panic_mb2', 'print_serial32');
     a.jmp('panic32');
 
     a.label('mb2_magic_ok');
+    // Validate and copy MBI while paging is off. The early identity-access
+    // contract is intentionally limited to the first 8 MiB; unsupported
+    // higher addresses fail closed instead of being dereferenced blindly.
+    a.emit(0x89, 0xfb); // mov ebx, edi (source pointer)
+    a.emit(0x85, 0xdb); // test ebx, ebx
+    a.je('panic32');
+    a.emit(0xf6, 0xc3, 0x07); // test bl, 7 (8-byte alignment)
+    a.jne('panic32');
+    a.emit(0x81, 0xfb, 0xf0, 0xff, 0x7f, 0x00); // cmp ebx, 0x007FFFF0
+    a.ja('panic32');
+    a.emit(0x8b, 0x0b); // mov ecx, [ebx] (total_size)
+    a.emit(0x83, 0xf9, 0x10); // cmp ecx, 16
+    a.jb('panic32');
+    a.emit(0x81, 0xf9); a.emit32(this.MULTIBOOT2_COPY_BUFFER_SIZE); // cmp ecx, reserved copy-buffer capacity
+    a.ja('panic32');
+    a.emit(0xf6, 0xc1, 0x07); // test cl, 7
+    a.jne('panic32');
+    a.emit(0x83, 0x7b, 0x04, 0x00); // cmp dword [ebx+4], 0
+    a.jne('panic32');
+    a.emit(0x89, 0xd8); // mov eax, ebx
+    a.emit(0x01, 0xc8); // add eax, ecx
+    a.jb('panic32'); // carry means pointer + total_size overflowed
+    a.emit(0x3d, 0x00, 0x00, 0x80, 0x00); // cmp eax, 8 MiB identity-map limit
+    a.ja('panic32');
+
+    // Overlap-safe memmove into the reserved kernel-owned copy buffer.
+    a.emit(0x89, 0xde); // mov esi, ebx
+    a.emit(0x8b, 0x0b); // mov ecx, [ebx]
+    a.movRegImm32(Reg64.RDI, this.MULTIBOOT2_COPY_BUFFER_ADDR);
+    a.emit(0x39, 0xf7); // cmp edi, esi
+    a.jbe('mb2_copy_forward');
+    a.emit(0x89, 0xf0); // mov eax, esi
+    a.emit(0x01, 0xc8); // add eax, ecx (source end already validated)
+    a.emit(0x39, 0xc7); // cmp edi, eax
+    a.jae('mb2_copy_forward');
+    a.emit(0x01, 0xce); // add esi, ecx
+    a.emit(0x4e); // dec esi
+    a.emit(0x89, 0xf8); // mov eax, edi
+    a.emit(0x01, 0xc8); // add eax, ecx
+    a.emit(0x48); // dec eax
+    a.emit(0x89, 0xc7); // mov edi, eax
+    a.emit(0xfd, 0xf3, 0xa4, 0xfc); // std; rep movsb; cld
+    a.jmp('mb2_copy_done');
+    a.label('mb2_copy_forward');
+    a.emit(0xf3, 0xa4); // rep movsb
+    a.label('mb2_copy_done');
+    a.movRegImm32(Reg64.RDI, this.MULTIBOOT2_COPY_BUFFER_ADDR);
+    a.movRegImm32(Reg64.RSP, this.KERNEL_STACK_TOP);
+    a.printLabel32('msg_boot_start', 'print_serial32');
     a.printLabel32('msg_mb2_ok', 'print_serial32');
+    a.printLabel32('msg_mb2_copy_ok', 'print_serial32');
 
     // =========================================================================
     // BAGIAN 2: CEK CPUID DAN DUKUNGAN 64-BIT LONG MODE
@@ -499,7 +549,7 @@ export class X86BootstrapEncoder {
     a.emit(0xc3); // ret
 
     a.label('panic32_cpu');
-    a.printLabel32('msg_panic_cpu', 'print_serial32');
+    a.jmp('panic32');
     a.label('panic32');
     // Tulis 0x01 (32-bit) ke ISA Debug Exit Port 0xF4 (exit_code = 3)
     a.emit(0x66, 0xba, 0xf4, 0x00); // mov dx, 0xF4
@@ -1206,6 +1256,7 @@ export class X86BootstrapEncoder {
     // =========================================================================
     a.label('msg_boot_start');           a.emitCString(this.STAGE_1_START);
     a.label('msg_mb2_ok');               a.emitCString(this.STAGE_2_MULTIBOOT2);
+    a.label('msg_mb2_copy_ok');          a.emitCString(this.STAGE_2B_MULTIBOOT2_COPY);
     a.label('msg_cpu_ok');               a.emitCString(this.STAGE_3_LONG_MODE);
     a.label('msg_paging_ok');            a.emitCString(this.STAGE_4_PAGING);
     a.label('msg_gdt_ok');               a.emitCString(this.STAGE_5_GDT64);
