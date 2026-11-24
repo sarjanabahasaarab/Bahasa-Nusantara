@@ -10,6 +10,7 @@
  */
 import { AddressSpace } from './address-space';
 import { PAGE_SIZE } from './types';
+import type { SyscallDispatcher } from '../syscall/syscall-dispatcher';
 
 export type PhysicalMemoryReader = (physicalAddress: bigint, length: number) => Uint8Array | null;
 export type PhysicalMemoryWriter = (physicalAddress: bigint, data: Uint8Array) => boolean;
@@ -85,4 +86,20 @@ export class AddressSpaceMemoryAccessor {
     }
     return true;
   }
+}
+
+/**
+ * Pasang adapter translasi ini pada dispatcher model syscall.
+ * Backend tetap harus menyediakan callback baca/tulis memori fisik yang valid.
+ */
+export function installAddressSpaceMemoryAccessor(
+  dispatcher: Pick<SyscallDispatcher, 'setMemoryAccessors'>,
+  accessor: AddressSpaceMemoryAccessor,
+): void {
+  dispatcher.setMemoryAccessors(
+    (addressSpace, virtualAddress, length) =>
+      accessor.copyFromUser(addressSpace, virtualAddress, length),
+    (addressSpace, virtualAddress, data) =>
+      accessor.copyToUser(addressSpace, virtualAddress, data),
+  );
 }
