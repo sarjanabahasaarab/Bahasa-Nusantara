@@ -4,7 +4,7 @@
 >
 > Bahasa pemrograman NUSANTARA adalah bahasa resmi dan toolchain utama untuk membangun ekosistem sistem operasi ini. Fokus produk repositori adalah mewujudkan OS mandiri, bukan berhenti pada bahasa pemrograman.
 
-[![Status](https://img.shields.io/badge/status-phase_50_qemu_verified-emerald.svg)](ROADMAP.md)
+[![Status](https://img.shields.io/badge/product-independent_NUSANTARA_OS-blue.svg)](ROADMAP.md)
 [![Versi](https://img.shields.io/badge/versi-v0.50.0-emerald.svg)](PERUBAHAN.md)
 [![CI/CD](https://github.com/sarjanabahasaarab/Bahasa-Nusantara/actions/workflows/ci.yml/badge.svg)](https://github.com/sarjanabahasaarab/Bahasa-Nusantara/actions/workflows/ci.yml)
 [![Lisensi](https://img.shields.io/badge/lisensi-Apache_2.0-blue.svg)](LISENSI)
