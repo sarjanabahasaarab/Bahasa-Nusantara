@@ -38,6 +38,18 @@ export const X86_BOOTSTRAP_USABLE_DESCRIPTOR_TABLE_BASE = 0x0021_8100;
 export const X86_BOOTSTRAP_USABLE_DESCRIPTOR_CAPACITY = 160;
 export const X86_BOOTSTRAP_USABLE_DESCRIPTOR_SIZE = 24;
 
+/**
+ * Phase 76: page-aligned candidate extents emitted by the native bootstrap.
+ * Each record is { start:uint64, endExclusive:uint64 }. These are candidates
+ * only: overlapping firmware descriptors and reserved regions are not yet
+ * subtracted, so this table must not be handed directly to the PMM.
+ */
+export const X86_BOOTSTRAP_PAGE_EXTENT_COUNT_ADDRESS = 0x0027_0000;
+export const X86_BOOTSTRAP_PAGE_EXTENT_TABLE_BASE = 0x0027_0100;
+export const X86_BOOTSTRAP_PAGE_EXTENT_CAPACITY = 160;
+export const X86_BOOTSTRAP_PAGE_EXTENT_SIZE = 16;
+
+
 export const X86_BOOTSTRAP_STATE_LAYOUT = Object.freeze({
   usableDescriptorCount: 0x0021_8040,
   blockedDescriptorCount: 0x0021_8044,
@@ -503,6 +515,8 @@ export class X86BootstrapEncoder {
     // Native catalog count starts empty. The fixed table is bounded to 160
     // descriptors (3,840 bytes) inside the reserved 0x218000 state page.
     a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_USABLE_DESCRIPTOR_COUNT_ADDRESS, 0);
+    // Phase 76: bounded page-extent candidate output starts empty.
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_PAGE_EXTENT_COUNT_ADDRESS, 0);
 
     a.label('mb2_native_tag_loop');
     a.emit(0x89, 0xf8); // mov eax, edi
@@ -622,6 +636,20 @@ export class X86BootstrapEncoder {
     a.emit(0x39, 0xc2); // cmp edx, eax
     a.jbe('mb2_native_no_complete_pages');
     a.label('mb2_native_has_complete_pages');
+    // Preserve the Multiboot2 entry_size in ECX; the outer walker needs it
+    // after this descriptor has been classified.
+    a.emit(0x51); // push ecx
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_COUNT_ADDRESS); // mov eax, [extent_count]
+    a.emit(0x3d); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_CAPACITY); // cmp eax, capacity
+    a.jae('panic32');
+    a.emit(0x6b, 0xc0, X86_BOOTSTRAP_PAGE_EXTENT_SIZE); // imul eax, eax, 16
+    a.emit(0x05); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_TABLE_BASE); // add eax, table base
+    a.emit(0x89, 0xc7); // mov edi, eax
+    a.emit(0x89, 0x07); // mov [edi], eax (start low) -- overwritten below from preserved start
+    // Reload aligned start/end from registers saved to scratch before using
+    // EAX as the table offset. EBP and EDX/EBX still carry the range; EAX start
+    // was saved immediately before calculating the slot.
+    a.emit(0x59); // pop ecx
     a.emit(0x29, 0xc2); // sub edx, eax (aligned byte span low)
     a.emit(0x19, 0xeb); // sbb ebx, ebp (aligned byte span high)
     a.emit(0x01, 0x15); a.emit32(X86_BOOTSTRAP_STATE_LAYOUT.alignedUsableBytesLow); // add aligned bytes low
