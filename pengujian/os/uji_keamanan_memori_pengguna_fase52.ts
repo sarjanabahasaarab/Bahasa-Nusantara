@@ -320,7 +320,7 @@ await asyncTest('52.32 accessor menolak transfer lebih besar dari batas 16 MiB',
   const space = new AddressSpace();
   const accessor = new AddressSpaceMemoryAccessor(() => new Uint8Array(0), () => true);
   assert.equal(accessor.copyFromUser(space, 0x0001_0000n, 16 * 1024 * 1024 + 1), null);
-  assert.equal(accessor.copyToUser(space, 0x0001_0000n, new Uint8Array(1), 16 * 1024 * 1024 + 1), false);
+  assert.equal(accessor.copyToUser(space, 0x0001_0000n, new Uint8Array(16 * 1024 * 1024 + 1)), false);
 });
 
 }
