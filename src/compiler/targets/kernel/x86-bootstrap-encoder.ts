@@ -51,6 +51,10 @@ export const X86_BOOTSTRAP_PAGE_EXTENT_SIZE = 16;
 /** In-place insertion-sort cursors inside the reserved Phase 76 workspace. */
 export const X86_BOOTSTRAP_PAGE_EXTENT_SORT_INDEX_ADDRESS = 0x0027_0c00;
 export const X86_BOOTSTRAP_PAGE_EXTENT_SORT_CURSOR_ADDRESS = 0x0027_0c04;
+/** Phase 78 in-place merge cursors in the reserved workspace. */
+export const X86_BOOTSTRAP_PAGE_EXTENT_MERGE_READ_ADDRESS = 0x0027_0c08;
+export const X86_BOOTSTRAP_PAGE_EXTENT_MERGE_WRITE_ADDRESS = 0x0027_0c0c;
+
 
 
 
@@ -747,6 +751,92 @@ export class X86BootstrapEncoder {
     a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_SORT_INDEX_ADDRESS); // inc [i]
     a.jmp('phase77_sort_outer');
     a.label('phase77_sort_done');
+    // Phase 78: compact sorted candidates in-place, merging overlap and adjacency.
+    // Both cursors are bounded by the already-validated candidate count.
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_PAGE_EXTENT_MERGE_READ_ADDRESS, 0);
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_PAGE_EXTENT_MERGE_WRITE_ADDRESS, 0);
+    a.label('phase78_merge_loop');
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_MERGE_READ_ADDRESS); // eax = read
+    a.emit(0x8b, 0x15); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_COUNT_ADDRESS); // edx = count
+    a.emit(0x39, 0xd0); // cmp read,count
+    a.jae('phase78_merge_done');
+    // ESI points at current input candidate.
+    a.emit(0x89, 0xc1); // mov ecx,eax
+    a.emit(0x6b, 0xc9, X86_BOOTSTRAP_PAGE_EXTENT_SIZE);
+    a.emit(0x81, 0xc1); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_TABLE_BASE);
+    a.emit(0x89, 0xce); // mov esi,ecx
+    // First candidate is copied to output slot zero.
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_MERGE_WRITE_ADDRESS);
+    a.emit(0x85, 0xc0);
+    a.je('phase78_merge_append');
+    // EDI points at the previous output record (write - 1).
+    a.emit(0x48); // dec eax
+    a.emit(0x6b, 0xc0, X86_BOOTSTRAP_PAGE_EXTENT_SIZE);
+    a.emit(0x05); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_TABLE_BASE);
+    a.emit(0x89, 0xc7); // mov edi,eax
+    // If current.start > previous.end, append; otherwise merge.
+    a.emit(0x8b, 0x56, 0x04); // current start high
+    a.emit(0x3b, 0x57, 0x0c); // compare previous end high
+    a.ja('phase78_merge_append');
+    a.jb('phase78_merge_overlap');
+    a.emit(0x8b, 0x06); // current start low
+    a.emit(0x3b, 0x47, 0x08); // compare previous end low
+    a.ja('phase78_merge_append');
+    a.label('phase78_merge_overlap');
+    // Extend previous.end only when current.end is greater.
+    a.emit(0x8b, 0x56, 0x0c); // current end high
+    a.emit(0x3b, 0x57, 0x0c); // previous end high
+    a.ja('phase78_merge_update_end');
+    a.jb('phase78_merge_advance');
+    a.emit(0x8b, 0x56, 0x08); // current end low
+    a.emit(0x3b, 0x47, 0x08); // previous end low
+    a.jbe('phase78_merge_advance');
+    a.label('phase78_merge_update_end');
+    a.emit(0x8b, 0x46, 0x08, 0x89, 0x47, 0x08); // copy end low
+    a.emit(0x8b, 0x46, 0x0c, 0x89, 0x47, 0x0c); // copy end high
+    a.jmp('phase78_merge_advance');
+    a.label('phase78_merge_append');
+    // Destination is table[write]; copy the complete 16-byte record.
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_MERGE_WRITE_ADDRESS);
+    a.emit(0x6b, 0xc0, X86_BOOTSTRAP_PAGE_EXTENT_SIZE);
+    a.emit(0x05); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_TABLE_BASE);
+    a.emit(0x89, 0xc7); // EDI = output slot
+    a.emit(0x8b, 0x06, 0x89, 0x07);
+    a.emit(0x8b, 0x46, 0x04, 0x89, 0x47, 0x04);
+    a.emit(0x8b, 0x46, 0x08, 0x89, 0x47, 0x08);
+    a.emit(0x8b, 0x46, 0x0c, 0x89, 0x47, 0x0c);
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_MERGE_WRITE_ADDRESS);
+    a.label('phase78_merge_advance');
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_MERGE_READ_ADDRESS);
+    a.jmp('phase78_merge_loop');
+    a.label('phase78_merge_done');
+    // Publish compacted count only after the complete pass.
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_MERGE_WRITE_ADDRESS);
+    a.emit(0xa3); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_COUNT_ADDRESS);
+    // Verify adjacent output extents are strictly separated (no overlap/touch).
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_PAGE_EXTENT_MERGE_READ_ADDRESS, 1);
+    a.label('phase78_verify_loop');
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_MERGE_READ_ADDRESS);
+    a.emit(0x8b, 0x15); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_COUNT_ADDRESS);
+    a.emit(0x39, 0xd0);
+    a.jae('phase78_verify_done');
+    a.emit(0x89, 0xc1);
+    a.emit(0x6b, 0xc9, X86_BOOTSTRAP_PAGE_EXTENT_SIZE);
+    a.emit(0x81, 0xc1); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_TABLE_BASE);
+    a.emit(0x89, 0xcf); // EDI = current record
+        // Compare previous end (current record - 16 + 8/12) against current start.
+    a.emit(0x8b, 0x57, 0xfc); // previous end high at edi-4
+    a.emit(0x3b, 0x57, 0x04); // current start high
+    a.ja('panic32');
+    a.jb('phase78_verify_next');
+    a.emit(0x8b, 0x47, 0xf8); // previous end low at edi-8
+    a.emit(0x3b, 0x07); // current start low
+    a.jae('panic32'); // touching intervals should have been merged too
+    a.label('phase78_verify_next');
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_MERGE_READ_ADDRESS);
+    a.jmp('phase78_verify_loop');
+    a.label('phase78_verify_done');
+    a.emit(0x60); a.printLabel32('msg_mb2_extents_merged', 'print_serial32'); a.emit(0x61);
     // Verify the resulting table is monotonically ordered before reporting OK.
     a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_PAGE_EXTENT_SORT_INDEX_ADDRESS, 1);
     a.label('phase77_verify_loop');
@@ -1664,6 +1754,7 @@ export class X86BootstrapEncoder {
     a.label('msg_mb2_classify_ok');      a.emitCString('NUSANTARA_MULTIBOOT2_CLASSIFY_OK\r\n');
     a.label('msg_mb2_page_audit_ok');    a.emitCString('NUSANTARA_MULTIBOOT2_PAGE_AUDIT_OK\r\n');
     a.label('msg_mb2_extents_sorted');  a.emitCString('NUSANTARA_MULTIBOOT2_EXTENTS_SORTED_OK\r\n');
+    a.label('msg_mb2_extents_merged');  a.emitCString('NUSANTARA_MULTIBOOT2_EXTENTS_MERGED_OK\r\n');
     a.label('msg_diag_mmap_begin');      a.emitCString('NUSANTARA_DIAG_MMAP_BEGIN\r\n');
     a.label('msg_diag_mmap_done');       a.emitCString('NUSANTARA_DIAG_MMAP_DONE\r\n');
     a.label('msg_diag_module_begin');    a.emitCString('NUSANTARA_DIAG_MODULE_BEGIN\r\n');
