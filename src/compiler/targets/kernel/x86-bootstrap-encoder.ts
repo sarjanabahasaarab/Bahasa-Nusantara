@@ -1026,6 +1026,8 @@ export class X86BootstrapEncoder {
     a.jmp('panic32');
 
     a.label('mb2_native_parse_done');
+    // All fixed and tag-derived exclusions must be catalogued before boot continues.
+    a.emit(0x60); a.printLabel32('msg_mb2_reservations_catalogued', 'print_serial32'); a.emit(0x61);
     // Restore the copied-MBI base expected by the existing boot continuation.
     a.movRegImm32(Reg64.RDI, this.MULTIBOOT2_COPY_BUFFER_ADDR);
     a.printLabel32('msg_mb2_ok', 'print_serial32');
