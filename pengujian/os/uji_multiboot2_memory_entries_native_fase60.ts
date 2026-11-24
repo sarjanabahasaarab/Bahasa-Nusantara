@@ -57,7 +57,7 @@ test('60.5 preserves tag pointer and tag size after scanning every descriptor', 
 });
 
 test('60.6 emits a distinct serial marker only after native descriptor validation', () => {
-  const marker = new TextEncoder().encode('NUSANTARA_MULTIBOOT2_RANGES_OK\\r\\n');
+  const marker = new TextEncoder().encode('NUSANTARA_MULTIBOOT2_RANGES_OK\r\n');
   assert.ok(containsBytes(Array.from(marker)));
 });
 
