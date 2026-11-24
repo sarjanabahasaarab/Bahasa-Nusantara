@@ -500,8 +500,34 @@ export class X86BootstrapEncoder {
     a.jne('panic32');
     a.emit(0x85, 0xc0); // require at least one entry
     a.je('panic32');
+    // Validate every 24-byte-or-larger descriptor before accepting the map:
+    // nonzero length, reserved dword zero, and checked uint64 base + length.
+    // Preserve tag size and tag pointer; ECX=entry_size, EDX=entry count.
+    a.emit(0x56); // push esi (tag pointer)
+    a.emit(0x89, 0xc2); // mov edx, eax (entry count)
+    a.emit(0x8d, 0x76, 0x10); // lea esi, [esi+16] (first descriptor)
+    a.label('mb2_native_memory_entry_loop');
+    a.emit(0x85, 0xd2); // test edx, edx
+    a.je('mb2_native_memory_entries_done');
+    a.emit(0x8b, 0x46, 0x08); // mov eax, [esi+8] (length low)
+    a.emit(0x0b, 0x46, 0x0c); // or eax, [esi+12] (length high)
+    a.emit(0x85, 0xc0); // reject zero-length descriptor
+    a.je('panic32');
+    a.emit(0x83, 0x7e, 0x14, 0x00); // reserved dword must be zero
+    a.jne('panic32');
+    a.emit(0x8b, 0x06); // mov eax, [esi] (base low)
+    a.emit(0x03, 0x46, 0x08); // add eax, [esi+8] (length low)
+    a.emit(0x8b, 0x46, 0x04); // mov eax, [esi+4] (base high; preserves CF)
+    a.emit(0x13, 0x46, 0x0c); // adc eax, [esi+12] (length high)
+    a.jb('panic32'); // carry means uint64 base + length overflow
+    a.emit(0x01, 0xce); // add esi, ecx (advance by entry_size)
+    a.jb('panic32'); // reject 32-bit descriptor pointer wrap
+    a.emit(0x4a); // dec edx
+    a.jmp('mb2_native_memory_entry_loop');
+    a.label('mb2_native_memory_entries_done');
+    a.emit(0x5e); // pop esi (restore tag pointer)
     a.emit(0x59); // pop ecx (restore tag size)
-    a.emit(0xbb, 0x01, 0x00, 0x00, 0x00); // mov ebx, 1 (memory map present)
+    a.emit(0xbb, 0x01, 0x00, 0x00, 0x00); // mov ebx, 1 (validated memory map present)
     a.jmp('mb2_native_advance');
 
     a.label('mb2_native_module');
@@ -567,6 +593,7 @@ export class X86BootstrapEncoder {
     a.printLabel32('msg_mb2_ok', 'print_serial32');
     a.printLabel32('msg_mb2_copy_ok', 'print_serial32');
     a.printLabel32('msg_mb2_parse_ok', 'print_serial32');
+    a.printLabel32('msg_mb2_ranges_ok', 'print_serial32');
 
     // =========================================================================
     // BAGIAN 2: CEK CPUID DAN DUKUNGAN 64-BIT LONG MODE
@@ -1378,6 +1405,7 @@ export class X86BootstrapEncoder {
     a.label('msg_mb2_ok');               a.emitCString(this.STAGE_2_MULTIBOOT2);
     a.label('msg_mb2_copy_ok');          a.emitCString(this.STAGE_2B_MULTIBOOT2_COPY);
     a.label('msg_mb2_parse_ok');         a.emitCString('NUSANTARA_MULTIBOOT2_PARSE_OK\r\n');
+    a.label('msg_mb2_ranges_ok');        a.emitCString('NUSANTARA_MULTIBOOT2_RANGES_OK\r\n');
     a.label('msg_cpu_ok');               a.emitCString(this.STAGE_3_LONG_MODE);
     a.label('msg_paging_ok');            a.emitCString(this.STAGE_4_PAGING);
     a.label('msg_gdt_ok');               a.emitCString(this.STAGE_5_GDT64);
