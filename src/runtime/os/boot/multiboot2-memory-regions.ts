@@ -16,6 +16,18 @@ export interface PhysicalMemoryReservation {
   reason?: string;
 }
 
+/**
+ * Fixed bootstrap CPU-local physical reservations used by the x86-64 encoder.
+ *
+ * These ranges are a reservation contract for firmware-derived PMM setup;
+ * callers must pass them through NormalizePhysicalMemoryOptions.reservations.
+ * They do not themselves reserve hardware pages or configure page tables.
+ */
+export const BOOTSTRAP_CPU_LOCAL_RESERVATIONS: readonly PhysicalMemoryReservation[] = Object.freeze([
+  { base: 0x24c000n, length: 0x4000n, reason: 'bootstrap CPU syscall stack (16 KiB)' },
+  { base: 0x251000n, length: 0x1000n, reason: 'bootstrap CPU-local GS data page' },
+]);
+
 export interface UsablePhysicalMemoryExtent {
   base: bigint;
   length: bigint;
