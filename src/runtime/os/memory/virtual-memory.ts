@@ -17,6 +17,8 @@ export interface PageTableEntry {
 
 export class VirtualMemoryManager {
   private readonly pageTable: Map<bigint, PageTableEntry> = new Map();
+  // Hanya frame yang dialokasikan oleh VMM sendiri boleh dikembalikan ke PMM.
+  private readonly ownedFrames: Map<bigint, bigint> = new Map();
   private readonly pmm: PhysicalMemoryManager;
   private readonly cr3Root: bigint;
 
@@ -51,6 +53,12 @@ export class VirtualMemoryManager {
       if (permissions.executable) perms |= PagePermissions.EXECUTE;
     }
 
+    const previousOwnedFrame = this.ownedFrames.get(pageAlignedVirt);
+    if (previousOwnedFrame !== undefined && previousOwnedFrame !== pageAlignedPhys) {
+      this.pmm.freeFrame(previousOwnedFrame);
+      this.ownedFrames.delete(pageAlignedVirt);
+    }
+
     this.pageTable.set(pageAlignedVirt, {
       physicalAddress: pageAlignedPhys,
       permissions: perms,
@@ -79,6 +87,8 @@ export class VirtualMemoryManager {
       return null;
     }
 
+    const pageAlignedVirt = virtAddr & ~BigInt(PAGE_SIZE - 1);
+    this.ownedFrames.set(pageAlignedVirt, frame);
     return frame;
   }
 
@@ -90,8 +100,10 @@ export class VirtualMemoryManager {
     const entry = this.pageTable.get(pageAlignedVirt);
     if (!entry) return false;
 
-    if (freePhysicalFrame) {
-      this.pmm.freeFrame(entry.physicalAddress);
+    const ownedFrame = this.ownedFrames.get(pageAlignedVirt);
+    if (ownedFrame !== undefined) {
+      if (freePhysicalFrame) this.pmm.freeFrame(ownedFrame);
+      this.ownedFrames.delete(pageAlignedVirt);
     }
 
     this.pageTable.delete(pageAlignedVirt);
@@ -163,6 +175,8 @@ export class VirtualMemoryManager {
   }
 
   public clear(): void {
+    for (const frame of this.ownedFrames.values()) this.pmm.freeFrame(frame);
+    this.ownedFrames.clear();
     this.pageTable.clear();
   }
 }

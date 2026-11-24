@@ -7,6 +7,8 @@ import assert from 'node:assert/strict';
 import { UserPointerSecurity, UserSecurityError } from '../../src/runtime/os/security/user-pointer.js';
 import { AddressSpace } from '../../src/runtime/os/memory/address-space.js';
 import { PagePermissions } from '../../src/runtime/os/memory/types.js';
+import { PhysicalMemoryManager } from '../../src/runtime/os/memory/physical-memory.js';
+import { VirtualMemoryManager } from '../../src/runtime/os/memory/virtual-memory.js';
 import { SyscallDispatcher } from '../../src/runtime/os/syscall/syscall-dispatcher.js';
 import { SyscallTable } from '../../src/runtime/os/syscall/syscall-table.js';
 import { SyscallNumber } from '../../src/runtime/os/syscall/syscall-numbers.js';
@@ -122,6 +124,104 @@ test('52.17 address space tetap mengizinkan READ pada halaman READ-only', () => 
   const result = space.checkAccess(0x0040_0000n, 'READ', true);
   assert.equal(result.allowed, true);
 });
+
+test('52.36 VMM tidak membebaskan frame eksternal saat unmapPage', () => {
+  const pmm = new PhysicalMemoryManager(4 * 4096);
+  const frame = pmm.allocateFrame();
+  assert.ok(frame !== null);
+  const freeBefore = pmm.getFreeFrameCount();
+  const vmm = new VirtualMemoryManager(pmm, 0x200000n);
+  vmm.mapPage(0x10000n, frame!);
+  assert.equal(vmm.unmapPage(0x10000n), true);
+  assert.equal(pmm.getFreeFrameCount(), freeBefore);
+  assert.equal(pmm.freeFrame(frame!), true);
+});
+
+test('52.37 VMM clear membebaskan frame miliknya tetapi bukan frame eksternal', () => {
+  const pmm = new PhysicalMemoryManager(8 * 4096);
+  const externalFrame = pmm.allocateFrame();
+  assert.ok(externalFrame !== null);
+  const vmm = new VirtualMemoryManager(pmm, 0x200000n);
+  vmm.mapPage(0x20000n, externalFrame!);
+  const ownedFrame = vmm.allocateAndMap(0x30000n);
+  assert.ok(ownedFrame !== null);
+  const beforeClear = pmm.getFreeFrameCount();
+  vmm.clear();
+  assert.equal(pmm.getFreeFrameCount(), beforeClear + 1);
+  assert.equal(pmm.freeFrame(externalFrame!), true);
+});
+
+test('52.38 AddressSpace destroy tidak membebaskan frame eksternal yang dipetakan', () => {
+  const pmm = new PhysicalMemoryManager(8 * 4096);
+  const externalFrame = pmm.allocateFrame();
+  assert.ok(externalFrame !== null);
+  const space = new AddressSpace(pmm);
+  space.mapPage(0x0040_0000n, externalFrame!, PagePermissions.USER_READ_WRITE, true);
+  const freeBeforeDestroy = pmm.getFreeFrameCount();
+  space.destroy();
+  assert.equal(pmm.getFreeFrameCount(), freeBeforeDestroy);
+  assert.equal(pmm.freeFrame(externalFrame!), true);
+});
+
+test('52.39 AddressSpace destroy membebaskan frame yang dialokasikan oleh AddressSpace', () => {
+  const pmm = new PhysicalMemoryManager(8 * 4096);
+  const space = new AddressSpace(pmm);
+  const frame = space.allocateAndMapUserPage(0x0050_0000n);
+  assert.ok(frame !== null);
+  const freeBeforeDestroy = pmm.getFreeFrameCount();
+  space.destroy();
+  assert.equal(pmm.getFreeFrameCount(), freeBeforeDestroy + 1);
+});
+
+test('52.40 VMM melepaskan frame milik lama saat mapping diganti frame eksternal', () => {
+  const pmm = new PhysicalMemoryManager(8 * 4096);
+  const vmm = new VirtualMemoryManager(pmm, 0x200000n);
+  const ownedFrame = vmm.allocateAndMap(0x40000n);
+  const externalFrame = pmm.allocateFrame();
+  assert.ok(ownedFrame !== null && externalFrame !== null);
+  const beforeReplace = pmm.getFreeFrameCount();
+  vmm.mapPage(0x40000n, externalFrame!);
+  assert.equal(pmm.getFreeFrameCount(), beforeReplace + 1);
+  const beforeUnmap = pmm.getFreeFrameCount();
+  vmm.unmapPage(0x40000n);
+  assert.equal(pmm.getFreeFrameCount(), beforeUnmap);
+  assert.equal(pmm.freeFrame(externalFrame!), true);
+});
+
+test('52.41 VMM mendukung transfer kepemilikan melalui unmapPage(false)', () => {
+  const pmm = new PhysicalMemoryManager(4 * 4096);
+  const vmm = new VirtualMemoryManager(pmm, 0x200000n);
+  const frame = vmm.allocateAndMap(0x50000n);
+  assert.ok(frame !== null);
+  assert.equal(vmm.unmapPage(0x50000n, false), true);
+  assert.equal(pmm.freeFrame(frame!), true);
+});
+
+test('52.42 AddressSpace melepaskan frame milik lama saat mapping diganti frame eksternal', () => {
+  const pmm = new PhysicalMemoryManager(8 * 4096);
+  const space = new AddressSpace(pmm);
+  const ownedFrame = space.allocateAndMapUserPage(0x0060_0000n);
+  const externalFrame = pmm.allocateFrame();
+  assert.ok(ownedFrame !== null && externalFrame !== null);
+  const beforeReplace = pmm.getFreeFrameCount();
+  space.mapPage(0x0060_0000n, externalFrame!, PagePermissions.USER_READ_WRITE, true);
+  assert.equal(pmm.getFreeFrameCount(), beforeReplace + 1);
+  const beforeUnmap = pmm.getFreeFrameCount();
+  space.unmapPage(0x0060_0000n);
+  assert.equal(pmm.getFreeFrameCount(), beforeUnmap);
+  assert.equal(pmm.freeFrame(externalFrame!), true);
+});
+
+test('52.43 AddressSpace mendukung transfer kepemilikan melalui unmapPage(false)', () => {
+  const pmm = new PhysicalMemoryManager(4 * 4096);
+  const space = new AddressSpace(pmm);
+  const frame = space.allocateAndMapUserPage(0x0070_0000n);
+  assert.ok(frame !== null);
+  assert.equal(space.unmapPage(0x0070_0000n, false), true);
+  assert.equal(pmm.freeFrame(frame!), true);
+});
+
+
 
 
 await asyncTest('52.18 dispatcher memberikan copy_from_user ke handler dengan data kernel hasil salin lintas halaman', async () => {
