@@ -39,8 +39,8 @@ function main(): void {
   const report = JSON.parse(fs.readFileSync(reportPath, 'utf8')) as SentinelReport;
 
   wajib(report.overallStatus === 'PASS', 'QEMU sentinel report bukan PASS.');
-  wajib(report.totalRequired === 18, 'Jumlah sentinel wajib harus tepat 18.');
-  wajib(report.sequentialMatchedCount === 18, 'Tidak semua 18 sentinel cocok berurutan.');
+  wajib(report.totalRequired === 19, 'Jumlah sentinel wajib harus tepat 19.');
+  wajib(report.sequentialMatchedCount === 19, 'Tidak semua 19 sentinel cocok berurutan.');
   wajib(report.exitCode === 1 && report.exitCodeValid === true, 'Exit code QEMU bukan exit sukses yang diharapkan (1).');
   wajib(report.timedOut === false, 'QEMU mengalami timeout.');
   wajib(report.hasPanic === false, 'Log QEMU mengandung kernel panic.');
@@ -49,7 +49,7 @@ function main(): void {
   wajib((report.outOfOrderSentinels?.length ?? 0) === 0, 'Ada sentinel di luar urutan.');
   wajib((report.violations?.length ?? 0) === 0, 'Laporan validator memiliki pelanggaran.');
   const stages = report.stages ?? [];
-  wajib(stages.length === 18, 'Rincian 18 tahapan sentinel tidak lengkap.');
+  wajib(stages.length === 19, 'Rincian 19 tahapan sentinel tidak lengkap.');
   wajib(
     stages.every((stage) => stage.matchedInOrder === true && stage.occurrences === 1),
     'Setiap sentinel harus muncul tepat satu kali dan berurutan.',
@@ -84,7 +84,7 @@ function main(): void {
     '3. User Fault ELF                : VALID',
     '4. GRUB2 ISO                     : ' + isoLine.replace('Status ISO Bootable :', '').trim(),
     '5. QEMU Bare-Metal Boot          : LULUS (eksekusi QEMU nyata)',
-    '6. Strict Sentinel               : 18/18 LULUS, berurutan, tanpa duplikasi',
+    '6. Strict Sentinel               : 19/19 LULUS, berurutan, tanpa duplikasi',
     '7. Ring 3 / Syscall               : PASS',
     '8. Process Isolation / User Fault: PASS',
     '9. QEMU Exit Code                : 1 (EXPECTED_SUCCESS, port 0xF4)',
@@ -111,7 +111,7 @@ function main(): void {
     '### Bukti Eksekusi QEMU CI Terverifikasi',
     '',
     '- **Status QEMU CI:** PASS — eksekusi QEMU x86_64 nyata pada runner GitHub Actions.',
-    '- **Sentinel:** 18/18 cocok tepat satu kali dalam urutan yang diwajibkan.',
+    '- **Sentinel:** 19/19 cocok tepat satu kali dalam urutan yang diwajibkan.',
     '- **Boot:** Multiboot2, Long Mode, paging, GDT64, IDT, kernel main, dan Ring 3 teramati pada log UART.',
     '- **Isolasi:** syscall, process exit, process isolation, user fault isolation, dan kernel survival terverifikasi.',
     '- **Exit code:** raw QEMU 1 (EXPECTED_SUCCESS melalui port debug 0xF4).',
@@ -125,12 +125,12 @@ function main(): void {
   ].join('\n');
 
   const oldQemuRow =
-    '| **Eksekusi QEMU Bare-Metal (18 Sentinel)** | **NOT EXECUTED** (`qemu-system-x86_64` **MISSING**) | **Menunggu Eksekusi `ubuntu-latest`** | Sertifikasi final hanya boleh dinyatakan COMPLETE setelah QEMU keluar `1` dan log serial UART aktual memuat 18 sentinel berurutan. |';
+    '| **Eksekusi QEMU Bare-Metal (19 Sentinel)** | **NOT EXECUTED** (`qemu-system-x86_64` **MISSING**) | **Menunggu Eksekusi `ubuntu-latest`** | Sertifikasi final hanya boleh dinyatakan COMPLETE setelah QEMU keluar `1` dan log serial UART aktual memuat 18 sentinel berurutan. |';
   const newQemuRow =
-    '| **Eksekusi QEMU Bare-Metal (18 Sentinel)** | **NOT EXECUTED** (QEMU tidak tersedia di kontainer lokal) | **PASS — 18/18 sentinel** (GitHub Actions run ' + runId + ') | Log UART aktual, exit code 1, anti-timeout, anti-panic, urutan sentinel, dan checksum artefak telah diverifikasi. |';
+    '| **Eksekusi QEMU Bare-Metal (19 Sentinel)** | **NOT EXECUTED** (QEMU tidak tersedia di kontainer lokal) | **PASS — 19/19 sentinel** (GitHub Actions run ' + runId + ') | Log UART aktual, exit code 1, anti-timeout, anti-panic, urutan sentinel, dan checksum artefak telah diverifikasi. |';
   certification = certification.replace(oldQemuRow, newQemuRow);
   certification = certification.replace(
-    'Status akhir baru boleh dinyatakan COMPLETE setelah workflow GitHub Actions pada runner Ubuntu menghasilkan exit code QEMU `1` bersama log serial UART mentah dari ke-18 sentinel.',
+    'Status akhir baru boleh dinyatakan COMPLETE setelah workflow GitHub Actions pada runner Ubuntu menghasilkan exit code QEMU `1` bersama log serial UART mentah dari ke-19 sentinel.',
     'Syarat eksekusi QEMU CI kini telah terpenuhi pada workflow run yang tercantum dalam bagian bukti di bawah; status lokal tetap PARTIAL karena toolchain QEMU tidak tersedia di kontainer lokal.',
   );
 
@@ -168,7 +168,7 @@ function main(): void {
     wajib(actual === expected, 'Verifikasi SHA256SUMS gagal: ' + relativePath);
   }
 
-  console.log('[PHASE50_CERTIFICATION_FINALIZED] QEMU PASS; 18/18 sentinel; reports and SHA256SUMS synchronized.');
+  console.log('[PHASE50_CERTIFICATION_FINALIZED] QEMU PASS; 19/19 sentinel; reports and SHA256SUMS synchronized.');
   console.log('Run: ' + runId + ' | Commit: ' + sha + ' | Report: ' + reportPath);
 }
 
