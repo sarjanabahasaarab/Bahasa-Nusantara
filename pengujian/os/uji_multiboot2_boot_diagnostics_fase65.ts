@@ -37,7 +37,14 @@ test('65.1 emits the first boot sentinel immediately after UART initialization',
     break;
   }
   assert.ok(at >= 0, 'UART initialization sequence must exist');
-  assert.ok(source.includes('NUSANTARA_BOOT_START'));
+  const boot = Array.from(new TextEncoder().encode('NUSANTARA_BOOT_START'));
+  let bootAt = -1;
+  outerBoot: for (let i = at + uart.length; i <= code.length - boot.length; i++) {
+    for (let j = 0; j < boot.length; j++) if (code[i + j] !== boot[j]) continue outerBoot;
+    bootAt = i;
+    break;
+  }
+  assert.ok(bootAt > at, 'first boot sentinel must follow UART setup');
 });
 
 test('65.2 includes memory-map entry begin and completion diagnostic markers', () => {
