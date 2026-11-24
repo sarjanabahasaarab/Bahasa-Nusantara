@@ -1032,6 +1032,7 @@ export class X86BootstrapEncoder {
     a.jmp('panic32');
 
 
+    a.label('mb2_native_parse_done');
     // Phase 80: round exclusions to 4 KiB pages, sort by uint64 start, merge.
     a.emit(0x60);
     a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_RESERVATION_NORMALIZE_INDEX_ADDRESS, 0);
