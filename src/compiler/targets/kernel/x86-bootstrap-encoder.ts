@@ -1485,6 +1485,12 @@ export class X86BootstrapEncoder {
     a.label('msg_mb2_page_audit_ok');    a.emitCString('NUSANTARA_MULTIBOOT2_PAGE_AUDIT_OK\r\n');
     a.label('msg_diag_mmap_begin');      a.emitCString('NUSANTARA_DIAG_MMAP_BEGIN\r\n');
     a.label('msg_diag_mmap_done');       a.emitCString('NUSANTARA_DIAG_MMAP_DONE\r\n');
+    a.label('msg_diag_module_begin');    a.emitCString('NUSANTARA_DIAG_MODULE_BEGIN\r\n');
+    a.label('msg_diag_module_done');     a.emitCString('NUSANTARA_DIAG_MODULE_DONE\r\n');
+    a.label('msg_diag_fb_begin');        a.emitCString('NUSANTARA_DIAG_FRAMEBUFFER_BEGIN\r\n');
+    a.label('msg_diag_fb_done');         a.emitCString('NUSANTARA_DIAG_FRAMEBUFFER_DONE\r\n');
+    a.label('msg_diag_end_tag_ok');      a.emitCString('NUSANTARA_DIAG_END_TAG_OK\r\n');
+    a.label('msg_diag_tag_advance_ok'); a.emitCString('NUSANTARA_DIAG_TAG_ADVANCE_OK\r\n');
     a.label('msg_diag_magic_ok');       a.emitCString('NUSANTARA_DIAG_MAGIC_OK\r\n');
     a.label('msg_diag_mbi_pointer_ok'); a.emitCString('NUSANTARA_DIAG_MBI_POINTER_OK\r\n');
     a.label('msg_diag_mbi_header_ok');  a.emitCString('NUSANTARA_DIAG_MBI_HEADER_OK\r\n');
