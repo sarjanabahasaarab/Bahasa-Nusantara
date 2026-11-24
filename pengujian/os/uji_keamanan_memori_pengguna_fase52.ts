@@ -173,6 +173,54 @@ test('52.39 AddressSpace destroy membebaskan frame yang dialokasikan oleh Addres
   assert.equal(pmm.getFreeFrameCount(), freeBeforeDestroy + 1);
 });
 
+test('52.40 VMM melepaskan frame milik lama saat mapping diganti frame eksternal', () => {
+  const pmm = new PhysicalMemoryManager(8 * 4096);
+  const vmm = new VirtualMemoryManager(pmm, 0x200000n);
+  const ownedFrame = vmm.allocateAndMap(0x40000n);
+  const externalFrame = pmm.allocateFrame();
+  assert.ok(ownedFrame !== null && externalFrame !== null);
+  const beforeReplace = pmm.getFreeFrameCount();
+  vmm.mapPage(0x40000n, externalFrame!);
+  assert.equal(pmm.getFreeFrameCount(), beforeReplace + 1);
+  const beforeUnmap = pmm.getFreeFrameCount();
+  vmm.unmapPage(0x40000n);
+  assert.equal(pmm.getFreeFrameCount(), beforeUnmap);
+  assert.equal(pmm.freeFrame(externalFrame!), true);
+});
+
+test('52.41 VMM mendukung transfer kepemilikan melalui unmapPage(false)', () => {
+  const pmm = new PhysicalMemoryManager(4 * 4096);
+  const vmm = new VirtualMemoryManager(pmm, 0x200000n);
+  const frame = vmm.allocateAndMap(0x50000n);
+  assert.ok(frame !== null);
+  assert.equal(vmm.unmapPage(0x50000n, false), true);
+  assert.equal(pmm.freeFrame(frame!), true);
+});
+
+test('52.42 AddressSpace melepaskan frame milik lama saat mapping diganti frame eksternal', () => {
+  const pmm = new PhysicalMemoryManager(8 * 4096);
+  const space = new AddressSpace(pmm);
+  const ownedFrame = space.allocateAndMapUserPage(0x0060_0000n);
+  const externalFrame = pmm.allocateFrame();
+  assert.ok(ownedFrame !== null && externalFrame !== null);
+  const beforeReplace = pmm.getFreeFrameCount();
+  space.mapPage(0x0060_0000n, externalFrame!, PagePermissions.USER_READ_WRITE, true);
+  assert.equal(pmm.getFreeFrameCount(), beforeReplace + 1);
+  const beforeUnmap = pmm.getFreeFrameCount();
+  space.unmapPage(0x0060_0000n);
+  assert.equal(pmm.getFreeFrameCount(), beforeUnmap);
+  assert.equal(pmm.freeFrame(externalFrame!), true);
+});
+
+test('52.43 AddressSpace mendukung transfer kepemilikan melalui unmapPage(false)', () => {
+  const pmm = new PhysicalMemoryManager(4 * 4096);
+  const space = new AddressSpace(pmm);
+  const frame = space.allocateAndMapUserPage(0x0070_0000n);
+  assert.ok(frame !== null);
+  assert.equal(space.unmapPage(0x0070_0000n, false), true);
+  assert.equal(pmm.freeFrame(frame!), true);
+});
+
 
 
 
