@@ -2,9 +2,9 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Strict 18-Sentinel Validator & Forensic Reporter for QEMU Bare-Metal Execution (Phase 23.10 / Phase 50)
+ * Strict 19-Sentinel Validator & Forensic Reporter for QEMU Bare-Metal Execution (Phase 23.10 / Phase 50)
  *
- * Enforces strict sequential verification of all 18 hardware boot & Ring 3 sentinels,
+ * Enforces strict sequential verification of all 19 hardware boot & Ring 3 sentinels,
  * rejects duplicate/out-of-order/missing/early-exit/forged serial logs, checks ISA debug-exit
  * and timeout status, records kernel panic diagnostics, and hashes runtime artifacts.
  */
@@ -85,6 +85,7 @@ export class QEMUSentinelValidator {
     'NUSANTARA_LONG_MODE_ENTERED',
     'NUSANTARA_IDT_OK',
     'NUSANTARA_MEMORY_MANAGER_OK',
+    'NUSANTARA_DIRECT_MAP_OK',
     'NUSANTARA_KERNEL_MAIN_ENTERED',
     'NUSANTARA_KERNEL_BOOT_OK',
     'NUSANTARA_USERMODE_ENTERED',
@@ -260,11 +261,11 @@ export class QEMUSentinelValidator {
       return 'FAIL';
     };
 
-    const bootStatus = groupStatus(0, 9);
-    const ring3Status = groupStatus(10, 13);
-    const processIsolationStatus = groupStatus(14, 14);
-    const faultHandlingStatus = groupStatus(15, 16);
-    const kernelFinalStatus = groupStatus(17, 17, true);
+    const bootStatus = groupStatus(0, 10);
+    const ring3Status = groupStatus(11, 14);
+    const processIsolationStatus = groupStatus(15, 15);
+    const faultHandlingStatus = groupStatus(16, 17);
+    const kernelFinalStatus = groupStatus(18, 18, true);
 
     const allStagesClean =
       sequentialMatchedCount === this.OFFICIAL_SENTINELS.length &&
@@ -322,11 +323,11 @@ export class QEMUSentinelValidator {
       '        LAPORAN VALIDASI SENTINEL QEMU STRICT (PHASE 23.10 / F50)     ',
       '======================================================================',
       `Status Keseluruhan     : ${report.overallStatus}`,
-      `Boot Status (1-10)     : ${report.bootStatus}`,
-      `Ring 3 UserMode (11-14): ${report.ring3Status}`,
-      `Process Isolation (15) : ${report.processIsolationStatus}`,
-      `Fault Handling (16-17) : ${report.faultHandlingStatus}`,
-      `Kernel Final (18+Exit) : ${report.kernelFinalStatus}`,
+      `Boot Status (1-11)     : ${report.bootStatus}`,
+      `Ring 3 UserMode (12-15): ${report.ring3Status}`,
+      `Process Isolation (16) : ${report.processIsolationStatus}`,
+      `Fault Handling (17-18) : ${report.faultHandlingStatus}`,
+      `Kernel Final (19+Exit) : ${report.kernelFinalStatus}`,
       `Sentinel Berurutan     : ${report.sequentialMatchedCount} / ${report.totalRequired}`,
       `QEMU Exit Code         : ${report.exitCode} (Valid: ${report.exitCodeValid})`,
       `Timeout / Panic        : ${report.timedOut ? 'TIMEOUT' : 'NO_TIMEOUT'} / ${report.hasPanic ? 'PANIC' : 'NO_PANIC'}`,
