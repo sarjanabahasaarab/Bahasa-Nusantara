@@ -306,6 +306,23 @@ await asyncTest('52.30 adapter memori terpasang pada dispatcher dan handler mene
   assert.equal(observed, 'NUSA');
 });
 
+
+await asyncTest('52.31 accessor menolak pointer null-page dan rentang melewati batas user space', async () => {
+  const space = new AddressSpace();
+  space.mapPage(0x0000_0000n, 0x01B0_0000n, PagePermissions.USER_READ_WRITE, true);
+  space.mapPage(0x0000_0001_0000n, 0x01B0_1000n, PagePermissions.USER_READ_WRITE, true);
+  const accessor = new AddressSpaceMemoryAccessor(() => new Uint8Array(4), () => true);
+  assert.equal(accessor.copyFromUser(space, 0n, 4), null);
+  assert.equal(accessor.copyFromUser(space, 0x0000_7FFF_FFFF_FFFEn, 4), null);
+});
+
+await asyncTest('52.32 accessor menolak transfer lebih besar dari batas 16 MiB', async () => {
+  const space = new AddressSpace();
+  const accessor = new AddressSpaceMemoryAccessor(() => new Uint8Array(0), () => true);
+  assert.equal(accessor.copyFromUser(space, 0x0001_0000n, 16 * 1024 * 1024 + 1), null);
+  assert.equal(accessor.copyToUser(space, 0x0001_0000n, new Uint8Array(1), 16 * 1024 * 1024 + 1), false);
+});
+
 }
 
 void runAsyncDispatcherTests().then(() => {
