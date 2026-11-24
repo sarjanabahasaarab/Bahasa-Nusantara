@@ -220,11 +220,11 @@ async function jalankanSemuaPengujian() {
   uji('2.8 PMM menolak konfigurasi bitmap melebihi batas aman sebelum alokasi', () => {
     let rejected = false;
     try {
-      new PhysicalMemoryManager(512 * 1024 * 1024 * 1024 + 4096);
+      new PhysicalMemoryManager(2 * 1024 * 1024 * 1024 * 1024 + 4096);
     } catch (error) {
       rejected = error instanceof RangeError;
     }
-    samaDengan(rejected, true, 'RAM 512 GiB lebih satu halaman harus ditolak secara terkontrol');
+    samaDengan(rejected, true, 'RAM 2 TiB lebih satu halaman harus ditolak secara terkontrol');
   });
 
   uji('2.9 PMM menolak base fisik dengan tipe runtime yang tidak valid', () => {
