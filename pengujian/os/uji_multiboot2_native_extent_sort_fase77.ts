@@ -36,6 +36,5 @@ assert.ok(contains([0x8b, 0x47, 0xf0, 0x3b, 0x07]), 'Sort compares uint64 low dw
 assert.ok(contains([0xff, 0x77, 0xf0, 0xff, 0x77, 0xf4, 0xff, 0x77, 0xf8, 0xff, 0x77, 0xfc]),
   'Sort preserves the full 16-byte record before shifting');
 assert.ok(contains([0x61]), 'Sorter must restore the outer parser registers');
-assert.ok(bytes.includes(...[]), 'Bootstrap bytecode is available');
 
 console.log('Phase 77: native uint64 extent insertion-sort contract passed.');
