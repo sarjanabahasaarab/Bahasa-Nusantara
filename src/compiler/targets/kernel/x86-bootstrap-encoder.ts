@@ -851,12 +851,10 @@ export class X86BootstrapEncoder {
     a.movRegImm64(Reg64.RBX, 4096n);
     a.emit(0x48, 0x39, 0xde); // cmp rsi, rbx
     a.ja('sys_write_efault');
-    a.emit(0x48, 0x89, 0xdf); // mov rdi, rbx -- overwritten below; keep source pointer separately
-    a.emit(0x48, 0x89, 0xfb); // mov rbx, rdi
+    a.emit(0x48, 0x89, 0xfb); // mov rbx, rdi (simpan pointer, hitung batas akhir)
     a.emit(0x48, 0x01, 0xf3); // add rbx, rsi
     a.jb('sys_write_efault'); // carry => overflow
-    a.movRegImm64(Reg64.RDI, 0x0040_1000n);
-    a.emit(0x48, 0x39, 0xfb); // cmp rbx, rdi
+    a.emit(0x48, 0x81, 0xfb, 0x00, 0x10, 0x40, 0x00); // cmp rbx, 0x00401000
     a.ja('sys_write_efault');
 
     // Tulis byte langsung dari buffer User Space [RDI .. RDI+RSI] ke UART COM1 (0x3F8)!
