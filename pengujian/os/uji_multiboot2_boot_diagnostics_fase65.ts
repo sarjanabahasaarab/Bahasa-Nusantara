@@ -47,8 +47,8 @@ test('65.1 emits the first boot sentinel immediately after UART initialization',
 });
 
 test('65.2 includes memory-map entry begin and completion diagnostic markers', () => {
-  assert.ok(containsBytes(Array.from(new TextEncoder().encode('NUSANTARA_DIAG_MMAP_BEGIN\\r\\n'))));
-  assert.ok(containsBytes(Array.from(new TextEncoder().encode('NUSANTARA_DIAG_MMAP_DONE\\r\\n'))));
+  assert.ok(containsBytes(Array.from(new TextEncoder().encode('NUSANTARA_DIAG_MMAP_BEGIN\r\n'))));
+  assert.ok(containsBytes(Array.from(new TextEncoder().encode('NUSANTARA_DIAG_MMAP_DONE\r\n'))));
 });
 
 test('65.3 preserves the tag pointer around diagnostic serial output', () => {
