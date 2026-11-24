@@ -128,24 +128,35 @@ export class UserELFBuilder {
     // syscall (0x0f, 0x05)
     payload[offset++] = 0x0f; payload[offset++] = 0x05;
 
-    // 3. Syscall 6: sys_console_write(ptr: stringVAddr, len: 32)
-    // mov rax, 6 (0x48, 0xc7, 0xc0, 0x06, 0x00, 0x00, 0x00)
+    // 3. Uji negatif: syscall write ke halaman user yang TIDAK dipetakan (0x00402000).
+    // Kernel wajib mengembalikan -EFAULT (-14), bukan membaca memori dan bukan panic.
     payload[offset++] = 0x48; payload[offset++] = 0xc7; payload[offset++] = 0xc0;
     payload[offset++] = 0x06; payload[offset++] = 0x00; payload[offset++] = 0x00; payload[offset++] = 0x00;
-    // mov rdi, stringVAddr (0x48, 0xbf, ...)
     payload[offset++] = 0x48; payload[offset++] = 0xbf;
     const view = new DataView(payload.buffer);
+    view.setBigUint64(offset, 0x0040_2000n, true);
+    offset += 8;
+    payload[offset++] = 0x48; payload[offset++] = 0xc7; payload[offset++] = 0xc6;
+    payload[offset++] = 0x01; payload[offset++] = 0x00; payload[offset++] = 0x00; payload[offset++] = 0x00;
+    payload[offset++] = 0x0f; payload[offset++] = 0x05;
+    // cmp rax, -14; je +2; ud2 jika kernel tidak menolak pointer tersebut.
+    payload[offset++] = 0x48; payload[offset++] = 0x83; payload[offset++] = 0xf8; payload[offset++] = 0xf2;
+    payload[offset++] = 0x74; payload[offset++] = 0x02;
+    payload[offset++] = 0x0f; payload[offset++] = 0x0b;
+
+    // 4. Syscall write valid ke string yang berada pada halaman kode user terpetakan.
+    payload[offset++] = 0x48; payload[offset++] = 0xc7; payload[offset++] = 0xc0;
+    payload[offset++] = 0x06; payload[offset++] = 0x00; payload[offset++] = 0x00; payload[offset++] = 0x00;
+    payload[offset++] = 0x48; payload[offset++] = 0xbf;
     view.setBigUint64(offset, stringVAddr, true);
     offset += 8;
-    // mov rsi, stringData.length (0x48, 0xc7, 0xc6, len, 0, 0, 0)
     payload[offset++] = 0x48; payload[offset++] = 0xc7; payload[offset++] = 0xc6;
     payload[offset++] = stringData.length & 0xff;
     payload[offset++] = (stringData.length >> 8) & 0xff;
     payload[offset++] = 0x00; payload[offset++] = 0x00;
-    // syscall (0x0f, 0x05)
     payload[offset++] = 0x0f; payload[offset++] = 0x05;
 
-    // 4. Syscall 1: sys_process_exit(0)
+    // 5. Syscall 1: sys_process_exit(0)
     // mov rax, 1 (0x48, 0xc7, 0xc0, 0x01, 0x00, 0x00, 0x00)
     payload[offset++] = 0x48; payload[offset++] = 0xc7; payload[offset++] = 0xc0;
     payload[offset++] = 0x01; payload[offset++] = 0x00; payload[offset++] = 0x00; payload[offset++] = 0x00;
