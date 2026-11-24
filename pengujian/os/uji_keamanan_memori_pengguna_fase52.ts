@@ -323,6 +323,16 @@ await asyncTest('52.32 accessor menolak transfer lebih besar dari batas 16 MiB',
   assert.equal(accessor.copyToUser(space, 0x0001_0000n, new Uint8Array(16 * 1024 * 1024 + 1)), false);
 });
 
+
+await asyncTest('52.33 accessor gagal tertutup jika backend fisik melempar exception', async () => {
+  const space = new AddressSpace();
+  space.mapPage(0x00F0_0000n, 0x01C0_0000n, PagePermissions.USER_READ_WRITE, true);
+  const readerThrows = new AddressSpaceMemoryAccessor(() => { throw new Error('physical read fault'); }, () => true);
+  const writerThrows = new AddressSpaceMemoryAccessor(() => null, () => { throw new Error('physical write fault'); });
+  assert.equal(readerThrows.copyFromUser(space, 0x00F0_0000n, 4), null);
+  assert.equal(writerThrows.copyToUser(space, 0x00F0_0000n, new Uint8Array(4)), false);
+});
+
 }
 
 void runAsyncDispatcherTests().then(() => {
