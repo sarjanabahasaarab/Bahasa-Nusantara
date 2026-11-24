@@ -7,6 +7,8 @@ import assert from 'node:assert/strict';
 import { UserPointerSecurity, UserSecurityError } from '../../src/runtime/os/security/user-pointer.js';
 import { AddressSpace } from '../../src/runtime/os/memory/address-space.js';
 import { PagePermissions } from '../../src/runtime/os/memory/types.js';
+import { SyscallDispatcher } from '../../src/runtime/os/syscall/syscall-dispatcher.js';
+import { SyscallTable } from '../../src/runtime/os/syscall/syscall-table.js';
 
 let passed = 0;
 let failed = 0;
@@ -109,6 +111,69 @@ test('52.17 address space tetap mengizinkan READ pada halaman READ-only', () => 
   space.mapPage(0x0040_0000n, 0x0100_0000n, PagePermissions.READ, true);
   const result = space.checkAccess(0x0040_0000n, 'READ', true);
   assert.equal(result.allowed, true);
+});
+
+
+test('52.18 dispatcher memberikan copy_from_user ke handler dengan data kernel hasil salin lintas halaman', async () => {
+  const space = new AddressSpace();
+  space.mapPage(0x0050_0000n, 0x0110_0000n, PagePermissions.USER_READ_WRITE, true);
+  space.mapPage(0x0050_1000n, 0x0110_1000n, PagePermissions.USER_READ_WRITE, true);
+  const table = new SyscallTable();
+  let received = '';
+  table.register({
+    number: 9001, name: 'test_copy_from_user', minArgs: 2,
+    handler: (args, ctx) => {
+      const bytes = ctx.userMemory?.copyFromUser(args[0], Number(args[1]));
+      received = bytes ? new TextDecoder().decode(bytes) : '';
+      return BigInt(bytes?.length ?? -1);
+    },
+  });
+  const dispatcher = new SyscallDispatcher(table);
+  dispatcher.setMemoryAccessors(
+    (_address, length) => new TextEncoder().encode('ABCD').subarray(0, length),
+    () => true,
+  );
+  const result = await dispatcher.dispatch(9001, [0x0050_0FFEn, 4n], {
+    callingProcessId: 7, callingThreadId: 1, isKernelCaller: false, addressSpace: space,
+  });
+  assert.equal(result, 4n);
+  assert.equal(received, 'ABCD');
+});
+
+test('52.19 copy_from_user handler gagal tertutup jika reader tidak dipasang', async () => {
+  const table = new SyscallTable();
+  table.register({
+    number: 9002, name: 'test_copy_from_user_without_reader', minArgs: 2,
+    handler: (args, ctx) => BigInt(ctx.userMemory?.copyFromUser(args[0], Number(args[1]))?.length ?? -1),
+  });
+  const dispatcher = new SyscallDispatcher(table);
+  const space = new AddressSpace();
+  space.mapPage(0x0060_0000n, 0x0120_0000n, PagePermissions.USER_READ_WRITE, true);
+  const result = await dispatcher.dispatch(9002, [0x0060_0000n, 4n], {
+    callingProcessId: 7, callingThreadId: 1, isKernelCaller: false, addressSpace: space,
+  });
+  assert.equal(result, -1n);
+});
+
+test('52.20 copy_to_user handler menulis hanya melalui writer yang dipasang', async () => {
+  const table = new SyscallTable();
+  let written = '';
+  table.register({
+    number: 9003, name: 'test_copy_to_user', minArgs: 1,
+    handler: (_args, ctx) => BigInt(ctx.userMemory?.copyToUser(0x0070_0000n, new TextEncoder().encode('OK')) ? 1 : 0),
+  });
+  const dispatcher = new SyscallDispatcher(table);
+  dispatcher.setMemoryAccessors(
+    () => null,
+    (_address, data) => { written = new TextDecoder().decode(data); return true; },
+  );
+  const space = new AddressSpace();
+  space.mapPage(0x0070_0000n, 0x0130_0000n, PagePermissions.USER_READ_WRITE, true);
+  const result = await dispatcher.dispatch(9003, [0n], {
+    callingProcessId: 7, callingThreadId: 1, isKernelCaller: false, addressSpace: space,
+  });
+  assert.equal(result, 1n);
+  assert.equal(written, 'OK');
 });
 
 console.log('Phase 52: LULUS=' + passed + ', GAGAL=' + failed + ', TOTAL=' + (passed + failed));
