@@ -289,6 +289,7 @@ export class X86BootstrapEncoder {
   public static readonly STAGE_6_LONG_ENTERED = 'NUSANTARA_LONG_MODE_ENTERED\r\n';
   public static readonly STAGE_7_IDT = 'NUSANTARA_IDT_OK\r\n';
   public static readonly STAGE_8_MEM = 'NUSANTARA_MEMORY_MANAGER_OK\r\n';
+  public static readonly STAGE_8B_DIRECT_MAP = 'NUSANTARA_DIRECT_MAP_OK\r\n';
   public static readonly STAGE_9_MAIN = 'NUSANTARA_KERNEL_MAIN_ENTERED\r\n';
   public static readonly STAGE_10_BOOT_OK = 'NUSANTARA_KERNEL_BOOT_OK\r\n';
 
@@ -309,6 +310,7 @@ export class X86BootstrapEncoder {
   private static readonly PT_USER_A_ADDR = 0x0020_3000;
   private static readonly PDPT_HIGH_ADDR = 0x0020_4000;
   private static readonly PD_HIGH_ADDR = 0x0020_5000;
+  private static readonly PD_DIRECT_ADDR = 0x0020_6000;
 
   private static readonly PML4_B_ADDR = 0x0021_0000;
   private static readonly PDPT_LOW_B_ADDR = 0x0021_1000;
@@ -647,8 +649,19 @@ export class X86BootstrapEncoder {
     a.movRegImm32(Reg64.RCX, 0x6000);
     a.emit(0xf3, 0xab);
 
-    // Higher-Half Kernel Tables (Supervisor-Only U/S=0): PDPT_HIGH[510] & PD_HIGH[0..3]
+    // Higher-Half kernel mapping (PDPT_HIGH[510]) dan direct map (PDPT_HIGH[0]).
+    // Direct map dipisahkan ke PD sendiri agar setiap huge page dapat diberi NX.
     a.storeMem64AbsImm32(this.PDPT_HIGH_ADDR + 510 * 8, this.PD_HIGH_ADDR | 0x03);
+    a.storeMem64AbsImm32(this.PDPT_HIGH_ADDR + 0, this.PD_DIRECT_ADDR | 0x03);
+
+    // Direct physical map: FFFF800000000000 -> physical 0..64 MiB.
+    // Setiap entri adalah 2 MiB RW + NX (bila CPU mendukung NX).
+    for (let page = 0; page < 32; page++) {
+      const physicalBase = page * 0x20_0000;
+      a.movRegImm64(Reg64.RAX, BigInt(physicalBase | 0x83));
+      a.emit(0x4c, 0x09, 0xf8); // Tambahkan bit NX dari R15 jika didukung.
+      a.storeMem64Abs(this.PD_DIRECT_ADDR + page * 8, Reg64.RAX);
+    }
     a.storeMem64AbsImm32(this.PD_HIGH_ADDR + 0, 0x0000_0083);
     a.storeMem64AbsImm32(this.PD_HIGH_ADDR + 8, 0x0020_0083);
     a.storeMem64AbsImm32(this.PD_HIGH_ADDR + 16, 0x0040_0083);
@@ -656,7 +669,8 @@ export class X86BootstrapEncoder {
 
     // Process A Page Tables (PML4_A)
     a.storeMem64AbsImm32(this.PML4_A_ADDR + 0, this.PDPT_LOW_A_ADDR | 0x07);     // User walk OK
-    a.storeMem64AbsImm32(this.PML4_A_ADDR + 511 * 8, this.PDPT_HIGH_ADDR | 0x03); // Supervisor only!
+    a.storeMem64AbsImm32(this.PML4_A_ADDR + 511 * 8, this.PDPT_HIGH_ADDR | 0x03); // Higher-half kernel, supervisor only.
+    a.storeMem64AbsImm32(this.PML4_A_ADDR + 256 * 8, this.PDPT_HIGH_ADDR | 0x03); // Direct map, supervisor only.
     a.storeMem64AbsImm32(this.PDPT_LOW_A_ADDR + 0, this.PD_LOW_A_ADDR | 0x07);    // User walk OK
     a.storeMem64AbsImm32(this.PD_LOW_A_ADDR + 0, 0x0000_0083);                   // 0..2MB Supervisor Only
     a.storeMem64AbsImm32(this.PD_LOW_A_ADDR + 8, 0x0020_0083);                   // 2..4MB Supervisor Only
@@ -673,6 +687,7 @@ export class X86BootstrapEncoder {
     // Process B Page Tables (PML4_B terisolasi)
     a.storeMem64AbsImm32(this.PML4_B_ADDR + 0, this.PDPT_LOW_B_ADDR | 0x07);
     a.storeMem64AbsImm32(this.PML4_B_ADDR + 511 * 8, this.PDPT_HIGH_ADDR | 0x03);
+    a.storeMem64AbsImm32(this.PML4_B_ADDR + 256 * 8, this.PDPT_HIGH_ADDR | 0x03);
     a.storeMem64AbsImm32(this.PDPT_LOW_B_ADDR + 0, this.PD_LOW_B_ADDR | 0x07);
     a.storeMem64AbsImm32(this.PD_LOW_B_ADDR + 0, 0x0000_0083);
     a.storeMem64AbsImm32(this.PD_LOW_B_ADDR + 8, 0x0020_0083);
@@ -691,6 +706,16 @@ export class X86BootstrapEncoder {
     a.emit(0x0f, 0x22, 0xd8); // mov cr3, rax
 
     a.printLabel64('msg_mem_ok', 'print_serial64');
+
+    // Uji akses tulis/baca melalui direct map fisik pada alamat 7 MiB.
+    // Jika pemetaan tidak aktif, hardware #PF Ring 0 akan menghentikan boot.
+    a.movRegImm64(Reg64.RAX, 0xFFFF_8000_0070_0000n);
+    a.movRegImm64(Reg64.RBX, 0x4E55_5341_4D41_5031n); // "NUSAMAP1"
+    a.emit(0x48, 0x89, 0x18); // mov [rax], rbx
+    a.emit(0x48, 0x8b, 0x08); // mov rcx, [rax]
+    a.emit(0x48, 0x39, 0xd9); // cmp rcx, rbx
+    a.jne('panic64_direct_map');
+    a.printLabel64('msg_direct_map_ok', 'print_serial64');
 
     // =========================================================================
     // BAGIAN 6: KERNEL MAIN & EKSEKUSI ELF64 USER MODE NYATA (RING 3)
@@ -1012,6 +1037,7 @@ export class X86BootstrapEncoder {
     a.printLabel64('msg_diag_nl', 'print_serial64');
     a.jmp('panic64_halt');
 
+    a.label('panic64_direct_map');
     a.label('panic64_proc');
     a.label('panic64_isolation');
     a.label('panic64_fault');
@@ -1170,6 +1196,7 @@ export class X86BootstrapEncoder {
     a.label('msg_long_entered');         a.emitCString(this.STAGE_6_LONG_ENTERED);
     a.label('msg_idt_ok');               a.emitCString(this.STAGE_7_IDT);
     a.label('msg_mem_ok');               a.emitCString(this.STAGE_8_MEM);
+    a.label('msg_direct_map_ok');        a.emitCString(this.STAGE_8B_DIRECT_MAP);
     a.label('msg_main_entered');         a.emitCString(this.STAGE_9_MAIN);
     a.label('msg_boot_ok');              a.emitCString(sentinel);
     a.label('msg_usermode_entered');     a.emitCString(this.STAGE_11_USERMODE_ENTERED);

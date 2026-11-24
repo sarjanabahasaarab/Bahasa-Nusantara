@@ -514,8 +514,8 @@ async function main(): Promise<void> {
     pastikan(text.includes('NUSANTARA_USERMODE_TEST_PASS'), 'Biner bootstrap harus memuat NUSANTARA_USERMODE_TEST_PASS');
   });
 
-  await uji('11.2 QEMURunner mengenali seluruh 18 tahapan diagnostik Fase 49 & 50', () => {
-    pastikan(QEMURunner.STAGES.length === 18, 'QEMURunner harus mendefinisikan 18 tahapan diagnostik serial');
+  await uji('11.2 QEMURunner mengenali seluruh 19 tahapan diagnostik Fase 49 & 50', () => {
+    pastikan(QEMURunner.STAGES.length === 19, 'QEMURunner harus mendefinisikan 19 tahapan diagnostik serial');
     pastikan(QEMURunner.STAGES.includes('NUSANTARA_USERMODE_ENTERED'), 'Harus menyertakan NUSANTARA_USERMODE_ENTERED');
     pastikan(QEMURunner.STAGES.includes('NUSANTARA_USER_FAULT_ISOLATED'), 'Harus menyertakan NUSANTARA_USER_FAULT_ISOLATED');
     pastikan(QEMURunner.STAGES.includes('NUSANTARA_KERNEL_SURVIVED_USER_FAULT'), 'Harus menyertakan NUSANTARA_KERNEL_SURVIVED_USER_FAULT');
@@ -592,7 +592,7 @@ async function main(): Promise<void> {
     pastikan(ditemukan, 'Handler SYS_CONSOLE_WRITE harus menyalin RDI (pointer) ke RBX, bukan RSI (panjang)');
   });
 
-  await uji('11.7 QEMUSentinelValidator meluluskan log 18/18 berurutan dengan exit code 1', () => {
+  await uji('11.7 QEMUSentinelValidator meluluskan log 19/19 berurutan dengan exit code 1', () => {
     const validLog = QEMUSentinelValidator.OFFICIAL_SENTINELS.join('\r\n') + '\r\n';
     const report = QEMUSentinelValidator.validate({
       serialLog: validLog,
@@ -602,7 +602,7 @@ async function main(): Promise<void> {
     });
 
     pastikan(report.overallStatus === 'PASS', `Harus PASS, aktual: ${report.overallStatus} (${report.violations.join('; ')})`);
-    pastikan(report.sequentialMatchedCount === 18, 'Semua 18 sentinel wajib cocok berurutan');
+    pastikan(report.sequentialMatchedCount === 19, 'Semua 19 sentinel wajib cocok berurutan');
     pastikan(report.bootStatus === 'PASS', 'bootStatus harus PASS');
     pastikan(report.ring3Status === 'PASS', 'ring3Status harus PASS');
     pastikan(report.processIsolationStatus === 'PASS', 'processIsolationStatus harus PASS');

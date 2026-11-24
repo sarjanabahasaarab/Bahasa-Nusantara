@@ -87,7 +87,7 @@ jobs:
           test -s artifacts/phase50/nusantara-phase50.iso
           xorriso -indev artifacts/phase50/nusantara-phase50.iso -report_el_torito plain
 
-      - name: "Execute Native QEMU Headless Boot & Sequential 18-Sentinel Verification"
+      - name: "Execute Native QEMU Headless Boot & Sequential 19-Sentinel Verification"
         run: ./scripts/run-phase50-qemu.sh --skip-build
 
       - name: "Re-calculate SHA-256 Checksums"
