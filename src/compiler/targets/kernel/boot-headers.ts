@@ -19,9 +19,29 @@ export class Multiboot2HeaderBuilder {
   addTag(type: number, flags: number, data: Uint8Array = new Uint8Array(0)): this {
     // Ukuran tag = 8 (header tag) + data.length, diratakan ke kelipatan 8
     const rawSize = 8 + data.byteLength;
-    const alignedSize = Math.ceil(rawSize / 8) * 8;
-    this.tags.push({ type, flags, size: alignedSize, data });
+    this.tags.push({ type, flags, size: rawSize, data });
     return this;
+  }
+
+  addInformationRequestTag(infoTypes: number[], required = false): this {
+    if (!Array.isArray(infoTypes) || infoTypes.length === 0) {
+      throw new RangeError('Information request harus berisi minimal satu tipe informasi.');
+    }
+    const unique = new Set<number>();
+    const data = new Uint8Array(infoTypes.length * 4);
+    const view = new DataView(data.buffer);
+    infoTypes.forEach((type, index) => {
+      if (!Number.isSafeInteger(type) || type < 0 || type > 0xFFFF_FFFF || unique.has(type)) {
+        throw new RangeError('Tipe information request harus uint32 unik.');
+      }
+      unique.add(type);
+      view.setUint32(index * 4, type, true);
+    });
+    return this.addTag(1, required ? 1 : 0, data);
+  }
+
+  addMemoryMapRequestTag(required = true): this {
+    return this.addInformationRequestTag([6], required);
   }
 
   addFramebufferTag(width = 1024, height = 768, bpp = 32): this {
@@ -43,7 +63,7 @@ export class Multiboot2HeaderBuilder {
     // [12..15]: checksum
     let tagsTotalLength = 0;
     for (const tag of this.tags) {
-      tagsTotalLength += tag.size;
+      tagsTotalLength += Math.ceil(tag.size / 8) * 8;
     }
     // Tambahkan End Tag: type = 0, flags = 0, size = 8
     const endTagSize = 8;
@@ -70,7 +90,7 @@ export class Multiboot2HeaderBuilder {
       if (tag.data && tag.data.byteLength > 0) {
         buffer.set(tag.data, offset + 8);
       }
-      offset += tag.size;
+      offset += Math.ceil(tag.size / 8) * 8;
     }
 
     // End Tag
