@@ -220,7 +220,8 @@ export class UserPointerSecurity {
       return true;
     }
 
-    return true;
+    // Tanpa reader tidak ada data yang benar-benar disalin; jangan laporkan sukses.
+    return false;
   }
 
   /**
@@ -246,6 +247,7 @@ export class UserPointerSecurity {
       return memoryWriter(destUserPtr, srcKernelBuffer.subarray(0, length));
     }
 
-    return true;
+    // Tanpa writer tidak ada data yang benar-benar disalin; jangan laporkan sukses.
+    return false;
   }
 }
