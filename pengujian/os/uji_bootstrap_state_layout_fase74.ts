@@ -10,12 +10,12 @@ import { X86_BOOTSTRAP_STATE_LAYOUT } from '../../src/compiler/targets/kernel/x8
 import { BOOTSTRAP_PHYSICAL_MEMORY_RESERVATIONS } from '../../src/runtime/os/boot/multiboot2-memory-regions.js';
 
 const stateReservation = BOOTSTRAP_PHYSICAL_MEMORY_RESERVATIONS.find(
-  (reservation) => reservation.reason.includes('kernel state, TSS, IDT and IDTR'),
+  (reservation) => reservation.reason?.includes('kernel state, TSS, IDT and IDTR') ?? false,
 );
 assert.ok(stateReservation, 'Kernel state physical reservation must exist');
 
-const slots = Object.entries(X86_BOOTSTRAP_STATE_LAYOUT)
-  .map(([name, address]) => ({ name, address }))
+const slots: Array<{ name: string; address: number }> = Object.entries(X86_BOOTSTRAP_STATE_LAYOUT)
+  .map(([name, address]) => ({ name, address: Number(address) }))
   .sort((left, right) => left.address - right.address);
 
 assert.equal(slots.length, 9, 'All six counters and three Multiboot2 cursor slots must be declared');
