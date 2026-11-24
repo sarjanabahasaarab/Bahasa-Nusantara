@@ -10,6 +10,7 @@ import { Process } from './process';
 import { Thread } from './thread';
 import { ProcessID, ProcessState, ThreadID, ThreadState } from './types';
 import { AddressSpace } from '../memory/address-space';
+import type { SyscallContext } from '../syscall/types';
 
 export class ProcessManager {
   private static instance?: ProcessManager;
@@ -173,6 +174,25 @@ export class ProcessManager {
       }
     }
     return false;
+  }
+
+  /**
+   * Construye el contexto de syscall desde el PCB/TCB real.
+   * El llamador no puede inyectar un AddressSpace ajeno ni elevar privilegios:
+   * ambos datos se derivan del proceso registrado.
+   */
+  public createSyscallContext(pid: ProcessID, tid: ThreadID): SyscallContext | null {
+    const process = this.processes.get(pid);
+    if (!process || process.state === ProcessState.TERMINATED) return null;
+    const thread = process.getThread(tid);
+    if (!thread || thread.state === ThreadState.TERMINATED) return null;
+
+    return {
+      callingProcessId: process.pid,
+      callingThreadId: thread.tid,
+      isKernelCaller: process.isKernelProcess,
+      addressSpace: process.addressSpace,
+    };
   }
 
   public getAllProcesses(): Process[] {
