@@ -130,8 +130,12 @@ export class Multiboot2InfoParser {
           const base = view.getBigUint64(entryOffset, true);
           const length = view.getBigUint64(entryOffset + 8, true);
           const typeValue = view.getUint32(entryOffset + 16, true);
+          const entryReserved = view.getUint32(entryOffset + 20, true);
           const endExclusive = base + length;
 
+          if (entryReserved !== 0) {
+            throw new RangeError(`Reserved field memory-map entry harus 0 pada offset ${entryOffset}.`);
+          }
           if (length === 0n || endExclusive <= base || endExclusive > UINT64_LIMIT) {
             throw new RangeError(`Rentang memori Multiboot2 tidak valid pada offset ${entryOffset}.`);
           }
