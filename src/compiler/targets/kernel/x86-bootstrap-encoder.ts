@@ -48,6 +48,10 @@ export const X86_BOOTSTRAP_PAGE_EXTENT_COUNT_ADDRESS = 0x0027_0000;
 export const X86_BOOTSTRAP_PAGE_EXTENT_TABLE_BASE = 0x0027_0100;
 export const X86_BOOTSTRAP_PAGE_EXTENT_CAPACITY = 160;
 export const X86_BOOTSTRAP_PAGE_EXTENT_SIZE = 16;
+/** In-place insertion-sort cursors inside the reserved Phase 76 workspace. */
+export const X86_BOOTSTRAP_PAGE_EXTENT_SORT_INDEX_ADDRESS = 0x0027_0c00;
+export const X86_BOOTSTRAP_PAGE_EXTENT_SORT_CURSOR_ADDRESS = 0x0027_0c04;
+
 
 
 export const X86_BOOTSTRAP_STATE_LAYOUT = Object.freeze({
@@ -697,6 +701,54 @@ export class X86BootstrapEncoder {
     a.emit(0x8b, 0x0d); a.emit32(X86_BOOTSTRAP_STATE_LAYOUT.multibootTagSize); // mov ecx, [scratch_tag_size]
     a.emit(0x8b, 0x35); a.emit32(X86_BOOTSTRAP_STATE_LAYOUT.multibootTagPointer); // mov esi, [scratch_tag_ptr]
     a.emit(0x8b, 0x3d); a.emit32(X86_BOOTSTRAP_STATE_LAYOUT.multibootInfoEnd); // mov edi, [scratch_mbi_end]
+    // Phase 77: insertion-sort candidate records by unsigned 64-bit start.
+    // pushad/popad keeps the outer Multiboot2 parser context intact.
+    a.emit(0x60); // pushad
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_PAGE_EXTENT_SORT_INDEX_ADDRESS, 1);
+    a.label('phase77_sort_outer');
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_SORT_INDEX_ADDRESS); // mov eax, [i]
+    a.emit(0x8b, 0x15); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_COUNT_ADDRESS); // mov edx, [count]
+    a.emit(0x39, 0xd0); // cmp eax, edx
+    a.jae('phase77_sort_done');
+    a.emit(0xa3); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_SORT_CURSOR_ADDRESS); // mov [j], eax
+    a.label('phase77_sort_inner');
+    a.emit(0x8b, 0x0d); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_SORT_CURSOR_ADDRESS); // mov ecx, [j]
+    a.emit(0x85, 0xc9); // test ecx, ecx
+    a.je('phase77_sort_outer_next');
+    a.emit(0x89, 0xc8); // mov eax, ecx
+    a.emit(0x6b, 0xc0, X86_BOOTSTRAP_PAGE_EXTENT_SIZE); // imul eax, eax, 16
+    a.emit(0x05); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_TABLE_BASE); // add eax, table base
+    a.emit(0x89, 0xc7); // mov edi, eax (current record)
+    a.emit(0x8b, 0x57, 0xf4); // mov edx, [edi-12] previous start high
+    a.emit(0x3b, 0x57, 0x04); // cmp edx, [edi+4] current start high
+    a.ja('phase77_sort_swap');
+    a.jb('phase77_sort_inner_next');
+    a.emit(0x8b, 0x47, 0xf0); // mov eax, [edi-16] previous start low
+    a.emit(0x3b, 0x07); // cmp eax, [edi] current start low
+    a.ja('phase77_sort_swap');
+    a.jmp('phase77_sort_inner_next');
+    a.label('phase77_sort_swap');
+    a.emit(0xff, 0x77, 0xf0); // push [edi-16]
+    a.emit(0xff, 0x77, 0xf4); // push [edi-12]
+    a.emit(0xff, 0x77, 0xf8); // push [edi-8]
+    a.emit(0xff, 0x77, 0xfc); // push [edi-4]
+    a.emit(0x8b, 0x07, 0x89, 0x47, 0xf0); // [edi] -> [edi-16]
+    a.emit(0x8b, 0x47, 0x04, 0x89, 0x47, 0xf4); // +4 -> -12
+    a.emit(0x8b, 0x47, 0x08, 0x89, 0x47, 0xf8); // +8 -> -8
+    a.emit(0x8b, 0x47, 0x0c, 0x89, 0x47, 0xfc); // +12 -> -4
+    a.emit(0x58, 0x89, 0x47, 0x0c); // pop eax; [edi+12] = eax
+    a.emit(0x58, 0x89, 0x47, 0x08); // pop eax; [edi+8] = eax
+    a.emit(0x58, 0x89, 0x47, 0x04); // pop eax; [edi+4] = eax
+    a.emit(0x58, 0x89, 0x07); // pop eax; [edi] = eax
+    a.label('phase77_sort_inner_next');
+    a.emit(0xff, 0x0d); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_SORT_CURSOR_ADDRESS); // dec [j]
+    a.jmp('phase77_sort_inner');
+    a.label('phase77_sort_outer_next');
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_SORT_INDEX_ADDRESS); // inc [i]
+    a.jmp('phase77_sort_outer');
+    a.label('phase77_sort_done');
+    a.emit(0x61); // popad
+    a.emit(0x60); a.printLabel32('msg_mb2_extents_sorted', 'print_serial32'); a.emit(0x61);
     a.jmp('mb2_native_advance');
 
     a.label('mb2_native_module');
@@ -1590,6 +1642,7 @@ export class X86BootstrapEncoder {
     a.label('msg_mb2_ranges_ok');        a.emitCString('NUSANTARA_MULTIBOOT2_RANGES_OK\r\n');
     a.label('msg_mb2_classify_ok');      a.emitCString('NUSANTARA_MULTIBOOT2_CLASSIFY_OK\r\n');
     a.label('msg_mb2_page_audit_ok');    a.emitCString('NUSANTARA_MULTIBOOT2_PAGE_AUDIT_OK\r\n');
+    a.label('msg_mb2_extents_sorted');  a.emitCString('NUSANTARA_MULTIBOOT2_EXTENTS_SORTED_OK\r\n');
     a.label('msg_diag_mmap_begin');      a.emitCString('NUSANTARA_DIAG_MMAP_BEGIN\r\n');
     a.label('msg_diag_mmap_done');       a.emitCString('NUSANTARA_DIAG_MMAP_DONE\r\n');
     a.label('msg_diag_module_begin');    a.emitCString('NUSANTARA_DIAG_MODULE_BEGIN\r\n');
