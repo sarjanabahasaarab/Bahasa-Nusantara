@@ -747,8 +747,29 @@ export class X86BootstrapEncoder {
     a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_SORT_INDEX_ADDRESS); // inc [i]
     a.jmp('phase77_sort_outer');
     a.label('phase77_sort_done');
+    // Verify the resulting table is monotonically ordered before reporting OK.
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_PAGE_EXTENT_SORT_INDEX_ADDRESS, 1);
+    a.label('phase77_verify_loop');
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_SORT_INDEX_ADDRESS); // mov eax, [i]
+    a.emit(0x8b, 0x15); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_COUNT_ADDRESS); // mov edx, [count]
+    a.emit(0x39, 0xd0); // cmp eax, edx
+    a.jae('phase77_verify_done');
+    a.emit(0x89, 0xc1); // mov ecx, eax
+    a.emit(0x6b, 0xc9, X86_BOOTSTRAP_PAGE_EXTENT_SIZE); // imul ecx, ecx, 16
+    a.emit(0x81, 0xc1); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_TABLE_BASE); // add ecx, table base
+    a.emit(0x89, 0xcf); // mov edi, ecx
+    a.emit(0x8b, 0x57, 0xf4); // mov edx, [edi-12] previous start high
+    a.emit(0x3b, 0x57, 0x04); // cmp edx, [edi+4] current start high
+    a.ja('panic32');
+    a.jb('phase77_verify_next');
+    a.emit(0x8b, 0x47, 0xf0); // mov eax, [edi-16] previous start low
+    a.emit(0x3b, 0x07); // cmp eax, [edi] current start low
+    a.ja('panic32');
+    a.label('phase77_verify_next');
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_SORT_INDEX_ADDRESS); // inc [i]
+    a.jmp('phase77_verify_loop');
+    a.label('phase77_verify_done');
     a.emit(0x61); // popad
-    a.emit(0x60); a.printLabel32('msg_mb2_extents_sorted', 'print_serial32'); a.emit(0x61);
     a.jmp('mb2_native_advance');
 
     a.label('mb2_native_module');
