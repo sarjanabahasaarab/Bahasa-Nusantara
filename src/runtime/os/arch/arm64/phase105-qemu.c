@@ -32,7 +32,9 @@ static void uart_putc(char value)
 {
     volatile uint32_t *flags = (volatile uint32_t *)(PHASE105_UART_BASE + 0x18u);
     volatile uint32_t *data = (volatile uint32_t *)PHASE105_UART_BASE;
-    while ((*flags & (1u << 5)) != 0u) { }
+    uint32_t spins = 1000000u;
+    while ((*flags & (1u << 5)) != 0u && spins != 0u) --spins;
+    /* A diagnostic UART must never deadlock kernel bring-up on a stuck TX flag. */
     *data = (uint32_t)(uint8_t)value;
 }
 static void uart_puts(const char *message)
