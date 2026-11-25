@@ -15,7 +15,10 @@ frame task lain, dan ERET melanjutkan task yang dipilih.
 - PL011 UART: 0x09000000.
 - EL1 physical timer PPI: INTID 30.
 - Interval timer: 10 ms.
-- Dua task EL1h dengan stack kernel terpisah dan exception frame awal.
+- Dua task EL1h dengan stack kernel terpisah dan exception frame awal. Setiap
+frame awal task harus memiliki bit SPSR_EL1.I = 0 sebelum dapat dipilih oleh
+scheduler; trampoline first-task Phase 104 hanya membuka IRQ untuk task pertama,
+sehingga platform juga harus menyiapkan task READY lainnya dengan IRQ terbuka.
 
 Image Phase 105 berdiri sendiri dan tidak mengubah jalur boot Phase 92.
 Kode OS yang diuji tetap memakai exception dispatcher, GICv3, Generic Timer,
@@ -25,7 +28,9 @@ IRQ runtime, IRQ scheduler, dan scheduler yang sudah ada.
 
 1. NUSANTARA_PHASE105_BOOT
 2. NUSANTARA_PHASE105_TIMER_ARMED
-3. NUSANTARA_PHASE105_PREEMPTION_OK
+3. NUSANTARA_PHASE105_TIMER_IRQ_SEEN
+4. NUSANTARA_PHASE105_TASK_A_START dan NUSANTARA_PHASE105_TASK_B_START
+5. NUSANTARA_PHASE105_PREEMPTION_OK
 
 Sentinel terakhir hanya dicetak dari task setelah kedua task melewati ambang
 progres dan callback pemilihan task mencatat sedikitnya enam pemilihan akibat
