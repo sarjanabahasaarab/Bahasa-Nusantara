@@ -203,3 +203,80 @@ export function normalizeMultiboot2MemoryRegions(
 
   return result;
 }
+
+
+/**
+ * Phase 81 reference algorithm: subtract a sorted reservation set from already
+ * normalized, sorted firmware candidates. This is a deterministic TypeScript
+ * oracle for the future native bootstrap implementation; it is not invoked by
+ * Ring 0 and does not make the resulting extents hardware allocator input.
+ */
+export function subtractNormalizedPhysicalReservations(
+  candidates: readonly UsablePhysicalMemoryExtent[],
+  reservations: readonly PhysicalMemoryReservation[],
+  options: { pageSize?: bigint; maxOutputExtents?: number } = {},
+): UsablePhysicalMemoryExtent[] {
+  if (!Array.isArray(candidates) || !Array.isArray(reservations)) {
+    throw new TypeError('Kandidat dan reservasi harus berupa array.');
+  }
+  const pageSize = options.pageSize ?? 4096n;
+  const maxOutputExtents = options.maxOutputExtents ?? 320;
+  if (typeof pageSize !== 'bigint' || pageSize <= 0n || (pageSize & (pageSize - 1n)) !== 0n) {
+    throw new RangeError('Ukuran halaman harus pangkat dua positif.');
+  }
+  if (!Number.isSafeInteger(maxOutputExtents) || maxOutputExtents < 0) {
+    throw new RangeError('Kapasitas hasil harus bilangan bulat aman non-negatif.');
+  }
+
+  let previousCandidateEnd = -1n;
+  const checkedCandidates: Interval[] = [];
+  for (const [index, candidate] of candidates.entries()) {
+    if (!candidate || typeof candidate.base !== 'bigint ||
+        typeof candidate.length !== 'bigint || typeof candidate.endExclusive !== 'bigint) {
+      throw new TypeError(`Kandidat #${index} tidak valid.`);
+    }
+    const end = assertRange(candidate.base, candidate.length, `Kandidat #${index}`);
+    if (candidate.endExclusive !== end || candidate.base % pageSize !== 0n ||
+        end % pageSize !== 0n || candidate.base < previousCandidateEnd) {
+      throw new RangeError(`Kandidat #${index} tidak sejajar atau tidak terurut.`);
+    }
+    checkedCandidates.push({ start: candidate.base, end });
+    previousCandidateEnd = end;
+  }
+
+  const exclusions: Interval[] = [];
+  for (const [index, reservation] of reservations.entries()) {
+    const end = assertRange(reservation.base, reservation.length, `Reservasi #${index}`);
+    exclusions.push({
+      start: alignDown(reservation.base, pageSize),
+      end: alignUp(end, pageSize),
+    });
+  }
+  const mergedExclusions = mergeIntervals(exclusions);
+  const result: UsablePhysicalMemoryExtent[] = [];
+  const append = (start: bigint, end: bigint) => {
+    if (start >= end) return;
+    if (result.length >= maxOutputExtents) {
+      throw new RangeError('Kapasitas tabel hasil pengurangan reservasi terlampaui.');
+    }
+    result.push({ base: start, length: end - start, endExclusive: end });
+  };
+
+  let exclusionIndex = 0;
+  for (const candidate of checkedCandidates) {
+    let cursor = candidate.start;
+    while (exclusionIndex < mergedExclusions.length &&
+           mergedExclusions[exclusionIndex].end <= cursor) exclusionIndex++;
+    let scan = exclusionIndex;
+    while (scan < mergedExclusions.length) {
+      const exclusion = mergedExclusions[scan];
+      if (exclusion.start >= candidate.end) break;
+      if (exclusion.start > cursor) append(cursor, exclusion.start);
+      if (exclusion.end > cursor) cursor = exclusion.end;
+      if (cursor >= candidate.end) break;
+      scan++;
+    }
+    if (cursor < candidate.end) append(cursor, candidate.end);
+  }
+  return result;
+}
