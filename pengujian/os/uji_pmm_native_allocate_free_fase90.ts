@@ -32,6 +32,12 @@ const code = Array.from(binary.codeBytes);
 assert.ok(binary.pmmAllocateFrameAddress > binary.entryPoint, 'allocator is exposed as a callable kernel entrypoint');
 assert.ok(binary.pmmFreeFrameAddress > binary.pmmAllocateFrameAddress, 'free routine is exposed after allocate routine');
 assert.ok(Number(binary.pmmFreeFrameAddress - binary.entryPoint) < code.length, 'native PMM entrypoints point inside emitted kernel code');
+const allocateOffset = Number(binary.pmmAllocateFrameAddress - binary.entryPoint);
+const freeOffset = Number(binary.pmmFreeFrameAddress - binary.entryPoint);
+assert.deepEqual(code.slice(allocateOffset, allocateOffset + 4), [0x53, 0x57, 0x31, 0xc0],
+  'allocate entrypoint starts with its documented callee-save prologue and frame scan');
+assert.deepEqual(code.slice(freeOffset, freeOffset + 3), [0x48, 0x81, 0xff],
+  'free entrypoint begins by validating the 64-bit physical address');
 const has = (bytes: number[]) => code.some((_, i) => bytes.every((v, j) => code[i + j] === v));
 const marker = new TextEncoder().encode('NUSANTARA_PMM_NATIVE_ALLOC_FREE_OK');
 assert.ok(code.some((_, i) => marker.every((v, j) => code[i + j] === v)), 'native PMM self-test marker is embedded');
