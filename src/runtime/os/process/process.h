@@ -1,0 +1,22 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+#ifndef NUSANTARA_OS_PROCESS_H
+#define NUSANTARA_OS_PROCESS_H
+#include <stddef.h>
+#include <stdint.h>
+#define NUSANTARA_OS_PROCESS_MAX 32u
+#define NUSANTARA_OS_PROCESS_PAGE_SIZE 4096u
+#define NUSANTARA_OS_PROCESS_PHYSICAL_LIMIT UINT64_C(0x0001000000000000)
+typedef enum nusantara_os_process_kind { NUSANTARA_OS_PROCESS_USER=1, NUSANTARA_OS_PROCESS_KERNEL=2 } nusantara_os_process_kind_t;
+typedef enum nusantara_os_process_state { NUSANTARA_OS_PROCESS_UNUSED=0, NUSANTARA_OS_PROCESS_CREATED, NUSANTARA_OS_PROCESS_READY, NUSANTARA_OS_PROCESS_RUNNING, NUSANTARA_OS_PROCESS_BLOCKED, NUSANTARA_OS_PROCESS_EXITED } nusantara_os_process_state_t;
+typedef enum nusantara_os_process_status { NUSANTARA_OS_PROCESS_OK=0, NUSANTARA_OS_PROCESS_INVALID_ARGUMENT, NUSANTARA_OS_PROCESS_FULL, NUSANTARA_OS_PROCESS_NOT_FOUND, NUSANTARA_OS_PROCESS_INVALID_STATE, NUSANTARA_OS_PROCESS_INVALID_PARENT, NUSANTARA_OS_PROCESS_INVALID_ADDRESS_SPACE } nusantara_os_process_status_t;
+typedef struct nusantara_os_process { uint64_t pid; uint64_t parent_pid; uint64_t scheduler_task_id; uint64_t page_table_root; int32_t exit_code; nusantara_os_process_kind_t kind; nusantara_os_process_state_t state; } nusantara_os_process_t;
+typedef struct nusantara_os_process_manager { nusantara_os_process_t processes[NUSANTARA_OS_PROCESS_MAX]; size_t count; uint64_t next_pid; } nusantara_os_process_manager_t;
+void nusantara_os_process_manager_init(nusantara_os_process_manager_t *);
+nusantara_os_process_status_t nusantara_os_process_create(nusantara_os_process_manager_t *,uint64_t,uint64_t,uint64_t,nusantara_os_process_kind_t,uint64_t *);
+nusantara_os_process_status_t nusantara_os_process_mark_ready(nusantara_os_process_manager_t *,uint64_t);
+nusantara_os_process_status_t nusantara_os_process_mark_running(nusantara_os_process_manager_t *,uint64_t);
+nusantara_os_process_status_t nusantara_os_process_block(nusantara_os_process_manager_t *,uint64_t);
+nusantara_os_process_status_t nusantara_os_process_resume(nusantara_os_process_manager_t *,uint64_t);
+nusantara_os_process_status_t nusantara_os_process_exit(nusantara_os_process_manager_t *,uint64_t,int32_t);
+const nusantara_os_process_t *nusantara_os_process_find(const nusantara_os_process_manager_t *,uint64_t);
+#endif
