@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: Apache-2.0
- * Phase 105: standalone QEMU virt image entry for real GICv3 timer preemption.
+ * Phase 105: QEMU virt entry; retain the proven Phase 92 EL transition.
  */
 .section .text.boot.header, "ax"
 .balign 8
@@ -20,23 +20,6 @@ _image_start:
 .type _start, %function
 _start:
     msr     daifset, #0xf
-    /* Emit a byte before touching EL2 system registers for boot diagnosis. */
-    movz    x9, #0x0900, lsl #16
-    mov     w10, wzr
-    str     w10, [x9, #0x30]
-    mov     w10, #13
-    str     w10, [x9, #0x24]
-    mov     w10, #1
-    str     w10, [x9, #0x28]
-    mov     w10, #0x70
-    str     w10, [x9, #0x2c]
-    mov     w10, #0x101
-    str     w10, [x9, #0x30]
-    mov     w10, #'E'
-1:
-    ldr     w11, [x9, #0x18]
-    tbnz    w11, #5, 1b
-    str     w10, [x9]
     mrs     x20, CurrentEL
     cmp     x20, #0x8
     b.eq    phase105_enter_el1
@@ -67,12 +50,12 @@ phase105_el1_entry:
     add     x1, x1, :lo12:__bss_start
     adrp    x2, __bss_end
     add     x2, x2, :lo12:__bss_end
-2:
+1:
     cmp     x1, x2
-    b.hs    3f
+    b.hs    2f
     stp     xzr, xzr, [x1], #16
-    b       2b
-3:
+    b       1b
+2:
     movz    x3, #0x0900, lsl #16
     mov     w4, wzr
     str     w4, [x3, #0x30]
@@ -85,15 +68,15 @@ phase105_el1_entry:
     mov     w4, #0x101
     str     w4, [x3, #0x30]
     bl      nusantara_phase105_main
-4:
+3:
     msr     daifset, #0xf
     wfe
-    b       4b
+    b       3b
 phase105_halt:
     msr     daifset, #0xf
-5:
+4:
     wfe
-    b       5b
+    b       4b
 .size _start, . - _start
 .section .bss.stack, "aw", %nobits
 .balign 16
