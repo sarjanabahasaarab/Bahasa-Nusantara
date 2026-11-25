@@ -31,7 +31,7 @@ echo "Phase 105 linked entry symbols:"
 llvm-nm -n "$BUILD/nusantara-phase105.elf" | grep -E '(_start|nusantara_phase105_main|phase105_uart_puts)'
 echo "Phase 105 C main disassembly:"
 llvm-objdump -d --no-show-raw-insn "$BUILD/nusantara-phase105.elf" | sed -n '/<nusantara_phase105_main>:/,+48p'
-if llvm-objdump -d --disassemble-symbols=nusantara_phase105_main "$BUILD/nusantara-phase105.elf" | grep -Eq '\\b(q[0-9]+|v[0-9]+)\\b'; then
+if llvm-objdump -d --disassemble-symbols=nusantara_phase105_main "$BUILD/nusantara-phase105.elf" | grep -Eq '(^|[[:space:],])(q[0-9]+|v[0-9]+)([[:space:],]|$)'; then
   echo "Phase 105 C entry must not use FP/SIMD before context support is enabled" >&2
   exit 1
 fi
