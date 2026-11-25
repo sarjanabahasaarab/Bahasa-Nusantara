@@ -25,7 +25,6 @@ typedef void (*nusantara_arm64_irq_unhandled_fn)(
     void *context, uint32_t intid);
 
 typedef struct nusantara_arm64_irq_runtime {
-    nusantara_arm64_timer_t *unused_timer_type_guard;
     nusantara_arm64_generic_timer_t *timer;
     nusantara_gicv3_cpu_interface_t *cpu_interface;
     nusantara_os_scheduler_t *scheduler;
