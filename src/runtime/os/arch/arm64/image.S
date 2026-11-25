@@ -74,10 +74,15 @@ arm64_boot_fail:
 arm64_uart_puts:
     ldrb    w1, [x0], #1
     cbz     w1, arm64_boot_halt
+arm64_uart_wait_tx:
+    ldr     w3, [x2, #0x18]
+    tbnz    w3, #5, arm64_uart_wait_tx
     str     w1, [x2]
     b       arm64_uart_puts
 
 arm64_boot_halt:
+    ldr     w3, [x2, #0x18]
+    tbnz    w3, #3, arm64_boot_halt
     dsb     sy
 arm64_halt:
     wfe
