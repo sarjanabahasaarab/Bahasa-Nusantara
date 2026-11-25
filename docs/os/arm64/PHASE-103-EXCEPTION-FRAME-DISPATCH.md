@@ -14,8 +14,8 @@ ELR_EL1, SPSR_EL1, lalu menjalankan eret.
   entry di ELR_EL1, alamat kembali di x30.
 - SPSR_EL1 awal 0x3c5 (EL1h, DAIF termask), agar task tidak menerima IRQ
   sebelum platform menyiapkan GIC, timer, dan dispatcher.
-- Handler terdaftar sebelum IRQ dibuka. Default mempertahankan frame aktif.
-- Pointer hasil handler yang null/tidak aligned ditolak; frame aktif dipakai.
+- Handler wajib terdaftar sebelum IRQ dibuka. Tanpa handler, dispatcher mengembalikan null dan assembly masuk fail-stop dengan DAIF termask.
+- Pointer hasil handler yang null/tidak aligned ditolak dan jalur assembly masuk fail-stop.
 
 ## Batasan
 Ini kontrak pemulihan exception frame EL1h, bukan bukti preemption berjalan
