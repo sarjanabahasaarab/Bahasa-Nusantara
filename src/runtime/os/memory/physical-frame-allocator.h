@@ -23,6 +23,7 @@ typedef enum nusantara_os_pmm_status {
     NUSANTARA_OS_PMM_OUT_OF_MEMORY,
     NUSANTARA_OS_PMM_NOT_MANAGED,
     NUSANTARA_OS_PMM_ALREADY_ALLOCATED,
+    NUSANTARA_OS_PMM_RESERVED_FRAME,
     NUSANTARA_OS_PMM_OVERFLOW
 } nusantara_os_pmm_status_t;
 
@@ -33,8 +34,8 @@ typedef enum nusantara_os_pmm_status {
 typedef struct nusantara_os_physical_frame_allocator {
     const nusantara_os_memory_extent_t *extents;
     size_t extent_count;
-    uint8_t *bitmap;
-    size_t bitmap_bytes;
+    uint8_t *state_map;
+    size_t state_map_bytes;
     uint64_t total_frames;
     uint64_t free_frames;
     uint8_t initialized;
@@ -44,8 +45,8 @@ nusantara_os_pmm_status_t nusantara_os_pmm_init(
     nusantara_os_physical_frame_allocator_t *allocator,
     const nusantara_os_memory_extent_t *extents,
     size_t extent_count,
-    uint8_t *bitmap,
-    size_t bitmap_bytes);
+    uint8_t *state_map,
+    size_t state_map_bytes);
 
 /* Reserve firmware/kernel/bootloader/page-table frames before normal allocation. */
 nusantara_os_pmm_status_t nusantara_os_pmm_reserve(
