@@ -123,9 +123,31 @@ nusantara_gicv3_status_t nusantara_gicv3_enable_spi(nusantara_gicv3_t *gic, uint
 nusantara_gicv3_status_t nusantara_gicv3_enable_ppi(nusantara_gicv3_t *gic, uint32_t intid) {
     if (!gic || !gic->redistributor_ready) return NUSANTARA_GICV3_NOT_INITIALIZED;
     if (intid < NUSANTARA_GICV3_IRQ_PPI_FIRST || intid >= NUSANTARA_GICV3_IRQ_SPI_FIRST) return NUSANTARA_GICV3_INVALID_IRQ;
-    const uintptr_t offset = NUSANTARA_GICR_ISENABLER0;
-    gic->mmio.write32(gic->mmio.context, gic->redistributor_base + offset,
-        1u << intid);
+    /*
+     * IAR1/EOIR1 service Group-1 interrupts. Explicitly assign this PPI to
+     * Non-secure Group 1 and set its priority before enabling the interrupt.
+     */
+    const uintptr_t group_offset = NUSANTARA_GICR_IGROUPR0;
+    const uint32_t group_mask = 1u << intid;
+    uint32_t group = gic->mmio.read32(
+        gic->mmio.context, gic->redistributor_base + group_offset);
+    gic->mmio.write32(gic->mmio.context,
+        gic->redistributor_base + group_offset, group | group_mask);
+
+    const uintptr_t priority_offset = NUSANTARA_GICR_IPRIORITYR +
+        (uintptr_t)(intid / 4u) * GICV3_BANK_BYTES;
+    const uint32_t priority_shift = (intid % 4u) * 8u;
+    const uint32_t priority_mask = 0xffu << priority_shift;
+    uint32_t priorities = gic->mmio.read32(
+        gic->mmio.context, gic->redistributor_base + priority_offset);
+    priorities = (priorities & ~priority_mask) |
+        ((uint32_t)NUSANTARA_GICV3_PRIORITY_DEFAULT << priority_shift);
+    gic->mmio.write32(gic->mmio.context,
+        gic->redistributor_base + priority_offset, priorities);
+    gic->mmio.barrier(gic->mmio.context);
+
+    gic->mmio.write32(gic->mmio.context,
+        gic->redistributor_base + NUSANTARA_GICR_ISENABLER0, group_mask);
     gic->mmio.barrier(gic->mmio.context);
     return NUSANTARA_GICV3_OK;
 }
