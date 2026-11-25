@@ -90,7 +90,17 @@ phase105_el1_entry:
     adrp    x0, phase105_entry_ok_message
     add     x0, x0, :lo12:phase105_entry_ok_message
     bl      phase105_uart_puts
+    mov     w3, #'C'
+8:
+    ldr     w4, [x2, #0x18]
+    tbnz    w4, #5, 8b
+    str     w3, [x2]
     bl      nusantara_phase105_main
+    mov     w3, #'R'
+9:
+    ldr     w4, [x2, #0x18]
+    tbnz    w4, #5, 9b
+    str     w3, [x2]
     b       phase105_halt
 
 phase105_boot_fail:
