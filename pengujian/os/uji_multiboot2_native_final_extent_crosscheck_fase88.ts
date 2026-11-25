@@ -55,4 +55,7 @@ for (const address of [
 }
 assert.ok(has([0x05, 0x00, 0x01, 0x27, 0x00]), 'native containment scan references candidate extent table');
 assert.ok(has([0x05, 0x00, 0x11, 0x27, 0x00]), 'native overlap scan references normalized reservation catalog');
+assert.ok(has([0x3b, 0x15, 0x1c, 0x80, 0x27, 0x00, 0x0f, 0x87]), 'reservation starting above final end is treated as disjoint');
+assert.ok(has([0x3b, 0x15, 0x1c, 0x80, 0x27, 0x00, 0x0f, 0x82]), 'reservation starting below final end is treated as overlap');
+assert.ok(has([0x3b, 0x05, 0x18, 0x80, 0x27, 0x00, 0x0f, 0x83]), 'equal-high reservation boundary uses unsigned low-dword comparison');
 console.log('Phase 88: native final extent containment and reservation cross-check contract passed.');
