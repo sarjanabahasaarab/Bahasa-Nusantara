@@ -228,6 +228,15 @@ void nusantara_phase105_main(void)
             &frame_b, task_b_stack, sizeof(task_b_stack),
             (uintptr_t)task_b, 0u, (uintptr_t)task_returned))
         phase105_fail("task B exception frame creation failed");
+
+    /*
+     * Every brand-new task frame must enter with IRQ unmasked. Phase 104's
+     * first-task trampoline does this for the boot-selected task only; this
+     * harness also prepares the second READY task for later ERET dispatch.
+     */
+    frame_a->spsr_el1 &= ~(1ull << 7);
+    frame_b->spsr_el1 &= ~(1ull << 7);
+
     if (nusantara_os_scheduler_add(&scheduler, (uintptr_t)frame_a, 0, 1u, &task_a_id) != NUSANTARA_OS_SCHEDULER_OK)
         phase105_fail("task A scheduler registration failed");
     if (nusantara_os_scheduler_add(&scheduler, (uintptr_t)frame_b, 0, 1u, &task_b_id) != NUSANTARA_OS_SCHEDULER_OK)
