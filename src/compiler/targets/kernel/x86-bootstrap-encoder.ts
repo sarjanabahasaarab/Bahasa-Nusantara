@@ -1238,7 +1238,8 @@ export class X86BootstrapEncoder {
     a.emit(0xa1); a.emit32(X86_BOOTSTRAP_FINAL_VALIDATE_PREVIOUS_HIGH_ADDRESS);
     a.emit(0x39, 0xd0); a.ja('panic32'); a.jb('phase86_ordered');
     a.emit(0xa1); a.emit32(X86_BOOTSTRAP_FINAL_VALIDATE_PREVIOUS_LOW_ADDRESS);
-    a.emit(0x39, 0xc1); a.ja('panic32');
+    // Compare previousEndLow - currentStartLow; panic only when previous end is above the new start.
+    a.emit(0x39, 0xc8); a.ja('panic32');
     a.label('phase86_ordered');
     a.label('phase86_first_record');
     a.emit(0x89, 0x1d); a.emit32(X86_BOOTSTRAP_FINAL_VALIDATE_PREVIOUS_LOW_ADDRESS);
