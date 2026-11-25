@@ -23,8 +23,7 @@ typedef nusantara_arm64_exception_frame_t *(*nusantara_arm64_exception_handler_f
 int nusantara_arm64_install_exception_vectors(void);
 int nusantara_arm64_exception_set_handler(
     nusantara_arm64_exception_handler_fn handler, void *context);
-nusantara_arm64_exception_frame_t *nusantara_arm64_exception_dispatch(
-    nusantara_arm64_exception_frame_t *frame);
+nusantara_arm64_exception_frame_t *nusantara_arm64_exception_dispatch(nusantara_arm64_exception_frame_t *frame);
 int nusantara_arm64_exception_context_prepare(
     nusantara_arm64_exception_frame_t **initial_frame,
     void *stack, size_t stack_size,
