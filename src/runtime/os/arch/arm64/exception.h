@@ -21,6 +21,12 @@ typedef struct nusantara_arm64_exception_frame {
     uint64_t vector;      /* 0..15, table slot number */
 } nusantara_arm64_exception_frame_t;
 
+/* Caller must establish a valid 16-byte-aligned EL1 stack and link a real dispatcher first. */
+int nusantara_arm64_install_exception_vectors(void);
+
+/* Called by the common assembly entry with a pointer to this frame in x0. */
+void nusantara_arm64_exception_dispatch(nusantara_arm64_exception_frame_t *frame);
+
 _Static_assert(sizeof(nusantara_arm64_exception_frame_t) == NUSANTARA_ARM64_EXCEPTION_FRAME_BYTES,
                "AArch64 exception frame ABI size mismatch");
 _Static_assert(offsetof(nusantara_arm64_exception_frame_t, esr_el1) == 248u,
