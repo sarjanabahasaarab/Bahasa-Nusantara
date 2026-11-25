@@ -176,11 +176,6 @@ static void task_b(void *argument)
 
 void nusantara_phase105_main(void)
 {
-    __asm__ volatile(
-        "movz x9, #0x0900, lsl #16\\n\\t"
-        "mov w10, #'B'\\n\\t"
-        "str w10, [x9]"
-        ::: "x9", "x10", "memory");
     const nusantara_gicv3_mmio_t mmio = {
         0, mmio_read32, mmio_write32, mmio_read64, mmio_write64, platform_barrier
     };
