@@ -47,29 +47,35 @@ arm64_el1_entry:
     adrp    x1, arm64_stack_top
     add     x1, x1, :lo12:arm64_stack_top
     mov     sp, x1
+
+    /* PL011: disable, set 115200 baud/8N1, then enable UART and TX. */
+    movz    x2, #0x0900, lsl #16
+    mov     w3, wzr
+    str     w3, [x2, #0x30]
+    mov     w3, #13
+    str     w3, [x2, #0x24]
+    mov     w3, #1
+    str     w3, [x2, #0x28]
+    mov     w3, #0x70
+    str     w3, [x2, #0x2c]
+    mov     w3, #0x101
+    str     w3, [x2, #0x30]
+
     cbz     x19, arm64_boot_fail
     tst     x19, #7
     b.ne    arm64_boot_fail
-
-    /* PL011 UART on QEMU virt: physical base 0x09000000, UARTDR offset 0. */
-    movz    x2, #0x0900, lsl #16
     adrp    x0, arm64_boot_ok_message
     add     x0, x0, :lo12:arm64_boot_ok_message
+    b       arm64_uart_puts
+
+arm64_boot_fail:
+    adrp    x0, arm64_boot_fail_message
+    add     x0, x0, :lo12:arm64_boot_fail_message
 arm64_uart_puts:
     ldrb    w1, [x0], #1
     cbz     w1, arm64_boot_halt
     str     w1, [x2]
     b       arm64_uart_puts
-
-arm64_boot_fail:
-    movz    x2, #0x0900, lsl #16
-    adrp    x0, arm64_boot_fail_message
-    add     x0, x0, :lo12:arm64_boot_fail_message
-arm64_uart_fail_puts:
-    ldrb    w1, [x0], #1
-    cbz     w1, arm64_boot_halt
-    str     w1, [x2]
-    b       arm64_uart_fail_puts
 
 arm64_boot_halt:
     dsb     sy
