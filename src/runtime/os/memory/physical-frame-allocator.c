@@ -190,7 +190,7 @@ nusantara_os_pmm_status_t nusantara_os_pmm_free(
     if (!valid_allocator(a)) return NUSANTARA_OS_PMM_INVALID_ARGUMENT;
     if (!locate_frame(a, address, &index)) return NUSANTARA_OS_PMM_NOT_MANAGED;
     if (frame_state(a, index) == 2u) return NUSANTARA_OS_PMM_RESERVED_FRAME;
-    if (frame_state(a, index) == 0u) return NUSANTARA_OS_PMM_ALREADY_ALLOCATED;
+    if (frame_state(a, index) != 1u) return NUSANTARA_OS_PMM_ALREADY_ALLOCATED;
     set_frame_state(a, index, 0u);
     ++a->free_frames;
     return NUSANTARA_OS_PMM_OK;
