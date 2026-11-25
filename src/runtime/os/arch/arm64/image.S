@@ -13,6 +13,7 @@ _image_start:
     .quad   0
     .quad   0
     .quad   0
+    .quad   0
     .word   0x644d5241
     .word   0
 
