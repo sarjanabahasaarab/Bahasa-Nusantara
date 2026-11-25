@@ -38,4 +38,7 @@ assert.match(header, /uint64_t x\[31\]/);
 assert.match(header, /offsetof\(nusantara_arm64_exception_frame_t, esr_el1\) == 248u/);
 assert.match(header, /offsetof\(nusantara_arm64_exception_frame_t, vector\) == 280u/);
 
+assert.ok(header.includes('int nusantara_arm64_install_exception_vectors(void)'));
+assert.ok(header.includes('nusantara_arm64_exception_dispatch(nusantara_arm64_exception_frame_t *frame)'));
+
 console.log('Phase 94: AArch64 16-slot vector table, exception frame ABI and fail-closed dispatcher passed.');
