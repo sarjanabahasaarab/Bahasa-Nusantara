@@ -1,0 +1,39 @@
+name: "NUSANTARA OS — ARM64 Generic Timer Phase 96"
+
+on:
+  push:
+    branches: ["phase96-arm64-generic-timer"]
+    paths:
+      - "src/runtime/os/arch/arm64/generic_timer.*"
+      - "pengujian/os/uji_arm64_generic_timer_fase96.c"
+      - "docs/os/arm64/PHASE-96-GENERIC-TIMER.md"
+      - ".github/workflows/arm64-generic-timer-phase96.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "src/runtime/os/arch/arm64/generic_timer.*"
+      - "pengujian/os/uji_arm64_generic_timer_fase96.c"
+      - "docs/os/arm64/PHASE-96-GENERIC-TIMER.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: arm64-generic-timer-phase96-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  generic-timer-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install host and AArch64 compilers
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc clang
+      - name: Compile and run Generic Timer host mock tests
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror -pedantic -I src/runtime/os/arch/arm64 src/runtime/os/arch/arm64/generic_timer.c pengujian/os/uji_arm64_generic_timer_fase96.c -o /tmp/uji-generic-timer
+          /tmp/uji-generic-timer
+      - name: Cross-compile Generic Timer driver for AArch64
+        run: clang --target=aarch64-none-elf -std=c11 -ffreestanding -Wall -Wextra -Werror -c src/runtime/os/arch/arm64/generic_timer.c -o /tmp/generic-timer-arm64.o
