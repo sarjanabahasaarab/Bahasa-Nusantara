@@ -1,0 +1,56 @@
+name: "NUSANTARA OS — ARM64 QEMU Timer Preemption (Phase 105)"
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "src/runtime/os/arch/arm64/**"
+      - "src/runtime/os/scheduler/**"
+      - "scripts/build-arm64-phase105-qemu.sh"
+      - ".github/workflows/arm64-qemu-preemption-phase105.yml"
+  push:
+    branches: ["main"]
+    paths:
+      - "src/runtime/os/arch/arm64/**"
+      - "src/runtime/os/scheduler/**"
+      - "scripts/build-arm64-phase105-qemu.sh"
+      - ".github/workflows/arm64-qemu-preemption-phase105.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qemu-arm64-preemption:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install AArch64 toolchain and QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang lld llvm qemu-system-arm
+      - name: Build real ARM64 kernel image
+        run: |
+          chmod +x scripts/build-arm64-phase105-qemu.sh
+          scripts/build-arm64-phase105-qemu.sh /tmp/nusantara-phase105/Image
+      - name: Boot QEMU and require real timer-driven task switches
+        shell: bash
+        run: |
+          set +e
+          timeout 12s qemu-system-aarch64 \
+            -machine virt,gic-version=3 -cpu cortex-a57 -smp 1 -m 256M \
+            -nographic -serial stdio -monitor none -nic none \
+            -kernel /tmp/nusantara-phase105/Image -no-reboot -no-shutdown \
+            > /tmp/nusantara-phase105-qemu.log 2>&1
+          qemu_status=$?
+          set -e
+          cat /tmp/nusantara-phase105-qemu.log
+          grep -Fq 'NUSANTARA_PHASE105_BOOT' /tmp/nusantara-phase105-qemu.log
+          grep -Fq 'NUSANTARA_PHASE105_TIMER_ARMED' /tmp/nusantara-phase105-qemu.log
+          grep -Fq 'NUSANTARA_PHASE105_PREEMPTION_OK' /tmp/nusantara-phase105-qemu.log
+          if grep -Fq 'NUSANTARA_PHASE105_FAIL' /tmp/nusantara-phase105-qemu.log; then
+            echo "Phase 105 kernel reported failure" >&2
+            exit 1
+          fi
+          if [ "$qemu_status" -ne 124 ] && [ "$qemu_status" -ne 0 ]; then
+            echo "Unexpected QEMU exit code: $qemu_status" >&2
+            exit "$qemu_status"
+          fi
