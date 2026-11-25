@@ -26,11 +26,11 @@ int main(void)
     assert(a->vector == 5u);
     assert(nusantara_arm64_exception_context_prepare(&b, stack_b, sizeof(stack_b),
         0x3000u, 0x1234u, 0x4000u) == 1);
-    assert(nusantara_arm64_exception_dispatch(a) == a);
+    assert(nusantara_arm64_exception_dispatch(a) == 0);
     assert(nusantara_arm64_exception_set_handler(redirect, b) == 1);
     assert(nusantara_arm64_exception_dispatch(a) == b);
     assert(nusantara_arm64_exception_set_handler(0, 0) == 1);
-    assert(nusantara_arm64_exception_dispatch(a) == a);
+    assert(nusantara_arm64_exception_dispatch(a) == 0);
     assert(nusantara_arm64_exception_context_prepare(&a, stack_a, 64u,
         0x1000u, 0u, 0x2000u) == 0);
     assert(nusantara_arm64_exception_context_prepare(&a, stack_a, sizeof(stack_a),
