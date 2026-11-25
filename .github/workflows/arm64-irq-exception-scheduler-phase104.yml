@@ -38,6 +38,14 @@ jobs:
             pengujian/os/uji_arm64_irq_exception_scheduler_fase104.c \
             -o /tmp/nusantara-phase104
           /tmp/nusantara-phase104
+      - name: GICv3 Group-1 PPI configuration tests
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror -pedantic \\
+            -Isrc/runtime/os/arch/arm64 \\
+            src/runtime/os/arch/arm64/gicv3.c \\
+            pengujian/os/uji_arm64_gicv3_fase95.c \\
+            -o /tmp/nusantara-gicv3-ppi-phase104
+          /tmp/nusantara-gicv3-ppi-phase104
       - name: Cross-compile C integration
         run: |
           for file in src/runtime/os/arch/arm64/exception.c \
