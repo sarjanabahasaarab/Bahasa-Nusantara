@@ -49,7 +49,7 @@ int main(void) {
     assert(nusantara_os_pmm_reserve(&pmm, 0x200000u, 0x1000u) == NUSANTARA_OS_PMM_OK);
     assert(nusantara_os_pmm_free_frames(&pmm) == 3u);
 
-    assert(nusantara_os_pmm_free(&pmm, 0x200000u) == NUSANTARA_OS_PMM_ALREADY_ALLOCATED);
+    assert(nusantara_os_pmm_free(&pmm, 0x200000u) == NUSANTARA_OS_PMM_RESERVED_FRAME);
     assert(nusantara_os_pmm_free(&pmm, 0x300000u) == NUSANTARA_OS_PMM_NOT_MANAGED);
     assert(nusantara_os_pmm_allocate(&pmm, NULL) == NUSANTARA_OS_PMM_INVALID_ARGUMENT);
 
