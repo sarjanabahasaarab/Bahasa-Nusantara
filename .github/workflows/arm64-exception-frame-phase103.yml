@@ -42,3 +42,5 @@ jobs:
             -Isrc/runtime/os/arch/arm64 \
             -c src/runtime/os/arch/arm64/exception.c \
             -o /tmp/nusantara-arm64-exception-c.o
+
+# Phase 103 contract checks are intentionally isolated from privileged runtime execution.
