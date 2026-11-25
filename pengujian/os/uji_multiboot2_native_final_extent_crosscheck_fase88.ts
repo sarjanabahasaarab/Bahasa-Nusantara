@@ -53,6 +53,6 @@ for (const address of [
   const bytes = [address & 0xff, (address >>> 8) & 0xff, (address >>> 16) & 0xff, (address >>> 24) & 0xff];
   assert.ok(has(bytes), `native cross-check references scratch address 0x${address.toString(16)}`);
 }
-assert.ok(has([0x05, 0x01, 0x27, 0x00]), 'native containment scan references candidate extent table');
-assert.ok(has([0x05, 0x11, 0x27, 0x00]), 'native overlap scan references normalized reservation catalog');
+assert.ok(has([0x05, 0x00, 0x01, 0x27, 0x00]), 'native containment scan references candidate extent table');
+assert.ok(has([0x05, 0x00, 0x11, 0x27, 0x00]), 'native overlap scan references normalized reservation catalog');
 console.log('Phase 88: native final extent containment and reservation cross-check contract passed.');
