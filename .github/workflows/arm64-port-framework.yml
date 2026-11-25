@@ -15,7 +15,9 @@ on:
     branches: ["main", "phase91-arm64-port-framework"]
     paths:
       - "src/runtime/os/arch/arm64/**"
+      - "scripts/build-arm64-image.mjs"
       - "pengujian/os/uji_arm64_port_framework_fase91.ts"
+      - "pengujian/os/uji_arm64_image_fase92.ts"
       - "docs/os/arm64/**"
       - "package.json"
       - ".github/workflows/arm64-port-framework.yml"
@@ -36,40 +38,34 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
-
       - name: Install ARM64 cross-toolchain and emulator
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends clang lld llvm qemu-system-arm
-
       - name: Install project dependencies
         run: npm ci
-
       - name: Typecheck
         run: npm run lint
-
       - name: Test ARM64 boot ABI, AAPCS64 and QEMU target contract
         run: npm run test:arm64-port-v91
-
       - name: Assemble freestanding AArch64 smoke object
         run: |
           clang --target=aarch64-none-elf -mcpu=cortex-a57 -ffreestanding -fno-stack-protector -c src/runtime/os/arch/arm64/boot-smoke.S -o /tmp/nusantara-arm64-boot-smoke.o
           llvm-readelf -h /tmp/nusantara-arm64-boot-smoke.o | tee /tmp/nusantara-arm64-elf-header.txt
           grep -Eq 'Machine:.*AArch64' /tmp/nusantara-arm64-elf-header.txt
-
       - name: Verify QEMU AArch64 virt machine and CPU
         run: |
           qemu-system-aarch64 --version
           qemu-system-aarch64 -machine help | grep -E '(^|[[:space:]])virt([[:space:]]|$)'
           qemu-system-aarch64 -cpu help | grep -E 'cortex-a57'
+
   arm64-qemu-boot-phase92:
-    if: github.event_name == 'pull_request' && github.event.pull_request.number == 135
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 134
     name: "Phase 92 — AArch64 Image & QEMU serial boot"
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -99,7 +95,7 @@ jobs:
           set +e
           timeout 8s qemu-system-aarch64 \
             -machine virt,gic-version=3 -cpu cortex-a57 -m 256M \
-            -nographic -serial stdio -monitor none \
+            -nographic -serial stdio -monitor none -nic none \
             -kernel /tmp/nusantara-arm64/Image -no-reboot -no-shutdown \
             > /tmp/nusantara-arm64-qemu.log 2>&1
           qemu_status=$?
@@ -114,4 +110,3 @@ jobs:
             echo "Unexpected QEMU exit code: $qemu_status" >&2
             exit "$qemu_status"
           fi
-
