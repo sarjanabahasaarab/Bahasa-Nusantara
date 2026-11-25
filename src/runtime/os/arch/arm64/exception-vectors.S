@@ -150,5 +150,8 @@ arm64_exception_common:
 .weak nusantara_arm64_exception_dispatch
 .type nusantara_arm64_exception_dispatch, %function
 nusantara_arm64_exception_dispatch:
-    ret
+1:
+    msr daifset, #0xf
+    wfe
+    b 1b
 .size nusantara_arm64_exception_dispatch, . - nusantara_arm64_exception_dispatch
