@@ -79,6 +79,15 @@ export const X86_BOOTSTRAP_SUBTRACT_END_HIGH_ADDRESS = 0x0027_6014;
 /** Phase 86: previous end pair used to validate sorted, disjoint final extents. */
 export const X86_BOOTSTRAP_FINAL_VALIDATE_PREVIOUS_LOW_ADDRESS = 0x0027_7000;
 export const X86_BOOTSTRAP_FINAL_VALIDATE_PREVIOUS_HIGH_ADDRESS = 0x0027_7004;
+/** Phase 88: bounded cross-check scratch for candidate containment and reservation exclusion. */
+export const X86_BOOTSTRAP_FINAL_CROSSCHECK_COUNT_ADDRESS = 0x0027_8000;
+export const X86_BOOTSTRAP_FINAL_CROSSCHECK_INDEX_ADDRESS = 0x0027_8004;
+export const X86_BOOTSTRAP_FINAL_CROSSCHECK_CANDIDATE_INDEX_ADDRESS = 0x0027_8008;
+export const X86_BOOTSTRAP_FINAL_CROSSCHECK_RESERVATION_INDEX_ADDRESS = 0x0027_800c;
+export const X86_BOOTSTRAP_FINAL_CROSSCHECK_START_LOW_ADDRESS = 0x0027_8010;
+export const X86_BOOTSTRAP_FINAL_CROSSCHECK_START_HIGH_ADDRESS = 0x0027_8014;
+export const X86_BOOTSTRAP_FINAL_CROSSCHECK_END_LOW_ADDRESS = 0x0027_8018;
+export const X86_BOOTSTRAP_FINAL_CROSSCHECK_END_HIGH_ADDRESS = 0x0027_801c;
 /** End-exclusive fixed bootstrap exclusions; dynamic entries are appended at boot. */
 export const X86_BOOTSTRAP_FIXED_RESERVATIONS = Object.freeze([
   { start: 0x00000000, end: 0x00200000, reason: 'low memory and kernel image' },
@@ -94,6 +103,7 @@ export const X86_BOOTSTRAP_FIXED_RESERVATIONS = Object.freeze([
   { start: 0x00273000, end: 0x00276000, reason: 'native final physical extent output table and count (12 KiB)' },
   { start: 0x00276000, end: 0x00277000, reason: 'native reservation subtraction scratch (4 KiB)' },
   { start: 0x00277000, end: 0x00278000, reason: 'native final extent validation scratch (4 KiB)' },
+  { start: 0x00278000, end: 0x00279000, reason: 'native final extent cross-check scratch (4 KiB)' },
   { start: 0x002f0000, end: 0x002f4000, reason: 'early boot page tables' },
   { start: 0x00600000, end: 0x00601000, reason: 'process A user code' },
   { start: 0x00610000, end: 0x00611000, reason: 'process A user stack' },
@@ -1247,6 +1257,94 @@ export class X86BootstrapEncoder {
     a.emit(0x46);
     a.jmp('phase86_validate_loop');
     a.label('phase86_validate_done');
+    // Phase 88: prove every final extent is contained in a firmware candidate
+    // and disjoint from every page-normalized reservation before publication.
+    // Scratch is isolated in the separately reserved 0x278000 page.
+    a.emit(0x60); // pushad
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_FINAL_EXTENT_COUNT_ADDRESS);
+    a.emit(0xa3); a.emit32(X86_BOOTSTRAP_FINAL_CROSSCHECK_COUNT_ADDRESS);
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_FINAL_CROSSCHECK_INDEX_ADDRESS, 0);
+    a.label('phase88_final_loop');
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_FINAL_CROSSCHECK_INDEX_ADDRESS);
+    a.emit(0x3b, 0x05); a.emit32(X86_BOOTSTRAP_FINAL_CROSSCHECK_COUNT_ADDRESS);
+    a.jae('phase88_done');
+    a.emit(0x6b, 0xc0, X86_BOOTSTRAP_FINAL_EXTENT_RECORD_SIZE);
+    a.emit(0x05); a.emit32(X86_BOOTSTRAP_FINAL_EXTENT_TABLE_BASE);
+    a.emit(0x89, 0xc6); // esi = final extent
+    a.emit(0x8b, 0x06, 0xa3); a.emit32(X86_BOOTSTRAP_FINAL_CROSSCHECK_START_LOW_ADDRESS);
+    a.emit(0x8b, 0x46, 0x04, 0xa3); a.emit32(X86_BOOTSTRAP_FINAL_CROSSCHECK_START_HIGH_ADDRESS);
+    a.emit(0x8b, 0x46, 0x08, 0xa3); a.emit32(X86_BOOTSTRAP_FINAL_CROSSCHECK_END_LOW_ADDRESS);
+    a.emit(0x8b, 0x46, 0x0c, 0xa3); a.emit32(X86_BOOTSTRAP_FINAL_CROSSCHECK_END_HIGH_ADDRESS);
+
+    // Find one candidate with candidate.start <= final.start and
+    // candidate.end >= final.end. Absence of containment is a hard failure.
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_FINAL_CROSSCHECK_CANDIDATE_INDEX_ADDRESS, 0);
+    a.label('phase88_candidate_loop');
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_FINAL_CROSSCHECK_CANDIDATE_INDEX_ADDRESS);
+    a.emit(0x3b, 0x05); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_COUNT_ADDRESS);
+    a.jae('panic32');
+    a.emit(0x6b, 0xc0, X86_BOOTSTRAP_PAGE_EXTENT_SIZE);
+    a.emit(0x05); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_TABLE_BASE);
+    a.emit(0x89, 0xc7); // edi = candidate
+    // candidate.start <= final.start
+    a.emit(0x8b, 0x57, 0x04);
+    a.emit(0x3b, 0x15); a.emit32(X86_BOOTSTRAP_FINAL_CROSSCHECK_START_HIGH_ADDRESS);
+    a.ja('phase88_candidate_next');
+    a.jb('phase88_candidate_start_ok');
+    a.emit(0x8b, 0x07);
+    a.emit(0x3b, 0x05); a.emit32(X86_BOOTSTRAP_FINAL_CROSSCHECK_START_LOW_ADDRESS);
+    a.ja('phase88_candidate_next');
+    a.label('phase88_candidate_start_ok');
+    // candidate.end >= final.end
+    a.emit(0x8b, 0x57, 0x0c);
+    a.emit(0x3b, 0x15); a.emit32(X86_BOOTSTRAP_FINAL_CROSSCHECK_END_HIGH_ADDRESS);
+    a.jb('phase88_candidate_next');
+    a.ja('phase88_candidate_contained');
+    a.emit(0x8b, 0x47, 0x08);
+    a.emit(0x3b, 0x05); a.emit32(X86_BOOTSTRAP_FINAL_CROSSCHECK_END_LOW_ADDRESS);
+    a.jb('phase88_candidate_next');
+    a.label('phase88_candidate_contained');
+
+    // A final extent must not intersect any normalized reservation.
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_FINAL_CROSSCHECK_RESERVATION_INDEX_ADDRESS, 0);
+    a.label('phase88_reservation_loop');
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_FINAL_CROSSCHECK_RESERVATION_INDEX_ADDRESS);
+    a.emit(0x3b, 0x05); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_COUNT_ADDRESS);
+    a.jae('phase88_final_next');
+    a.emit(0x6b, 0xc0, X86_BOOTSTRAP_RESERVATION_CATALOG_RECORD_SIZE);
+    a.emit(0x05); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_TABLE_BASE);
+    a.emit(0x89, 0xc7); // edi = normalized reservation
+    // reservation.end <= final.start => no overlap
+    a.emit(0x8b, 0x57, 0x0c);
+    a.emit(0x3b, 0x15); a.emit32(X86_BOOTSTRAP_FINAL_CROSSCHECK_START_HIGH_ADDRESS);
+    a.jb('phase88_reservation_next');
+    a.ja('phase88_check_reservation_start');
+    a.emit(0x8b, 0x47, 0x08);
+    a.emit(0x3b, 0x05); a.emit32(X86_BOOTSTRAP_FINAL_CROSSCHECK_START_LOW_ADDRESS);
+    a.jbe('phase88_reservation_next');
+    a.label('phase88_check_reservation_start');
+    // reservation.start >= final.end => no overlap; a start below final.end overlaps.
+    a.emit(0x8b, 0x57, 0x04);
+    a.emit(0x3b, 0x15); a.emit32(X86_BOOTSTRAP_FINAL_CROSSCHECK_END_HIGH_ADDRESS);
+    a.ja('phase88_reservation_next');
+    a.jb('panic32');
+    a.emit(0x8b, 0x07);
+    a.emit(0x3b, 0x05); a.emit32(X86_BOOTSTRAP_FINAL_CROSSCHECK_END_LOW_ADDRESS);
+    a.jae('phase88_reservation_next');
+    a.jmp('panic32');
+    a.label('phase88_reservation_next');
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_FINAL_CROSSCHECK_RESERVATION_INDEX_ADDRESS);
+    a.jmp('phase88_reservation_loop');
+
+    a.label('phase88_final_next');
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_FINAL_CROSSCHECK_INDEX_ADDRESS);
+    a.jmp('phase88_final_loop');
+    a.label('phase88_candidate_next');
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_FINAL_CROSSCHECK_CANDIDATE_INDEX_ADDRESS);
+    a.jmp('phase88_candidate_loop');
+    a.label('phase88_done');
+    a.emit(0x61); // popad
+    a.emit(0x60); a.printLabel32('msg_mb2_final_extents_crosschecked', 'print_serial32'); a.emit(0x61);
     a.printLabel32('msg_mb2_final_extents_validated', 'print_serial32');
     // Publish a completion marker only after the entire bounded output table is built.
     a.emit(0x60); a.printLabel32('msg_mb2_reservations_subtracted', 'print_serial32'); a.emit(0x61);
@@ -2080,6 +2178,7 @@ export class X86BootstrapEncoder {
     a.label('msg_mb2_reservations_normalized'); a.emitCString('NUSANTARA_MULTIBOOT2_RESERVATIONS_NORMALIZED_OK\r\n');
     a.label('msg_mb2_reservations_subtracted'); a.emitCString('NUSANTARA_MULTIBOOT2_RESERVATIONS_SUBTRACTED_OK\r\n');
     a.label('msg_mb2_final_extents_validated'); a.emitCString('NUSANTARA_MULTIBOOT2_FINAL_EXTENTS_VALIDATED_OK\r\n');
+    a.label('msg_mb2_final_extents_crosschecked'); a.emitCString('NUSANTARA_MULTIBOOT2_FINAL_EXTENTS_CROSSCHECK_OK\r\n');
     a.label('msg_diag_mmap_begin');      a.emitCString('NUSANTARA_DIAG_MMAP_BEGIN\r\n');
     a.label('msg_diag_mmap_done');       a.emitCString('NUSANTARA_DIAG_MMAP_DONE\r\n');
     a.label('msg_diag_module_begin');    a.emitCString('NUSANTARA_DIAG_MODULE_BEGIN\r\n');
