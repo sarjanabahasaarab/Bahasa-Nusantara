@@ -1,0 +1,32 @@
+name: NUSANTARA OS — Scheduler Phase 99
+on:
+  pull_request:
+    paths:
+      - "src/runtime/os/scheduler/**"
+      - "pengujian/os/uji_scheduler_fase99.c"
+      - ".github/workflows/scheduler-phase99.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/runtime/os/scheduler/**"
+      - "pengujian/os/uji_scheduler_fase99.c"
+      - ".github/workflows/scheduler-phase99.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  scheduler-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install compilers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc clang
+      - name: Host contract tests
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror -pedantic -Isrc/runtime/os/scheduler src/runtime/os/scheduler/scheduler.c pengujian/os/uji_scheduler_fase99.c -o /tmp/nusantara-scheduler-phase99
+          /tmp/nusantara-scheduler-phase99
+      - name: AArch64 freestanding compile
+        run: |
+          clang --target=aarch64-none-elf -std=c11 -ffreestanding -Wall -Wextra -Werror -pedantic -Isrc/runtime/os/scheduler -c src/runtime/os/scheduler/scheduler.c -o /tmp/scheduler-aarch64.o

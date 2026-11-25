@@ -1,0 +1,32 @@
+name: NUSANTARA OS — Process & Userspace Phase 100
+on:
+  pull_request:
+    paths:
+      - "src/runtime/os/process/**"
+      - "pengujian/os/uji_process_userspace_fase100.c"
+      - ".github/workflows/process-userspace-phase100.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/runtime/os/process/**"
+      - "pengujian/os/uji_process_userspace_fase100.c"
+      - ".github/workflows/process-userspace-phase100.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  process-userspace-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install compilers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc clang
+      - name: Host contract tests
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror -pedantic -Isrc/runtime/os/process src/runtime/os/process/process.c pengujian/os/uji_process_userspace_fase100.c -o /tmp/nusantara-process-phase100
+          /tmp/nusantara-process-phase100
+      - name: AArch64 freestanding compile
+        run: |
+          clang --target=aarch64-none-elf -std=c11 -ffreestanding -Wall -Wextra -Werror -pedantic -Isrc/runtime/os/process -c src/runtime/os/process/process.c -o /tmp/process-aarch64.o
