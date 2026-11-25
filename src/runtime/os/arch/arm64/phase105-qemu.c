@@ -189,7 +189,6 @@ void nusantara_phase105_main(void)
     uint64_t task_a_id = 0u;
     uint64_t task_b_id = 0u;
 
-    uart_putc('B');
     uart_puts("NUSANTARA_PHASE105_BOOT\r\n");
     if (!nusantara_arm64_install_exception_vectors())
         phase105_fail("cannot install VBAR_EL1");
