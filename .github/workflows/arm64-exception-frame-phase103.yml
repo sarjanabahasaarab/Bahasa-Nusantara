@@ -1,0 +1,46 @@
+name: NUSANTARA OS — ARM64 Exception Frame Phase 103
+on:
+  pull_request:
+    paths:
+      - "src/runtime/os/arch/arm64/exception*"
+      - "pengujian/os/uji_arm64_exception_frame_fase103.c"
+      - ".github/workflows/arm64-exception-frame-phase103.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/runtime/os/arch/arm64/exception*"
+      - "pengujian/os/uji_arm64_exception_frame_fase103.c"
+      - ".github/workflows/arm64-exception-frame-phase103.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  exception-frame-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cross compiler
+        run: sudo apt-get update && sudo apt-get install -y gcc clang llvm
+      - name: Host exception-frame tests
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -Isrc/runtime/os/arch/arm64 \
+            src/runtime/os/arch/arm64/exception.c \
+            pengujian/os/uji_arm64_exception_frame_fase103.c \
+            -o /tmp/nusantara-arm64-exception-phase103
+          /tmp/nusantara-arm64-exception-phase103
+      - name: Cross-assemble exception vectors
+        run: |
+          clang --target=aarch64-none-elf -mcpu=cortex-a57 -ffreestanding \
+            -fno-stack-protector -c src/runtime/os/arch/arm64/exception-vectors.S \
+            -o /tmp/nusantara-arm64-exception-vectors.o
+          llvm-readelf -h /tmp/nusantara-arm64-exception-vectors.o | grep -E "Machine:.*AArch64"
+          llvm-readelf -s /tmp/nusantara-arm64-exception-vectors.o | grep -E "arm64_exception_vectors|nusantara_arm64_exception_dispatch"
+      - name: Cross-compile exception C contract
+        run: |
+          clang --target=aarch64-none-elf -std=c11 -ffreestanding -Wall -Wextra -Werror -pedantic \
+            -Isrc/runtime/os/arch/arm64 \
+            -c src/runtime/os/arch/arm64/exception.c \
+            -o /tmp/nusantara-arm64-exception-c.o
+
+# Phase 103 contract checks are intentionally isolated from privileged runtime execution.
