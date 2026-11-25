@@ -28,18 +28,10 @@ static volatile uint64_t task_a_progress;
 static volatile uint64_t task_b_progress;
 static volatile uint64_t preemption_count;
 
-static void uart_putc(char value)
-{
-    volatile uint32_t *flags = (volatile uint32_t *)(PHASE105_UART_BASE + 0x18u);
-    volatile uint32_t *data = (volatile uint32_t *)PHASE105_UART_BASE;
-    uint32_t spins = 100000u;
-    while ((*flags & (1u << 5)) != 0u && spins != 0u) --spins;
-    /* A diagnostic UART must never deadlock kernel bring-up on a stuck TX flag. */
-    if (spins != 0u) *data = (uint32_t)(uint8_t)value;
-}
+extern void phase105_uart_puts(const char *message);
 static void uart_puts(const char *message)
 {
-    while (*message != '\0') uart_putc(*message++);
+    phase105_uart_puts(message);
 }
 static void phase105_halt(void)
 {
