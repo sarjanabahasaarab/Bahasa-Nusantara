@@ -63,6 +63,14 @@ nusantara_arm64_install_exception_vectors:
 .size nusantara_arm64_install_exception_vectors, . - nusantara_arm64_install_exception_vectors
 
 /* Each stub preserves x16/x17 before using x16 as the vector identifier. */
+.macro ARM64_VECTOR_SP0_STUB number
+.global arm64_vector_stub_\number
+.type arm64_vector_stub_\number, %function
+arm64_vector_stub_\number:
+    b       arm64_exception_sp0_fail_stop
+.size arm64_vector_stub_\number, . - arm64_vector_stub_\number
+.endm
+
 .macro ARM64_VECTOR_STUB number
 .global arm64_vector_stub_\number
 .type arm64_vector_stub_\number, %function
@@ -74,10 +82,11 @@ arm64_vector_stub_\number:
 .size arm64_vector_stub_\number, . - arm64_vector_stub_\number
 .endm
 
-ARM64_VECTOR_STUB 0
-ARM64_VECTOR_STUB 1
-ARM64_VECTOR_STUB 2
-ARM64_VECTOR_STUB 3
+/* EL1t/SP0 has no guaranteed kernel exception stack: stop without a push. */
+ARM64_VECTOR_SP0_STUB 0
+ARM64_VECTOR_SP0_STUB 1
+ARM64_VECTOR_SP0_STUB 2
+ARM64_VECTOR_SP0_STUB 3
 ARM64_VECTOR_STUB 4
 ARM64_VECTOR_STUB 5
 ARM64_VECTOR_STUB 6
@@ -90,6 +99,14 @@ ARM64_VECTOR_STUB 12
 ARM64_VECTOR_STUB 13
 ARM64_VECTOR_STUB 14
 ARM64_VECTOR_STUB 15
+
+.type arm64_exception_sp0_fail_stop, %function
+arm64_exception_sp0_fail_stop:
+    msr     daifset, #0xf
+2:
+    wfe
+    b       2b
+.size arm64_exception_sp0_fail_stop, . - arm64_exception_sp0_fail_stop
 
 /*
  * Frame layout (288 bytes, 16-byte aligned):
