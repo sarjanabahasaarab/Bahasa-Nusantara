@@ -17,7 +17,7 @@ nusantara_os_scheduler_status_t nusantara_os_scheduler_add(nusantara_os_schedule
  size_t i;if(!s||!id||sp==0u)return NUSANTARA_OS_SCHEDULER_INVALID_ARGUMENT;
  if(q==0u)q=NUSANTARA_OS_SCHEDULER_DEFAULT_QUANTUM;
  for(i=0;i<NUSANTARA_OS_SCHEDULER_MAX_TASKS;++i)if(s->tasks[i].state==NUSANTARA_OS_TASK_UNUSED){
-  uint64_t n=s->next_id++;if(n==0u){n=s->next_id++;if(n==0u)return NUSANTARA_OS_SCHEDULER_FULL;}
+  uint64_t n;if(s->next_id==0u)return NUSANTARA_OS_SCHEDULER_FULL;n=s->next_id++;
   s->tasks[i].id=n;s->tasks[i].saved_stack_pointer=sp;s->tasks[i].architecture_context=ctx;
   s->tasks[i].quantum=q;s->tasks[i].remaining=q;s->tasks[i].state=NUSANTARA_OS_TASK_READY;
   ++s->count;*id=n;return NUSANTARA_OS_SCHEDULER_OK;
