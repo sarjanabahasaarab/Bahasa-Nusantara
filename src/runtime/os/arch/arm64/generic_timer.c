@@ -35,6 +35,9 @@ nusantara_arm64_timer_status_t nusantara_arm64_timer_arm_ticks(
         return NUSANTARA_ARM64_TIMER_INVALID_INTERVAL;
     }
 
+    const uint64_t now = timer->io.read_counter(timer->io.context);
+    if (now > UINT64_MAX - ticks) return NUSANTARA_ARM64_TIMER_OVERFLOW;
+
     /* Mask first so a previous interval cannot fire while registers are updated. */
     timer->io.write_control(timer->io.context, NUSANTARA_ARM64_TIMER_CTL_IMASK);
     timer->io.isb(timer->io.context);
@@ -44,7 +47,7 @@ nusantara_arm64_timer_status_t nusantara_arm64_timer_arm_ticks(
     timer->io.isb(timer->io.context);
 
     timer->last_interval_ticks = (uint32_t)ticks;
-    timer->last_deadline = timer->io.read_counter(timer->io.context) + ticks;
+    timer->last_deadline = now + ticks;
     timer->armed = 1u;
     return NUSANTARA_ARM64_TIMER_OK;
 }
@@ -62,12 +65,15 @@ nusantara_arm64_timer_status_t nusantara_arm64_timer_arm_ms(
     }
     const uint64_t whole_ticks = whole_seconds * timer->frequency_hz;
     /* frequency_hz * remainder_ms is safe after quotient/remainder reduction. */
-    if (timer->frequency_hz > UINT64_MAX / remainder_ms) {
-        return NUSANTARA_ARM64_TIMER_OVERFLOW;
+    uint64_t fractional_ticks = 0u;
+    if (remainder_ms != 0u) {
+        if (timer->frequency_hz > UINT64_MAX / remainder_ms) {
+            return NUSANTARA_ARM64_TIMER_OVERFLOW;
+        }
+        const uint64_t fractional_product = timer->frequency_hz * remainder_ms;
+        fractional_ticks = fractional_product / 1000u +
+            ((fractional_product % 1000u) != 0u ? 1u : 0u);
     }
-    const uint64_t fractional_product = timer->frequency_hz * remainder_ms;
-    const uint64_t fractional_ticks = fractional_product / 1000u +
-        ((fractional_product % 1000u) != 0u ? 1u : 0u);
     if (whole_ticks > NUSANTARA_ARM64_TIMER_MAX_TICKS ||
         fractional_ticks > NUSANTARA_ARM64_TIMER_MAX_TICKS - whole_ticks) {
         return NUSANTARA_ARM64_TIMER_OVERFLOW;
