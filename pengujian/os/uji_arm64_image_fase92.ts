@@ -10,7 +10,7 @@ const linker = readFileSync('src/runtime/os/arch/arm64/image.ld', 'utf8');
 const builder = readFileSync('scripts/build-arm64-image.mjs', 'utf8');
 
 const header = source.slice(source.indexOf('_image_start:'), source.indexOf('.org'));
-assert.equal((header.match(/^\\s*\\.quad\\s+0$/gm) ?? []).length, 3,
+assert.equal((header.match(/^\\s*\\.quad\\s+0$/gm) ?? []).length, 4,
   'Image header must place ARM64 magic at byte offset 56');
 
 assert.match(source, /\.quad\s+0x00080000/, 'Image header must declare the 512 KiB text offset');
