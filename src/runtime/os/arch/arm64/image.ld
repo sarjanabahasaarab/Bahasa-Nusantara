@@ -20,13 +20,13 @@ SECTIONS
     *(.rodata*)
   }
 
-  _image_end = .;
-
   .bss (NOLOAD) : ALIGN(16) {
     *(.bss.stack)
     *(.bss*)
     *(COMMON)
   }
+
+  _image_end = .;
 
   /DISCARD/ : {
     *(.comment)
