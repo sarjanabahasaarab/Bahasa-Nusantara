@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 #include "scheduler.h"
-#include <string.h>
 static nusantara_os_task_t *find_mut(nusantara_os_scheduler_t *s,uint64_t id) {
  size_t i;for(i=0;i<NUSANTARA_OS_SCHEDULER_MAX_TASKS;++i)
   if(s->tasks[i].state!=NUSANTARA_OS_TASK_UNUSED&&s->tasks[i].id==id)return &s->tasks[i];
@@ -12,7 +11,16 @@ const nusantara_os_task_t *nusantara_os_scheduler_find(const nusantara_os_schedu
   if(s->tasks[i].state!=NUSANTARA_OS_TASK_UNUSED&&s->tasks[i].id==id)return &s->tasks[i];
  return NULL;
 }
-void nusantara_os_scheduler_init(nusantara_os_scheduler_t *s) { if(s){memset(s,0,sizeof(*s));s->next_id=1u;} }
+void nusantara_os_scheduler_init(nusantara_os_scheduler_t *s) {
+ size_t i;
+ if(!s)return;
+ for(i=0;i<NUSANTARA_OS_SCHEDULER_MAX_TASKS;++i){
+  s->tasks[i].id=0u;s->tasks[i].saved_stack_pointer=0u;
+  s->tasks[i].architecture_context=NULL;s->tasks[i].quantum=0u;
+  s->tasks[i].remaining=0u;s->tasks[i].state=NUSANTARA_OS_TASK_UNUSED;
+ }
+ s->count=0u;s->current=0u;s->next_id=1u;s->has_current=0u;
+}
 nusantara_os_scheduler_status_t nusantara_os_scheduler_add(nusantara_os_scheduler_t *s,uintptr_t sp,void *ctx,uint32_t q,uint64_t *id) {
  size_t i;if(!s||!id||sp==0u)return NUSANTARA_OS_SCHEDULER_INVALID_ARGUMENT;
  if(q==0u)q=NUSANTARA_OS_SCHEDULER_DEFAULT_QUANTUM;
