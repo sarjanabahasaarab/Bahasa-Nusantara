@@ -88,6 +88,8 @@ export const X86_BOOTSTRAP_FIXED_RESERVATIONS = Object.freeze([
   { start: 0x00270000, end: 0x00271000, reason: 'native extent workspace' },
   { start: 0x00271000, end: 0x00272000, reason: 'native reservation catalog workspace' },
   { start: 0x00272000, end: 0x00273000, reason: 'native reservation normalization workspace' },
+  { start: 0x00273000, end: 0x00276000, reason: 'native final physical extent output table and count (12 KiB)' },
+  { start: 0x00276000, end: 0x00277000, reason: 'native reservation subtraction scratch (4 KiB)' },
   { start: 0x002f0000, end: 0x002f4000, reason: 'early boot page tables' },
   { start: 0x00600000, end: 0x00601000, reason: 'process A user code' },
   { start: 0x00610000, end: 0x00611000, reason: 'process A user stack' },
