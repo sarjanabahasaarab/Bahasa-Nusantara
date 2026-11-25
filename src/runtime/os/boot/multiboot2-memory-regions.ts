@@ -231,8 +231,8 @@ export function subtractNormalizedPhysicalReservations(
   let previousCandidateEnd = -1n;
   const checkedCandidates: Interval[] = [];
   for (const [index, candidate] of candidates.entries()) {
-    if (!candidate || typeof candidate.base !== 'bigint ||
-        typeof candidate.length !== 'bigint || typeof candidate.endExclusive !== 'bigint) {
+    if (!candidate || typeof candidate.base !== 'bigint' ||
+        typeof candidate.length !== 'bigint' || typeof candidate.endExclusive !== 'bigint') {
       throw new TypeError(`Kandidat #${index} tidak valid.`);
     }
     const end = assertRange(candidate.base, candidate.length, `Kandidat #${index}`);
