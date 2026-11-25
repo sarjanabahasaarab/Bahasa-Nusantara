@@ -1,0 +1,39 @@
+name: "NUSANTARA OS — Physical Memory Manager Phase 97"
+
+on:
+  push:
+    branches: ["phase97-arm64-physical-memory-manager"]
+    paths:
+      - "src/runtime/os/memory/physical-frame-allocator.*"
+      - "pengujian/os/uji_physical_frame_allocator_fase97.c"
+      - "docs/os/arm64/PHASE-97-PHYSICAL-MEMORY-MANAGER.md"
+      - ".github/workflows/physical-memory-manager-phase97.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "src/runtime/os/memory/physical-frame-allocator.*"
+      - "pengujian/os/uji_physical_frame_allocator_fase97.c"
+      - "docs/os/arm64/PHASE-97-PHYSICAL-MEMORY-MANAGER.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: physical-memory-manager-phase97-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  physical-memory-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install host and AArch64 compilers
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc clang
+      - name: Compile and run physical frame allocator tests
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror -pedantic -I src/runtime/os/memory src/runtime/os/memory/physical-frame-allocator.c pengujian/os/uji_physical_frame_allocator_fase97.c -o /tmp/uji-pmm
+          /tmp/uji-pmm
+      - name: Cross-compile allocator for AArch64
+        run: clang --target=aarch64-none-elf -std=c11 -ffreestanding -Wall -Wextra -Werror -c src/runtime/os/memory/physical-frame-allocator.c -o /tmp/physical-frame-allocator-arm64.o
