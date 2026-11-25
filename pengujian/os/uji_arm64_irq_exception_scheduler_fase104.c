@@ -79,6 +79,10 @@ int main(void)
         NUSANTARA_ARM64_IRQ_RUNTIME_OK);
     assert(nusantara_arm64_irq_scheduler_init(&integration, &runtime, &scheduler) ==
         NUSANTARA_ARM64_IRQ_SCHEDULER_OK);
+    timer.armed = 0u;
+    assert(nusantara_arm64_irq_scheduler_start_first_task(&integration) ==
+        NUSANTARA_ARM64_IRQ_SCHEDULER_TIMER_NOT_ARMED);
+    timer.armed = 1u;
 
     /* Expired physical timer: save task A's exception frame, select task B. */
     hw.iar = 30u;
