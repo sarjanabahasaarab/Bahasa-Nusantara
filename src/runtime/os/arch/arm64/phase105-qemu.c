@@ -27,17 +27,12 @@ static _Alignas(16) uint8_t task_b_stack[8192];
 static volatile uint64_t task_a_progress;
 static volatile uint64_t task_b_progress;
 static volatile uint64_t preemption_count;
+static volatile uint64_t timer_irq_count;
 
-static void uart_putc(char value)
-{
-    volatile uint32_t *flags = (volatile uint32_t *)(PHASE105_UART_BASE + 0x18u);
-    volatile uint32_t *data = (volatile uint32_t *)PHASE105_UART_BASE;
-    while ((*flags & (1u << 5)) != 0u) { }
-    *data = (uint32_t)(uint8_t)value;
-}
+extern void phase105_uart_puts(const char *message);
 static void uart_puts(const char *message)
 {
-    while (*message != '\0') uart_putc(*message++);
+    phase105_uart_puts(message);
 }
 static void phase105_halt(void)
 {
@@ -137,6 +132,10 @@ static uint32_t cpu_read_iar1(void *context)
     uint64_t value;
     (void)context;
     __asm__ volatile("mrs %0, ICC_IAR1_EL1" : "=r"(value));
+    if ((value & 0x00ffffffu) == PHASE105_TIMER_PPI) {
+        ++timer_irq_count;
+        if (timer_irq_count == 1u) uart_puts("NUSANTARA_PHASE105_TIMER_IRQ_SEEN\\r\\n");
+    }
     return (uint32_t)value;
 }
 static void cpu_write_eoir1(void *context, uint32_t token)
@@ -162,6 +161,7 @@ static void phase105_report_success(void)
 static void task_a(void *argument)
 {
     (void)argument;
+    uart_puts("NUSANTARA_PHASE105_TASK_A_START\\r\\n");
     for (;;) {
         ++task_a_progress;
         if (task_a_progress >= PHASE105_PROGRESS_TARGET &&
@@ -172,6 +172,7 @@ static void task_a(void *argument)
 static void task_b(void *argument)
 {
     (void)argument;
+    uart_puts("NUSANTARA_PHASE105_TASK_B_START\\r\\n");
     for (;;) {
         ++task_b_progress;
         if (task_a_progress >= PHASE105_PROGRESS_TARGET &&
@@ -227,6 +228,15 @@ void nusantara_phase105_main(void)
             &frame_b, task_b_stack, sizeof(task_b_stack),
             (uintptr_t)task_b, 0u, (uintptr_t)task_returned))
         phase105_fail("task B exception frame creation failed");
+
+    /*
+     * Every brand-new task frame must enter with IRQ unmasked. Phase 104's
+     * first-task trampoline does this for the boot-selected task only; this
+     * harness also prepares the second READY task for later ERET dispatch.
+     */
+    frame_a->spsr_el1 &= ~(1ull << 7);
+    frame_b->spsr_el1 &= ~(1ull << 7);
+
     if (nusantara_os_scheduler_add(&scheduler, (uintptr_t)frame_a, 0, 1u, &task_a_id) != NUSANTARA_OS_SCHEDULER_OK)
         phase105_fail("task A scheduler registration failed");
     if (nusantara_os_scheduler_add(&scheduler, (uintptr_t)frame_b, 0, 1u, &task_b_id) != NUSANTARA_OS_SCHEDULER_OK)
