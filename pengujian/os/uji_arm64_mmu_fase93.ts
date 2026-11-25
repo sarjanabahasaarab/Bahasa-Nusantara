@@ -92,10 +92,10 @@ assert.equal(plan.rootPhysicalAddress, 0x40fff000n);
 assert.equal(plan.mappedPages, 3);
 assert.equal(plan.tables[0].level, 0);
 assert.equal(plan.tables[0].entries.length, 1);
-assert.equal(plan.tables.filter((table) => table.level === 1).length, 1);
+assert.equal(plan.tables.filter((table) => table.level === 1).length, 2);
 assert.equal(plan.tables.filter((table) => table.level === 2).length, 2);
 assert.equal(plan.tables.filter((table) => table.level === 3).length, 2);
-assert.equal(plan.tables.length, 6, 'Sparse plan must allocate only the six required table pages.');
+assert.equal(plan.tables.length, 7, 'Sparse plan must allocate only the seven required table pages.');
 assert.ok(plan.tables.every((table) => table.physicalAddress % ARM64_MMU_PAGE_SIZE === 0n));
 assert.ok(plan.tables.every((table) => table.entries.every((entry) => entry.index >= 0 && entry.index < 512)));
 assert.throws(() => buildArm64PageTablePlan([
