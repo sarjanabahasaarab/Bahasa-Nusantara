@@ -4,6 +4,7 @@
 #ifndef NUSANTARA_ARM64_EXCEPTION_H
 #define NUSANTARA_ARM64_EXCEPTION_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 #define NUSANTARA_ARM64_EXCEPTION_VECTOR_COUNT 16u
