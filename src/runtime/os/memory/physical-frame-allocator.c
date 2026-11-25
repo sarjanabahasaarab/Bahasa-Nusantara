@@ -6,7 +6,7 @@
 #define PMM_U64_LIMIT UINT64_MAX
 
 static int valid_allocator(const nusantara_os_physical_frame_allocator_t *a) {
-    return a && a->initialized && a->bitmap && a->extents;
+    return a && a->initialized && a->state_map && a->extents;
 }
 
 static uint64_t extent_frames(const nusantara_os_memory_extent_t *e) {
@@ -89,14 +89,15 @@ nusantara_os_pmm_status_t nusantara_os_pmm_init(
         total += frames;
         previous_end = base + length;
     }
-    if (total > (uint64_t)SIZE_MAX * 8u) return NUSANTARA_OS_PMM_OVERFLOW;
-    required = (size_t)(total / 8u + ((total % 8u) != 0u ? 1u : 0u));
+    /* Four 2-bit frame states fit in each byte. */
+    if (total / 4u > (uint64_t)SIZE_MAX) return NUSANTARA_OS_PMM_OVERFLOW;
+    required = (size_t)(total / 4u + ((total % 4u) != 0u ? 1u : 0u));
     if (bitmap_bytes < required) return NUSANTARA_OS_PMM_BITMAP_TOO_SMALL;
 
     a->extents = extents;
     a->extent_count = extent_count;
     a->bitmap = bitmap;
-    a->bitmap_bytes = bitmap_bytes;
+    a->state_map_bytes = bitmap_bytes;
     a->total_frames = total;
     a->free_frames = total;
     for (i = 0; i < required; ++i) bitmap[i] = 0u;
@@ -118,11 +119,11 @@ nusantara_os_pmm_status_t nusantara_os_pmm_reserve(
     }
     /* Validate the entire range before mutating the bitmap (atomic failure semantics). */
     for (cursor = first_index; cursor <= last_index; ++cursor) {
-        if (bit_is_set(a, cursor)) continue;
+        if (frame_state(a, cursor) == 1u) return NUSANTARA_OS_PMM_ALREADY_ALLOCATED;
     }
     for (cursor = first_index; cursor <= last_index; ++cursor) {
-        if (!bit_is_set(a, cursor)) {
-            set_bit(a, cursor);
+        if (frame_state(a, cursor) == 0u) {
+            set_frame_state(a, cursor, 2u);
             --a->free_frames;
         }
     }
@@ -136,8 +137,8 @@ nusantara_os_pmm_status_t nusantara_os_pmm_allocate(
     if (a->free_frames == 0u) return NUSANTARA_OS_PMM_OUT_OF_MEMORY;
     for (i = 0u; i < a->total_frames; ++i) {
         uint64_t address;
-        if (!bit_is_set(a, i) && address_for_index(a, i, &address)) {
-            set_bit(a, i);
+        if (frame_state(a, i) == 0u && address_for_index(a, i, &address)) {
+            set_frame_state(a, i, 1u);
             --a->free_frames;
             *physical_address = address;
             return NUSANTARA_OS_PMM_OK;
@@ -156,11 +157,11 @@ nusantara_os_pmm_status_t nusantara_os_pmm_allocate_contiguous(
     if (count > a->free_frames) return NUSANTARA_OS_PMM_OUT_OF_MEMORY;
     for (i = 0u; i < a->total_frames; ++i) {
         uint64_t address;
-        if (bit_is_set(a, i) || !address_for_index(a, i, &address) ||
+        if (frame_state(a, i) != 0u || !address_for_index(a, i, &address) ||
             (run != 0u && address != previous + NUSANTARA_OS_PAGE_SIZE)) {
             run = 0u;
         }
-        if (!bit_is_set(a, i) && address_for_index(a, i, &address)) {
+        if (frame_state(a, i) == 0u && address_for_index(a, i, &address)) {
             if (run == 0u) start = i;
             ++run;
             previous = address;
@@ -168,7 +169,7 @@ nusantara_os_pmm_status_t nusantara_os_pmm_allocate_contiguous(
                 uint64_t j;
                 uint64_t result;
                 (void)address_for_index(a, start, &result);
-                for (j = start; j <= i; ++j) set_bit(a, j);
+                for (j = start; j <= i; ++j) set_frame_state(a, j, 1u);
                 a->free_frames -= count;
                 *physical_address = result;
                 return NUSANTARA_OS_PMM_OK;
@@ -183,8 +184,9 @@ nusantara_os_pmm_status_t nusantara_os_pmm_free(
     uint64_t index;
     if (!valid_allocator(a)) return NUSANTARA_OS_PMM_INVALID_ARGUMENT;
     if (!locate_frame(a, address, &index)) return NUSANTARA_OS_PMM_NOT_MANAGED;
-    if (!bit_is_set(a, index)) return NUSANTARA_OS_PMM_ALREADY_ALLOCATED;
-    clear_bit(a, index);
+    if (frame_state(a, index) == 2u) return NUSANTARA_OS_PMM_RESERVED_FRAME;
+    if (frame_state(a, index) == 0u) return NUSANTARA_OS_PMM_ALREADY_ALLOCATED;
+    set_frame_state(a, index, 0u);
     ++a->free_frames;
     return NUSANTARA_OS_PMM_OK;
 }
