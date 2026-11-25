@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Apache-2.0
+/* SPDX-License-Identifier: Apache-2.0 */
 #ifndef NUSANTARA_ARM64_EXCEPTION_H
 #define NUSANTARA_ARM64_EXCEPTION_H
 #include <stddef.h>
