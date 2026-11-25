@@ -12,7 +12,7 @@ Menyediakan jalur masuk exception AArch64 pada EL1 yang memiliki layout tetap, m
 - Implementasi dispatcher default bersifat weak dan berhenti aman (WFE); kernel dapat menggantinya dengan dispatcher kuat.
 
 ## Integrasi dan batasan
-Tabel belum dipasang otomatis ke `VBAR_EL1`. Kernel harus terlebih dahulu menyediakan stack EL1 yang valid, menghubungkan dispatcher, lalu memasang alamat tabel menggunakan `MSR VBAR_EL1` dan `ISB`. Belum ada decoding ESR, panic logger, pemulihan page fault, atau penanganan interrupt GIC; itu masuk fase berikutnya. Jangan membuka mask IRQ/FIQ sebelum controller dan handler terkait siap.
+Tabel dapat dipasang melalui `nusantara_arm64_install_exception_vectors()`. Fungsi ini hanya menulis `VBAR_EL1` saat dipanggil dari EL1, menjalankan `ISB`, dan mengembalikan 1; dari EL lain ia mengembalikan 0. **Prasyarat:** pemanggil sudah berada pada EL1 dengan stack 16-byte aligned yang valid, tabel dan dispatcher telah ikut ditautkan ke image kernel, dan interrupt masih dimask. Fungsi ini tidak mengatur stack atau membuka interrupt. Belum ada decoding ESR, panic logger, pemulihan page fault, atau penanganan interrupt GIC; itu masuk fase berikutnya. Jangan membuka mask IRQ/FIQ sebelum controller dan handler terkait siap.
 
 Header C menetapkan ABI frame. Fungsi dispatcher tidak boleh mengembalikan kontrol untuk exception fatal; implementasi default mencegah return tanpa penanganan.
 
