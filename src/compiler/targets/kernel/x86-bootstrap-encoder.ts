@@ -76,6 +76,9 @@ export const X86_BOOTSTRAP_SUBTRACT_CURSOR_LOW_ADDRESS = 0x0027_6008;
 export const X86_BOOTSTRAP_SUBTRACT_CURSOR_HIGH_ADDRESS = 0x0027_600c;
 export const X86_BOOTSTRAP_SUBTRACT_END_LOW_ADDRESS = 0x0027_6010;
 export const X86_BOOTSTRAP_SUBTRACT_END_HIGH_ADDRESS = 0x0027_6014;
+/** Phase 86: previous end pair used to validate sorted, disjoint final extents. */
+export const X86_BOOTSTRAP_FINAL_VALIDATE_PREVIOUS_LOW_ADDRESS = 0x0027_7000;
+export const X86_BOOTSTRAP_FINAL_VALIDATE_PREVIOUS_HIGH_ADDRESS = 0x0027_7004;
 /** End-exclusive fixed bootstrap exclusions; dynamic entries are appended at boot. */
 export const X86_BOOTSTRAP_FIXED_RESERVATIONS = Object.freeze([
   { start: 0x00000000, end: 0x00200000, reason: 'low memory and kernel image' },
@@ -90,6 +93,7 @@ export const X86_BOOTSTRAP_FIXED_RESERVATIONS = Object.freeze([
   { start: 0x00272000, end: 0x00273000, reason: 'native reservation normalization workspace' },
   { start: 0x00273000, end: 0x00276000, reason: 'native final physical extent output table and count (12 KiB)' },
   { start: 0x00276000, end: 0x00277000, reason: 'native reservation subtraction scratch (4 KiB)' },
+  { start: 0x00277000, end: 0x00278000, reason: 'native final extent validation scratch (4 KiB)' },
   { start: 0x002f0000, end: 0x002f4000, reason: 'early boot page tables' },
   { start: 0x00600000, end: 0x00601000, reason: 'process A user code' },
   { start: 0x00610000, end: 0x00611000, reason: 'process A user stack' },
@@ -1207,6 +1211,42 @@ export class X86BootstrapEncoder {
     a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_SUBTRACT_CANDIDATE_INDEX_ADDRESS);
     a.jmp('phase82_candidate_loop');
     a.label('phase82_done');
+    // Phase 86: validate the actual native output table before publishing it.
+    // Count is bounded; every record must be non-empty, 4 KiB aligned, sorted,
+    // and disjoint. Previous end is kept in the separately reserved scratch page.
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_FINAL_EXTENT_COUNT_ADDRESS);
+    a.emit(0x3d); a.emit32(X86_BOOTSTRAP_FINAL_EXTENT_CAPACITY); a.ja('panic32');
+    a.emit(0x89, 0xc7); // edi = stable count
+    a.emit(0x31, 0xf6); // esi = index
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_FINAL_VALIDATE_PREVIOUS_LOW_ADDRESS, 0);
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_FINAL_VALIDATE_PREVIOUS_HIGH_ADDRESS, 0);
+    a.label('phase86_validate_loop');
+    a.emit(0x39, 0xfe); a.jae('phase86_validate_done');
+    a.emit(0x89, 0xf0);
+    a.emit(0x6b, 0xc0, X86_BOOTSTRAP_FINAL_EXTENT_RECORD_SIZE);
+    a.emit(0x05); a.emit32(X86_BOOTSTRAP_FINAL_EXTENT_TABLE_BASE);
+    a.emit(0x8b, 0x08);
+    a.emit(0x8b, 0x50, 0x04);
+    a.emit(0x8b, 0x58, 0x08);
+    a.emit(0x8b, 0x68, 0x0c);
+    a.emit(0x39, 0xea); a.jb('phase86_record_nonempty'); a.ja('panic32');
+    a.emit(0x39, 0xd9); a.jae('panic32');
+    a.label('phase86_record_nonempty');
+    a.emit(0xf7, 0xc1); a.emit32(0x00000fff); a.jne('panic32');
+    a.emit(0xf7, 0xc3); a.emit32(0x00000fff); a.jne('panic32');
+    a.emit(0x83, 0xfe, 0x00); a.je('phase86_first_record');
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_FINAL_VALIDATE_PREVIOUS_HIGH_ADDRESS);
+    a.emit(0x39, 0xd0); a.ja('panic32'); a.jb('phase86_ordered');
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_FINAL_VALIDATE_PREVIOUS_LOW_ADDRESS);
+    a.emit(0x39, 0xc1); a.ja('panic32');
+    a.label('phase86_ordered');
+    a.label('phase86_first_record');
+    a.emit(0x89, 0x1d); a.emit32(X86_BOOTSTRAP_FINAL_VALIDATE_PREVIOUS_LOW_ADDRESS);
+    a.emit(0x89, 0x2d); a.emit32(X86_BOOTSTRAP_FINAL_VALIDATE_PREVIOUS_HIGH_ADDRESS);
+    a.emit(0x46);
+    a.jmp('phase86_validate_loop');
+    a.label('phase86_validate_done');
+    a.printLabel32('msg_mb2_final_extents_validated', 'print_serial32');
     // Publish a completion marker only after the entire bounded output table is built.
     a.emit(0x60); a.printLabel32('msg_mb2_reservations_subtracted', 'print_serial32'); a.emit(0x61);
     a.emit(0x60); a.printLabel32('msg_mb2_reservations_normalized', 'print_serial32'); a.emit(0x61);
@@ -2038,6 +2078,7 @@ export class X86BootstrapEncoder {
     a.label('msg_mb2_reservations_catalogued'); a.emitCString('NUSANTARA_MULTIBOOT2_RESERVATIONS_CATALOGUED_OK\r\n');
     a.label('msg_mb2_reservations_normalized'); a.emitCString('NUSANTARA_MULTIBOOT2_RESERVATIONS_NORMALIZED_OK\r\n');
     a.label('msg_mb2_reservations_subtracted'); a.emitCString('NUSANTARA_MULTIBOOT2_RESERVATIONS_SUBTRACTED_OK\r\n');
+    a.label('msg_mb2_final_extents_validated'); a.emitCString('NUSANTARA_MULTIBOOT2_FINAL_EXTENTS_VALIDATED_OK\r\n');
     a.label('msg_diag_mmap_begin');      a.emitCString('NUSANTARA_DIAG_MMAP_BEGIN\r\n');
     a.label('msg_diag_mmap_done');       a.emitCString('NUSANTARA_DIAG_MMAP_DONE\r\n');
     a.label('msg_diag_module_begin');    a.emitCString('NUSANTARA_DIAG_MODULE_BEGIN\r\n');
