@@ -33,6 +33,12 @@ static void previous_unhandled(void *p, uint32_t id) {
     fake_hw_t *h = (fake_hw_t *)p; (void)id; ++h->unhandled_count;
 }
 
+/* The host test validates the C contract, not the privileged ERET entry. */
+void nusantara_arm64_exception_start_first_task(uintptr_t frame_pointer)
+{
+    (void)frame_pointer;
+}
+
 int main(void)
 {
     fake_hw_t hw = {0};
@@ -93,9 +99,18 @@ int main(void)
     assert(nusantara_arm64_exception_dispatch(frame_b) == frame_b);
     assert(hw.eoi == 40u && hw.eoi_count == 2u && hw.unhandled_count == 1u);
 
+    /* A blocked current task is saved, then the READY peer is resumed. */
+    assert(nusantara_os_scheduler_block(&scheduler, id_b) == NUSANTARA_OS_SCHEDULER_OK);
+    hw.iar = 30u;
+    hw.control = NUSANTARA_ARM64_TIMER_CTL_ENABLE | NUSANTARA_ARM64_TIMER_CTL_ISTATUS;
+    assert(nusantara_arm64_exception_dispatch(frame_b) == frame_a);
+    assert(scheduler.tasks[1].saved_stack_pointer == (uintptr_t)frame_b);
+    assert(scheduler.tasks[0].state == NUSANTARA_OS_TASK_RUNNING);
+    assert(hw.eoi == 30u && hw.eoi_count == 3u);
+
     /* Non-IRQ exception vector is rejected by this IRQ-only dispatcher. */
-    frame_b->vector = 4u;
-    assert(nusantara_arm64_exception_dispatch(frame_b) == 0);
+    frame_a->vector = 4u;
+    assert(nusantara_arm64_exception_dispatch(frame_a) == 0);
 
     puts("Phase 104 ARM64 IRQ-to-exception-frame scheduler: PASS");
     return 0;
