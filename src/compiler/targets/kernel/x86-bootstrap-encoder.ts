@@ -484,6 +484,8 @@ export class X86BootstrapEncoder {
   public static generateBootstrapBinary(config: BootstrapConfig = {}): {
     codeBytes: Uint8Array;
     entryPoint: bigint;
+    pmmAllocateFrameAddress: bigint;
+    pmmFreeFrameAddress: bigint;
     sentinel: string;
   } {
     const sentinel = config.sentinelMessage ?? this.STAGE_10_BOOT_OK;
