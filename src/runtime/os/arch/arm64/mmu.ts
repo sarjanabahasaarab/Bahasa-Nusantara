@@ -165,7 +165,9 @@ export function buildArm64PageTablePlan(
     for (let level = 0 as 0 | 1 | 2; level < 3; level = (level + 1) as 0 | 1 | 2) {
       const index = pageIndex(mapping.virtualAddress, level);
       const nextLevel = (level + 1) as 1 | 2 | 3;
-      const prefix = mapping.virtualAddress >> BigInt(ARM64_MMU_LEVEL_SHIFTS[nextLevel]);
+      // A child table is unique per parent-table entry, so its identity uses
+      // the VA prefix above the index consumed by the current parent level.
+      const prefix = mapping.virtualAddress >> BigInt(ARM64_MMU_LEVEL_SHIFTS[level]);
       const key = `${nextLevel}:${prefix.toString(16)}`;
       let child = byPrefix.get(key);
       if (!child) {
