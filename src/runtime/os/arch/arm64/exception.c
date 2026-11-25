@@ -14,11 +14,12 @@ nusantara_arm64_exception_frame_t *nusantara_arm64_exception_dispatch(
 {
     nusantara_arm64_exception_frame_t *selected = frame;
     if (frame == 0 || (((uintptr_t)frame & 0x0fu) != 0u))
-        return frame;
-    if (active_handler != 0)
-        selected = active_handler(active_context, frame);
+        return 0;
+    if (active_handler == 0)
+        return 0;
+    selected = active_handler(active_context, frame);
     if (selected == 0 || (((uintptr_t)selected & 0x0fu) != 0u))
-        return frame;
+        return 0;
     return selected;
 }
 int nusantara_arm64_exception_context_prepare(
