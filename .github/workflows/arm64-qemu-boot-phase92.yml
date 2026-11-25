@@ -1,0 +1,71 @@
+name: "NUSANTARA OS — ARM64 QEMU Boot (Phase 92)"
+
+on:
+  pull_request:
+    branches: ["main", "phase91-arm64-port-framework"]
+    paths:
+      - "src/runtime/os/arch/arm64/**"
+      - "scripts/build-arm64-image.mjs"
+      - "pengujian/os/uji_arm64_image_fase92.ts"
+      - ".github/workflows/arm64-qemu-boot-phase92.yml"
+      - "package.json"
+  push:
+    branches: ["main", "phase92-arm64-qemu-boot"]
+    paths:
+      - "src/runtime/os/arch/arm64/**"
+      - "scripts/build-arm64-image.mjs"
+      - "pengujian/os/uji_arm64_image_fase92.ts"
+      - ".github/workflows/arm64-qemu-boot-phase92.yml"
+      - "package.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: arm64-qemu-phase92-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  arm64-qemu-boot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install AArch64 toolchain and QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang lld llvm qemu-system-arm
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck and Phase 92 contracts
+        run: |
+          npm run lint
+          npm run test:arm64-image-v92
+      - name: Build AArch64 Image
+        run: node scripts/build-arm64-image.mjs /tmp/nusantara-arm64/Image
+      - name: Boot Image in QEMU virt and verify serial sentinel
+        shell: bash
+        run: |
+          set +e
+          timeout 8s qemu-system-aarch64 \
+            -machine virt,gic-version=3 -cpu cortex-a57 -m 256M \
+            -nographic -serial stdio -monitor none \
+            -kernel /tmp/nusantara-arm64/Image -no-reboot -no-shutdown \
+            > /tmp/nusantara-arm64-qemu.log 2>&1
+          qemu_status=$?
+          set -e
+          cat /tmp/nusantara-arm64-qemu.log
+          grep -Fq 'NUSANTARA_ARM64_BOOT_OK' /tmp/nusantara-arm64-qemu.log
+          if grep -Fq 'NUSANTARA_ARM64_BOOT_FAIL' /tmp/nusantara-arm64-qemu.log; then
+            echo "ARM64 kernel reported boot failure" >&2
+            exit 1
+          fi
+          if [ "$qemu_status" -ne 124 ] && [ "$qemu_status" -ne 0 ]; then
+            echo "Unexpected QEMU exit code: $qemu_status" >&2
+            exit "$qemu_status"
+          fi
