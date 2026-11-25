@@ -26,7 +26,9 @@ assert.deepEqual(run([extent(0x1000n, 0xa000n)], [{ base: 0x1000n, length: 0x200
 assert.deepEqual(run([extent(0x1000n, 0xa000n)], [{ base: 0x8000n, length: 0x2000n }]), [
   extent(0x1000n, 0x8000n),
 ]);
-assert.deepEqual(run([extent(0x1000n, 0xa000n)], [{ base: 0x2000n, length: 0x8000n }]), []);
+assert.deepEqual(run([extent(0x1000n, 0xa000n)], [{ base: 0x2000n, length: 0x8000n }]), [
+  extent(0x1000n, 0x2000n),
+]);
 assert.deepEqual(run([extent(0x1000n, 0xa000n)], [
   { base: 0x3001n, length: 0x0fffn },
   { base: 0x4000n, length: 0x1000n },
