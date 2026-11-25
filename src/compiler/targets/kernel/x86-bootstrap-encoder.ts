@@ -2442,6 +2442,9 @@ export class X86BootstrapEncoder {
     return {
       codeBytes,
       entryPoint: BigInt(baseAddr),
+      /** Callable Ring 0 System V AMD64 entrypoints embedded in codeBytes. */
+      pmmAllocateFrameAddress: BigInt(baseAddr + a.getLabelOffset('pmm_allocate_frame')),
+      pmmFreeFrameAddress: BigInt(baseAddr + a.getLabelOffset('pmm_free_frame')),
       sentinel,
     };
   }
