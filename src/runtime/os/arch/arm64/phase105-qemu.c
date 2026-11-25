@@ -27,6 +27,7 @@ static _Alignas(16) uint8_t task_b_stack[8192];
 static volatile uint64_t task_a_progress;
 static volatile uint64_t task_b_progress;
 static volatile uint64_t preemption_count;
+static volatile uint64_t timer_irq_count;
 
 extern void phase105_uart_puts(const char *message);
 static void uart_puts(const char *message)
@@ -131,6 +132,10 @@ static uint32_t cpu_read_iar1(void *context)
     uint64_t value;
     (void)context;
     __asm__ volatile("mrs %0, ICC_IAR1_EL1" : "=r"(value));
+    if ((value & 0x00ffffffu) == PHASE105_TIMER_PPI) {
+        ++timer_irq_count;
+        if (timer_irq_count == 1u) uart_puts("NUSANTARA_PHASE105_TIMER_IRQ_SEEN\\r\\n");
+    }
     return (uint32_t)value;
 }
 static void cpu_write_eoir1(void *context, uint32_t token)
@@ -156,6 +161,7 @@ static void phase105_report_success(void)
 static void task_a(void *argument)
 {
     (void)argument;
+    uart_puts("NUSANTARA_PHASE105_TASK_A_START\\r\\n");
     for (;;) {
         ++task_a_progress;
         if (task_a_progress >= PHASE105_PROGRESS_TARGET &&
@@ -166,6 +172,7 @@ static void task_a(void *argument)
 static void task_b(void *argument)
 {
     (void)argument;
+    uart_puts("NUSANTARA_PHASE105_TASK_B_START\\r\\n");
     for (;;) {
         ++task_b_progress;
         if (task_a_progress >= PHASE105_PROGRESS_TARGET &&
