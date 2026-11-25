@@ -1,0 +1,52 @@
+name: "NUSANTARA OS — ARM64 Exception Vectors Phase 94"
+
+on:
+  push:
+    branches: ["phase94-arm64-exception-vectors"]
+    paths:
+      - "src/runtime/os/arch/arm64/exception-vectors.S"
+      - "src/runtime/os/arch/arm64/exception.h"
+      - "pengujian/os/uji_arm64_exception_vectors_fase94.ts"
+      - "docs/os/arm64/PHASE-94-EXCEPTION-VECTORS.md"
+      - ".github/workflows/arm64-exception-vectors-phase94.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "src/runtime/os/arch/arm64/exception-vectors.S"
+      - "src/runtime/os/arch/arm64/exception.h"
+      - "pengujian/os/uji_arm64_exception_vectors_fase94.ts"
+      - "docs/os/arm64/PHASE-94-EXCEPTION-VECTORS.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: arm64-exception-vectors-phase94-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  exception-vector-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install dependencies and AArch64 assembler
+        run: |
+          npm ci
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang llvm
+      - name: TypeScript typecheck
+        run: npm run lint
+      - name: Test vector table and exception frame ABI
+        run: npx tsx pengujian/os/uji_arm64_exception_vectors_fase94.ts
+      - name: Cross-assemble AArch64 exception vectors
+        run: |
+          clang --target=aarch64-none-elf -mcpu=cortex-a57 -ffreestanding -fno-stack-protector -c src/runtime/os/arch/arm64/exception-vectors.S -o /tmp/nusantara-arm64-exception-vectors.o
+          llvm-readelf -h /tmp/nusantara-arm64-exception-vectors.o | tee /tmp/nusantara-arm64-exception-elf.txt
+          grep -Eq 'Machine:.*AArch64' /tmp/nusantara-arm64-exception-elf.txt
+          llvm-readelf -s /tmp/nusantara-arm64-exception-vectors.o | grep -E 'arm64_exception_vectors|nusantara_arm64_exception_dispatch'
