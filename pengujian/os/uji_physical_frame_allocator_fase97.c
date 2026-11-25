@@ -19,7 +19,7 @@ int main(void) {
         NUSANTARA_OS_PMM_OK);
     assert(nusantara_os_pmm_total_frames(&pmm) == 8u);
     assert(nusantara_os_pmm_free_frames(&pmm) == 8u);
-    assert(bitmap[0] == 0u && bitmap[1] == 0u);
+    assert(bitmap[0] == 0u && bitmap[1] == 0xffu); /* bytes beyond required bitmap remain caller-owned */
 
     /* Reserve first frame and an existing reservation is idempotent. */
     assert(nusantara_os_pmm_reserve(&pmm, 0x100000u, 0x1000u) == NUSANTARA_OS_PMM_OK);
