@@ -1,0 +1,47 @@
+name: NUSANTARA OS — ARM64 IRQ Scheduler Phase 101
+on:
+  pull_request:
+    paths:
+      - "src/runtime/os/arch/arm64/irq-runtime.*"
+      - "src/runtime/os/arch/arm64/generic_timer.*"
+      - "src/runtime/os/arch/arm64/gicv3.*"
+      - "src/runtime/os/scheduler/**"
+      - "pengujian/os/uji_arm64_irq_runtime_fase101.c"
+      - ".github/workflows/arm64-irq-scheduler-phase101.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/runtime/os/arch/arm64/irq-runtime.*"
+      - "src/runtime/os/arch/arm64/generic_timer.*"
+      - "src/runtime/os/arch/arm64/gicv3.*"
+      - "src/runtime/os/scheduler/**"
+      - "pengujian/os/uji_arm64_irq_runtime_fase101.c"
+      - ".github/workflows/arm64-irq-scheduler-phase101.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  irq-scheduler-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install compilers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc clang
+      - name: Host contract tests
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -Isrc/runtime/os/arch/arm64 -Isrc/runtime/os/scheduler \
+            src/runtime/os/arch/arm64/irq-runtime.c \
+            src/runtime/os/arch/arm64/generic_timer.c \
+            src/runtime/os/arch/arm64/gicv3.c \
+            src/runtime/os/scheduler/scheduler.c \
+            pengujian/os/uji_arm64_irq_runtime_fase101.c \
+            -o /tmp/nusantara-arm64-irq-phase101
+          /tmp/nusantara-arm64-irq-phase101
+      - name: AArch64 freestanding compile
+        run: |
+          clang --target=aarch64-none-elf -std=c11 -ffreestanding -Wall -Wextra -Werror -pedantic \
+            -Isrc/runtime/os/arch/arm64 -Isrc/runtime/os/scheduler \
+            -c src/runtime/os/arch/arm64/irq-runtime.c -o /tmp/irq-runtime-aarch64.o
