@@ -50,6 +50,8 @@ nusantara_arm64_install_exception_vectors:
 .global nusantara_arm64_exception_start_first_task
 .type nusantara_arm64_exception_start_first_task, %function
 nusantara_arm64_exception_start_first_task:
+    msr daifset, #2
+    isb
     cbz x0, arm64_exception_sp0_fail_stop
     ldr x1, [x0, #272]
     bic x1, x1, #0x80
