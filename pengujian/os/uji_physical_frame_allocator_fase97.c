@@ -10,7 +10,7 @@ int main(void) {
         { .base = 0x100000u, .length = 0x4000u },
         { .base = 0x200000u, .length = 0x4000u }
     };
-    uint8_t bitmap[2];
+    uint8_t bitmap[3];
     nusantara_os_physical_frame_allocator_t pmm;
     uint64_t address = 0u;
 
@@ -19,7 +19,7 @@ int main(void) {
         NUSANTARA_OS_PMM_OK);
     assert(nusantara_os_pmm_total_frames(&pmm) == 8u);
     assert(nusantara_os_pmm_free_frames(&pmm) == 8u);
-    assert(bitmap[0] == 0u && bitmap[1] == 0xffu); /* bytes beyond required bitmap remain caller-owned */
+    assert(bitmap[0] == 0u && bitmap[1] == 0u && bitmap[2] == 0xffu); /* unused caller byte remains untouched */
 
     /* Reserve first frame and an existing reservation is idempotent. */
     assert(nusantara_os_pmm_reserve(&pmm, 0x100000u, 0x1000u) == NUSANTARA_OS_PMM_OK);
@@ -42,7 +42,10 @@ int main(void) {
     assert(address == 0x101000u);
     assert(nusantara_os_pmm_free_frames(&pmm) == 4u);
 
-    /* Reservations must reject ranges crossing a hole without partial mutation. */
+    /* Reservations reject allocated frames atomically, as well as physical holes. */
+    assert(nusantara_os_pmm_reserve(&pmm, 0x101000u, 0x2000u) ==
+        NUSANTARA_OS_PMM_ALREADY_ALLOCATED);
+    assert(nusantara_os_pmm_free_frames(&pmm) == 4u);
     assert(nusantara_os_pmm_reserve(&pmm, 0x103000u, 0x2000u) ==
         NUSANTARA_OS_PMM_NOT_MANAGED);
     assert(nusantara_os_pmm_free_frames(&pmm) == 4u);
