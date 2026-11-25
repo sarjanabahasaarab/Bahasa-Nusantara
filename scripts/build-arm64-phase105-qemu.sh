@@ -27,6 +27,10 @@ ld.lld -m aarch64elf -nostdlib -T src/runtime/os/arch/arm64/phase105-image.ld \
   "$BUILD/phase105-qemu.o" "$BUILD/exception.o" "$BUILD/generic_timer.o" \
   "$BUILD/irq-runtime.o" "$BUILD/gicv3.o" "$BUILD/irq-scheduler.o" "$BUILD/scheduler.o"
 llvm-readelf -h "$BUILD/nusantara-phase105.elf" | grep -Eq 'Machine:.*AArch64'
+echo "Phase 105 linked entry symbols:"
+llvm-nm -n "$BUILD/nusantara-phase105.elf" | grep -E '(_start|nusantara_phase105_main|phase105_uart_puts)'
+echo "Phase 105 C main disassembly:"
+llvm-objdump -d --no-show-raw-insn "$BUILD/nusantara-phase105.elf" | sed -n '/<nusantara_phase105_main>:/,+48p'
 llvm-objcopy -O binary "$BUILD/nusantara-phase105.elf" "$OUT"
 test -s "$OUT"
 echo "Phase 105 AArch64 Image built: $OUT"
