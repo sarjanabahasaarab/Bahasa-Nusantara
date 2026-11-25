@@ -87,17 +87,6 @@ phase105_el1_entry:
     cbz     x19, phase105_boot_fail
     tst     x19, #7
     b.ne    phase105_boot_fail
-    adrp    x0, phase105_entry_ok_message
-    add     x0, x0, :lo12:phase105_entry_ok_message
-    bl      phase105_uart_puts
-    mov     w3, #'C'
-8:
-    ldr     w4, [x2, #0x18]
-    tbnz    w4, #5, 8b
-    str     w3, [x2]
-10:
-    ldr     w4, [x2, #0x18]
-    tbnz    w4, #7, 10b
     bl      nusantara_phase105_main
     mov     w3, #'R'
 9:
