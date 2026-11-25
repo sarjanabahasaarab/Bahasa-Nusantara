@@ -58,6 +58,8 @@ export const BOOTSTRAP_PHYSICAL_MEMORY_RESERVATIONS: readonly PhysicalMemoryRese
   { base: 0x270000n, length: 0x1000n, reason: 'native Multiboot2 page-extent candidate workspace (4 KiB)' },
   { base: 0x271000n, length: 0x1000n, reason: 'native Multiboot2 reservation catalog workspace (4 KiB)' },
   { base: 0x272000n, length: 0x1000n, reason: 'native Multiboot2 reservation normalization workspace (4 KiB)' },
+  { base: 0x273000n, length: 0x3000n, reason: 'native final physical extent output table (12 KiB)' },
+  { base: 0x276000n, length: 0x1000n, reason: 'native reservation subtraction cursors (4 KiB)' },
   { base: 0x2f0000n, length: 0x4000n, reason: 'early boot page tables (16 KiB)' },
   { base: 0x600000n, length: 0x1000n, reason: 'process A user code frame (4 KiB)' },
   { base: 0x610000n, length: 0x1000n, reason: 'process A user stack frame (4 KiB)' },

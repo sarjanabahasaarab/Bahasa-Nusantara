@@ -64,6 +64,18 @@ export const X86_BOOTSTRAP_RESERVATION_SORT_INDEX_ADDRESS = 0x0027_2004;
 export const X86_BOOTSTRAP_RESERVATION_SORT_CURSOR_ADDRESS = 0x0027_2008;
 export const X86_BOOTSTRAP_RESERVATION_MERGE_READ_ADDRESS = 0x0027_200c;
 export const X86_BOOTSTRAP_RESERVATION_MERGE_WRITE_ADDRESS = 0x0027_2010;
+/** Phase 82: final native extents after subtracting all normalized exclusions. */
+export const X86_BOOTSTRAP_FINAL_EXTENT_COUNT_ADDRESS = 0x0027_3000;
+export const X86_BOOTSTRAP_FINAL_EXTENT_TABLE_BASE = 0x0027_3100;
+export const X86_BOOTSTRAP_FINAL_EXTENT_CAPACITY = 320;
+export const X86_BOOTSTRAP_FINAL_EXTENT_RECORD_SIZE = 16;
+/** Phase 82 bounded subtraction cursors, reserved at 0x276000. */
+export const X86_BOOTSTRAP_SUBTRACT_CANDIDATE_INDEX_ADDRESS = 0x0027_6000;
+export const X86_BOOTSTRAP_SUBTRACT_RESERVATION_INDEX_ADDRESS = 0x0027_6004;
+export const X86_BOOTSTRAP_SUBTRACT_CURSOR_LOW_ADDRESS = 0x0027_6008;
+export const X86_BOOTSTRAP_SUBTRACT_CURSOR_HIGH_ADDRESS = 0x0027_600c;
+export const X86_BOOTSTRAP_SUBTRACT_END_LOW_ADDRESS = 0x0027_6010;
+export const X86_BOOTSTRAP_SUBTRACT_END_HIGH_ADDRESS = 0x0027_6014;
 /** End-exclusive fixed bootstrap exclusions; dynamic entries are appended at boot. */
 export const X86_BOOTSTRAP_FIXED_RESERVATIONS = Object.freeze([
   { start: 0x00000000, end: 0x00200000, reason: 'low memory and kernel image' },
@@ -1111,6 +1123,90 @@ export class X86BootstrapEncoder {
     a.emit(0xa1); a.emit32(X86_BOOTSTRAP_RESERVATION_MERGE_WRITE_ADDRESS);
     a.emit(0xa3); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_COUNT_ADDRESS);
     a.emit(0x61);
+    // Phase 82: native bounded subtraction of normalized exclusions from
+    // sorted page-aligned firmware candidate extents. Output is a separate
+    // table; the Phase 76 input catalog remains intact for diagnostics.
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_FINAL_EXTENT_COUNT_ADDRESS, 0);
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_SUBTRACT_CANDIDATE_INDEX_ADDRESS, 0);
+    a.label('phase82_candidate_loop');
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_SUBTRACT_CANDIDATE_INDEX_ADDRESS);
+    a.emit(0x8b, 0x15); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_COUNT_ADDRESS);
+    a.emit(0x39, 0xd0); a.jae('phase82_done');
+    a.emit(0x89, 0xc1); a.emit(0x6b, 0xc9, X86_BOOTSTRAP_PAGE_EXTENT_SIZE);
+    a.emit(0x81, 0xc1); a.emit32(X86_BOOTSTRAP_PAGE_EXTENT_TABLE_BASE);
+    a.emit(0x89, 0xce); // ESI = candidate
+    a.emit(0x8b, 0x06); a.emit(0xa3); a.emit32(X86_BOOTSTRAP_SUBTRACT_CURSOR_LOW_ADDRESS);
+    a.emit(0x8b, 0x46, 0x04); a.emit(0xa3); a.emit32(X86_BOOTSTRAP_SUBTRACT_CURSOR_HIGH_ADDRESS);
+    a.emit(0x8b, 0x46, 0x08); a.emit(0xa3); a.emit32(X86_BOOTSTRAP_SUBTRACT_END_LOW_ADDRESS);
+    a.emit(0x8b, 0x46, 0x0c); a.emit(0xa3); a.emit32(X86_BOOTSTRAP_SUBTRACT_END_HIGH_ADDRESS);
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_SUBTRACT_RESERVATION_INDEX_ADDRESS, 0);
+    a.label('phase82_reservation_loop');
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_SUBTRACT_RESERVATION_INDEX_ADDRESS);
+    a.emit(0x8b, 0x15); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_COUNT_ADDRESS);
+    a.emit(0x39, 0xd0); a.jae('phase82_candidate_tail');
+    a.emit(0x89, 0xc1); a.emit(0x6b, 0xc9, X86_BOOTSTRAP_RESERVATION_CATALOG_RECORD_SIZE);
+    a.emit(0x81, 0xc1); a.emit32(X86_BOOTSTRAP_RESERVATION_CATALOG_TABLE_BASE);
+    a.emit(0x89, 0xcf); // EDI = exclusion
+    // If exclusion.end <= cursor, advance to the next exclusion.
+    a.emit(0x8b, 0x57, 0x0c); a.emit(0x8b, 0x0d); a.emit32(X86_BOOTSTRAP_SUBTRACT_CURSOR_HIGH_ADDRESS);
+    a.emit(0x39, 0xca); a.jb('phase82_next_reservation'); a.ja('phase82_test_after');
+    a.emit(0x8b, 0x57, 0x08); a.emit(0x8b, 0x0d); a.emit32(X86_BOOTSTRAP_SUBTRACT_CURSOR_LOW_ADDRESS);
+    a.emit(0x39, 0xca); a.jbe('phase82_next_reservation');
+    a.label('phase82_test_after');
+    // If exclusion.start >= candidate.end, remaining exclusions cannot overlap.
+    a.emit(0x8b, 0x57, 0x04); a.emit(0x8b, 0x0d); a.emit32(X86_BOOTSTRAP_SUBTRACT_END_HIGH_ADDRESS);
+    a.emit(0x39, 0xca); a.ja('phase82_candidate_tail'); a.jb('phase82_overlap');
+    a.emit(0x8b, 0x17); a.emit(0x8b, 0x0d); a.emit32(X86_BOOTSTRAP_SUBTRACT_END_LOW_ADDRESS);
+    a.emit(0x39, 0xca); a.jae('phase82_candidate_tail');
+    a.label('phase82_overlap');
+    // Emit the gap [cursor, exclusion.start) when it is non-empty.
+    a.emit(0x8b, 0x57, 0x04); a.emit(0x8b, 0x0d); a.emit32(X86_BOOTSTRAP_SUBTRACT_CURSOR_HIGH_ADDRESS);
+    a.emit(0x39, 0xca); a.ja('phase82_append_gap'); a.jb('phase82_gap_done');
+    a.emit(0x8b, 0x17); a.emit(0x8b, 0x0d); a.emit32(X86_BOOTSTRAP_SUBTRACT_CURSOR_LOW_ADDRESS);
+    a.emit(0x39, 0xca); a.jbe('phase82_gap_done');
+    a.label('phase82_append_gap');
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_FINAL_EXTENT_COUNT_ADDRESS);
+    a.emit(0x3d); a.emit32(X86_BOOTSTRAP_FINAL_EXTENT_CAPACITY); a.jae('panic32');
+    a.emit(0x6b, 0xc0, X86_BOOTSTRAP_FINAL_EXTENT_RECORD_SIZE);
+    a.emit(0x05); a.emit32(X86_BOOTSTRAP_FINAL_EXTENT_TABLE_BASE); a.emit(0x89, 0xc2);
+    a.emit(0x8b, 0x0d); a.emit32(X86_BOOTSTRAP_SUBTRACT_CURSOR_LOW_ADDRESS); a.emit(0x89, 0x0a);
+    a.emit(0x8b, 0x0d); a.emit32(X86_BOOTSTRAP_SUBTRACT_CURSOR_HIGH_ADDRESS); a.emit(0x89, 0x4a, 0x04);
+    a.emit(0x8b, 0x0f); a.emit(0x89, 0x4a, 0x08);
+    a.emit(0x8b, 0x4f, 0x04); a.emit(0x89, 0x4a, 0x0c);
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_FINAL_EXTENT_COUNT_ADDRESS);
+    a.label('phase82_gap_done');
+    // Since the exclusion intersects the candidate, move cursor to its end.
+    a.emit(0x8b, 0x47, 0x08); a.emit(0xa3); a.emit32(X86_BOOTSTRAP_SUBTRACT_CURSOR_LOW_ADDRESS);
+    a.emit(0x8b, 0x47, 0x0c); a.emit(0xa3); a.emit32(X86_BOOTSTRAP_SUBTRACT_CURSOR_HIGH_ADDRESS);
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_SUBTRACT_RESERVATION_INDEX_ADDRESS);
+    a.jmp('phase82_reservation_loop');
+    a.label('phase82_next_reservation');
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_SUBTRACT_RESERVATION_INDEX_ADDRESS);
+    a.jmp('phase82_reservation_loop');
+    a.label('phase82_candidate_tail');
+    // Emit [cursor, candidate.end) if the cursor has not reached the end.
+    a.emit(0x8b, 0x15); a.emit32(X86_BOOTSTRAP_SUBTRACT_CURSOR_HIGH_ADDRESS);
+    a.emit(0x8b, 0x0d); a.emit32(X86_BOOTSTRAP_SUBTRACT_END_HIGH_ADDRESS);
+    a.emit(0x39, 0xca); a.jb('phase82_append_tail'); a.ja('phase82_candidate_done');
+    a.emit(0x8b, 0x15); a.emit32(X86_BOOTSTRAP_SUBTRACT_CURSOR_LOW_ADDRESS);
+    a.emit(0x8b, 0x0d); a.emit32(X86_BOOTSTRAP_SUBTRACT_END_LOW_ADDRESS);
+    a.emit(0x39, 0xca); a.jae('phase82_candidate_done');
+    a.label('phase82_append_tail');
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_FINAL_EXTENT_COUNT_ADDRESS);
+    a.emit(0x3d); a.emit32(X86_BOOTSTRAP_FINAL_EXTENT_CAPACITY); a.jae('panic32');
+    a.emit(0x6b, 0xc0, X86_BOOTSTRAP_FINAL_EXTENT_RECORD_SIZE);
+    a.emit(0x05); a.emit32(X86_BOOTSTRAP_FINAL_EXTENT_TABLE_BASE); a.emit(0x89, 0xc2);
+    a.emit(0x8b, 0x0d); a.emit32(X86_BOOTSTRAP_SUBTRACT_CURSOR_LOW_ADDRESS); a.emit(0x89, 0x0a);
+    a.emit(0x8b, 0x0d); a.emit32(X86_BOOTSTRAP_SUBTRACT_CURSOR_HIGH_ADDRESS); a.emit(0x89, 0x4a, 0x04);
+    a.emit(0x8b, 0x0d); a.emit32(X86_BOOTSTRAP_SUBTRACT_END_LOW_ADDRESS); a.emit(0x89, 0x4a, 0x08);
+    a.emit(0x8b, 0x0d); a.emit32(X86_BOOTSTRAP_SUBTRACT_END_HIGH_ADDRESS); a.emit(0x89, 0x4a, 0x0c);
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_FINAL_EXTENT_COUNT_ADDRESS);
+    a.label('phase82_candidate_done');
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_SUBTRACT_CANDIDATE_INDEX_ADDRESS);
+    a.jmp('phase82_candidate_loop');
+    a.label('phase82_done');
+    // Publish a completion marker only after the entire bounded output table is built.
+    a.emit(0x60); a.printLabel32('msg_mb2_reservations_subtracted', 'print_serial32'); a.emit(0x61);
     a.emit(0x60); a.printLabel32('msg_mb2_reservations_normalized', 'print_serial32'); a.emit(0x61);
     a.emit(0x60); a.printLabel32('msg_mb2_reservations_catalogued', 'print_serial32'); a.emit(0x61);
     // Restore the copied-MBI base expected by the existing boot continuation.
@@ -1939,6 +2035,7 @@ export class X86BootstrapEncoder {
     a.label('msg_mb2_extents_merged');  a.emitCString('NUSANTARA_MULTIBOOT2_EXTENTS_MERGED_OK\r\n');
     a.label('msg_mb2_reservations_catalogued'); a.emitCString('NUSANTARA_MULTIBOOT2_RESERVATIONS_CATALOGUED_OK\r\n');
     a.label('msg_mb2_reservations_normalized'); a.emitCString('NUSANTARA_MULTIBOOT2_RESERVATIONS_NORMALIZED_OK\r\n');
+    a.label('msg_mb2_reservations_subtracted'); a.emitCString('NUSANTARA_MULTIBOOT2_RESERVATIONS_SUBTRACTED_OK\r\n');
     a.label('msg_diag_mmap_begin');      a.emitCString('NUSANTARA_DIAG_MMAP_BEGIN\r\n');
     a.label('msg_diag_mmap_done');       a.emitCString('NUSANTARA_DIAG_MMAP_DONE\r\n');
     a.label('msg_diag_module_begin');    a.emitCString('NUSANTARA_DIAG_MODULE_BEGIN\r\n');
