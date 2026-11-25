@@ -1,0 +1,46 @@
+name: NUSANTARA OS — ARM64 Context Switch Phase 102
+on:
+  pull_request:
+    paths:
+      - "src/runtime/os/arch/arm64/context-switch.*"
+      - "pengujian/os/uji_arm64_context_switch_fase102.c"
+      - ".github/workflows/arm64-context-switch-phase102.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/runtime/os/arch/arm64/context-switch.*"
+      - "pengujian/os/uji_arm64_context_switch_fase102.c"
+      - ".github/workflows/arm64-context-switch-phase102.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  context-switch-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install compilers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc clang llvm
+      - name: Host frame tests
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -Isrc/runtime/os/arch/arm64 -Isrc/runtime/os/scheduler \
+            src/runtime/os/arch/arm64/context-switch.c \
+            pengujian/os/uji_arm64_context_switch_fase102.c \
+            -o /tmp/nusantara-arm64-context-phase102
+          /tmp/nusantara-arm64-context-phase102
+      - name: Cross-assemble AArch64 switch primitive
+        run: |
+          clang --target=aarch64-none-elf -mcpu=cortex-a57 -ffreestanding \
+            -fno-stack-protector -c src/runtime/os/arch/arm64/context-switch.S \
+            -o /tmp/nusantara-arm64-context-switch.o
+          llvm-readelf -h /tmp/nusantara-arm64-context-switch.o | grep -E "Machine:.*AArch64"
+          llvm-readelf -s /tmp/nusantara-arm64-context-switch.o | grep -E "nusantara_arm64_context_switch_asm|nusantara_arm64_task_trampoline"
+      - name: Cross-compile C contract
+        run: |
+          clang --target=aarch64-none-elf -std=c11 -ffreestanding -Wall -Wextra -Werror -pedantic \
+            -Isrc/runtime/os/arch/arm64 -Isrc/runtime/os/scheduler \
+            -c src/runtime/os/arch/arm64/context-switch.c \
+            -o /tmp/nusantara-arm64-context-switch-c.o
