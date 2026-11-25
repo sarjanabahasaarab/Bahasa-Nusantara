@@ -82,6 +82,9 @@ int main(void) {
     assert(mock.tval == 1000);
     assert(nusantara_arm64_timer_arm_ms(&timer, 2u) == NUSANTARA_ARM64_TIMER_OK);
     assert(mock.tval == 2000);
+    /* Exact whole-second conversion must handle a zero millisecond remainder. */
+    assert(nusantara_arm64_timer_arm_ms(&timer, 1000u) == NUSANTARA_ARM64_TIMER_OK);
+    assert(mock.tval == 1000000);
     assert(nusantara_arm64_timer_arm_ms(&timer, 0u) == NUSANTARA_ARM64_TIMER_INVALID_INTERVAL);
     assert(nusantara_arm64_timer_arm_ticks(&timer, 0u) == NUSANTARA_ARM64_TIMER_INVALID_INTERVAL);
     assert(nusantara_arm64_timer_arm_ticks(&timer, (uint64_t)NUSANTARA_ARM64_TIMER_MAX_TICKS + 1u) ==
