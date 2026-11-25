@@ -10,7 +10,7 @@ on:
       - ".github/workflows/arm64-qemu-boot-phase92.yml"
       - "package.json"
   push:
-    branches: ["main"]
+    branches: ["main", "phase92-arm64-qemu-boot"]
     paths:
       - "src/runtime/os/arch/arm64/**"
       - "scripts/build-arm64-image.mjs"
