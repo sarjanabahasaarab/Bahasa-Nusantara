@@ -1,0 +1,68 @@
+name: "NUSANTARA OS — ARM64 Port Foundation"
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "src/runtime/os/arch/arm64/**"
+      - "pengujian/os/uji_arm64_port_framework_fase91.ts"
+      - "docs/os/arm64/**"
+      - "package.json"
+      - ".github/workflows/arm64-port-framework.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "src/runtime/os/arch/arm64/**"
+      - "pengujian/os/uji_arm64_port_framework_fase91.ts"
+      - "docs/os/arm64/**"
+      - "package.json"
+      - ".github/workflows/arm64-port-framework.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  arm64-foundation:
+    name: "AArch64 Toolchain, ABI & QEMU virt Contract"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install ARM64 cross-toolchain and emulator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang lld llvm qemu-system-arm
+
+      - name: Install project dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Test ARM64 boot ABI, AAPCS64 and QEMU target contract
+        run: npm run test:arm64-port-v91
+
+      - name: Assemble freestanding AArch64 smoke object
+        run: |
+          clang --target=aarch64-none-elf -mcpu=cortex-a57 -ffreestanding -fno-stack-protector -c src/runtime/os/arch/arm64/boot-smoke.S -o /tmp/nusantara-arm64-boot-smoke.o
+          llvm-readelf -h /tmp/nusantara-arm64-boot-smoke.o | tee /tmp/nusantara-arm64-elf-header.txt
+          grep -Eq 'Machine:.*AArch64' /tmp/nusantara-arm64-elf-header.txt
+
+      - name: Verify QEMU AArch64 virt machine and CPU
+        run: |
+          qemu-system-aarch64 --version
+          qemu-system-aarch64 -machine help | grep -E '(^|[[:space:]])virt([[:space:]]|$)'
+          qemu-system-aarch64 -cpu help | grep -E 'cortex-a57'
