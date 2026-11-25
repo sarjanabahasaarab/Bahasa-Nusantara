@@ -49,4 +49,5 @@ jobs:
           clang --target=aarch64-none-elf -mcpu=cortex-a57 -ffreestanding -fno-stack-protector -c src/runtime/os/arch/arm64/exception-vectors.S -o /tmp/nusantara-arm64-exception-vectors.o
           llvm-readelf -h /tmp/nusantara-arm64-exception-vectors.o | tee /tmp/nusantara-arm64-exception-elf.txt
           grep -Eq 'Machine:.*AArch64' /tmp/nusantara-arm64-exception-elf.txt
-          llvm-readelf -s /tmp/nusantara-arm64-exception-vectors.o | grep -E 'arm64_exception_vectors|nusantara_arm64_exception_dispatch'
+          llvm-readelf -s /tmp/nusantara-arm64-exception-vectors.o | grep -E 'arm64_exception_vectors|nusantara_arm64_exception_dispatch|nusantara_arm64_install_exception_vectors'
+          printf '#include "src/runtime/os/arch/arm64/exception.h"\\n' | clang --target=aarch64-none-elf -std=c11 -ffreestanding -fsyntax-only -I. -x c -
