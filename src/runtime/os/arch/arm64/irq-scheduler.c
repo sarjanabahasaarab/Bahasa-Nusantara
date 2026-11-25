@@ -97,7 +97,9 @@ nusantara_arm64_exception_frame_t *nusantara_arm64_irq_scheduler_handle_exceptio
         scheduler->current >= NUSANTARA_OS_SCHEDULER_MAX_TASKS)
         return 0;
     current = &scheduler->tasks[scheduler->current];
-    if (current->state != NUSANTARA_OS_TASK_RUNNING)
+    if (current->state != NUSANTARA_OS_TASK_RUNNING &&
+        current->state != NUSANTARA_OS_TASK_BLOCKED &&
+        current->state != NUSANTARA_OS_TASK_TERMINATED)
         return 0;
 
     /* The interrupted task owns this exact asynchronous exception frame. */
