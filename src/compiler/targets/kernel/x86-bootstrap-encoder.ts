@@ -1374,6 +1374,11 @@ export class X86BootstrapEncoder {
     a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_PMM_BITMAP_FREE_COUNT_ADDRESS, 0);
     a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_PMM_BITMAP_MANAGED_FRAME_COUNT_ADDRESS, X86_BOOTSTRAP_PMM_BITMAP_MANAGED_FRAMES);
     a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_PMM_BITMAP_EXTENT_INDEX_ADDRESS, 0);
+    // Ownership bitmap starts empty; only native allocations set ownership bits.
+    a.movRegImm32(Reg64.RDI, X86_BOOTSTRAP_PMM_ALLOCATED_BITMAP_BASE);
+    a.movRegImm32(Reg64.RAX, 0);
+    a.movRegImm32(Reg64.RCX, X86_BOOTSTRAP_PMM_ALLOCATED_BITMAP_BYTES / 4);
+    a.emit(0xfc, 0xf3, 0xab); // cld; rep stosd
     a.label('phase89_extent_loop');
     a.emit(0xa1); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_EXTENT_INDEX_ADDRESS);
     a.emit(0x3b, 0x05); a.emit32(X86_BOOTSTRAP_FINAL_EXTENT_COUNT_ADDRESS);
@@ -2292,7 +2297,7 @@ export class X86BootstrapEncoder {
     // Reject addresses outside the 64 MiB managed window or not page-aligned.
     a.emit(0x48, 0x81, 0xff); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_LIMIT_BYTES);
     a.jae('pmm_free_invalid');
-    a.emit(0xf7, 0xc7); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_PAGE_SIZE);
+    a.emit(0xf7, 0xc7); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_PAGE_SIZE - 1);
     a.jne('pmm_free_invalid');
     a.emit(0x89, 0xf8); // eax = edi (physical address)
     a.emit(0xc1, 0xe8, 0x0c); // eax = frame index
