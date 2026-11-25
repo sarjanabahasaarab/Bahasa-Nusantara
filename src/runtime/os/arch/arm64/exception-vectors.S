@@ -46,6 +46,18 @@ nusantara_arm64_install_exception_vectors:
     ret
 .size nusantara_arm64_install_exception_vectors, . - nusantara_arm64_install_exception_vectors
 
+/* Enter the first EL1h task. Clear only SPSR.I so IRQs become visible at ERET. */
+.global nusantara_arm64_exception_start_first_task
+.type nusantara_arm64_exception_start_first_task, %function
+nusantara_arm64_exception_start_first_task:
+    cbz x0, arm64_exception_sp0_fail_stop
+    ldr x1, [x0, #272]
+    bic x1, x1, #0x80
+    str x1, [x0, #272]
+    mov sp, x0
+    b arm64_exception_restore_selected
+.size nusantara_arm64_exception_start_first_task, . - nusantara_arm64_exception_start_first_task
+
 .macro ARM64_VECTOR_SP0_STUB number
 .global arm64_vector_stub_\number
 .type arm64_vector_stub_\number, %function
@@ -121,6 +133,10 @@ arm64_exception_common:
     bl nusantara_arm64_exception_dispatch
     cbz x0, arm64_exception_sp0_fail_stop
     mov sp, x0
+    b arm64_exception_restore_selected
+
+.type arm64_exception_restore_selected, %function
+arm64_exception_restore_selected:
     ldr x0, [sp, #264]
     msr elr_el1, x0
     ldr x0, [sp, #272]
