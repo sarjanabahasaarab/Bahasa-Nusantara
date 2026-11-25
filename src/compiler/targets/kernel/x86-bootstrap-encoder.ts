@@ -2273,11 +2273,11 @@ export class X86BootstrapEncoder {
     a.emit(0x8d, 0x3c, 0x95); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_BASE);
     a.emit(0x89, 0xc1, 0x83, 0xe1, 0x1f); // ecx = frame % 32
     a.emit(0xf0, 0x0f, 0xab, 0x0f); // lock bts [rdi],ecx; CF=old free bit
-    a.jc('pmm_allocate_next');
+    a.jb('pmm_allocate_next');
     // Claim the parallel ownership bit. An unexpected set bit is corruption.
     a.emit(0x8d, 0x3c, 0x95); a.emit32(X86_BOOTSTRAP_PMM_ALLOCATED_BITMAP_BASE);
     a.emit(0xf0, 0x0f, 0xab, 0x0f);
-    a.jc('pmm_allocate_rollback');
+    a.jb('pmm_allocate_rollback');
     a.emit(0xf0, 0xff, 0x0c, 0x25); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_FREE_COUNT_ADDRESS); // lock dec [free count]
     a.emit(0xc1, 0xe0, 0x0c); // eax = physical frame address
     a.emit(0x5f, 0x5b, 0xc3); // pop rdi; pop rbx; ret
