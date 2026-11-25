@@ -56,7 +56,7 @@ jobs:
       - name: Assemble freestanding AArch64 smoke object
         run: |
           clang --target=aarch64-none-elf -mcpu=cortex-a57 -ffreestanding -fno-stack-protector -c src/runtime/os/arch/arm64/boot-smoke.S -o /tmp/nusantara-arm64-boot-smoke.o
-          llvm-readelf -h /tmp/nusantara-arm64-boot-smoke.o | tee /tmp/nusantara-arm64-elf-header.txt
+          llvm-readelf -h /tmp/nusantara-arm64-elf-header.txt | tee /tmp/nusantara-arm64-elf-header.txt
           grep -Eq 'Machine:.*AArch64' /tmp/nusantara-arm64-elf-header.txt
       - name: Verify QEMU AArch64 virt machine and CPU
         run: |
@@ -110,3 +110,23 @@ jobs:
             echo "Unexpected QEMU exit code: $qemu_status" >&2
             exit "$qemu_status"
           fi
+
+  arm64-mmu-phase93:
+    if: github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'phase91-arm64-port-framework'
+    name: "Phase 93 — ARM64 MMU descriptors and table plan"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npm run lint
+      - name: Test Phase 93 MMU descriptor and table plan
+        run: npx tsx pengujian/os/uji_arm64_mmu_fase93.ts
