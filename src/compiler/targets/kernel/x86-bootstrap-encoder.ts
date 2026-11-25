@@ -1323,14 +1323,15 @@ export class X86BootstrapEncoder {
     a.emit(0x3b, 0x05); a.emit32(X86_BOOTSTRAP_FINAL_CROSSCHECK_START_LOW_ADDRESS);
     a.jbe('phase88_reservation_next');
     a.label('phase88_check_reservation_start');
-    // reservation.start >= final.end => overlap; otherwise the ranges overlap.
+    // reservation.start >= final.end => no overlap; a start below final.end overlaps.
     a.emit(0x8b, 0x57, 0x04);
     a.emit(0x3b, 0x15); a.emit32(X86_BOOTSTRAP_FINAL_CROSSCHECK_END_HIGH_ADDRESS);
-    a.ja('panic32');
-    a.jb('phase88_reservation_next');
+    a.ja('phase88_reservation_next');
+    a.jb('panic32');
     a.emit(0x8b, 0x07);
     a.emit(0x3b, 0x05); a.emit32(X86_BOOTSTRAP_FINAL_CROSSCHECK_END_LOW_ADDRESS);
-    a.jae('panic32');
+    a.jae('phase88_reservation_next');
+    a.jmp('panic32');
     a.label('phase88_reservation_next');
     a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_FINAL_CROSSCHECK_RESERVATION_INDEX_ADDRESS);
     a.jmp('phase88_reservation_loop');
