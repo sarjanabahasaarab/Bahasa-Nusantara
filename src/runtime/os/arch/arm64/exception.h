@@ -24,6 +24,8 @@ int nusantara_arm64_install_exception_vectors(void);
 int nusantara_arm64_exception_set_handler(
     nusantara_arm64_exception_handler_fn handler, void *context);
 nusantara_arm64_exception_frame_t *nusantara_arm64_exception_dispatch(nusantara_arm64_exception_frame_t *frame);
+/* Restore an initial EL1h frame and enable IRQs only as ERET enters the first task. */
+void nusantara_arm64_exception_start_first_task(uintptr_t frame_pointer);
 int nusantara_arm64_exception_context_prepare(
     nusantara_arm64_exception_frame_t **initial_frame,
     void *stack, size_t stack_size,
