@@ -1,0 +1,57 @@
+name: NUSANTARA OS — ARM64 IRQ Exception Scheduler Phase 104
+on:
+  pull_request:
+    paths:
+      - "src/runtime/os/arch/arm64/irq-scheduler.*"
+      - "src/runtime/os/arch/arm64/exception.h"
+      - "src/runtime/os/arch/arm64/exception-vectors.S"
+      - "pengujian/os/uji_arm64_irq_exception_scheduler_fase104.c"
+      - ".github/workflows/arm64-irq-exception-scheduler-phase104.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/runtime/os/arch/arm64/irq-scheduler.*"
+      - "src/runtime/os/arch/arm64/exception.h"
+      - "src/runtime/os/arch/arm64/exception-vectors.S"
+      - "pengujian/os/uji_arm64_irq_exception_scheduler_fase104.c"
+      - ".github/workflows/arm64-irq-exception-scheduler-phase104.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  irq-exception-scheduler:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cross compiler
+        run: sudo apt-get update && sudo apt-get install -y gcc clang llvm
+      - name: Host IRQ exception scheduler integration test
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -Isrc/runtime/os/arch/arm64 -Isrc/runtime/os/scheduler \
+            src/runtime/os/arch/arm64/exception.c \
+            src/runtime/os/arch/arm64/generic_timer.c \
+            src/runtime/os/arch/arm64/irq-runtime.c \
+            src/runtime/os/arch/arm64/irq-scheduler.c \
+            src/runtime/os/scheduler/scheduler.c \
+            pengujian/os/uji_arm64_irq_exception_scheduler_fase104.c \
+            -o /tmp/nusantara-phase104
+          /tmp/nusantara-phase104
+      - name: Cross-compile C integration
+        run: |
+          for file in src/runtime/os/arch/arm64/exception.c \
+            src/runtime/os/arch/arm64/generic_timer.c \
+            src/runtime/os/arch/arm64/irq-runtime.c \
+            src/runtime/os/arch/arm64/irq-scheduler.c \
+            src/runtime/os/scheduler/scheduler.c; do
+            clang --target=aarch64-none-elf -std=c11 -ffreestanding \
+              -Wall -Wextra -Werror -pedantic \
+              -Isrc/runtime/os/arch/arm64 -Isrc/runtime/os/scheduler \
+              -c "$file" -o "/tmp/$(basename "$file").o"
+          done
+      - name: Cross-assemble exception vectors
+        run: |
+          clang --target=aarch64-none-elf -mcpu=cortex-a57 -ffreestanding \
+            -fno-stack-protector -c src/runtime/os/arch/arm64/exception-vectors.S \
+            -o /tmp/nusantara-phase104-vectors.o
+          llvm-readelf -h /tmp/nusantara-phase104-vectors.o | grep -E "Machine:.*AArch64"
