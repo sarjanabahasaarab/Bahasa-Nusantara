@@ -63,6 +63,7 @@ export const BOOTSTRAP_PHYSICAL_MEMORY_RESERVATIONS: readonly PhysicalMemoryRese
   { base: 0x277000n, length: 0x1000n, reason: 'native final extent validation scratch (4 KiB)' },
   { base: 0x278000n, length: 0x1000n, reason: 'native final extent cross-check scratch (4 KiB)' },
   { base: 0x279000n, length: 0x1000n, reason: 'native PMM bootstrap bitmap and counters (4 KiB)' },
+  { base: 0x27a000n, length: 0x1000n, reason: 'native PMM allocated-frame ownership bitmap and API scratch (4 KiB)' },
   { base: 0x2f0000n, length: 0x4000n, reason: 'early boot page tables (16 KiB)' },
   { base: 0x600000n, length: 0x1000n, reason: 'process A user code frame (4 KiB)' },
   { base: 0x610000n, length: 0x1000n, reason: 'process A user stack frame (4 KiB)' },

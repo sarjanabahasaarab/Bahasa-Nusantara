@@ -99,6 +99,10 @@ export const X86_BOOTSTRAP_PMM_BITMAP_LIMIT_BYTES = 0x0400_0000;
 export const X86_BOOTSTRAP_PMM_BITMAP_PAGE_SIZE = 0x1000;
 export const X86_BOOTSTRAP_PMM_BITMAP_MANAGED_FRAMES = 0x4000;
 export const X86_BOOTSTRAP_PMM_BITMAP_BYTES = 0x0800;
+/** Phase 90: allocated-frame ownership bitmap and native PMM API state. */
+export const X86_BOOTSTRAP_PMM_ALLOCATED_BITMAP_BASE = 0x0027_a100;
+export const X86_BOOTSTRAP_PMM_ALLOCATED_BITMAP_BYTES = 0x0800;
+export const X86_BOOTSTRAP_PMM_API_TEST_FRAME_ADDRESS = 0x0027_a000;
 /** End-exclusive fixed bootstrap exclusions; dynamic entries are appended at boot. */
 export const X86_BOOTSTRAP_FIXED_RESERVATIONS = Object.freeze([
   { start: 0x00000000, end: 0x00200000, reason: 'low memory and kernel image' },
@@ -116,6 +120,7 @@ export const X86_BOOTSTRAP_FIXED_RESERVATIONS = Object.freeze([
   { start: 0x00277000, end: 0x00278000, reason: 'native final extent validation scratch (4 KiB)' },
   { start: 0x00278000, end: 0x00279000, reason: 'native final extent cross-check scratch (4 KiB)' },
   { start: 0x00279000, end: 0x0027a000, reason: 'native PMM bootstrap bitmap and counters (4 KiB)' },
+  { start: 0x0027a000, end: 0x0027b000, reason: 'native PMM allocated-frame ownership bitmap and API scratch (4 KiB)' },
   { start: 0x002f0000, end: 0x002f4000, reason: 'early boot page tables' },
   { start: 0x00600000, end: 0x00601000, reason: 'process A user code' },
   { start: 0x00610000, end: 0x00611000, reason: 'process A user stack' },
@@ -479,6 +484,8 @@ export class X86BootstrapEncoder {
   public static generateBootstrapBinary(config: BootstrapConfig = {}): {
     codeBytes: Uint8Array;
     entryPoint: bigint;
+    pmmAllocateFrameAddress: bigint;
+    pmmFreeFrameAddress: bigint;
     sentinel: string;
   } {
     const sentinel = config.sentinelMessage ?? this.STAGE_10_BOOT_OK;
@@ -1369,6 +1376,11 @@ export class X86BootstrapEncoder {
     a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_PMM_BITMAP_FREE_COUNT_ADDRESS, 0);
     a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_PMM_BITMAP_MANAGED_FRAME_COUNT_ADDRESS, X86_BOOTSTRAP_PMM_BITMAP_MANAGED_FRAMES);
     a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_PMM_BITMAP_EXTENT_INDEX_ADDRESS, 0);
+    // Ownership bitmap starts empty; only native allocations set ownership bits.
+    a.movRegImm32(Reg64.RDI, X86_BOOTSTRAP_PMM_ALLOCATED_BITMAP_BASE);
+    a.movRegImm32(Reg64.RAX, 0);
+    a.movRegImm32(Reg64.RCX, X86_BOOTSTRAP_PMM_ALLOCATED_BITMAP_BYTES / 4);
+    a.emit(0xfc, 0xf3, 0xab); // cld; rep stosd
     a.label('phase89_extent_loop');
     a.emit(0xa1); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_EXTENT_INDEX_ADDRESS);
     a.emit(0x3b, 0x05); a.emit32(X86_BOOTSTRAP_FINAL_EXTENT_COUNT_ADDRESS);
@@ -1756,6 +1768,22 @@ export class X86BootstrapEncoder {
     a.emit(0x48, 0x39, 0xd9); // cmp rcx, rbx
     a.jne('panic64_direct_map');
     a.printLabel64('msg_direct_map_ok', 'print_serial64');
+
+    // Phase 90 hardware-path self-test: allocate one real frame, free it once,
+    // then prove a second free is rejected (double-free protection).
+    a.call('pmm_allocate_frame');
+    a.emit(0x48, 0x85, 0xc0); // test rax, rax
+    a.je('panic64_direct_map');
+    a.emit(0x48, 0x89, 0xc3); // preserve returned physical address in RBX
+    a.emit(0x48, 0x89, 0xc7); // RDI = physical address
+    a.call('pmm_free_frame');
+    a.emit(0x83, 0xf8, 0x01); // first free must return true
+    a.jne('panic64_direct_map');
+    a.emit(0x48, 0x89, 0xdf); // RDI = same physical address
+    a.call('pmm_free_frame');
+    a.emit(0x85, 0xc0); // second free must return false
+    a.jne('panic64_direct_map');
+    a.printLabel64('msg_pmm_native_api_ok', 'print_serial64');
 
     // =========================================================================
     // BAGIAN 6: KERNEL MAIN & EKSEKUSI ELF64 USER MODE NYATA (RING 3)
@@ -2230,6 +2258,71 @@ export class X86BootstrapEncoder {
     a.emit(0x5b);                   // pop rbx
     a.emit(0xc3);                   // ret
 
+    // -------------------------------------------------------------------------
+    // Phase 90 native PMM API (System V AMD64):
+    // allocate: RAX=physical frame, 0 on exhaustion.
+    // free: RDI=physical frame, EAX=1 on success, 0 on invalid/double-free.
+    // This bootstrap implementation is single-CPU; SMP locking is a later phase.
+    // -------------------------------------------------------------------------
+    a.align(16);
+    a.label('pmm_allocate_frame');
+    a.emit(0x53, 0x57); // push rbx; push rdi
+    a.emit(0x31, 0xc0); // xor eax,eax (frame index)
+    a.label('pmm_allocate_scan');
+    a.emit(0x3d); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_MANAGED_FRAMES);
+    a.jae('pmm_allocate_oom');
+    a.emit(0x89, 0xc2, 0xc1, 0xea, 0x05); // edx = frame / 32
+    a.emit(0x8d, 0x3c, 0x95); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_BASE);
+    a.emit(0x89, 0xc1, 0x83, 0xe1, 0x1f); // ecx = frame % 32
+    a.emit(0xf0, 0x0f, 0xab, 0x0f); // lock bts [rdi],ecx; CF=old free bit
+    a.jb('pmm_allocate_next');
+    // Claim the parallel ownership bit. An unexpected set bit is corruption.
+    a.emit(0x8d, 0x3c, 0x95); a.emit32(X86_BOOTSTRAP_PMM_ALLOCATED_BITMAP_BASE);
+    a.emit(0xf0, 0x0f, 0xab, 0x0f);
+    a.jb('pmm_allocate_rollback');
+    a.emit(0xf0, 0xff, 0x0c, 0x25); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_FREE_COUNT_ADDRESS); // lock dec [free count]
+    a.emit(0xc1, 0xe0, 0x0c); // eax = physical frame address
+    a.emit(0x5f, 0x5b, 0xc3); // pop rdi; pop rbx; ret
+    a.label('pmm_allocate_rollback');
+    a.emit(0x8d, 0x3c, 0x95); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_BASE);
+    a.emit(0xf0, 0x0f, 0xb3, 0x0f); // restore free bit
+    a.jmp('pmm_allocate_oom');
+    a.label('pmm_allocate_next');
+    a.emit(0xff, 0xc0); // inc eax
+    a.jmp('pmm_allocate_scan');
+    a.label('pmm_allocate_oom');
+    a.emit(0x31, 0xc0);
+    a.emit(0x5f, 0x5b, 0xc3);
+
+    a.align(16);
+    a.label('pmm_free_frame');
+    // Reject addresses outside the 64 MiB managed window or not page-aligned.
+    a.emit(0x48, 0x81, 0xff); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_LIMIT_BYTES);
+    a.jae('pmm_free_invalid');
+    a.emit(0xf7, 0xc7); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_PAGE_SIZE - 1);
+    a.jne('pmm_free_invalid');
+    a.emit(0x89, 0xf8); // eax = edi (physical address)
+    a.emit(0xc1, 0xe8, 0x0c); // eax = frame index
+    a.emit(0x89, 0xc2, 0xc1, 0xea, 0x05); // edx = frame / 32
+    a.emit(0x89, 0xc1, 0x83, 0xe1, 0x1f); // ecx = frame % 32
+    // Ownership must be set; clearing it atomically rejects double-free.
+    a.emit(0x8d, 0x3c, 0x95); a.emit32(X86_BOOTSTRAP_PMM_ALLOCATED_BITMAP_BASE);
+    a.emit(0xf0, 0x0f, 0xb3, 0x0f); // lock btr allocated bit
+    a.jae('pmm_free_invalid');
+    // Free bitmap must currently be set. If not, restore ownership and fail closed.
+    a.emit(0x8d, 0x3c, 0x95); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_BASE);
+    a.emit(0xf0, 0x0f, 0xb3, 0x0f); // lock btr free bit
+    a.jae('pmm_free_restore_ownership');
+    a.emit(0xf0, 0xff, 0x04, 0x25); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_FREE_COUNT_ADDRESS); // lock inc [free count]
+    a.emit(0xb8, 0x01, 0x00, 0x00, 0x00);
+    a.emit(0xc3);
+    a.label('pmm_free_restore_ownership');
+    a.emit(0x8d, 0x3c, 0x95); a.emit32(X86_BOOTSTRAP_PMM_ALLOCATED_BITMAP_BASE);
+    a.emit(0xf0, 0x0f, 0xab, 0x0f); // restore ownership bit
+    a.label('pmm_free_invalid');
+    a.emit(0x31, 0xc0);
+    a.emit(0xc3);
+
     // =========================================================================
     // BAGIAN 8: DATA STRINGS, EMBEDDED USER ELF64, & GDT64
     // =========================================================================
@@ -2272,6 +2365,7 @@ export class X86BootstrapEncoder {
     a.label('msg_idt_ok');               a.emitCString(this.STAGE_7_IDT);
     a.label('msg_mem_ok');               a.emitCString(this.STAGE_8_MEM);
     a.label('msg_direct_map_ok');        a.emitCString(this.STAGE_8B_DIRECT_MAP);
+    a.label('msg_pmm_native_api_ok');    a.emitCString('NUSANTARA_PMM_NATIVE_ALLOC_FREE_OK\\r\\n');
     a.label('msg_main_entered');         a.emitCString(this.STAGE_9_MAIN);
     a.label('msg_boot_ok');              a.emitCString(sentinel);
     a.label('msg_usermode_entered');     a.emitCString(this.STAGE_11_USERMODE_ENTERED);
@@ -2350,6 +2444,9 @@ export class X86BootstrapEncoder {
     return {
       codeBytes,
       entryPoint: BigInt(baseAddr),
+      /** Callable Ring 0 System V AMD64 entrypoints embedded in codeBytes. */
+      pmmAllocateFrameAddress: BigInt(baseAddr + a.getLabelOffset('pmm_allocate_frame')),
+      pmmFreeFrameAddress: BigInt(baseAddr + a.getLabelOffset('pmm_free_frame')),
       sentinel,
     };
   }
