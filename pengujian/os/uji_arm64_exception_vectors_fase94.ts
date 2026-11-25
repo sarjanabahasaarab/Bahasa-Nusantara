@@ -25,6 +25,8 @@ assert.match(assembly, /bl\s+nusantara_arm64_exception_dispatch/,
   'Exception common path must call the kernel dispatcher');
 assert.match(assembly, /msr\s+elr_el1,\s*x0[\s\S]*msr\s+spsr_el1,\s*x0[\s\S]*eret/,
   'Returning dispatcher must restore exception return state');
+assert.match(assembly, /nusantara_arm64_install_exception_vectors:[\s\S]*mrs\s+x0,\s*CurrentEL[\s\S]*cmp\s+x0,\s*#4[\s\S]*msr\s+VBAR_EL1,\s*x1[\s\S]*isb[\s\S]*mov\s+w0,\s*#1/,
+  'Installer must guard EL1 and write VBAR_EL1 followed by ISB');
 assert.match(assembly, /\.weak\s+nusantara_arm64_exception_dispatch[\s\S]*wfe/,
   'Default dispatcher must fail closed instead of returning to unknown state');
 
