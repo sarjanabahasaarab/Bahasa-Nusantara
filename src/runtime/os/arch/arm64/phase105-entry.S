@@ -95,6 +95,9 @@ phase105_el1_entry:
     ldr     w4, [x2, #0x18]
     tbnz    w4, #5, 8b
     str     w3, [x2]
+10:
+    ldr     w4, [x2, #0x18]
+    tbnz    w4, #3, 10b
     bl      nusantara_phase105_main
     mov     w3, #'R'
 9:
