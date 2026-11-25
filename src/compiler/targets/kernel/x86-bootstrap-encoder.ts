@@ -64,6 +64,18 @@ export const X86_BOOTSTRAP_RESERVATION_SORT_INDEX_ADDRESS = 0x0027_2004;
 export const X86_BOOTSTRAP_RESERVATION_SORT_CURSOR_ADDRESS = 0x0027_2008;
 export const X86_BOOTSTRAP_RESERVATION_MERGE_READ_ADDRESS = 0x0027_200c;
 export const X86_BOOTSTRAP_RESERVATION_MERGE_WRITE_ADDRESS = 0x0027_2010;
+/** Phase 82: final native extents after subtracting all normalized exclusions. */
+export const X86_BOOTSTRAP_FINAL_EXTENT_COUNT_ADDRESS = 0x0027_3000;
+export const X86_BOOTSTRAP_FINAL_EXTENT_TABLE_BASE = 0x0027_3100;
+export const X86_BOOTSTRAP_FINAL_EXTENT_CAPACITY = 320;
+export const X86_BOOTSTRAP_FINAL_EXTENT_RECORD_SIZE = 16;
+/** Phase 82 bounded subtraction cursors, reserved at 0x276000. */
+export const X86_BOOTSTRAP_SUBTRACT_CANDIDATE_INDEX_ADDRESS = 0x0027_6000;
+export const X86_BOOTSTRAP_SUBTRACT_RESERVATION_INDEX_ADDRESS = 0x0027_6004;
+export const X86_BOOTSTRAP_SUBTRACT_CURSOR_LOW_ADDRESS = 0x0027_6008;
+export const X86_BOOTSTRAP_SUBTRACT_CURSOR_HIGH_ADDRESS = 0x0027_600c;
+export const X86_BOOTSTRAP_SUBTRACT_END_LOW_ADDRESS = 0x0027_6010;
+export const X86_BOOTSTRAP_SUBTRACT_END_HIGH_ADDRESS = 0x0027_6014;
 /** End-exclusive fixed bootstrap exclusions; dynamic entries are appended at boot. */
 export const X86_BOOTSTRAP_FIXED_RESERVATIONS = Object.freeze([
   { start: 0x00000000, end: 0x00200000, reason: 'low memory and kernel image' },
@@ -2023,6 +2035,7 @@ export class X86BootstrapEncoder {
     a.label('msg_mb2_extents_merged');  a.emitCString('NUSANTARA_MULTIBOOT2_EXTENTS_MERGED_OK\r\n');
     a.label('msg_mb2_reservations_catalogued'); a.emitCString('NUSANTARA_MULTIBOOT2_RESERVATIONS_CATALOGUED_OK\r\n');
     a.label('msg_mb2_reservations_normalized'); a.emitCString('NUSANTARA_MULTIBOOT2_RESERVATIONS_NORMALIZED_OK\r\n');
+    a.label('msg_mb2_reservations_subtracted'); a.emitCString('NUSANTARA_MULTIBOOT2_RESERVATIONS_SUBTRACTED_OK\\r\\n');
     a.label('msg_diag_mmap_begin');      a.emitCString('NUSANTARA_DIAG_MMAP_BEGIN\r\n');
     a.label('msg_diag_mmap_done');       a.emitCString('NUSANTARA_DIAG_MMAP_DONE\r\n');
     a.label('msg_diag_module_begin');    a.emitCString('NUSANTARA_DIAG_MODULE_BEGIN\r\n');
