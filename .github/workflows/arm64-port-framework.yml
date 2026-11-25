@@ -56,7 +56,7 @@ jobs:
       - name: Assemble freestanding AArch64 smoke object
         run: |
           clang --target=aarch64-none-elf -mcpu=cortex-a57 -ffreestanding -fno-stack-protector -c src/runtime/os/arch/arm64/boot-smoke.S -o /tmp/nusantara-arm64-boot-smoke.o
-          llvm-readelf -h /tmp/nusantara-arm64-elf-header.txt | tee /tmp/nusantara-arm64-elf-header.txt
+          llvm-readelf -h /tmp/nusantara-arm64-boot-smoke.o | tee /tmp/nusantara-arm64-elf-header.txt
           grep -Eq 'Machine:.*AArch64' /tmp/nusantara-arm64-elf-header.txt
       - name: Verify QEMU AArch64 virt machine and CPU
         run: |
