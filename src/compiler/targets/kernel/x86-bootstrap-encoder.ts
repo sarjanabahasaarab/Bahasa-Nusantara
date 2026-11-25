@@ -88,6 +88,17 @@ export const X86_BOOTSTRAP_FINAL_CROSSCHECK_START_LOW_ADDRESS = 0x0027_8010;
 export const X86_BOOTSTRAP_FINAL_CROSSCHECK_START_HIGH_ADDRESS = 0x0027_8014;
 export const X86_BOOTSTRAP_FINAL_CROSSCHECK_END_LOW_ADDRESS = 0x0027_8018;
 export const X86_BOOTSTRAP_FINAL_CROSSCHECK_END_HIGH_ADDRESS = 0x0027_801c;
+/** Phase 89: native one-bit-per-page PMM bootstrap bitmap (0–64 MiB direct map). */
+export const X86_BOOTSTRAP_PMM_BITMAP_FREE_COUNT_ADDRESS = 0x0027_9000;
+export const X86_BOOTSTRAP_PMM_BITMAP_MANAGED_FRAME_COUNT_ADDRESS = 0x0027_9004;
+export const X86_BOOTSTRAP_PMM_BITMAP_EXTENT_INDEX_ADDRESS = 0x0027_9008;
+export const X86_BOOTSTRAP_PMM_BITMAP_FRAME_INDEX_ADDRESS = 0x0027_900c;
+export const X86_BOOTSTRAP_PMM_BITMAP_FRAME_END_ADDRESS = 0x0027_9010;
+export const X86_BOOTSTRAP_PMM_BITMAP_BASE = 0x0027_9100;
+export const X86_BOOTSTRAP_PMM_BITMAP_LIMIT_BYTES = 0x0400_0000;
+export const X86_BOOTSTRAP_PMM_BITMAP_PAGE_SIZE = 0x1000;
+export const X86_BOOTSTRAP_PMM_BITMAP_MANAGED_FRAMES = 0x4000;
+export const X86_BOOTSTRAP_PMM_BITMAP_BYTES = 0x0800;
 /** End-exclusive fixed bootstrap exclusions; dynamic entries are appended at boot. */
 export const X86_BOOTSTRAP_FIXED_RESERVATIONS = Object.freeze([
   { start: 0x00000000, end: 0x00200000, reason: 'low memory and kernel image' },
@@ -104,6 +115,7 @@ export const X86_BOOTSTRAP_FIXED_RESERVATIONS = Object.freeze([
   { start: 0x00276000, end: 0x00277000, reason: 'native reservation subtraction scratch (4 KiB)' },
   { start: 0x00277000, end: 0x00278000, reason: 'native final extent validation scratch (4 KiB)' },
   { start: 0x00278000, end: 0x00279000, reason: 'native final extent cross-check scratch (4 KiB)' },
+  { start: 0x00279000, end: 0x0027a000, reason: 'native PMM bootstrap bitmap and counters (4 KiB)' },
   { start: 0x002f0000, end: 0x002f4000, reason: 'early boot page tables' },
   { start: 0x00600000, end: 0x00601000, reason: 'process A user code' },
   { start: 0x00610000, end: 0x00611000, reason: 'process A user stack' },
@@ -1344,6 +1356,62 @@ export class X86BootstrapEncoder {
     a.jmp('phase88_candidate_loop');
     a.label('phase88_done');
     a.emit(0x61); // popad
+
+    // Phase 89: initialize a conservative native PMM bitmap for the existing
+    // 0..64 MiB direct map. All frames start reserved; only verified final
+    // extents clear their bits. Extents beyond the direct-map limit are skipped
+    // or clipped, so the bootstrap allocator cannot return an unmapped frame.
+    a.emit(0x60); // pushad
+    a.movRegImm32(Reg64.RDI, X86_BOOTSTRAP_PMM_BITMAP_BASE);
+    a.movRegImm32(Reg64.RAX, 0xffff_ffff);
+    a.movRegImm32(Reg64.RCX, X86_BOOTSTRAP_PMM_BITMAP_BYTES / 4);
+    a.emit(0xfc, 0xf3, 0xab); // cld; rep stosd — mark all managed frames reserved
+    a.storeMem32AbsImm32Mode32(X86_BOOTSTRAP_PMM_BITMAP_FREE_COUNT_ADDRESS, 0);
+    a.storeMem32AbsImm32(X86_BOOTSTRAP_PMM_BITMAP_MANAGED_FRAME_COUNT_ADDRESS, X86_BOOTSTRAP_PMM_BITMAP_MANAGED_FRAMES);
+    a.storeMem32AbsImm32(X86_BOOTSTRAP_PMM_BITMAP_EXTENT_INDEX_ADDRESS, 0);
+    a.label('phase89_extent_loop');
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_EXTENT_INDEX_ADDRESS);
+    a.emit(0x3b, 0x05); a.emit32(X86_BOOTSTRAP_FINAL_EXTENT_COUNT_ADDRESS);
+    a.jae('phase89_done');
+    a.emit(0x6b, 0xc0, X86_BOOTSTRAP_FINAL_EXTENT_RECORD_SIZE);
+    a.emit(0x05); a.emit32(X86_BOOTSTRAP_FINAL_EXTENT_TABLE_BASE);
+    a.emit(0x89, 0xc6); // esi = final extent record
+    a.emit(0x8b, 0x56, 0x04); // mov edx, [esi+4] (start high)
+    a.emit(0x85, 0xd2); a.jne('phase89_next_extent');
+    a.emit(0x8b, 0x06); // mov eax, [esi] (start low)
+    a.emit(0x3d); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_LIMIT_BYTES);
+    a.jae('phase89_next_extent');
+    a.emit(0xc1, 0xe8, 0x0c); // start frame index
+    a.emit(0xa3); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_FRAME_INDEX_ADDRESS);
+    a.emit(0x8b, 0x56, 0x0c); // mov edx, [esi+12] (end high)
+    a.emit(0x85, 0xd2); a.jne('phase89_clamp_end');
+    a.emit(0x8b, 0x5e, 0x08); // mov ebx, [esi+8] (end low)
+    a.emit(0x81, 0xfb); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_LIMIT_BYTES);
+    a.jbe('phase89_end_ready');
+    a.label('phase89_clamp_end');
+    a.movRegImm32(Reg64.RBX, X86_BOOTSTRAP_PMM_BITMAP_LIMIT_BYTES);
+    a.label('phase89_end_ready');
+    a.emit(0xc1, 0xeb, 0x0c); // end frame index (exclusive)
+    a.emit(0x89, 0x1d); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_FRAME_END_ADDRESS);
+    a.label('phase89_frame_loop');
+    a.emit(0xa1); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_FRAME_INDEX_ADDRESS);
+    a.emit(0x3b, 0x05); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_FRAME_END_ADDRESS);
+    a.jae('phase89_next_extent');
+    a.emit(0x89, 0xc2, 0xc1, 0xea, 0x05); // edx = frame index / 32
+    a.emit(0x8d, 0x3c, 0x95); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_BASE);
+    a.emit(0x89, 0xc1, 0x83, 0xe1, 0x1f); // ecx = frame index % 32
+    a.emit(0x0f, 0xb3, 0x0f); // btr dword [edi], ecx; CF=1 iff frame was reserved
+    a.jae('phase89_frame_already_free');
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_FREE_COUNT_ADDRESS);
+    a.label('phase89_frame_already_free');
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_FRAME_INDEX_ADDRESS);
+    a.jmp('phase89_frame_loop');
+    a.label('phase89_next_extent');
+    a.emit(0xff, 0x05); a.emit32(X86_BOOTSTRAP_PMM_BITMAP_EXTENT_INDEX_ADDRESS);
+    a.jmp('phase89_extent_loop');
+    a.label('phase89_done');
+    a.emit(0x61); // popad
+    a.emit(0x60); a.printLabel32('msg_mb2_pmm_bitmap_initialized', 'print_serial32'); a.emit(0x61);
     a.emit(0x60); a.printLabel32('msg_mb2_final_extents_crosschecked', 'print_serial32'); a.emit(0x61);
     a.printLabel32('msg_mb2_final_extents_validated', 'print_serial32');
     // Publish a completion marker only after the entire bounded output table is built.
@@ -2179,6 +2247,7 @@ export class X86BootstrapEncoder {
     a.label('msg_mb2_reservations_subtracted'); a.emitCString('NUSANTARA_MULTIBOOT2_RESERVATIONS_SUBTRACTED_OK\r\n');
     a.label('msg_mb2_final_extents_validated'); a.emitCString('NUSANTARA_MULTIBOOT2_FINAL_EXTENTS_VALIDATED_OK\r\n');
     a.label('msg_mb2_final_extents_crosschecked'); a.emitCString('NUSANTARA_MULTIBOOT2_FINAL_EXTENTS_CROSSCHECK_OK\r\n');
+    a.label('msg_mb2_pmm_bitmap_initialized'); a.emitCString('NUSANTARA_PMM_BITMAP_INITIALIZED_OK\r\n');
     a.label('msg_diag_mmap_begin');      a.emitCString('NUSANTARA_DIAG_MMAP_BEGIN\r\n');
     a.label('msg_diag_mmap_done');       a.emitCString('NUSANTARA_DIAG_MMAP_DONE\r\n');
     a.label('msg_diag_module_begin');    a.emitCString('NUSANTARA_DIAG_MODULE_BEGIN\r\n');
