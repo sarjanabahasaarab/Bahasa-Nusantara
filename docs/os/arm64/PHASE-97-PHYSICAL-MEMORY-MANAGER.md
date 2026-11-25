@@ -8,11 +8,11 @@ Menyediakan pengelola frame fisik 4 KiB yang dapat menerima peta RAM sparse dari
 
 ## Implementasi
 
-- Bitmap caller-owned; allocator tidak memakai heap saat inisialisasi maupun alokasi.
+- State map caller-owned dengan dua bit per frame (bebas, teralokasi, dicadangkan); allocator tidak memakai heap saat inisialisasi maupun alokasi.
 - Daftar extent RAM harus berurutan, page-aligned, tidak tumpang tindih, dan tidak overflow.
 - Reservasi frame untuk kernel, bootloader, firmware, dan page table sebelum alokasi umum.
 - Alokasi satu frame dan beberapa frame berurutan secara fisik.
-- Pembebasan memvalidasi bahwa frame dikelola dan sedang dialokasikan.
+- Pembebasan memvalidasi bahwa frame dikelola dan sedang dialokasikan; frame yang dicadangkan tidak dapat dibebaskan melalui jalur free biasa.
 - Rentang reserve yang melintasi celah RAM ditolak sebelum perubahan bitmap.
 - Tidak ada asumsi bahwa semua alamat fisik RAM membentuk satu rentang kontinu.
 
