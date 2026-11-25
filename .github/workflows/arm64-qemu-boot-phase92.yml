@@ -54,7 +54,7 @@ jobs:
           set +e
           timeout 8s qemu-system-aarch64 \
             -machine virt,gic-version=3 -cpu cortex-a57 -m 256M \
-            -nographic -serial stdio -monitor none \
+            -nographic -serial stdio -monitor none -nic none \
             -kernel /tmp/nusantara-arm64/Image -no-reboot -no-shutdown \
             > /tmp/nusantara-arm64-qemu.log 2>&1
           qemu_status=$?
