@@ -116,8 +116,11 @@ phase105_halt:
     wfe
     b       5b
 
-/* x0 = NUL-terminated message; clobbers x0-x1, preserves x2 UART base. */
+/* x0 = NUL-terminated message; clobbers x0-x3. */
+.global phase105_uart_puts
+.type phase105_uart_puts, %function
 phase105_uart_puts:
+    movz    x2, #0x0900, lsl #16
     ldrb    w1, [x0], #1
     cbz     w1, 6f
 7:
@@ -127,6 +130,7 @@ phase105_uart_puts:
     b       phase105_uart_puts
 6:
     ret
+.size phase105_uart_puts, . - phase105_uart_puts
 .size _start, . - _start
 
 .section .rodata, "a"
