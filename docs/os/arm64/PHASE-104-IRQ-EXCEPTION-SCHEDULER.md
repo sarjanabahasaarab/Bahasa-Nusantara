@@ -23,7 +23,8 @@ API start_first_task memerlukan:
 - distributor, redistributor, CPU interface GICv3, serta timer PPI sudah dikonfigurasi;
 - Generic Timer sudah di-arm dan perangkat memori/MMIO sudah dipetakan dengan benar.
 
-Assembly bootstrap menghapus mask IRQ (bit I) dari SPSR_EL1 frame pertama tepat
+Assembly bootstrap terlebih dahulu memask IRQ pada DAIF saat masih berada di
+stack boot, lalu menghapus mask IRQ (bit I) dari SPSR_EL1 frame pertama tepat
 sebelum ERET. Dengan begitu IRQ baru dapat diterima setelah transisi ke task
 pertama, bukan saat kernel masih menyiapkan state.
 
