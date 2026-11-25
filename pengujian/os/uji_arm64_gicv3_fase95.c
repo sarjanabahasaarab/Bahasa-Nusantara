@@ -91,6 +91,8 @@ int main(void) {
     assert(gic.redistributor_ready == 1u);
     assert((hw.redist[NUSANTARA_GICR_WAKER / 4u] & NUSANTARA_GICR_WAKER_PROCESSOR_SLEEP) == 0u);
     assert(nusantara_gicv3_enable_ppi(&gic, 27u) == NUSANTARA_GICV3_OK);
+    assert(hw.redist[NUSANTARA_GICR_IGROUPR0 / 4u] == (1u << 27));
+    assert(hw.redist[NUSANTARA_GICR_IPRIORITYR / 4u + 6u] == (0xa0u << 24));
     assert(hw.redist[NUSANTARA_GICR_ISENABLER0 / 4u] == (1u << 27));
     assert(nusantara_gicv3_enable_ppi(&gic, 15u) == NUSANTARA_GICV3_INVALID_IRQ);
 
