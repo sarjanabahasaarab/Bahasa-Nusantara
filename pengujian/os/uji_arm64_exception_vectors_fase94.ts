@@ -11,8 +11,10 @@ assert.match(assembly, /\.balign\s+2048[\s\S]*arm64_exception_vectors:/,
   'VBAR_EL1 vector table must be aligned to 2 KiB');
 assert.equal((assembly.match(/^ARM64_VECTOR_SLOT\s+\d+$/gm) ?? []).length, 16,
   'Vector table must define exactly 16 architectural slots');
-assert.equal((assembly.match(/^ARM64_VECTOR_STUB\s+\d+$/gm) ?? []).length, 16,
-  'All vector slots must have a dedicated stub');
+assert.equal((assembly.match(/^ARM64_VECTOR_SP0_STUB\s+\d+$/gm) ?? []).length, 4,
+  'EL1 SP0 vectors must fail-stop without touching an untrusted stack');
+assert.equal((assembly.match(/^ARM64_VECTOR_STUB\s+\d+$/gm) ?? []).length, 12,
+  'All SPx and lower-EL vector slots must have a dedicated register-saving stub');
 assert.match(assembly, /\.space\s+124/,
   'Each 4-byte branch must be padded to a 128-byte vector slot');
 assert.match(assembly, /stp\s+x16,\s*x17,\s*\[sp\][\s\S]*mov\s+x16,\s*#\\number/,
