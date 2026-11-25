@@ -42,6 +42,26 @@ ARM64_VECTOR_SLOT 15
 
 .size arm64_exception_vectors, . - arm64_exception_vectors
 
+/* Install VBAR_EL1 only when executing at EL1. Caller must already have
+ * established a valid, 16-byte-aligned EL1 stack and a linked dispatcher.
+ */
+.global nusantara_arm64_install_exception_vectors
+.type nusantara_arm64_install_exception_vectors, %function
+nusantara_arm64_install_exception_vectors:
+    mrs     x0, CurrentEL
+    cmp     x0, #4
+    b.ne    1f
+    adrp    x1, arm64_exception_vectors
+    add     x1, x1, :lo12:arm64_exception_vectors
+    msr     VBAR_EL1, x1
+    isb
+    mov     w0, #1
+    ret
+1:
+    mov     w0, wzr
+    ret
+.size nusantara_arm64_install_exception_vectors, . - nusantara_arm64_install_exception_vectors
+
 /* Each stub preserves x16/x17 before using x16 as the vector identifier. */
 .macro ARM64_VECTOR_STUB number
 .global arm64_vector_stub_\number
