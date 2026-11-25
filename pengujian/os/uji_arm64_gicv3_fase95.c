@@ -31,7 +31,13 @@ static uint32_t read32(void *context, uintptr_t address) {
 static void write32(void *context, uintptr_t address, uint32_t value) {
     mock_hw_t *hw = context;
     if (address >= DIST_BASE && address < DIST_BASE + DIST_BYTES) hw->dist[(address - DIST_BASE) / 4u] = value;
-    if (address >= REDIST_BASE && address < REDIST_BASE + REDIST_BYTES) hw->redist[(address - REDIST_BASE) / 4u] = value;
+    if (address >= REDIST_BASE && address < REDIST_BASE + REDIST_BYTES) {
+        hw->redist[(address - REDIST_BASE) / 4u] = value;
+        if (address == REDIST_BASE + NUSANTARA_GICR_WAKER &&
+            (value & NUSANTARA_GICR_WAKER_PROCESSOR_SLEEP) == 0u) {
+            hw->redist[NUSANTARA_GICR_WAKER / 4u] &= ~NUSANTARA_GICR_WAKER_CHILDREN_ASLEEP;
+        }
+    }
 }
 static uint64_t read64(void *context, uintptr_t address) {
     mock_hw_t *hw = context;
