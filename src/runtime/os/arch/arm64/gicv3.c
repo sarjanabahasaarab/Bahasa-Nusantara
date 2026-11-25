@@ -51,7 +51,8 @@ nusantara_gicv3_status_t nusantara_gicv3_distributor_init(
     if (count > NUSANTARA_GICV3_MAX_IRQS) count = NUSANTARA_GICV3_MAX_IRQS;
     if (count <= NUSANTARA_GICV3_IRQ_SPI_FIRST) return NUSANTARA_GICV3_INVALID_ARGUMENT;
 
-    for (uint32_t bank = 1u; bank < (count / GICV3_IRQS_PER_BANK); ++bank) {
+    const uint32_t bank_count = (count + GICV3_IRQS_PER_BANK - 1u) / GICV3_IRQS_PER_BANK;
+    for (uint32_t bank = 1u; bank < bank_count; ++bank) {
         const uintptr_t bank_offset = (uintptr_t)bank * GICV3_BANK_BYTES;
         mmio->write32(mmio->context, distributor_base + NUSANTARA_GICD_ICENABLER + bank_offset, 0xffffffffu);
         mmio->write32(mmio->context, distributor_base + NUSANTARA_GICD_IGROUPR + bank_offset, 0xffffffffu);
