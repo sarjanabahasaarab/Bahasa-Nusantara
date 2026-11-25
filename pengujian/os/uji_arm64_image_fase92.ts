@@ -19,6 +19,8 @@ assert.match(source, /\.org\s+0x800/, 'AArch64 entry code must start at Image of
 assert.match(source, /msr\s+spsr_el2,\s*x1[\s\S]*msr\s+elr_el2,\s*x1[\s\S]*eret/, 'EL2 entry must transition to EL1');
 assert.match(source, /arm64_stack_top[\s\S]*mov\s+sp,\s*x1/, 'Kernel must establish a private aligned stack');
 assert.match(source, /movz\s+x2,\s*#0x0900,\s*lsl\s+#16/, 'PL011 UART base must be 0x09000000');
+assert.match(source, /mov\s+w3,\s*#13[\s\S]*str\s+w3,\s*\[x2,\s*#0x24\]/, 'PL011 integer baud divisor must be initialized');
+assert.match(source, /mov\s+w3,\s*#0x101[\s\S]*str\s+w3,\s*\[x2,\s*#0x30\]/, 'PL011 UART and transmitter must be enabled');
 assert.match(source, /NUSANTARA_ARM64_BOOT_OK\\r\\n/, 'Runtime success sentinel must be present');
 assert.match(source, /NUSANTARA_ARM64_BOOT_FAIL\\r\\n/, 'Runtime failure sentinel must be present');
 assert.match(linker, /0x40080000/, 'Image must link at the QEMU virt AArch64 kernel load address');
