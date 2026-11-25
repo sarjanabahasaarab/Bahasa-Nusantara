@@ -51,7 +51,7 @@ arm64_el1_entry:
     b.ne    arm64_boot_fail
 
     /* PL011 UART on QEMU virt: physical base 0x09000000, UARTDR offset 0. */
-    movz    x2, #0x9000, lsl #12
+    movz    x2, #0x0900, lsl #16
     adrp    x0, arm64_boot_ok_message
     add     x0, x0, :lo12:arm64_boot_ok_message
 arm64_uart_puts:
@@ -61,7 +61,7 @@ arm64_uart_puts:
     b       arm64_uart_puts
 
 arm64_boot_fail:
-    movz    x2, #0x9000, lsl #12
+    movz    x2, #0x0900, lsl #16
     adrp    x0, arm64_boot_fail_message
     add     x0, x0, :lo12:arm64_boot_fail_message
 arm64_uart_fail_puts:
