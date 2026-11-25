@@ -32,6 +32,7 @@ jobs:
             src/runtime/os/arch/arm64/exception.c \
             src/runtime/os/arch/arm64/generic_timer.c \
             src/runtime/os/arch/arm64/irq-runtime.c \
+            src/runtime/os/arch/arm64/gicv3.c \
             src/runtime/os/arch/arm64/irq-scheduler.c \
             src/runtime/os/scheduler/scheduler.c \
             pengujian/os/uji_arm64_irq_exception_scheduler_fase104.c \
@@ -42,6 +43,7 @@ jobs:
           for file in src/runtime/os/arch/arm64/exception.c \
             src/runtime/os/arch/arm64/generic_timer.c \
             src/runtime/os/arch/arm64/irq-runtime.c \
+            src/runtime/os/arch/arm64/gicv3.c \
             src/runtime/os/arch/arm64/irq-scheduler.c \
             src/runtime/os/scheduler/scheduler.c; do
             clang --target=aarch64-none-elf -std=c11 -ffreestanding \
