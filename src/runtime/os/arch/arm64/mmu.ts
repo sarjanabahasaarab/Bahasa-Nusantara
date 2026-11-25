@@ -136,7 +136,8 @@ export function encodeArm64PageDescriptor(mapping: Arm64PageMapping): bigint {
 
 /**
  * Build a sparse four-level translation-table plan for 4 KiB pages.
- * allocateTable must return unique, aligned physical pages reserved for tables.
+ * allocateTable must reserve unique, aligned physical pages for table use;
+ * callers must keep those pages out of the general-purpose frame allocator.
  */
 export function buildArm64PageTablePlan(
   mappings: readonly Arm64PageMapping[],
