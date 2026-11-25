@@ -1,0 +1,32 @@
+name: NUSANTARA OS — Virtual Memory Manager Phase 98
+on:
+  pull_request:
+    paths:
+      - "src/runtime/os/memory/virtual-memory-manager.*"
+      - "pengujian/os/uji_virtual_memory_manager_fase98.c"
+      - ".github/workflows/virtual-memory-manager-phase98.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/runtime/os/memory/virtual-memory-manager.*"
+      - "pengujian/os/uji_virtual_memory_manager_fase98.c"
+      - ".github/workflows/virtual-memory-manager-phase98.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  virtual-memory-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install compilers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc clang
+      - name: Host contract tests
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror -pedantic -Isrc/runtime/os/memory src/runtime/os/memory/virtual-memory-manager.c pengujian/os/uji_virtual_memory_manager_fase98.c -o /tmp/nusantara-vmm-phase98
+          /tmp/nusantara-vmm-phase98
+      - name: AArch64 freestanding compile
+        run: |
+          clang --target=aarch64-none-elf -std=c11 -ffreestanding -Wall -Wextra -Werror -pedantic -Isrc/runtime/os/memory -c src/runtime/os/memory/virtual-memory-manager.c -o /tmp/virtual-memory-manager-aarch64.o
