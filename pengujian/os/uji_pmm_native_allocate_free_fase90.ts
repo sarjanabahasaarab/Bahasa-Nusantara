@@ -27,7 +27,11 @@ for (let i = 1; i < X86_BOOTSTRAP_FIXED_RESERVATIONS.length; i++) {
     'fixed reservations remain sorted and disjoint');
 }
 
-const code = Array.from(X86BootstrapEncoder.generateBootstrapBinary().codeBytes);
+const binary = X86BootstrapEncoder.generateBootstrapBinary();
+const code = Array.from(binary.codeBytes);
+assert.ok(binary.pmmAllocateFrameAddress > binary.entryPoint, 'allocator is exposed as a callable kernel entrypoint');
+assert.ok(binary.pmmFreeFrameAddress > binary.pmmAllocateFrameAddress, 'free routine is exposed after allocate routine');
+assert.ok(Number(binary.pmmFreeFrameAddress - binary.entryPoint) < code.length, 'native PMM entrypoints point inside emitted kernel code');
 const has = (bytes: number[]) => code.some((_, i) => bytes.every((v, j) => code[i + j] === v));
 const marker = new TextEncoder().encode('NUSANTARA_PMM_NATIVE_ALLOC_FREE_OK');
 assert.ok(code.some((_, i) => marker.every((v, j) => code[i + j] === v)), 'native PMM self-test marker is embedded');
