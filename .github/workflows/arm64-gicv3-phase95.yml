@@ -1,0 +1,39 @@
+name: "NUSANTARA OS — ARM64 GICv3 Phase 95"
+
+on:
+  push:
+    branches: ["phase95-arm64-gicv3-driver"]
+    paths:
+      - "src/runtime/os/arch/arm64/gicv3.*"
+      - "pengujian/os/uji_arm64_gicv3_fase95.c"
+      - "docs/os/arm64/PHASE-95-GICV3.md"
+      - ".github/workflows/arm64-gicv3-phase95.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "src/runtime/os/arch/arm64/gicv3.*"
+      - "pengujian/os/uji_arm64_gicv3_fase95.c"
+      - "docs/os/arm64/PHASE-95-GICV3.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: arm64-gicv3-phase95-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gicv3-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install host and AArch64 compilers
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc clang
+      - name: Compile and run GICv3 host mock tests
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror -pedantic -I src/runtime/os/arch/arm64 src/runtime/os/arch/arm64/gicv3.c pengujian/os/uji_arm64_gicv3_fase95.c -o /tmp/uji-gicv3
+          /tmp/uji-gicv3
+      - name: Cross-compile GICv3 driver for AArch64
+        run: clang --target=aarch64-none-elf -std=c11 -ffreestanding -Wall -Wextra -Werror -c src/runtime/os/arch/arm64/gicv3.c -o /tmp/gicv3-arm64.o
