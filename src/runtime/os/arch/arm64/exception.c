@@ -52,6 +52,7 @@ static int prepare_frame(
     frame->spsr_el1 = spsr;
     frame->vector = vector;
     frame->sp_el0 = (uint64_t)user_stack_top;
+    frame->reserved = 0u;
     scratch = (uint64_t *)((uintptr_t)frame + NUSANTARA_ARM64_EXCEPTION_FRAME_BYTES);
     scratch[0] = 0u;
     scratch[1] = 0u;
