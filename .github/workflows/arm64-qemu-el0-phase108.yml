@@ -1,0 +1,48 @@
+name: ARM64 QEMU EL0 SVC round trip — Phase 108
+on:
+  pull_request:
+    paths:
+      - 'src/runtime/os/arch/arm64/phase108-*'
+      - 'src/runtime/os/arch/arm64/exception*'
+      - 'src/runtime/os/arch/arm64/user-syscall.*'
+      - 'scripts/build-arm64-phase108-qemu.sh'
+      - 'docs/os/arm64/PHASE-108-QEMU-EL0-SVC.md'
+      - '.github/workflows/arm64-qemu-el0-phase108.yml'
+  workflow_dispatch:
+jobs:
+  qemu-el0:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install AArch64 toolchain and QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld llvm qemu-system-arm
+      - name: Build freestanding EL0 demo image
+        run: |
+          bash scripts/build-arm64-phase108-qemu.sh /tmp/nusantara-phase108/Image
+      - name: Boot QEMU and require real EL0 SVC round trip
+        shell: bash
+        run: |
+          set +e
+          timeout 8s qemu-system-aarch64 \
+            -machine virt,gic-version=3 -cpu cortex-a57 -smp 1 -m 256M \
+            -nographic -serial stdio -monitor none -nic none \
+            -kernel /tmp/nusantara-phase108/Image -no-reboot -no-shutdown \
+            > /tmp/nusantara-phase108-serial.log 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -ne 124 ] && [ "$rc" -ne 0 ]; then
+            cat /tmp/nusantara-phase108-serial.log
+            echo "QEMU exited unexpectedly: $rc" >&2
+            exit 1
+          fi
+          cat /tmp/nusantara-phase108-serial.log
+          grep -Fq 'NUSANTARA_PHASE108_BOOT' /tmp/nusantara-phase108-serial.log
+          grep -Fq 'NUSANTARA_PHASE108_EL0_ENTER' /tmp/nusantara-phase108-serial.log
+          grep -Fq 'NUSANTARA_PHASE108_EL0_SVC_WRITE_OK' /tmp/nusantara-phase108-serial.log
+          grep -Fq 'NUSANTARA_PHASE108_EL0_EXIT_OK' /tmp/nusantara-phase108-serial.log
+          if grep -Eq 'NUSANTARA_PHASE108_FAIL|NUSANTARA_PHASE108_UNEXPECTED_IRQ|EL0_EXIT_FAIL' /tmp/nusantara-phase108-serial.log; then
+            exit 1
+          fi
