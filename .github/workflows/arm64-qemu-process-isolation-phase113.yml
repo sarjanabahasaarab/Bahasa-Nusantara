@@ -1,0 +1,56 @@
+name: ARM64 QEMU process address-space isolation — Phase 113
+on:
+  pull_request:
+    paths:
+      - 'src/runtime/os/arch/arm64/address-space.*'
+      - 'src/runtime/os/arch/arm64/mmu.*'
+      - 'src/runtime/os/arch/arm64/mmu-control.*'
+      - 'src/runtime/os/arch/arm64/exception.*'
+      - 'src/runtime/os/arch/arm64/exception-vectors.S'
+      - 'src/runtime/os/arch/arm64/phase113-*'
+      - 'scripts/build-arm64-phase113-qemu.sh'
+      - '.github/workflows/arm64-qemu-process-isolation-phase113.yml'
+      - 'docs/os/arm64/PHASE-113-QEMU-PROCESS-ISOLATION.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qemu-process-isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install AArch64 toolchain and QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang lld llvm qemu-system-arm
+      - name: Build freestanding process-isolation image
+        run: bash scripts/build-arm64-phase113-qemu.sh /tmp/nusantara-phase113/Image
+      - name: Boot QEMU and require real EL0 address-space isolation
+        shell: bash
+        run: |
+          set +e
+          timeout 12s qemu-system-aarch64 \
+            -machine virt,gic-version=3 -cpu cortex-a57 -smp 1 -m 256M \
+            -nographic -serial stdio -monitor none -nic none \
+            -kernel /tmp/nusantara-phase113/Image -no-reboot -no-shutdown \
+            > /tmp/nusantara-phase113-serial.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/nusantara-phase113-serial.log
+          if [ "$rc" -ne 124 ] && [ "$rc" -ne 0 ]; then
+            echo "Unexpected QEMU exit code: $rc" >&2
+            exit 1
+          fi
+          grep -Fq 'NUSANTARA_PHASE113_BOOT' /tmp/nusantara-phase113-serial.log
+          grep -Fq 'NUSANTARA_PHASE113_PROCESS_A_ENTER' /tmp/nusantara-phase113-serial.log
+          grep -Fq 'NUSANTARA_PHASE113_PROCESS_A_SVC' /tmp/nusantara-phase113-serial.log
+          grep -Fq 'NUSANTARA_PHASE113_ADDRESS_SPACE_SWITCH_OK' /tmp/nusantara-phase113-serial.log
+          grep -Fq 'NUSANTARA_PHASE113_PROCESS_B_ENTER' /tmp/nusantara-phase113-serial.log
+          grep -Fq 'NUSANTARA_PHASE113_CROSS_PROCESS_ACCESS_BLOCKED' /tmp/nusantara-phase113-serial.log
+          grep -Fq 'NUSANTARA_PHASE113_SAME_VA_PRIVATE_FRAMES_OK' /tmp/nusantara-phase113-serial.log
+          grep -Fq 'NUSANTARA_PHASE113_PASS' /tmp/nusantara-phase113-serial.log
+          if grep -Fq 'NUSANTARA_PHASE113_FAIL' /tmp/nusantara-phase113-serial.log ||
+             grep -Fq 'NUSANTARA_PHASE113_UNEXPECTED_EXCEPTION' /tmp/nusantara-phase113-serial.log; then
+            exit 1
+          fi
