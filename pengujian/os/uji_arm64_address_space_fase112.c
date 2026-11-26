@@ -133,8 +133,8 @@ int main(void)
     assert(manager.active == &first && installed_root == first.root_physical);
     assert(install_count == 1u);
     assert(nusantara_arm64_address_space_map_user(
-        &manager, &first, shared_va + 4096u, allocate_user_frame(),
-        NUSANTARA_ARM64_PAGE_USER_RW, 0, 1) == NUSANTARA_ARM64_AS_ACTIVE);
+        &manager, &first, shared_va + 4096u, second_data,
+        NUSANTARA_ARM64_PAGE_USER_RW, 0, 0) == NUSANTARA_ARM64_AS_ACTIVE);
     assert(nusantara_arm64_address_space_destroy(&manager, &first) ==
            NUSANTARA_ARM64_AS_ACTIVE);
 
@@ -142,7 +142,9 @@ int main(void)
            NUSANTARA_ARM64_AS_OK);
     assert(manager.active == &second && installed_root == second.root_physical);
     assert(install_count == 2u);
-    manager.active = 0; /* Simulate a kernel-root switch before teardown. */
+    assert(nusantara_arm64_address_space_deactivate(&manager,
+        UINT64_C(0x800000)) == NUSANTARA_ARM64_AS_OK);
+    assert(manager.active == 0);
 
     assert(nusantara_arm64_address_space_destroy(&manager, &first) ==
            NUSANTARA_ARM64_AS_OK);
