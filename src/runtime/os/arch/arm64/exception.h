@@ -19,6 +19,7 @@ typedef struct nusantara_arm64_exception_frame {
     uint64_t spsr_el1;
     uint64_t vector;
     uint64_t sp_el0;
+    uint64_t reserved;
 } nusantara_arm64_exception_frame_t;
 typedef nusantara_arm64_exception_frame_t *(*nusantara_arm64_exception_handler_fn)(
     void *context, nusantara_arm64_exception_frame_t *frame);
