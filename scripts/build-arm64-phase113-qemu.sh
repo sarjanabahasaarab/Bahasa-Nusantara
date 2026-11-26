@@ -2,19 +2,19 @@
 # SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-OUT="\${1:-/tmp/nusantara-phase113/Image}"
+OUT="$1"
 BUILD="/tmp/nusantara-phase113-build"
 mkdir -p "$BUILD" "$(dirname "$OUT")"
 cd "$ROOT"
-COMMON=(--target=aarch64-none-elf -mcpu=cortex-a57 -std=c11 -O2
-  -ffreestanding -fno-builtin -fno-stack-protector -fno-pic -mgeneral-regs-only
-  -Wall -Wextra -Werror -pedantic -Isrc/runtime/os/arch/arm64)
 for source in phase113-qemu address-space mmu mmu-control exception; do
-  clang "\${COMMON[@]}" -c "src/runtime/os/arch/arm64/\${source}.c" -o "$BUILD/\${source}.o"
+  clang --target=aarch64-none-elf -mcpu=cortex-a57 -std=c11 -O2 \
+    -ffreestanding -fno-builtin -fno-stack-protector -fno-pic -mgeneral-regs-only \
+    -Wall -Wextra -Werror -pedantic -Isrc/runtime/os/arch/arm64 \
+    -c "src/runtime/os/arch/arm64/$source.c" -o "$BUILD/$source.o"
 done
 for source in phase113-entry exception-vectors phase113-user; do
   clang --target=aarch64-none-elf -mcpu=cortex-a57 -ffreestanding -fno-stack-protector \
-    -c "src/runtime/os/arch/arm64/\${source}.S" -o "$BUILD/\${source}.o"
+    -c "src/runtime/os/arch/arm64/$source.S" -o "$BUILD/$source.o"
 done
 ld.lld -m aarch64elf -nostdlib -T src/runtime/os/arch/arm64/phase113-image.ld \
   -o "$BUILD/nusantara-phase113.elf" \
