@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-.section .text.phase111_user, "ax"
+.section .usercode, "ax"
 .balign 4
 .global phase111_user_entry
 .type phase111_user_entry, %function
