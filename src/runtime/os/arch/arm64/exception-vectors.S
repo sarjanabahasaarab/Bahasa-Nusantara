@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: Apache-2.0
- * NUSANTARA OS — AArch64 exception frame return integration (Phase 103).
- * The selected frame is 288 bytes followed by the x16/x17 scratch pair.
+ * NUSANTARA OS — exception frame with per-task EL0 stack state (Phase 107).
  */
 .section .text.exception_vectors, "ax"
 .balign 2048
@@ -46,7 +45,6 @@ nusantara_arm64_install_exception_vectors:
     ret
 .size nusantara_arm64_install_exception_vectors, . - nusantara_arm64_install_exception_vectors
 
-/* Enter the first EL1h task. Clear only SPSR.I so IRQs become visible at ERET. */
 .global nusantara_arm64_exception_start_first_task
 .type nusantara_arm64_exception_start_first_task, %function
 nusantara_arm64_exception_start_first_task:
@@ -104,7 +102,7 @@ arm64_exception_sp0_fail_stop:
 
 .type arm64_exception_common, %function
 arm64_exception_common:
-    sub sp, sp, #288
+    sub sp, sp, #304
     stp x0, x1, [sp, #0]
     stp x2, x3, [sp, #16]
     stp x4, x5, [sp, #32]
@@ -113,7 +111,7 @@ arm64_exception_common:
     stp x10, x11, [sp, #80]
     stp x12, x13, [sp, #96]
     stp x14, x15, [sp, #112]
-    ldp x0, x1, [sp, #288]
+    ldp x0, x1, [sp, #304]
     stp x0, x1, [sp, #128]
     stp x18, x19, [sp, #144]
     stp x20, x21, [sp, #160]
@@ -131,6 +129,8 @@ arm64_exception_common:
     mrs x0, spsr_el1
     str x0, [sp, #272]
     str x16, [sp, #280]
+    mrs x0, sp_el0
+    str x0, [sp, #288]
     mov x0, sp
     bl nusantara_arm64_exception_dispatch
     cbz x0, arm64_exception_sp0_fail_stop
@@ -143,6 +143,8 @@ arm64_exception_restore_selected:
     msr elr_el1, x0
     ldr x0, [sp, #272]
     msr spsr_el1, x0
+    ldr x0, [sp, #288]
+    msr sp_el0, x0
     ldp x0, x1, [sp, #0]
     ldp x2, x3, [sp, #16]
     ldp x4, x5, [sp, #32]
@@ -159,12 +161,11 @@ arm64_exception_restore_selected:
     ldp x26, x27, [sp, #208]
     ldp x28, x29, [sp, #224]
     ldr x30, [sp, #240]
-    add sp, sp, #288
+    add sp, sp, #304
     add sp, sp, #16
     eret
 .size arm64_exception_common, . - arm64_exception_common
 
-/* Weak fallback returns the incoming frame unchanged. */
 .weak nusantara_arm64_exception_dispatch
 .type nusantara_arm64_exception_dispatch, %function
 nusantara_arm64_exception_dispatch:

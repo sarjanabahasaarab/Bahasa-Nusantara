@@ -22,10 +22,11 @@ nusantara_arm64_exception_frame_t *nusantara_arm64_exception_dispatch(
         return 0;
     return selected;
 }
-int nusantara_arm64_exception_context_prepare(
+static int prepare_frame(
     nusantara_arm64_exception_frame_t **initial_frame,
     void *stack, size_t stack_size,
-    uintptr_t entry, uintptr_t argument, uintptr_t return_address)
+    uintptr_t entry, uintptr_t argument, uintptr_t return_address,
+    uintptr_t user_stack_top, uint64_t spsr, uint64_t vector)
 {
     uintptr_t base, end, top;
     nusantara_arm64_exception_frame_t *frame;
@@ -48,11 +49,34 @@ int nusantara_arm64_exception_context_prepare(
     frame->esr_el1 = 0u;
     frame->far_el1 = 0u;
     frame->elr_el1 = (uint64_t)entry;
-    frame->spsr_el1 = NUSANTARA_ARM64_SPSR_EL1H_MASKED;
-    frame->vector = 5u;
+    frame->spsr_el1 = spsr;
+    frame->vector = vector;
+    frame->sp_el0 = (uint64_t)user_stack_top;
+    frame->reserved = 0u;
     scratch = (uint64_t *)((uintptr_t)frame + NUSANTARA_ARM64_EXCEPTION_FRAME_BYTES);
     scratch[0] = 0u;
     scratch[1] = 0u;
     *initial_frame = frame;
     return 1;
+}
+int nusantara_arm64_exception_context_prepare(
+    nusantara_arm64_exception_frame_t **initial_frame,
+    void *stack, size_t stack_size,
+    uintptr_t entry, uintptr_t argument, uintptr_t return_address)
+{
+    return prepare_frame(initial_frame, stack, stack_size, entry, argument,
+                         return_address, 0u,
+                         NUSANTARA_ARM64_SPSR_EL1H_MASKED, 5u);
+}
+int nusantara_arm64_exception_user_context_prepare(
+    nusantara_arm64_exception_frame_t **initial_frame,
+    void *kernel_stack, size_t kernel_stack_size,
+    uintptr_t user_entry, uintptr_t user_stack_top,
+    uintptr_t argument, uintptr_t return_address)
+{
+    if (user_stack_top == 0u || (user_stack_top & 0x0fu) != 0u)
+        return 0;
+    return prepare_frame(initial_frame, kernel_stack, kernel_stack_size,
+                         user_entry, argument, return_address, user_stack_top,
+                         NUSANTARA_ARM64_SPSR_EL0T, 8u);
 }

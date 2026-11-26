@@ -1,0 +1,35 @@
+name: ARM64 EL0 context and exception routing — Phase 107
+on:
+  pull_request:
+    paths:
+      - 'src/runtime/os/arch/arm64/**'
+      - 'pengujian/os/uji_arm64_el0_context_router_fase107.c'
+      - 'docs/os/arm64/PHASE-107-EL0-CONTEXT-SWITCHING.md'
+      - '.github/workflows/arm64-el0-context-phase107.yml'
+  workflow_dispatch:
+jobs:
+  phase107:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Host EL0 frame and router tests
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -Isrc/runtime/os/arch/arm64 \
+            pengujian/os/uji_arm64_el0_context_router_fase107.c \
+            src/runtime/os/arch/arm64/exception-router.c \
+            src/runtime/os/arch/arm64/exception.c \
+            -o /tmp/uji-arm64-el0-context-fase107
+          /tmp/uji-arm64-el0-context-fase107
+      - name: AArch64 exception vectors assembly
+        run: |
+          clang --target=aarch64-none-elf -mcpu=cortex-a57 -ffreestanding \
+            -Wall -Wextra -Werror -c \
+            src/runtime/os/arch/arm64/exception-vectors.S \
+            -o /tmp/nusantara-arm64-vectors-fase107.o
+          clang --target=aarch64-none-elf -mcpu=cortex-a57 -ffreestanding \
+            -Wall -Wextra -Werror -c \
+            src/runtime/os/arch/arm64/user-entry.S \
+            -o /tmp/nusantara-arm64-user-entry-fase107.o
+          test -s /tmp/nusantara-arm64-vectors-fase107.o
+          test -s /tmp/nusantara-arm64-user-entry-fase107.o

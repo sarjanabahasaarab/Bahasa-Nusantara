@@ -7,7 +7,7 @@ menyimpan frame task yang terinterupsi, menjalankan satu langkah scheduler,
 dan mengembalikan frame task berikutnya untuk dipulihkan oleh ERET.
 
 ## Jalur eksekusi
-1. VBAR_EL1 slot 5 menerima IRQ pada Current EL dengan SP_EL1.
+1. VBAR_EL1 slot 5 menerima IRQ pada Current EL dengan SP_EL1; slot 9 menerima IRQ dari lower-EL AArch64 (EL0) menggunakan stack kernel SP_EL1.
 2. Vector assembly menyimpan x0–x30, ESR_EL1, FAR_EL1, ELR_EL1, SPSR_EL1.
 3. Dispatcher Phase 103 memanggil handler Phase 104.
 4. Handler menyimpan pointer frame ke saved_stack_pointer task aktif.
@@ -33,11 +33,11 @@ pertama, bukan saat kernel masih menyiapkan state.
 - Scheduler harus selalu memiliki idle task READY/RUNNING. Bila tick membuat
   tidak ada task runnable, handler fail-stop; ia tidak pernah melanjutkan task
   yang sudah BLOCKED.
-- Handler hanya menerima vector 5. Exception lain tidak boleh disamarkan
+- Handler menerima vector 5 (EL1h) dan 9 (lower-EL AArch64/EL0). Exception lain tidak boleh disamarkan
   sebagai IRQ dan akan masuk fail-stop melalui dispatcher.
 - GIC meng-EOI setiap token non-spurious; token spurious tidak di-EOI. Driver PPI mengatur IGROUPR0 dan IPRIORITYR redistributor sebelum ISENABLER0 agar cocok dengan jalur IAR1/EOIR1 Group 1.
 - Handler berjalan dengan IRQ termask secara arsitektural selama exception.
-- Belum mendukung EL0 frame, SMP, lazy FP/SIMD/SVE save, FIQ, nested IRQ,
+- Frame EL0 dengan penyimpanan SP_EL0 dan IRQ slot 9 ditambahkan pada Phase 107. Belum mendukung SMP, lazy FP/SIMD/SVE save, FIQ, nested IRQ,
   per-task address-space switching, ataupun stack guard/page fault recovery.
 - Host test memakai fake MMIO/system-register callbacks; ia membuktikan
   kontrak frame selection dan scheduler integration, bukan interrupt fisik

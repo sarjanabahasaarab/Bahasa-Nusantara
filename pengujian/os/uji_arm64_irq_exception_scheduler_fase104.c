@@ -59,8 +59,10 @@ int main(void)
     nusantara_os_task_t *first = 0;
     uint64_t id_a = 0u, id_b = 0u;
 
-    frame_a->vector = 5u;
-    frame_b->vector = 5u;
+    frame_a->vector = 9u; /* IRQ from a lower-EL AArch64 task. */
+    frame_b->vector = 9u;
+    frame_a->sp_el0 = 0x8000u;
+    frame_b->sp_el0 = 0x9000u;
     hw.frequency = 1000000u;
     assert(nusantara_arm64_timer_init(&timer, &timer_io) == NUSANTARA_ARM64_TIMER_OK);
     assert(nusantara_arm64_timer_arm_ms(&timer, 10u) == NUSANTARA_ARM64_TIMER_OK);
@@ -84,11 +86,12 @@ int main(void)
         NUSANTARA_ARM64_IRQ_SCHEDULER_TIMER_NOT_ARMED);
     timer.armed = 1u;
 
-    /* Expired physical timer: save task A's exception frame, select task B. */
+    /* Expired timer from EL0: save task A including SP_EL0, select task B. */
     hw.iar = 30u;
     hw.control = NUSANTARA_ARM64_TIMER_CTL_ENABLE | NUSANTARA_ARM64_TIMER_CTL_ISTATUS;
     assert(nusantara_arm64_exception_dispatch(frame_a) == frame_b);
     assert(scheduler.tasks[0].saved_stack_pointer == (uintptr_t)frame_a);
+    assert(((nusantara_arm64_exception_frame_t *)scheduler.tasks[0].saved_stack_pointer)->sp_el0 == 0x8000u);
     assert(scheduler.tasks[1].state == NUSANTARA_OS_TASK_RUNNING);
     assert(hw.eoi == 30u && hw.eoi_count == 1u);
     assert(hw.tval > 0u && hw.selected_count == 1u);
