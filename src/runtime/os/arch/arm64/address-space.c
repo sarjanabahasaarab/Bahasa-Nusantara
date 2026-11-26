@@ -17,32 +17,16 @@ static int registered_space(const nusantara_arm64_address_space_manager_t *manag
     return 0;
 }
 
-static int table_page_adapter(void *context, nusantara_arm64_page_table_t *table)
-{
-    nusantara_arm64_address_space_t *space =
-        (nusantara_arm64_address_space_t *)context;
-    /* The owning manager is stored immediately after the space in no hidden
-       layout: adapter context is a small explicit pair below. */
-    (void)space;
-    (void)table;
-    return 0;
-}
-
-typedef struct address_space_adapter_context {
-    nusantara_arm64_address_space_manager_t *manager;
-    nusantara_arm64_address_space_t *space;
-} address_space_adapter_context_t;
-
 static int resolve_or_allocate_table(void *context,
                                      nusantara_arm64_page_table_t *table)
 {
-    address_space_adapter_context_t *adapter =
-        (address_space_adapter_context_t *)context;
-    nusantara_arm64_address_space_manager_t *manager = adapter->manager;
-    nusantara_arm64_address_space_t *space = adapter->space;
+    nusantara_arm64_address_space_t *space =
+        (nusantara_arm64_address_space_t *)context;
+    nusantara_arm64_address_space_manager_t *manager;
     uint64_t physical;
     uint64_t *alias = 0;
-    if (table == 0) return 0;
+    if (space == 0 || table == 0 || space->manager == 0) return 0;
+    manager = space->manager;
     if (table->physical_address == 0u) {
         if (space->table_page_count >= NUSANTARA_ARM64_ADDRESS_SPACE_MAX_TABLES ||
             !manager->ops.allocate_page(manager->ops_context, &physical, &alias) ||
@@ -87,14 +71,13 @@ nusantara_arm64_address_space_status_t nusantara_arm64_address_space_create(
     size_t i, slot = NUSANTARA_ARM64_ADDRESS_SPACE_MAX;
     uint64_t root_physical = 0u;
     uint64_t *root_alias = 0;
-    address_space_adapter_context_t adapter;
     if (manager == 0 || space == 0 || id == 0u)
         return NUSANTARA_ARM64_AS_INVALID_ARGUMENT;
-    if (space->initialized) return NUSANTARA_ARM64_AS_INVALID_ARGUMENT;
     for (i = 0u; i < NUSANTARA_ARM64_ADDRESS_SPACE_MAX; ++i) {
         if (manager->spaces[i] == 0 && slot == NUSANTARA_ARM64_ADDRESS_SPACE_MAX)
             slot = i;
-        if (manager->spaces[i] != 0 && manager->spaces[i]->id == id)
+        if (manager->spaces[i] == space ||
+            (manager->spaces[i] != 0 && manager->spaces[i]->id == id))
             return NUSANTARA_ARM64_AS_INVALID_ARGUMENT;
     }
     if (slot == NUSANTARA_ARM64_ADDRESS_SPACE_MAX)
@@ -103,24 +86,19 @@ nusantara_arm64_address_space_status_t nusantara_arm64_address_space_create(
         root_alias == 0 || !valid_page_address(root_physical))
         return NUSANTARA_ARM64_AS_OUT_OF_MEMORY;
 
+    space->manager = manager;
     space->id = id;
     space->root_physical = root_physical;
     space->table_page_count = 1u;
     space->table_pages[0] = root_physical;
     space->mapping_count = 0u;
     space->initialized = 0u;
-    adapter.manager = manager;
-    adapter.space = space;
     if (!nusantara_arm64_mmu_init(&space->mmu, root_alias, root_physical,
-                                  resolve_or_allocate_table, &adapter)) {
+                                  resolve_or_allocate_table, space)) {
         manager->ops.release_page(manager->ops_context, root_physical);
         space->table_page_count = 0u;
         return NUSANTARA_ARM64_AS_MMU_FAILURE;
     }
-    /*
-     * mmu retains the adapter context; keep it alive in caller-owned space.
-     * The adapter is embedded through the reserved final fields below.
-     */
     space->initialized = 1u;
     manager->spaces[slot] = space;
     ++manager->count;
@@ -147,9 +125,16 @@ nusantara_arm64_address_space_status_t nusantara_arm64_address_space_map_user(
     if (manager->active == space) return NUSANTARA_ARM64_AS_ACTIVE;
     if (space->mapping_count >= NUSANTARA_ARM64_ADDRESS_SPACE_MAX_MAPPINGS)
         return NUSANTARA_ARM64_AS_FULL;
-    for (i = 0u; i < space->mapping_count; ++i)
+    for (i = 0u; i < space->mapping_count; ++i) {
         if (space->mappings[i].virtual_address == virtual_address)
             return NUSANTARA_ARM64_AS_ALREADY_MAPPED;
+        if (take_ownership && space->mappings[i].owns_frame &&
+            space->mappings[i].physical_address == physical_address)
+            return NUSANTARA_ARM64_AS_INVALID_MAPPING;
+    }
+    for (i = 0u; i < space->table_page_count; ++i)
+        if (space->table_pages[i] == physical_address)
+            return NUSANTARA_ARM64_AS_INVALID_MAPPING;
     if (!nusantara_arm64_mmu_map_page(&space->mmu, virtual_address,
                                       physical_address, access, executable))
         return NUSANTARA_ARM64_AS_MMU_FAILURE;
@@ -202,6 +187,7 @@ nusantara_arm64_address_space_status_t nusantara_arm64_address_space_destroy(
     space->root_physical = 0u;
     space->table_page_count = 0u;
     space->mapping_count = 0u;
+    space->manager = 0;
     return NUSANTARA_ARM64_AS_OK;
 }
 
