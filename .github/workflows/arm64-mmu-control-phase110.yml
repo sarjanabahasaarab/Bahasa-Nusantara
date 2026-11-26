@@ -1,0 +1,35 @@
+name: ARM64 MMU control — Phase 110
+on:
+  pull_request:
+    paths:
+      - 'src/runtime/os/arch/arm64/mmu-control.*'
+      - 'pengujian/os/uji_arm64_mmu_control_fase110.c'
+      - 'docs/os/arm64/PHASE-110-MMU-CONTROL.md'
+      - '.github/workflows/arm64-mmu-control-phase110.yml'
+  workflow_dispatch:
+jobs:
+  host-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and run MMU register and fault decoder tests
+        run: |
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -Isrc/runtime/os/arch/arm64 \
+            src/runtime/os/arch/arm64/mmu-control.c \
+            pengujian/os/uji_arm64_mmu_control_fase110.c \
+            -o /tmp/uji-arm64-mmu-control
+          /tmp/uji-arm64-mmu-control
+  cross-compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install AArch64 compiler
+        run: sudo apt-get update && sudo apt-get install -y clang
+      - name: Compile freestanding ARM64 MMU control
+        run: |
+          clang --target=aarch64-none-elf -mcpu=cortex-a57 -std=c11 -O2 \
+            -ffreestanding -fno-builtin -fno-stack-protector -mgeneral-regs-only \
+            -Wall -Wextra -Werror -pedantic \
+            -Isrc/runtime/os/arch/arm64 \
+            -c src/runtime/os/arch/arm64/mmu-control.c -o /tmp/mmu-control-phase110.o
