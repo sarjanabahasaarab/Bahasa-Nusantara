@@ -15,23 +15,20 @@
 #define PF_R 4u
 
 static uint8_t fixture[IMAGE_SIZE];
+static unsigned case_number;
 
-static void put16(size_t o, uint16_t v) {
-    fixture[o]=(uint8_t)v; fixture[o+1]=(uint8_t)(v>>8);
-}
+static void put16(size_t o, uint16_t v) { fixture[o]=(uint8_t)v; fixture[o+1]=(uint8_t)(v>>8); }
 static void put32(size_t o, uint32_t v) {
     fixture[o]=(uint8_t)v; fixture[o+1]=(uint8_t)(v>>8);
     fixture[o+2]=(uint8_t)(v>>16); fixture[o+3]=(uint8_t)(v>>24);
 }
-static void put64(size_t o, uint64_t v) {
-    put32(o,(uint32_t)v); put32(o+4,(uint32_t)(v>>32));
-}
+static void put64(size_t o, uint64_t v) { put32(o,(uint32_t)v); put32(o+4,(uint32_t)(v>>32)); }
 static size_t ph(size_t index) { return PHOFF + index * PH_SIZE; }
-static void set_ph(size_t i,uint32_t type,uint32_t flags,uint64_t off,
-                   uint64_t va,uint64_t filesz,uint64_t memsz,uint64_t align) {
-    size_t p=ph(i);
-    put32(p,type); put32(p+4,flags); put64(p+8,off); put64(p+16,va);
-    put64(p+24,va); put64(p+32,filesz); put64(p+40,memsz); put64(p+48,align);
+static void set_ph(size_t i,uint32_t type,uint32_t flags,uint64_t off,uint64_t va,
+                   uint64_t filesz,uint64_t memsz,uint64_t align) {
+    size_t p=ph(i); put32(p,type); put32(p+4,flags); put64(p+8,off);
+    put64(p+16,va); put64(p+24,va); put64(p+32,filesz);
+    put64(p+40,memsz); put64(p+48,align);
 }
 static void valid_fixture(void) {
     memset(fixture,0,sizeof(fixture));
@@ -45,7 +42,14 @@ static void valid_fixture(void) {
 }
 static void expect(nusantara_arm64_elf64_status_t wanted) {
     nusantara_arm64_elf64_image_t image;
-    assert(nusantara_arm64_elf64_validate(fixture,sizeof(fixture),&image)==wanted);
+    nusantara_arm64_elf64_status_t actual =
+        nusantara_arm64_elf64_validate(fixture,sizeof(fixture),&image);
+    ++case_number;
+    if (actual != wanted) {
+        fprintf(stderr,"Phase114 case %u: expected status %u, got %u\n",
+                case_number,(unsigned)wanted,(unsigned)actual);
+        assert(actual == wanted);
+    }
 }
 int main(void) {
     nusantara_arm64_elf64_image_t image;
