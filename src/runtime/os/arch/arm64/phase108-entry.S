@@ -48,6 +48,18 @@ phase108_el1_entry:
     adrp x1, phase108_boot_stack_top
     add x1, x1, :lo12:phase108_boot_stack_top
     mov sp, x1
+    /* Initialize PL011 at 0x09000000 for deterministic serial evidence. */
+    movz x2, #0x0900, lsl #16
+    mov w3, wzr
+    str w3, [x2, #0x30]
+    mov w3, #13
+    str w3, [x2, #0x24]
+    mov w3, #1
+    str w3, [x2, #0x28]
+    mov w3, #0x70
+    str w3, [x2, #0x2c]
+    mov w3, #0x101
+    str w3, [x2, #0x30]
     adrp x1, __bss_start
     add x1, x1, :lo12:__bss_start
     adrp x2, __bss_end
