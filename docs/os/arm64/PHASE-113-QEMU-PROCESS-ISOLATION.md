@@ -30,3 +30,7 @@ Marker utama:
 - Belum ada ASID, SMP TLB shootdown, demand paging, copy-on-write, ELF loader, atau uji perangkat fisik.
 - Pool frame pada image uji adalah allocator statis khusus QEMU, bukan allocator produksi.
 - UART PL011 dipetakan sebagai Device-nGnRE; kernel dan tabel halaman tetap dapat diakses melalui pemetaan EL1.
+
+## Catatan build
+
+Build script menerima path image sebagai argumen wajib agar output CI selalu eksplisit; compile memakai Clang freestanding untuk target AArch64.
