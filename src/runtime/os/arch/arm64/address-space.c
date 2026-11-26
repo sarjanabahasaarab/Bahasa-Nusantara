@@ -162,6 +162,17 @@ nusantara_arm64_address_space_status_t nusantara_arm64_address_space_switch(
     return NUSANTARA_ARM64_AS_OK;
 }
 
+nusantara_arm64_address_space_status_t nusantara_arm64_address_space_deactivate(
+    nusantara_arm64_address_space_manager_t *manager, uint64_t kernel_root_physical)
+{
+    if (manager == 0 || !valid_page_address(kernel_root_physical))
+        return NUSANTARA_ARM64_AS_INVALID_ARGUMENT;
+    if (!manager->ops.install_root(manager->ops_context, kernel_root_physical))
+        return NUSANTARA_ARM64_AS_MMU_FAILURE;
+    manager->active = 0;
+    return NUSANTARA_ARM64_AS_OK;
+}
+
 nusantara_arm64_address_space_status_t nusantara_arm64_address_space_destroy(
     nusantara_arm64_address_space_manager_t *manager,
     nusantara_arm64_address_space_t *space)
