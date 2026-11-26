@@ -97,6 +97,15 @@ int main(void)
     assert(nusantara_arm64_address_space_map_user(
         &manager, &second, shared_va, second_data,
         NUSANTARA_ARM64_PAGE_USER_RW, 0, 1) == NUSANTARA_ARM64_AS_OK);
+    /* An owned frame cannot be aliased into another process or reused as a user page table. */
+    assert(nusantara_arm64_address_space_map_user(
+        &manager, &second, shared_va + 4096u, first_data,
+        NUSANTARA_ARM64_PAGE_USER_RW, 0, 1) ==
+        NUSANTARA_ARM64_AS_INVALID_MAPPING);
+    assert(nusantara_arm64_address_space_map_user(
+        &manager, &second, shared_va + 8192u, first.table_pages[0],
+        NUSANTARA_ARM64_PAGE_USER_RW, 0, 0) ==
+        NUSANTARA_ARM64_AS_INVALID_MAPPING);
 
     descriptor = nusantara_arm64_mmu_lookup_page(&first.mmu, shared_va);
     assert((descriptor & NUSANTARA_ARM64_PA_MASK) == first_data);
