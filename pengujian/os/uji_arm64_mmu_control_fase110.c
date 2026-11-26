@@ -23,11 +23,11 @@ int main(void)
     assert(fault.level == 3u);
     /* Lower-EL instruction permission fault. */
     assert(nusantara_arm64_mmu_decode_fault(
-        (UINT64_C(0x20) << 26) | UINT64_C(0x0eu), &fault));
+        (UINT64_C(0x20) << 26) | UINT64_C(0x0e), &fault));
     assert(fault.instruction == 1u);
     assert(fault.write == 0u);
     assert(!nusantara_arm64_mmu_decode_fault(
-        (UINT64_C(0x24) << 26) | UINT64_C(0x05u), &fault));
+        (UINT64_C(0x24) << 26) | UINT64_C(0x05), &fault));
     assert(!nusantara_arm64_mmu_decode_fault(0u, &fault));
     assert(!nusantara_arm64_mmu_decode_fault(UINT64_C(0x0f), 0));
     return 0;
