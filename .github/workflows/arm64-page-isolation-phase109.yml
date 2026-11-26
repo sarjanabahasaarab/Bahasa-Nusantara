@@ -1,0 +1,35 @@
+name: ARM64 page-table isolation foundation — Phase 109
+on:
+  pull_request:
+    paths:
+      - 'src/runtime/os/arch/arm64/mmu.*'
+      - 'pengujian/os/uji_arm64_page_isolation_fase109.c'
+      - 'docs/os/arm64/PHASE-109-USER-PAGE-ISOLATION.md'
+      - '.github/workflows/arm64-page-isolation-phase109.yml'
+  workflow_dispatch:
+jobs:
+  host-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and run page permission contract tests
+        run: |
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -Isrc/runtime/os/arch/arm64 \
+            src/runtime/os/arch/arm64/mmu.c \
+            pengujian/os/uji_arm64_page_isolation_fase109.c \
+            -o /tmp/uji-arm64-page-isolation
+          /tmp/uji-arm64-page-isolation
+  cross-compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install AArch64 compiler
+        run: sudo apt-get update && sudo apt-get install -y clang
+      - name: Compile freestanding ARM64 MMU implementation
+        run: |
+          clang --target=aarch64-none-elf -mcpu=cortex-a57 -std=c11 -O2 \
+            -ffreestanding -fno-builtin -fno-stack-protector -mgeneral-regs-only \
+            -Wall -Wextra -Werror -pedantic \
+            -Isrc/runtime/os/arch/arm64 \
+            -c src/runtime/os/arch/arm64/mmu.c -o /tmp/mmu-phase109.o
