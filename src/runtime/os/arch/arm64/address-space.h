@@ -84,6 +84,8 @@ nusantara_arm64_address_space_status_t nusantara_arm64_address_space_map_user(
 nusantara_arm64_address_space_status_t nusantara_arm64_address_space_switch(
     nusantara_arm64_address_space_manager_t *manager,
     nusantara_arm64_address_space_t *space);
+nusantara_arm64_address_space_status_t nusantara_arm64_address_space_deactivate(
+    nusantara_arm64_address_space_manager_t *manager, uint64_t kernel_root_physical);
 nusantara_arm64_address_space_status_t nusantara_arm64_address_space_destroy(
     nusantara_arm64_address_space_manager_t *manager,
     nusantara_arm64_address_space_t *space);
