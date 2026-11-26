@@ -26,12 +26,9 @@
 #define EXPECTED_KERNEL_VA UINT64_C(0x40080000)
 
 extern void phase111_user_entry(void);
-extern char __bss_start[], __bss_end[];
-extern char phase111_user_stack_end[];
 
 static _Alignas(4096) uint64_t l0[512];
 static _Alignas(4096) uint64_t l1_low[512];
-static _Alignas(4096) uint64_t l1_ram[512];
 static _Alignas(4096) uint64_t l2_low[512];
 static _Alignas(4096) uint64_t l2_ram[512];
 static _Alignas(4096) uint64_t l3_user[512];
@@ -59,7 +56,6 @@ static uint64_t table_desc(const void *p)
 }
 static void build_tables(void)
 {
-    unsigned i;
     /* TTBR0 L0 -> L1; identity map the low UART window and RAM window. */
     l0[0] = table_desc(l1_low);
     l1_low[0] = table_desc(l2_low);
@@ -77,9 +73,6 @@ static void build_tables(void)
         DESC_SH_INNER | DESC_AP_EL0_RW | DESC_PXN | DESC_UXN;
     /* 0x50000000 alias maps the same two user-owned physical pages. */
     l2_ram[128] = table_desc(l3_user);
-    for (i = 2u; i < 512u; ++i) {
-        (void)i;
-    }
 }
 static int enable_mmu(void)
 {
