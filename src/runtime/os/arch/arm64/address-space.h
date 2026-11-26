@@ -49,8 +49,9 @@ typedef struct nusantara_arm64_user_mapping {
     uint8_t owns_frame;
 } nusantara_arm64_user_mapping_t;
 
-struct nusantara_arm64_address_space;
+struct nusantara_arm64_address_space_manager;
 typedef struct nusantara_arm64_address_space {
+    struct nusantara_arm64_address_space_manager *manager;
     uint64_t id;
     uint64_t root_physical;
     nusantara_arm64_mmu_t mmu;
