@@ -88,8 +88,8 @@ nusantara_arm64_exception_frame_t *nusantara_arm64_irq_scheduler_handle_exceptio
         frame == 0 || (((uintptr_t)frame & 0x0fu) != 0u))
         return 0;
 
-    /* VBAR slot 5 is the current-EL, SP_EL1, IRQ vector. */
-    if (frame->vector != 5u)
+    /* Slots 5 and 9 are IRQs from EL1h and lower-EL AArch64 respectively. */
+    if (frame->vector != 5u && frame->vector != 9u)
         return 0;
 
     scheduler = integration->scheduler;
