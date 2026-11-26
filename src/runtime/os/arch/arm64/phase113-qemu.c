@@ -150,7 +150,7 @@ static nusantara_arm64_exception_frame_t *dispatch(void *ctx,nusantara_arm64_exc
 }
 void phase113_main(uintptr_t dtb) {
     const nusantara_arm64_address_space_ops_t ops={page_allocate,page_resolve,page_release,install_root};
-    uint64_t da,db,priv,sa,sb; (void)dtb;
+    uint64_t da=0u,db=0u,priv=0u,sa=0u,sb=0u; (void)dtb;
     uart_puts("NUSANTARA_PHASE113_BOOT\r\n");
     if(!nusantara_arm64_install_exception_vectors() ||
        !nusantara_arm64_address_space_manager_init(&manager,&ops,0)) {
