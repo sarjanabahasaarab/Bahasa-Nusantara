@@ -1,0 +1,35 @@
+name: ARM64 ELF64 Loader Validation — Phase 114
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/runtime/os/arch/arm64/elf64-loader.*'
+      - 'pengujian/os/uji_arm64_elf64_loader_fase114.c'
+      - 'docs/os/arm64/PHASE-114-ELF64-LOADER.md'
+      - '.github/workflows/arm64-elf64-loader-phase114.yml'
+  pull_request:
+    paths:
+      - 'src/runtime/os/arch/arm64/elf64-loader.*'
+      - 'pengujian/os/uji_arm64_elf64_loader_fase114.c'
+      - 'docs/os/arm64/PHASE-114-ELF64-LOADER.md'
+      - '.github/workflows/arm64-elf64-loader-phase114.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile with strict C diagnostics
+        run: |
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -Isrc/runtime/os/arch/arm64 \
+            src/runtime/os/arch/arm64/elf64-loader.c \
+            pengujian/os/uji_arm64_elf64_loader_fase114.c \
+            -o /tmp/nusantara-phase114-elf64-test
+      - name: Run ELF64 validation tests
+        run: /tmp/nusantara-phase114-elf64-test
