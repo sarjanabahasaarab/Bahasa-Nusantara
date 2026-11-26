@@ -38,7 +38,10 @@ nusantara_arm64_exception_frame_t *nusantara_arm64_user_syscall_handle_exception
     number = frame->x[8];
     switch (number) {
     case NUSANTARA_ARM64_SYSCALL_WRITE:
-        if (frame->x[1] > (uint64_t)SIZE_MAX ||
+        if (
+#if SIZE_MAX < UINT64_MAX
+            frame->x[1] > (uint64_t)SIZE_MAX ||
+#endif
             ops->validate_user_range(ops->context, (uintptr_t)frame->x[0],
                                      (size_t)frame->x[1]) == 0) {
             result = NUSANTARA_ARM64_SYSCALL_EFAULT;
