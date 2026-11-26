@@ -27,7 +27,7 @@ int main(void)
     assert(fault.instruction == 1u);
     assert(fault.write == 0u);
     assert(!nusantara_arm64_mmu_decode_fault(
-        (UINT64_C(0x24) << 26) | UINT64_C(0x05), &fault));
+        (UINT64_C(0x24) << 26) | UINT64_C(0x10), &fault));
     assert(!nusantara_arm64_mmu_decode_fault(0u, &fault));
     assert(!nusantara_arm64_mmu_decode_fault(UINT64_C(0x0f), 0));
     return 0;
