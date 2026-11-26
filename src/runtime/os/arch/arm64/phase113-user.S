@@ -11,7 +11,7 @@ phase113_user_entry:
     svc #0
     /* Mapped only in process A: process B must take a translation fault. */
     movz x9, #0x1000, lsl #16
-    add x9, x9, #0x2000
+    add x9, x9, #0x3000
     ldr x10, [x9]
 1:  wfe
     b 1b
