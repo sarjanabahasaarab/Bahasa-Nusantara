@@ -25,6 +25,7 @@ static nusantara_arm64_address_space_manager_t manager;
 static nusantara_arm64_address_space_t process_a, process_b;
 static nusantara_arm64_exception_frame_t *frame_a, *frame_b;
 static uint64_t *data_a_alias, *data_b_alias, *private_a_alias;
+static uint64_t *stack_a_alias, *stack_b_alias;
 static unsigned handoff_seen;
 
 static void uart_putc(char c) {
@@ -118,6 +119,11 @@ static int map_process(nusantara_arm64_address_space_t *space,
 static nusantara_arm64_exception_frame_t *dispatch(void *ctx,nusantara_arm64_exception_frame_t *f) {
     nusantara_arm64_mmu_fault_t fault; (void)ctx;
     if(!f) return 0;
+    if(f->vector==8u && ((f->esr_el1>>26)&0x3fu)==0x15u && handoff_seen==1u) {
+        /* Process B completed its own SVC; resume after SVC to test A-only VA. */
+        f->elr_el1 += 4u;
+        return f;
+    }
     if(f->vector==8u && ((f->esr_el1>>26)&0x3fu)==0x15u && handoff_seen==0u) {
         handoff_seen=1u; frame_a=f;
         uart_puts("NUSANTARA_PHASE113_PROCESS_A_SVC\r\n");
@@ -155,7 +161,7 @@ void phase113_main(uintptr_t dtb) {
         uart_puts("NUSANTARA_PHASE113_FAIL_CREATE\r\n"); halt();
     }
     if(!alloc_user(&da,&data_a_alias) || !alloc_user(&db,&data_b_alias) ||
-       !alloc_user(&priv,&private_a_alias) || !alloc_user(&sa,0) || !alloc_user(&sb,0)) {
+       !alloc_user(&priv,&private_a_alias) || !alloc_user(&sa,&stack_a_alias) || !alloc_user(&sb,&stack_b_alias)) {
         uart_puts("NUSANTARA_PHASE113_FAIL_FRAME_ALLOC\r\n"); halt();
     }
     *private_a_alias=UINT64_C(0xfeed113);
