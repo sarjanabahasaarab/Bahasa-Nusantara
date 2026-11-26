@@ -35,6 +35,12 @@ static void uart_putc(char c) {
     *dr=(uint32_t)(uint8_t)c;
 }
 static void uart_puts(const char *s) { while (*s) uart_putc(*s++); }
+static void uart_hex64(uint64_t value) {
+    static const char digits[] = "0123456789abcdef";
+    int shift;
+    for (shift = 60; shift >= 0; shift -= 4)
+        uart_putc(digits[(value >> (unsigned)shift) & 0x0fu]);
+}
 static void halt(void) {
     __asm__ volatile("msr daifset, #0xf" ::: "memory");
     for (;;) __asm__ volatile("wfe");
