@@ -24,7 +24,7 @@ SECTIONS
   }
   /* Dedicated physical pages: user code and user stack. */
   . = 0x40200000;
-  .user_text : ALIGN(4096) { *(.text.phase111_user) }
+  .user_text : ALIGN(4096) { *(.usercode) }
   . = 0x40201000;
   .user_stack (NOLOAD) : ALIGN(4096) { . += 4096; }
   _image_end = .;
