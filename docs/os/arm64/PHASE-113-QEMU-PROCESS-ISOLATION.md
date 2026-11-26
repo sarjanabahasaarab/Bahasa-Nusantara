@@ -9,7 +9,7 @@ Membuktikan bahwa dua konteks EL0 benar-benar berjalan dengan root TTBR0_EL1 ber
 - Memakai pengelola ruang alamat Phase 112 dan callback nusantara_arm64_mmu_install_ttbr0 untuk pergantian root.
 - Kedua proses mengeksekusi kode fisik yang sama pada virtual address yang sama.
 - Virtual address data yang sama dipetakan ke dua physical frame berbeda.
-- Satu halaman tambahan hanya dipetakan ke proses A.
+- Satu halaman tambahan pada VA `0x10003000` hanya dipetakan ke proses A; proses B mencoba membaca VA yang sama dan harus menerima translation fault.
 - Perpindahan dari proses A ke B dilakukan pada jalur exception SVC; frame EL0 proses B dipulihkan setelah root TTBR0_EL1 B dipasang.
 - Proses B mencoba membaca halaman privat proses A; uji hanya lulus bila CPU menghasilkan lower-EL data abort pada FAR yang diharapkan.
 - Kernel memeriksa isi kedua frame data untuk membuktikan bahwa store masing-masing proses tetap terpisah.
