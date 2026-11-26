@@ -158,6 +158,8 @@ static nusantara_arm64_exception_frame_t *dispatch(void *ctx,nusantara_arm64_exc
     uart_hex64(f->far_el1);
     uart_puts(" VECTOR=");
     uart_hex64(f->vector);
+    uart_puts(" X9=");
+    uart_hex64(f->x[9]);
     uart_puts(" ELR=");
     uart_hex64(f->elr_el1);
     uart_puts("\r\n"); halt(); return 0;
