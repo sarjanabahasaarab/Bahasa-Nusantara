@@ -29,6 +29,6 @@ phase108_user_failed:
 .global phase108_user_message
 .global phase108_user_message_end
 phase108_user_message:
-    .asciz "NUSANTARA_PHASE108_EL0_SVC_WRITE_OK\r\n"
+    .ascii "NUSANTARA_PHASE108_EL0_SVC_WRITE_OK\r\n"
 phase108_user_message_end:
 .section .note.GNU-stack,"",%progbits
