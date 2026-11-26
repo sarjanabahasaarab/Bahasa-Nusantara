@@ -1,0 +1,30 @@
+name: ARM64 EL0 syscall — Phase 106
+on:
+  pull_request:
+    paths:
+      - 'src/runtime/os/arch/arm64/**'
+      - 'pengujian/os/uji_arm64_user_syscall_fase106.c'
+      - 'docs/os/arm64/PHASE-106-EL0-USERSPACE-SYSCALLS.md'
+      - '.github/workflows/arm64-el0-syscall-phase106.yml'
+  workflow_dispatch:
+jobs:
+  phase106:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Host syscall contract tests
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -pedantic \
+            -Isrc/runtime/os/arch/arm64 \
+            pengujian/os/uji_arm64_user_syscall_fase106.c \
+            src/runtime/os/arch/arm64/user-syscall.c \
+            src/runtime/os/arch/arm64/exception.c \
+            -o /tmp/uji-arm64-user-syscall-fase106
+          /tmp/uji-arm64-user-syscall-fase106
+      - name: AArch64 EL0 entry assembly
+        run: |
+          clang --target=aarch64-none-elf -mcpu=cortex-a57 -ffreestanding \
+            -Wall -Wextra -Werror -c \
+            src/runtime/os/arch/arm64/user-entry.S \
+            -o /tmp/nusantara-arm64-user-entry-fase106.o
+          test -s /tmp/nusantara-arm64-user-entry-fase106.o
