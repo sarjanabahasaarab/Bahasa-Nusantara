@@ -1,0 +1,42 @@
+name: ARM64 process address spaces — Phase 112
+on:
+  pull_request:
+    paths:
+      - 'src/runtime/os/arch/arm64/address-space.*'
+      - 'src/runtime/os/arch/arm64/mmu.*'
+      - 'pengujian/os/uji_arm64_address_space_fase112.c'
+      - 'docs/os/arm64/PHASE-112-PROCESS-ADDRESS-SPACES.md'
+      - '.github/workflows/arm64-address-space-phase112.yml'
+  workflow_dispatch:
+jobs:
+  host-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and run address-space lifecycle tests
+        run: |
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -Isrc/runtime/os/arch/arm64 \
+            src/runtime/os/arch/arm64/mmu.c \
+            src/runtime/os/arch/arm64/address-space.c \
+            pengujian/os/uji_arm64_address_space_fase112.c \
+            -o /tmp/uji-arm64-address-space
+          /tmp/uji-arm64-address-space
+  cross-compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install AArch64 compiler
+        run: sudo apt-get update && sudo apt-get install -y clang
+      - name: Cross-compile ARM64 address-space manager
+        run: |
+          clang --target=aarch64-none-elf -mcpu=cortex-a57 -std=c11 -O2 \
+            -ffreestanding -fno-builtin -fno-stack-protector -mgeneral-regs-only \
+            -Wall -Wextra -Werror -pedantic \
+            -Isrc/runtime/os/arch/arm64 \
+            -c src/runtime/os/arch/arm64/address-space.c -o /tmp/address-space-phase112.o
+          clang --target=aarch64-none-elf -mcpu=cortex-a57 -std=c11 -O2 \
+            -ffreestanding -fno-builtin -fno-stack-protector -mgeneral-regs-only \
+            -Wall -Wextra -Werror -pedantic \
+            -Isrc/runtime/os/arch/arm64 \
+            -c src/runtime/os/arch/arm64/mmu.c -o /tmp/mmu-phase112.o
