@@ -126,8 +126,8 @@ static nusantara_arm64_exception_frame_t *dispatch(void *ctx,nusantara_arm64_exc
     nusantara_arm64_mmu_fault_t fault; (void)ctx;
     if(!f) return 0;
     if(f->vector==8u && ((f->esr_el1>>26)&0x3fu)==0x15u && handoff_seen==1u) {
-        /* Process B completed its own SVC; resume after SVC to test A-only VA. */
-        f->elr_el1 += 4u;
+        /* ELR_EL1 already points to the instruction after SVC. Do not skip
+         * the following MOVZ: it resets X9 before forming PRIVATE_VA. */
         return f;
     }
     if(f->vector==8u && ((f->esr_el1>>26)&0x3fu)==0x15u && handoff_seen==0u) {
