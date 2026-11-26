@@ -13,6 +13,7 @@ Membuktikan bahwa dua konteks EL0 benar-benar berjalan dengan root TTBR0_EL1 ber
 - Perpindahan dari proses A ke B dilakukan pada jalur exception SVC; frame EL0 proses B dipulihkan setelah root TTBR0_EL1 B dipasang.
 - Proses B mencoba membaca halaman privat proses A; uji hanya lulus bila CPU menghasilkan lower-EL data abort pada FAR yang diharapkan.
 - Kernel memeriksa isi kedua frame data untuk membuktikan bahwa store masing-masing proses tetap terpisah.
+- Jika terjadi fault tak terduga, serial juga mencetak X9 dari exception frame agar alamat efektif instruksi EL0 dapat dibandingkan langsung dengan FAR_EL1.
 
 ## Bukti CI yang diwajibkan
 
