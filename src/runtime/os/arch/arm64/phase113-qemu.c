@@ -153,13 +153,13 @@ static nusantara_arm64_exception_frame_t *dispatch(void *ctx,nusantara_arm64_exc
         uart_puts("NUSANTARA_PHASE113_PASS\r\n"); halt();
     }
     uart_puts("NUSANTARA_PHASE113_UNEXPECTED_EXCEPTION ESR=");
-    uart_hex64(frame->esr_el1);
+    uart_hex64(f->esr_el1);
     uart_puts(" FAR=");
-    uart_hex64(frame->far_el1);
+    uart_hex64(f->far_el1);
     uart_puts(" VECTOR=");
-    uart_hex64(frame->vector);
+    uart_hex64(f->vector);
     uart_puts(" ELR=");
-    uart_hex64(frame->elr_el1);
+    uart_hex64(f->elr_el1);
     uart_puts("\r\n"); halt(); return 0;
 }
 void phase113_main(uintptr_t dtb) {
