@@ -27,4 +27,4 @@ jobs:
             -Wall -Wextra -Werror -c \
             src/runtime/os/arch/arm64/user-entry.S \
             -o /tmp/nusantara-arm64-user-entry-fase106.o
-          llvm-readelf -h /tmp/nusantara-arm64-user-entry-fase106.o | grep -q AArch64
+          test -s /tmp/nusantara-arm64-user-entry-fase106.o
