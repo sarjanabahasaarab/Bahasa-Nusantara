@@ -66,10 +66,10 @@ jobs:
         shell: bash
         run: |
           set +e
-          timeout 10s qemu-system-aarch64 \\
-            -machine virt,gic-version=3 -cpu cortex-a57 -smp 1 -m 256M \\
-            -nographic -serial stdio -monitor none -nic none \\
-            -kernel /tmp/nusantara-phase111/Image -no-reboot -no-shutdown \\
+          timeout 10s qemu-system-aarch64 \
+            -machine virt,gic-version=3 -cpu cortex-a57 -smp 1 -m 256M \
+            -nographic -serial stdio -monitor none -nic none \
+            -kernel /tmp/nusantara-phase111/Image -no-reboot -no-shutdown \
             > /tmp/nusantara-phase111-serial.log 2>&1
           rc=$?
           set -e
