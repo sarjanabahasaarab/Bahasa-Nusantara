@@ -34,21 +34,22 @@ int nusantara_arm64_mmu_enable_el1(uint64_t root_physical)
             const uint64_t mair = nusantara_arm64_mmu_mair_value();
             const uint64_t tcr = nusantara_arm64_mmu_tcr_value();
             __asm__ volatile(
-                "msr mair_el1, %0\n"
-                "msr tcr_el1, %1\n"
-                "msr ttbr0_el1, %2\n"
+                "msr mair_el1, %1\n"
+                "msr tcr_el1, %2\n"
+                "msr ttbr0_el1, %3\n"
                 "dsb sy\n"
                 "tlbi vmalle1\n"
                 "dsb sy\n"
+                "ic iallu\n"
+                "dsb sy\n"
                 "isb\n"
-                "mrs %3, sctlr_el1\n"
-                "orr %3, %3, %4\n"
-                "msr sctlr_el1, %3\n"
+                "mrs %0, sctlr_el1\n"
+                "orr %0, %0, %4\n"
+                "msr sctlr_el1, %0\n"
                 "isb\n"
                 : "=&r"(sctlr)
                 : "r"(mair), "r"(tcr), "r"(root_physical),
                   "r"(NUSANTARA_ARM64_MMU_SCTLR_M |
-                      NUSANTARA_ARM64_MMU_SCTLR_C |
                       NUSANTARA_ARM64_MMU_SCTLR_I)
                 : "memory");
         }
