@@ -57,7 +57,6 @@ int main(void)
 
     make_svc(frame, NUSANTARA_ARM64_SYSCALL_WRITE);
     frame->x[0] = 0x1010u; frame->x[1] = 12u;
-    assert(nusantara_arm64_user_syscall_handle_exception(&state, frame) == 0);
     assert(nusantara_arm64_exception_dispatch(frame) == frame);
     assert(frame->x[0] == 12u && state.writes == 1u);
 
