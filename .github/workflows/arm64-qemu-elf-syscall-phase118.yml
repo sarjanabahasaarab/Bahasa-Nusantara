@@ -1,0 +1,56 @@
+name: ARM64 QEMU ELF user syscalls — Phase 118
+on:
+  pull_request:
+    paths:
+      - 'src/runtime/os/arch/arm64/process-bootstrap.*'
+      - 'src/runtime/os/arch/arm64/elf64-load.*'
+      - 'src/runtime/os/arch/arm64/elf64-loader.*'
+      - 'src/runtime/os/arch/arm64/address-space.*'
+      - 'src/runtime/os/arch/arm64/mmu.*'
+      - 'src/runtime/os/arch/arm64/mmu-control.*'
+      - 'src/runtime/os/arch/arm64/exception.*'
+      - 'src/runtime/os/arch/arm64/user-syscall.*'
+      - 'src/runtime/os/arch/arm64/phase118-*'
+      - 'scripts/build-arm64-phase118-qemu.sh'
+      - '.github/workflows/arm64-qemu-elf-syscall-phase118.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qemu-elf-syscalls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install AArch64 toolchain and QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang lld llvm qemu-system-arm
+      - name: Build freestanding ELF syscall image
+        run: bash scripts/build-arm64-phase118-qemu.sh /tmp/nusantara-phase118/Image
+      - name: Execute write and exit syscalls from EL0
+        shell: bash
+        run: |
+          set +e
+          timeout 12s qemu-system-aarch64 \
+            -machine virt,gic-version=3 -cpu cortex-a57 -smp 1 -m 256M \
+            -nographic -serial stdio -monitor none -nic none \
+            -kernel /tmp/nusantara-phase118/Image -no-reboot -no-shutdown \
+            > /tmp/nusantara-phase118-serial.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/nusantara-phase118-serial.log
+          if [ "$rc" -ne 124 ] && [ "$rc" -ne 0 ]; then
+            echo "Unexpected QEMU exit code: $rc" >&2
+            exit 1
+          fi
+          grep -Fq 'NUSANTARA_PHASE118_BOOT' /tmp/nusantara-phase118-serial.log
+          grep -Fq 'NUSANTARA_PHASE118_ERET_TO_EL0' /tmp/nusantara-phase118-serial.log
+          grep -Fq 'NUSANTARA EL0 WRITE SYSCALL OK' /tmp/nusantara-phase118-serial.log
+          grep -Fq 'NUSANTARA_PHASE118_WRITE_SYSCALL_OK' /tmp/nusantara-phase118-serial.log
+          grep -Fq 'NUSANTARA_PHASE118_EXIT_SYSCALL_OK' /tmp/nusantara-phase118-serial.log
+          grep -Fq 'NUSANTARA_PHASE118_PROCESS_RECLAIMED' /tmp/nusantara-phase118-serial.log
+          grep -Fq 'NUSANTARA_PHASE118_PASS' /tmp/nusantara-phase118-serial.log
+          if grep -Fq 'NUSANTARA_PHASE118_FAIL' /tmp/nusantara-phase118-serial.log; then
+            exit 1
+          fi

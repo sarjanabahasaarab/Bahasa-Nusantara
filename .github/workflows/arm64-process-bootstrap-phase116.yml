@@ -1,0 +1,50 @@
+name: ARM64 ELF Process Bootstrap — Phase 116
+
+on:
+  pull_request:
+    paths:
+      - 'src/runtime/os/arch/arm64/process-bootstrap.*'
+      - 'src/runtime/os/arch/arm64/exception.*'
+      - 'src/runtime/os/arch/arm64/elf64-load.*'
+      - 'src/runtime/os/arch/arm64/elf64-loader.*'
+      - 'src/runtime/os/arch/arm64/address-space.*'
+      - 'src/runtime/os/arch/arm64/mmu.*'
+      - 'pengujian/os/uji_arm64_process_bootstrap_fase116.c'
+      - 'docs/os/arm64/PHASE-116-ELF-PROCESS-BOOTSTRAP.md'
+      - '.github/workflows/arm64-process-bootstrap-phase116.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/runtime/os/arch/arm64/process-bootstrap.*'
+      - 'src/runtime/os/arch/arm64/exception.*'
+      - 'src/runtime/os/arch/arm64/elf64-load.*'
+      - 'src/runtime/os/arch/arm64/elf64-loader.*'
+      - 'src/runtime/os/arch/arm64/address-space.*'
+      - 'src/runtime/os/arch/arm64/mmu.*'
+      - 'pengujian/os/uji_arm64_process_bootstrap_fase116.c'
+      - 'docs/os/arm64/PHASE-116-ELF-PROCESS-BOOTSTRAP.md'
+      - '.github/workflows/arm64-process-bootstrap-phase116.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile process bootstrap with strict C diagnostics
+        run: |
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -Isrc/runtime/os/arch/arm64 \
+            src/runtime/os/arch/arm64/mmu.c \
+            src/runtime/os/arch/arm64/address-space.c \
+            src/runtime/os/arch/arm64/elf64-loader.c \
+            src/runtime/os/arch/arm64/elf64-load.c \
+            src/runtime/os/arch/arm64/exception.c \
+            src/runtime/os/arch/arm64/process-bootstrap.c \
+            pengujian/os/uji_arm64_process_bootstrap_fase116.c \
+            -o /tmp/nusantara-phase116-process-bootstrap
+      - name: Run ELF process bootstrap and rollback tests
+        run: /tmp/nusantara-phase116-process-bootstrap

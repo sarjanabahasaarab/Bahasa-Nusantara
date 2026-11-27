@@ -1,0 +1,73 @@
+name: ARM64 EL0 memory safety and QEMU syscalls — Phase 119
+on:
+  pull_request:
+    paths:
+      - 'src/runtime/os/arch/arm64/user-memory.*'
+      - 'src/runtime/os/arch/arm64/user-syscall.*'
+      - 'src/runtime/os/arch/arm64/process-bootstrap.*'
+      - 'src/runtime/os/arch/arm64/elf64-load.*'
+      - 'src/runtime/os/arch/arm64/elf64-loader.*'
+      - 'src/runtime/os/arch/arm64/address-space.*'
+      - 'src/runtime/os/arch/arm64/mmu.*'
+      - 'src/runtime/os/arch/arm64/mmu-control.*'
+      - 'src/runtime/os/arch/arm64/exception.*'
+      - 'src/runtime/os/arch/arm64/phase119-*'
+      - 'pengujian/os/uji_arm64_user_memory_fase119.c'
+      - 'scripts/build-arm64-phase119-qemu.sh'
+      - '.github/workflows/arm64-qemu-user-memory-phase119.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  host-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile strict user memory tests
+        run: |
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -Isrc/runtime/os/arch/arm64 \
+            src/runtime/os/arch/arm64/mmu.c \
+            src/runtime/os/arch/arm64/address-space.c \
+            src/runtime/os/arch/arm64/user-memory.c \
+            pengujian/os/uji_arm64_user_memory_fase119.c \
+            -o /tmp/nusantara-phase119-user-memory
+      - name: Run range permission and overflow tests
+        run: /tmp/nusantara-phase119-user-memory
+  qemu-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install AArch64 toolchain and QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang lld llvm qemu-system-arm
+      - name: Build freestanding ELF user memory image
+        run: bash scripts/build-arm64-phase119-qemu.sh /tmp/nusantara-phase119/Image
+      - name: Reject unmapped user pointer and execute valid write/exit
+        shell: bash
+        run: |
+          set +e
+          timeout 12s qemu-system-aarch64 \
+            -machine virt,gic-version=3 -cpu cortex-a57 -smp 1 -m 256M \
+            -nographic -serial stdio -monitor none -nic none \
+            -kernel /tmp/nusantara-phase119/Image -no-reboot -no-shutdown \
+            > /tmp/nusantara-phase119-serial.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/nusantara-phase119-serial.log
+          if [ "$rc" -ne 124 ] && [ "$rc" -ne 0 ]; then
+            echo "Unexpected QEMU exit code: $rc" >&2
+            exit 1
+          fi
+          grep -Fq 'NUSANTARA_PHASE119_BOOT' /tmp/nusantara-phase119-serial.log
+          grep -Fq 'NUSANTARA_PHASE119_ERET_TO_EL0' /tmp/nusantara-phase119-serial.log
+          grep -Fq 'NUSANTARA EL0 WRITE SYSCALL OK' /tmp/nusantara-phase119-serial.log
+          grep -Fq 'NUSANTARA_PHASE119_WRITE_SYSCALL_OK' /tmp/nusantara-phase119-serial.log
+          grep -Fq 'NUSANTARA_PHASE119_EXIT_SYSCALL_OK' /tmp/nusantara-phase119-serial.log
+          grep -Fq 'NUSANTARA_PHASE119_INVALID_POINTER_REJECTED' /tmp/nusantara-phase119-serial.log
+          grep -Fq 'NUSANTARA_PHASE119_PASS' /tmp/nusantara-phase119-serial.log
+          if grep -Fq 'NUSANTARA_PHASE119_FAIL' /tmp/nusantara-phase119-serial.log; then
+            exit 1
+          fi

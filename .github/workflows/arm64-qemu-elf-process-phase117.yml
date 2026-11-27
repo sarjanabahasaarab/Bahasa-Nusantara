@@ -1,0 +1,55 @@
+name: ARM64 QEMU ELF process execution — Phase 117
+on:
+  pull_request:
+    paths:
+      - 'src/runtime/os/arch/arm64/process-bootstrap.*'
+      - 'src/runtime/os/arch/arm64/elf64-load.*'
+      - 'src/runtime/os/arch/arm64/elf64-loader.*'
+      - 'src/runtime/os/arch/arm64/address-space.*'
+      - 'src/runtime/os/arch/arm64/mmu.*'
+      - 'src/runtime/os/arch/arm64/mmu-control.*'
+      - 'src/runtime/os/arch/arm64/exception.*'
+      - 'src/runtime/os/arch/arm64/exception-vectors.S'
+      - 'src/runtime/os/arch/arm64/phase117-*'
+      - 'scripts/build-arm64-phase117-qemu.sh'
+      - '.github/workflows/arm64-qemu-elf-process-phase117.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qemu-elf-process:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install AArch64 toolchain and QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang lld llvm qemu-system-arm
+      - name: Build freestanding ELF process image
+        run: bash scripts/build-arm64-phase117-qemu.sh /tmp/nusantara-phase117/Image
+      - name: Execute loaded ELF in EL0 and verify exit/reclamation
+        shell: bash
+        run: |
+          set +e
+          timeout 12s qemu-system-aarch64 \
+            -machine virt,gic-version=3 -cpu cortex-a57 -smp 1 -m 256M \
+            -nographic -serial stdio -monitor none -nic none \
+            -kernel /tmp/nusantara-phase117/Image -no-reboot -no-shutdown \
+            > /tmp/nusantara-phase117-serial.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/nusantara-phase117-serial.log
+          if [ "$rc" -ne 124 ] && [ "$rc" -ne 0 ]; then
+            echo "Unexpected QEMU exit code: $rc" >&2
+            exit 1
+          fi
+          grep -Fq 'NUSANTARA_PHASE117_BOOT' /tmp/nusantara-phase117-serial.log
+          grep -Fq 'NUSANTARA_PHASE117_ERET_TO_EL0' /tmp/nusantara-phase117-serial.log
+          grep -Fq 'NUSANTARA_PHASE117_EL0_INSTRUCTION_EXECUTED' /tmp/nusantara-phase117-serial.log
+          grep -Fq 'NUSANTARA_PHASE117_SVC_TRAPPED_AT_EL1' /tmp/nusantara-phase117-serial.log
+          grep -Fq 'NUSANTARA_PHASE117_PROCESS_FRAMES_RECLAIMED' /tmp/nusantara-phase117-serial.log
+          grep -Fq 'NUSANTARA_PHASE117_PASS' /tmp/nusantara-phase117-serial.log
+          if grep -Fq 'NUSANTARA_PHASE117_FAIL' /tmp/nusantara-phase117-serial.log; then
+            exit 1
+          fi
