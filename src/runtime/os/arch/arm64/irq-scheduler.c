@@ -24,12 +24,11 @@ static void selected_task_callback(
         return;
     integration->selected_task = (nusantara_os_task_t *)task;
     integration->selected_frame = 0;
-    if (integration->process_scheduler != 0 && task != 0) {
-        if (nusantara_arm64_process_scheduler_activate_task(
-                integration->process_scheduler, (nusantara_os_task_t *)task,
-                &integration->selected_frame) != NUSANTARA_ARM64_PROCESS_SCHEDULER_OK)
-            integration->selected_frame = 0;
-    }
+    if (integration->process_context != 0 && task != 0 &&
+        integration->activate_process_task != 0 &&
+        !integration->activate_process_task(integration->process_context,
+            (nusantara_os_task_t *)task, &integration->selected_frame))
+        integration->selected_frame = 0;
     if (integration->previous_task_selected != 0) {
         integration->previous_task_selected(
             integration->previous_callback_context, task);
@@ -67,7 +66,9 @@ nusantara_arm64_irq_scheduler_status_t nusantara_arm64_irq_scheduler_init(
     integration->previous_unhandled_irq = irq_runtime->unhandled_irq;
     integration->previous_callback_context = irq_runtime->callback_context;
     integration->selected_task = 0;
-    integration->process_scheduler = 0;
+    integration->process_context = 0;
+    integration->save_process_frame = 0;
+    integration->activate_process_task = 0;
     integration->selected_frame = 0;
     integration->initialized = 1u;
 
@@ -84,14 +85,16 @@ nusantara_arm64_irq_scheduler_status_t nusantara_arm64_irq_scheduler_init(
 }
 
 nusantara_arm64_irq_scheduler_status_t nusantara_arm64_irq_scheduler_bind_processes(
-    nusantara_arm64_irq_scheduler_t *integration,
-    nusantara_arm64_process_scheduler_t *process_scheduler)
+    nusantara_arm64_irq_scheduler_t *integration, void *process_context,
+    nusantara_arm64_irq_process_save_fn save_frame,
+    nusantara_arm64_irq_process_activate_fn activate_task)
 {
     if (integration == 0 || integration->initialized == 0u ||
-        process_scheduler == 0 || process_scheduler->initialized == 0u ||
-        process_scheduler->scheduler != integration->scheduler)
+        process_context == 0 || save_frame == 0 || activate_task == 0)
         return NUSANTARA_ARM64_IRQ_SCHEDULER_INVALID_ARGUMENT;
-    integration->process_scheduler = process_scheduler;
+    integration->process_context = process_context;
+    integration->save_process_frame = save_frame;
+    integration->activate_process_task = activate_task;
     return NUSANTARA_ARM64_IRQ_SCHEDULER_OK;
 }
 
@@ -125,10 +128,9 @@ nusantara_arm64_exception_frame_t *nusantara_arm64_irq_scheduler_handle_exceptio
 
     /* The interrupted task owns this exact asynchronous exception frame. */
     current->saved_stack_pointer = (uintptr_t)frame;
-    if (integration->process_scheduler != 0 &&
-        nusantara_arm64_process_scheduler_save_frame(
-            integration->process_scheduler, frame) !=
-            NUSANTARA_ARM64_PROCESS_SCHEDULER_OK)
+    if (integration->process_context != 0 &&
+        (integration->save_process_frame == 0 ||
+         !integration->save_process_frame(integration->process_context, frame)))
         return 0;
     integration->selected_task = 0;
     integration->selected_frame = 0;
@@ -152,7 +154,7 @@ nusantara_arm64_exception_frame_t *nusantara_arm64_irq_scheduler_handle_exceptio
         (integration->selected_task->saved_stack_pointer & 0x0fu) != 0u)
         return 0;
 
-    if (integration->process_scheduler != 0)
+    if (integration->process_context != 0)
         return integration->selected_frame;
 
     return (nusantara_arm64_exception_frame_t *)
