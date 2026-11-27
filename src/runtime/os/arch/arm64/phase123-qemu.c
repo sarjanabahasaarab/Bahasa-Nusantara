@@ -21,7 +21,6 @@
 static _Alignas(4096) uint8_t page_pool[PAGE_COUNT][4096];
 static uint8_t page_used[PAGE_COUNT];
 static _Alignas(16) uint8_t kernel_stack_a[8192], kernel_stack_b[8192];
-static _Alignas(16) uint8_t idle_stack[8192];
 static nusantara_arm64_address_space_manager_t manager;
 static nusantara_arm64_address_space_t kernel_space;
 static nusantara_arm64_process_bootstrap_t process_a, process_b;
@@ -30,10 +29,8 @@ static nusantara_arm64_process_scheduler_t process_scheduler;
 static nusantara_os_scheduler_t task_scheduler;
 static nusantara_arm64_process_syscall_adapter_t syscall_adapter;
 static uint8_t elf_a[ELF_BYTES], elf_b[ELF_BYTES];
-static _Alignas(16) nusantara_arm64_exception_frame_t idle_frame;
-static uint64_t task_a_id, task_b_id;
+typedef struct phase123_idle_context {\n    nusantara_arm64_exception_frame_t frame;\n    uint64_t scratch[2];\n} phase123_idle_context_t;\nstatic _Alignas(16) phase123_idle_context_t idle_context;\nstatic uint64_t task_a_id, task_b_id;
 static unsigned writes_a, writes_b;
-static unsigned phase123_done;
 
 extern void nusantara_arm64_exception_start_first_task(uintptr_t frame_pointer);
 
@@ -83,7 +80,7 @@ static void make_elf(uint8_t *b,const char *message,size_t message_len) {
     size_t i;
     const uint32_t code[14]={
         UINT32_C(0xd2800028),UINT32_C(0xd2a00800),UINT32_C(0xf2820000),
-        UINT32_C(0xd28000a1),UINT32_C(0xd4000001),
+        UINT32_C(0xd2800121),UINT32_C(0xd4000001),
         UINT32_C(0xd2800068),UINT32_C(0xd4000001),
         UINT32_C(0xd2800028),UINT32_C(0xd2a00800),UINT32_C(0xf2820000),
         UINT32_C(0xd28000a1),UINT32_C(0xd4000001),
@@ -159,7 +156,6 @@ static void phase123_idle(void) {
     uart_puts("NUSANTARA_PHASE123_B_YIELD_TO_A_OK\r\n");
     uart_puts("NUSANTARA_PHASE123_EXIT_AND_REAP_OK\r\n");
     uart_puts("NUSANTARA_PHASE123_PASS\r\n");
-    phase123_done=1u;
     halt();
 }
 void phase123_main(uintptr_t dtb) {
@@ -212,10 +208,10 @@ void phase123_main(uintptr_t dtb) {
           &binding_b,&process_b)!=NUSANTARA_ARM64_PROCESS_SCHEDULER_OK){
         uart_puts("NUSANTARA_PHASE123_FAIL_SCHEDULER\r\n");halt();
     }
-    idle_frame.elr_el1=(uint64_t)(uintptr_t)phase123_idle;
-    idle_frame.spsr_el1=NUSANTARA_ARM64_SPSR_EL1H_MASKED;
+    idle_context.frame.elr_el1=(uint64_t)(uintptr_t)phase123_idle;
+    idle_context.frame.spsr_el1=NUSANTARA_ARM64_SPSR_EL1H_MASKED;
     if(!nusantara_arm64_process_syscall_adapter_init(&syscall_adapter,
-       &process_scheduler,&syscall_ops,&idle_frame)||
+       &process_scheduler,&syscall_ops,&idle_context.frame)||
        !nusantara_arm64_user_syscall_init(&syscall_ops)||
        nusantara_arm64_process_scheduler_start(&process_scheduler,&first_frame)!=
          NUSANTARA_ARM64_PROCESS_SCHEDULER_OK||
