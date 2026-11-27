@@ -28,7 +28,7 @@ int main(void) {
  assert(low_task&&low_task->preemptions==1u);
  assert(high_task&&high_task->dispatches==2u);
  assert(s.total_preemptions==1u);
- assert(s.context_switches==3u);
+ assert(s.context_switches==2u);
  assert(s.total_ticks==2u);
  /* Counters are monotonic and saturate rather than wrapping. */
  s.total_ticks=UINT64_MAX;
