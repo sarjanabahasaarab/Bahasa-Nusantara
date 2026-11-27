@@ -199,10 +199,13 @@ void nusantara_phase105_main(void)
     uart_puts("NUSANTARA_PHASE105_BOOT\r\n");
     if (!nusantara_arm64_install_exception_vectors())
         phase105_fail("cannot install VBAR_EL1");
+    uart_puts("P105:VECTORS\\r\\n");
     if (nusantara_gicv3_distributor_init(&gic, &mmio, PHASE105_GICD_BASE, 100000u) != NUSANTARA_GICV3_OK)
         phase105_fail("GICD initialization failed");
+    uart_puts("P105:GICD\\r\\n");
     if (nusantara_gicv3_redistributor_wake(&gic, PHASE105_GICR_BASE) != NUSANTARA_GICV3_OK)
         phase105_fail("GICR wake failed");
+    uart_puts("P105:GICR\\r\\n");
 
     cpu_interface.context = 0;
     cpu_interface.write_sre_el1 = cpu_write_sre;
@@ -214,12 +217,16 @@ void nusantara_phase105_main(void)
     cpu_interface.isb = platform_isb;
     if (nusantara_gicv3_cpu_interface_enable(&gic, &cpu_interface) != NUSANTARA_GICV3_OK)
         phase105_fail("GIC CPU interface initialization failed");
+    uart_puts("P105:CPU\\r\\n");
     if (nusantara_gicv3_enable_ppi(&gic, PHASE105_TIMER_PPI) != NUSANTARA_GICV3_OK)
         phase105_fail("physical timer PPI enable failed");
+    uart_puts("P105:PPI\\r\\n");
     if (nusantara_arm64_timer_init(&timer, &timer_io) != NUSANTARA_ARM64_TIMER_OK)
         phase105_fail("CNTFRQ_EL0 unavailable");
+    uart_puts("P105:TIMER\\r\\n");
 
     nusantara_os_scheduler_init(&scheduler);
+    uart_puts("P105:SCHED_INIT\\r\\n");
     if (!nusantara_arm64_exception_context_prepare(
             &frame_a, task_a_stack, sizeof(task_a_stack),
             (uintptr_t)task_a, 0u, (uintptr_t)task_returned))
@@ -245,6 +252,7 @@ void nusantara_phase105_main(void)
         nusantara_os_scheduler_schedule(&scheduler, &first_task) != NUSANTARA_OS_SCHEDULER_OK ||
         first_task == 0)
         phase105_fail("initial scheduler selection failed");
+    uart_puts("P105:SCHED_SELECT\\r\\n");
 
     if (nusantara_arm64_irq_runtime_init(
             &irq_runtime, &timer, &cpu_interface, &scheduler,

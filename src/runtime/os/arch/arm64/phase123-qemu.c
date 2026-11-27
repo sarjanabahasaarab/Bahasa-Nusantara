@@ -180,10 +180,12 @@ void phase123_main(uintptr_t dtb) {
        !nusantara_arm64_address_space_manager_init(&manager,&page_ops,0)){
         uart_puts("NUSANTARA_PHASE123_FAIL_INIT\r\n");halt();
     }
+    uart_puts("P123:MANAGER\\r\\n");
     if(nusantara_arm64_address_space_create(&manager,&kernel_space,1u)!=
        NUSANTARA_ARM64_AS_OK||!map_kernel(&kernel_space)){
         uart_puts("NUSANTARA_PHASE123_FAIL_KERNEL\r\n");halt();
     }
+    uart_puts("P123:KERNEL_SPACE\\r\\n");
     if(nusantara_arm64_process_bootstrap_create(&manager,&process_a,10u,
        elf_a,sizeof(elf_a),USER_STACK_TOP,2u,0u,USER_ENTRY,
        kernel_stack_a,sizeof(kernel_stack_a))!=NUSANTARA_ARM64_PROCESS_BOOTSTRAP_OK||
@@ -193,6 +195,7 @@ void phase123_main(uintptr_t dtb) {
        !map_kernel(&process_a.address_space)||!map_kernel(&process_b.address_space)){
         uart_puts("NUSANTARA_PHASE123_FAIL_ELF_CREATE\r\n");halt();
     }
+    uart_puts("P123:PROCESSES\\r\\n");
     nusantara_os_scheduler_init(&task_scheduler);
     if(nusantara_os_scheduler_add(&task_scheduler,(uintptr_t)process_a.initial_frame,
        0,1u,&task_a_id)!=NUSANTARA_OS_SCHEDULER_OK||
@@ -200,10 +203,12 @@ void phase123_main(uintptr_t dtb) {
        0,1u,&task_b_id)!=NUSANTARA_OS_SCHEDULER_OK){
         uart_puts("NUSANTARA_PHASE123_FAIL_TASK_ADD\r\n");halt();
     }
+    uart_puts("P123:TASKS_ADDED\\r\\n");
     for(i=0;i<NUSANTARA_OS_SCHEDULER_MAX_TASKS;i++){
         if(task_scheduler.tasks[i].id==task_a_id)task_a=&task_scheduler.tasks[i];
         if(task_scheduler.tasks[i].id==task_b_id)task_b=&task_scheduler.tasks[i];
     }
+    uart_puts("P123:TASKS_FOUND\\r\\n");
     if(task_a==0||task_b==0||
        nusantara_arm64_process_scheduler_init(&process_scheduler,&task_scheduler,
           &manager,kernel_space.root_physical)!=NUSANTARA_ARM64_PROCESS_SCHEDULER_OK||
