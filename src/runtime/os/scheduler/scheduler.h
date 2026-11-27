@@ -19,6 +19,9 @@ typedef struct nusantara_os_task {
  uint64_t cpu_ticks;
  uint64_t dispatches;
  uint64_t preemptions;
+ uint64_t ready_wait_ticks;
+ uint64_t max_ready_wait_ticks;
+ uint64_t ready_wait_events;
 } nusantara_os_task_t;
 typedef struct nusantara_os_scheduler {
  nusantara_os_task_t tasks[NUSANTARA_OS_SCHEDULER_MAX_TASKS];
