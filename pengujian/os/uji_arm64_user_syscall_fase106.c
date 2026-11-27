@@ -49,7 +49,7 @@ int main(void)
     nusantara_arm64_exception_frame_t *frame = 0;
     test_state_t state = { 0x1000u, 0x100u, 0u, 0u, 0u };
     const nusantara_arm64_user_syscall_ops_t ops = {
-        &state, validate, write_user, exit_user, yield_user
+        &state, validate, write_user, exit_user, yield_user, 0, 0
     };
     assert(nusantara_arm64_exception_context_prepare(
         &frame, stack, sizeof(stack), 0x2000u, 0u, 0x3000u));

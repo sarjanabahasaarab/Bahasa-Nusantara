@@ -1,0 +1,24 @@
+name: ARM64 frame-returning syscall contract — Phase 121
+on:
+  pull_request:
+    paths:
+      - 'src/runtime/os/arch/arm64/user-syscall.*'
+      - 'pengujian/os/uji_arm64_frame_syscall_fase121.c'
+      - '.github/workflows/arm64-frame-syscall-phase121.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  frame-returning-syscalls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile strict C11 dispatcher contract
+        run: |
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -Isrc/runtime/os/arch/arm64 \
+            src/runtime/os/arch/arm64/user-syscall.c \
+            pengujian/os/uji_arm64_frame_syscall_fase121.c \
+            -o /tmp/nusantara-phase121-frame-syscalls
+      - name: Verify scheduler frame handoff
+        run: /tmp/nusantara-phase121-frame-syscalls
