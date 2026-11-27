@@ -66,7 +66,7 @@ int main(void) {
     valid_fixture(); put64(ph(0)+40,UINT64_C(0xffffffffffffffff)); expect(NUSANTARA_ARM64_ELF64_INVALID_SEGMENT);
     valid_fixture(); put32(ph(0)+4,PF_R|PF_W|PF_X); expect(NUSANTARA_ARM64_ELF64_INVALID_SEGMENT);
     valid_fixture(); put64(ph(0)+48,3); expect(NUSANTARA_ARM64_ELF64_INVALID_SEGMENT);
-    valid_fixture(); put64(ph(1)+16,0x400800); expect(NUSANTARA_ARM64_ELF64_OVERLAP);
+    valid_fixture(); put64(ph(1)+16,0x400800); put64(ph(1)+48,1); expect(NUSANTARA_ARM64_ELF64_OVERLAP);
     valid_fixture(); put64(24,0x402100); expect(NUSANTARA_ARM64_ELF64_ENTRY_NOT_EXECUTABLE);
     valid_fixture(); put64(ph(0)+8,IMAGE_SIZE-8); put64(ph(0)+32,0x100); expect(NUSANTARA_ARM64_ELF64_INVALID_SEGMENT);
     valid_fixture(); set_ph(0,PT_DYNAMIC,PF_R,0x1000,0x400000,0x10,0x10,1); expect(NUSANTARA_ARM64_ELF64_UNSUPPORTED_DYNAMIC);
