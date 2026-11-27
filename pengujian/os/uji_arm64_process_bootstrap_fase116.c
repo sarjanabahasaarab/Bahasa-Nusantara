@@ -131,6 +131,28 @@ int main(void)
     puts("PASS: static ELF entry mapped RX and EL0 exception frame prepared");
     puts("PASS: user stack pages mapped RW/NX and reclaimed on destroy");
 
+    reset_pool(POOL_COUNT);
+    assert(nusantara_arm64_address_space_manager_init(&manager,&ops,0));
+    memset(&process,0,sizeof(process));
+    assert(nusantara_arm64_process_bootstrap_create(
+        &manager,&process,117u,elf,sizeof(elf),USER_STACK_TOP,
+        USER_STACK_PAGES,(uintptr_t)0x1234u,0x500000u,
+        kernel_stack,sizeof(kernel_stack))==
+        NUSANTARA_ARM64_PROCESS_BOOTSTRAP_INVALID_ARGUMENT);
+    assert(manager.count==0u && active_pages()==0u && allocations==releases);
+    puts("PASS: unmapped/non-executable exit trampoline is rejected with rollback");
+
+    reset_pool(POOL_COUNT);
+    assert(nusantara_arm64_address_space_manager_init(&manager,&ops,0));
+    memset(&process,0,sizeof(process));
+    assert(nusantara_arm64_process_bootstrap_create(
+        &manager,&process,118u,elf,sizeof(elf),0x401000u,
+        1u,(uintptr_t)0x1234u,0x400000u,
+        kernel_stack,sizeof(kernel_stack))==
+        NUSANTARA_ARM64_PROCESS_BOOTSTRAP_STACK_FAILURE);
+    assert(manager.count==0u && active_pages()==0u && allocations==releases);
+    puts("PASS: stack collision with ELF mapping triggers complete rollback");
+
     /* Sweep allocation cutoffs: every partial construction must roll back. */
     for(limit=1u;limit<POOL_COUNT;limit++) {
         nusantara_arm64_process_bootstrap_status_t status;
