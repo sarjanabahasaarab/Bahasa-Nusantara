@@ -118,11 +118,7 @@ static int map_kernel(nusantara_arm64_address_space_t *space)
           NUSANTARA_ARM64_PAGE_KERNEL_RW,0))
         return 0;
     {
-        uint64_t *entry;
         /* QEMU virt PL011 uses MAIR AttrIdx 1 (Device-nGnRE). */
-        entry=(uint64_t *)(uintptr_t)nusantara_arm64_mmu_lookup_page(&space->mmu,UART_BASE);
-        (void)entry;
-        /* Locate the L3 descriptor via the page-table walk helper. */
         {
             uint64_t *entries=space->mmu.root.entries;
             const unsigned shifts[3]={39u,30u,21u};
