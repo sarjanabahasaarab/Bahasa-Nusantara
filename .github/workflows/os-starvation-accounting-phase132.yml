@@ -1,0 +1,19 @@
+name: NUSANTARA OS starvation accounting contract — Phase 132
+on:
+  pull_request:
+    paths:
+      - 'src/runtime/os/scheduler/scheduler.*'
+      - 'pengujian/os/uji_starvation_accounting_fase132.c'
+      - '.github/workflows/os-starvation-accounting-phase132.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  starvation-accounting-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile strict C11 starvation accounting contract
+        run: cc -std=c11 -Wall -Wextra -Werror -pedantic -Isrc/runtime/os/scheduler src/runtime/os/scheduler/scheduler.c pengujian/os/uji_starvation_accounting_fase132.c -o /tmp/uji-starvation-accounting
+      - name: Run starvation accounting contract
+        run: /tmp/uji-starvation-accounting
