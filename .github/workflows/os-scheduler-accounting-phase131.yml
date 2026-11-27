@@ -1,0 +1,19 @@
+name: NUSANTARA OS scheduler accounting contract — Phase 131
+on:
+  pull_request:
+    paths:
+      - 'src/runtime/os/scheduler/scheduler.*'
+      - 'pengujian/os/uji_scheduler_accounting_fase131.c'
+      - '.github/workflows/os-scheduler-accounting-phase131.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  scheduler-accounting-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile strict C11 scheduler accounting contract
+        run: cc -std=c11 -Wall -Wextra -Werror -pedantic -Isrc/runtime/os/scheduler src/runtime/os/scheduler/scheduler.c pengujian/os/uji_scheduler_accounting_fase131.c -o /tmp/uji-scheduler-accounting
+      - name: Run scheduler accounting contract
+        run: /tmp/uji-scheduler-accounting

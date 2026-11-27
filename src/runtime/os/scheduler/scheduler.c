@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 #include "scheduler.h"
+static void count_up(uint64_t *value) { if (*value != UINT64_MAX) ++*value; }
 static nusantara_os_task_t *find_mut(nusantara_os_scheduler_t *s,uint64_t id) {
  size_t i;for(i=0;i<NUSANTARA_OS_SCHEDULER_MAX_TASKS;++i)
   if(s->tasks[i].state!=NUSANTARA_OS_TASK_UNUSED&&s->tasks[i].id==id)return &s->tasks[i];
@@ -17,8 +18,10 @@ void nusantara_os_scheduler_init(nusantara_os_scheduler_t *s) {
   s->tasks[i].id=0u;s->tasks[i].saved_stack_pointer=0u;s->tasks[i].architecture_context=NULL;
   s->tasks[i].quantum=0u;s->tasks[i].remaining=0u;s->tasks[i].state=NUSANTARA_OS_TASK_UNUSED;
   s->tasks[i].base_priority=0u;s->tasks[i].effective_priority=0u;
+  s->tasks[i].cpu_ticks=0u;s->tasks[i].dispatches=0u;s->tasks[i].preemptions=0u;
  }
  s->count=0u;s->current=0u;s->next_id=1u;s->has_current=0u;
+ s->total_ticks=0u;s->context_switches=0u;s->total_preemptions=0u;
 }
 nusantara_os_scheduler_status_t nusantara_os_scheduler_add(nusantara_os_scheduler_t *s,uintptr_t sp,void *ctx,uint32_t q,uint64_t *id) {
  size_t i;if(!s||!id||sp==0u)return NUSANTARA_OS_SCHEDULER_INVALID_ARGUMENT;
@@ -28,6 +31,7 @@ nusantara_os_scheduler_status_t nusantara_os_scheduler_add(nusantara_os_schedule
   s->tasks[i].id=n;s->tasks[i].saved_stack_pointer=sp;s->tasks[i].architecture_context=ctx;
   s->tasks[i].quantum=q;s->tasks[i].remaining=q;s->tasks[i].state=NUSANTARA_OS_TASK_READY;
   s->tasks[i].base_priority=0u;s->tasks[i].effective_priority=0u;
+  s->tasks[i].cpu_ticks=0u;s->tasks[i].dispatches=0u;s->tasks[i].preemptions=0u;
   ++s->count;*id=n;return NUSANTARA_OS_SCHEDULER_OK;
  }
  return NUSANTARA_OS_SCHEDULER_FULL;
@@ -44,8 +48,13 @@ static nusantara_os_task_t *choose_next(nusantara_os_scheduler_t *s) {
   if(!best||cur->effective_priority>best->effective_priority){cur->remaining=cur->quantum;return cur;}
  }
  if(!best)return NULL;
- if(s->has_current&&s->current<NUSANTARA_OS_SCHEDULER_MAX_TASKS&&s->tasks[s->current].state==NUSANTARA_OS_TASK_RUNNING)s->tasks[s->current].state=NUSANTARA_OS_TASK_READY;
- s->current=best_i;s->has_current=1u;best->state=NUSANTARA_OS_TASK_RUNNING;best->remaining=best->quantum;return best;
+ if(s->has_current&&s->current<NUSANTARA_OS_SCHEDULER_MAX_TASKS&&s->current!=best_i){
+  if(s->tasks[s->current].state==NUSANTARA_OS_TASK_RUNNING)
+   s->tasks[s->current].state=NUSANTARA_OS_TASK_READY;
+  count_up(&s->context_switches);
+ }
+ s->current=best_i;s->has_current=1u;best->state=NUSANTARA_OS_TASK_RUNNING;best->remaining=best->quantum;
+ count_up(&best->dispatches);return best;
 }
 nusantara_os_scheduler_status_t nusantara_os_scheduler_schedule(nusantara_os_scheduler_t *s,nusantara_os_task_t **next) {
  nusantara_os_task_t *t;if(!s||!next)return NUSANTARA_OS_SCHEDULER_INVALID_ARGUMENT;
@@ -54,7 +63,9 @@ nusantara_os_scheduler_status_t nusantara_os_scheduler_schedule(nusantara_os_sch
 nusantara_os_scheduler_status_t nusantara_os_scheduler_tick(nusantara_os_scheduler_t *s,nusantara_os_task_t **next) {
  size_t i;uint32_t highest_ready=0u;int has_higher_ready=0;
  if(!s||!next)return NUSANTARA_OS_SCHEDULER_INVALID_ARGUMENT;
+ count_up(&s->total_ticks);
  if(!s->has_current||s->current>=NUSANTARA_OS_SCHEDULER_MAX_TASKS||s->tasks[s->current].state!=NUSANTARA_OS_TASK_RUNNING)return nusantara_os_scheduler_schedule(s,next);
+ count_up(&s->tasks[s->current].cpu_ticks);
  /* A newly runnable task with strictly higher effective priority preempts immediately. */
  for(i=0;i<NUSANTARA_OS_SCHEDULER_MAX_TASKS;++i) {
   const nusantara_os_task_t *candidate=&s->tasks[i];
@@ -63,8 +74,10 @@ nusantara_os_scheduler_status_t nusantara_os_scheduler_tick(nusantara_os_schedul
    highest_ready=candidate->effective_priority;has_higher_ready=1;
   }
  }
- if(has_higher_ready&&highest_ready>s->tasks[s->current].effective_priority)
+ if(has_higher_ready&&highest_ready>s->tasks[s->current].effective_priority) {
+  count_up(&s->tasks[s->current].preemptions);count_up(&s->total_preemptions);
   return nusantara_os_scheduler_schedule(s,next);
+ }
  if(s->tasks[s->current].remaining>0u)--s->tasks[s->current].remaining;
  if(s->tasks[s->current].remaining==0u)return nusantara_os_scheduler_schedule(s,next);
  *next=&s->tasks[s->current];return NUSANTARA_OS_SCHEDULER_OK;
@@ -102,4 +115,3 @@ nusantara_os_scheduler_status_t nusantara_os_scheduler_reset_effective_prioritie
  for(i=0;i<NUSANTARA_OS_SCHEDULER_MAX_TASKS;++i)if(s->tasks[i].state!=NUSANTARA_OS_TASK_UNUSED)s->tasks[i].effective_priority=s->tasks[i].base_priority;
  return NUSANTARA_OS_SCHEDULER_OK;
 }
-
