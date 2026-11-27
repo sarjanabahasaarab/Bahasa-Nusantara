@@ -146,6 +146,17 @@ static int map_kernel(nusantara_arm64_address_space_t *space) {
     }
     return 1;
 }
+static int phase125_save_process_frame(void *ctx,nusantara_arm64_exception_frame_t *frame) {
+    return nusantara_arm64_process_scheduler_save_frame(
+        (nusantara_arm64_process_scheduler_t *)ctx,frame)==
+        NUSANTARA_ARM64_PROCESS_SCHEDULER_OK;
+}
+static int phase125_activate_process_task(void *ctx,nusantara_os_task_t *task,
+        nusantara_arm64_exception_frame_t **selected) {
+    return nusantara_arm64_process_scheduler_activate_task(
+        (nusantara_arm64_process_scheduler_t *)ctx,task,selected)==
+        NUSANTARA_ARM64_PROCESS_SCHEDULER_OK;
+}
 static void phase125_success(void) {
     uart_puts("NUSANTARA_PHASE125_TIMER_PREEMPTION_OK\r\n");
     uart_puts("NUSANTARA_PHASE125_ADDRESS_SPACE_SWITCH_OK\r\n");
@@ -261,7 +272,8 @@ void phase125_main(uintptr_t dtb) {
        task_selected,0)!=NUSANTARA_ARM64_IRQ_RUNTIME_OK||
        nusantara_arm64_irq_scheduler_init(&irq_scheduler,&irq_runtime,&task_scheduler)!=
        NUSANTARA_ARM64_IRQ_SCHEDULER_OK||
-       nusantara_arm64_irq_scheduler_bind_processes(&irq_scheduler,&process_scheduler)!=
+       nusantara_arm64_irq_scheduler_bind_processes(&irq_scheduler,&process_scheduler,
+          phase125_save_process_frame,phase125_activate_process_task)!=
        NUSANTARA_ARM64_IRQ_SCHEDULER_OK||
        nusantara_arm64_timer_arm_ms(&timer,PHASE125_TIMER_INTERVAL_MS)!=NUSANTARA_ARM64_TIMER_OK){
         uart_puts("NUSANTARA_PHASE125_FAIL_IRQ_BIND\r\n");halt();
