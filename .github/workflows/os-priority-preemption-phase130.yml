@@ -1,0 +1,19 @@
+name: NUSANTARA OS priority preemption contract — Phase 130
+on:
+  pull_request:
+    paths:
+      - 'src/runtime/os/scheduler/scheduler.*'
+      - 'pengujian/os/uji_priority_preemption_fase130.c'
+      - '.github/workflows/os-priority-preemption-phase130.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  priority-preemption-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile strict C11 priority preemption contract
+        run: cc -std=c11 -Wall -Wextra -Werror -pedantic -Isrc/runtime/os/scheduler src/runtime/os/scheduler/scheduler.c pengujian/os/uji_priority_preemption_fase130.c -o /tmp/uji-priority-preemption
+      - name: Run priority preemption contract
+        run: /tmp/uji-priority-preemption
