@@ -84,7 +84,6 @@ static void put64(uint8_t *p,uint64_t v){put32(p,(uint32_t)v);put32(p+4,(uint32_
 
 static void make_elf(uint8_t *b,const char *message,size_t message_len,uint16_t marker) {
     size_t i;
-    uart_puts("NUSANTARA_PHASE124_MAKE_ELF_BEGIN\\r\\n");
     uint32_t code[18]={
         UINT32_C(0xd2800028),UINT32_C(0xd2a00800),UINT32_C(0xf2820000),
         UINT32_C(0xd2800121),UINT32_C(0xd4000001),
@@ -96,42 +95,35 @@ static void make_elf(uint8_t *b,const char *message,size_t message_len,uint16_t 
     };
     code[7]=UINT32_C(0xd280000a)|((uint32_t)marker<<5);
     for(i=0;i<ELF_BYTES;i++)b[i]=0u;
-    uart_puts("NUSANTARA_PHASE124_BUFFER_ZEROED\\r\\n");
     b[0]=0x7fu;b[1]='E';b[2]='L';b[3]='F';b[4]=2u;b[5]=1u;b[6]=1u;
-    uart_puts("NUSANTARA_PHASE124_MAGIC_OK\\r\\n");
     put16(b+16,2u);put16(b+18,183u);put32(b+20,1u);
     put64(b+24,USER_ENTRY);put64(b+32,64u);
     put16(b+52,64u);put16(b+54,56u);put16(b+56,2u);
-    uart_puts("NUSANTARA_PHASE124_HEADER_OK\\r\\n");
     put32(b+64,1u);put32(b+68,5u);
     put64(b+72,0x1000u);put64(b+80,USER_ENTRY);put64(b+88,USER_ENTRY);
     put64(b+96,sizeof(code));put64(b+104,sizeof(code));put64(b+112,0x1000u);
-    uart_puts("NUSANTARA_PHASE124_PROGRAM_HEADER_OK\\r\\n");
-    put32(b+0x1000u+0u,code[0]);uart_putc('.');
-    put32(b+0x1000u+4u,code[1]);uart_putc('.');
-    put32(b+0x1000u+8u,code[2]);uart_putc('.');
-    put32(b+0x1000u+12u,code[3]);uart_putc('.');
-    put32(b+0x1000u+16u,code[4]);uart_putc('.');
-    put32(b+0x1000u+20u,code[5]);uart_putc('.');
-    put32(b+0x1000u+24u,code[6]);uart_putc('.');
-    put32(b+0x1000u+28u,code[7]);uart_putc('.');
-    put32(b+0x1000u+32u,code[8]);uart_putc('.');
-    put32(b+0x1000u+36u,code[9]);uart_putc('.');
-    put32(b+0x1000u+40u,code[10]);uart_putc('.');
-    put32(b+0x1000u+44u,code[11]);uart_putc('.');
-    put32(b+0x1000u+48u,code[12]);uart_putc('.');
-    put32(b+0x1000u+52u,code[13]);uart_putc('.');
-    put32(b+0x1000u+56u,code[14]);uart_putc('.');
-    put32(b+0x1000u+60u,code[15]);uart_putc('.');
-    put32(b+0x1000u+64u,code[16]);uart_putc('.');
-    put32(b+0x1000u+68u,code[17]);uart_putc('.');
-    uart_puts("NUSANTARA_PHASE124_CODE_OK\\r\\n");
-    uart_puts("NUSANTARA_PHASE124_CODE_COPIED\\r\\n");
+    put32(b+0x1000u+0u,code[0]);
+    put32(b+0x1000u+4u,code[1]);
+    put32(b+0x1000u+8u,code[2]);
+    put32(b+0x1000u+12u,code[3]);
+    put32(b+0x1000u+16u,code[4]);
+    put32(b+0x1000u+20u,code[5]);
+    put32(b+0x1000u+24u,code[6]);
+    put32(b+0x1000u+28u,code[7]);
+    put32(b+0x1000u+32u,code[8]);
+    put32(b+0x1000u+36u,code[9]);
+    put32(b+0x1000u+40u,code[10]);
+    put32(b+0x1000u+44u,code[11]);
+    put32(b+0x1000u+48u,code[12]);
+    put32(b+0x1000u+52u,code[13]);
+    put32(b+0x1000u+56u,code[14]);
+    put32(b+0x1000u+60u,code[15]);
+    put32(b+0x1000u+64u,code[16]);
+    put32(b+0x1000u+68u,code[17]);
     put32(b+120,1u);put32(b+124,6u);
     put64(b+128,0x2000u);put64(b+136,USER_DATA);put64(b+144,USER_DATA);
     put64(b+152,message_len);put64(b+160,message_len);put64(b+168,0x1000u);
     for(i=0;i<message_len;i++)b[0x2000u+i]=(uint8_t)message[i];
-    uart_puts("NUSANTARA_PHASE124_DATA_OK\\r\\n");
 }
 static int map_kernel(nusantara_arm64_address_space_t *space) {
     uint64_t off;
@@ -216,9 +208,7 @@ void phase124_main(uintptr_t dtb) {
     (void)dtb;
     uart_puts("NUSANTARA_PHASE124_BOOT\r\n");
     make_elf(elf_a,"PROCESS-A",9u,UINT16_C(0xA123));
-    uart_puts("NUSANTARA_PHASE124_ELF_A_BUILT\\r\\n");
     make_elf(elf_b,"PROCESS-B",9u,UINT16_C(0xB456));
-    uart_puts("NUSANTARA_PHASE124_ELF_B_BUILT\\r\\n");
     uart_puts("NUSANTARA_PHASE124_ELF_BUILT\r\n");
     if(!nusantara_arm64_install_exception_vectors()||
        !nusantara_arm64_address_space_manager_init(&manager,&page_ops,0)){
