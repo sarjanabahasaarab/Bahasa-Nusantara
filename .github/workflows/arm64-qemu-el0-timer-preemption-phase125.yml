@@ -9,6 +9,7 @@ on:
       - 'src/runtime/os/arch/arm64/generic_timer.*'
       - 'src/runtime/os/arch/arm64/gicv3.*'
       - 'src/runtime/os/scheduler/scheduler.*'
+      - 'pengujian/os/uji_arm64_process_scheduler_fase120.c'
       - 'scripts/build-arm64-phase125-qemu.sh'
       - '.github/workflows/arm64-qemu-el0-timer-preemption-phase125.yml'
   workflow_dispatch:
