@@ -48,8 +48,10 @@ static nusantara_os_task_t *choose_next(nusantara_os_scheduler_t *s) {
   if(!best||cur->effective_priority>best->effective_priority){cur->remaining=cur->quantum;return cur;}
  }
  if(!best)return NULL;
- if(s->has_current&&s->current<NUSANTARA_OS_SCHEDULER_MAX_TASKS&&s->tasks[s->current].state==NUSANTARA_OS_TASK_RUNNING){
-  s->tasks[s->current].state=NUSANTARA_OS_TASK_READY;count_up(&s->context_switches);
+ if(s->has_current&&s->current<NUSANTARA_OS_SCHEDULER_MAX_TASKS&&s->current!=best_i){
+  if(s->tasks[s->current].state==NUSANTARA_OS_TASK_RUNNING)
+   s->tasks[s->current].state=NUSANTARA_OS_TASK_READY;
+  count_up(&s->context_switches);
  }
  s->current=best_i;s->has_current=1u;best->state=NUSANTARA_OS_TASK_RUNNING;best->remaining=best->quantum;
  count_up(&best->dispatches);return best;
