@@ -144,8 +144,7 @@ static int64_t write_active(void *ctx,uintptr_t address,size_t length) {
     else if(m->active==&process_b.address_space)++writes_b;
     else return NUSANTARA_ARM64_SYSCALL_EFAULT;
     for(i=0;i<length;i++)uart_putc(p[i]);
-    uart_putc('\r');uart_putc('
-');
+    uart_putc('\r');uart_putc('\n');
     return (int64_t)length;
 }
 static void phase123_idle(void) {
@@ -153,21 +152,15 @@ static void phase123_idle(void) {
        NUSANTARA_ARM64_PROCESS_SCHEDULER_OK||
        nusantara_arm64_process_scheduler_reap(&process_scheduler,task_b_id)!=
        NUSANTARA_ARM64_PROCESS_SCHEDULER_OK){
-        uart_puts("NUSANTARA_PHASE123_FAIL_REAP\r
-");halt();
+        uart_puts("NUSANTARA_PHASE123_FAIL_REAP\r\n");halt();
     }
     if(writes_a!=2u||writes_b!=2u){
-        uart_puts("NUSANTARA_PHASE123_FAIL_COUNTS\r
-");halt();
+        uart_puts("NUSANTARA_PHASE123_FAIL_COUNTS\r\n");halt();
     }
-    uart_puts("NUSANTARA_PHASE123_A_YIELD_TO_B_OK\r
-");
-    uart_puts("NUSANTARA_PHASE123_B_YIELD_TO_A_OK\r
-");
-    uart_puts("NUSANTARA_PHASE123_EXIT_AND_REAP_OK\r
-");
-    uart_puts("NUSANTARA_PHASE123_PASS\r
-");
+    uart_puts("NUSANTARA_PHASE123_A_YIELD_TO_B_OK\r\n");
+    uart_puts("NUSANTARA_PHASE123_B_YIELD_TO_A_OK\r\n");
+    uart_puts("NUSANTARA_PHASE123_EXIT_AND_REAP_OK\r\n");
+    uart_puts("NUSANTARA_PHASE123_PASS\r\n");
     halt();
 }
 void phase123_main(uintptr_t dtb) {
@@ -181,18 +174,15 @@ void phase123_main(uintptr_t dtb) {
     nusantara_arm64_exception_frame_t *first_frame=0;
     size_t i;
     (void)dtb;
-    uart_puts("NUSANTARA_PHASE123_BOOT\r
-");
+    uart_puts("NUSANTARA_PHASE123_BOOT\r\n");
     make_elf(elf_a,"PROCESS-A",9u);make_elf(elf_b,"PROCESS-B",9u);
     if(!nusantara_arm64_install_exception_vectors()||
        !nusantara_arm64_address_space_manager_init(&manager,&page_ops,0)){
-        uart_puts("NUSANTARA_PHASE123_FAIL_INIT\r
-");halt();
+        uart_puts("NUSANTARA_PHASE123_FAIL_INIT\r\n");halt();
     }
     if(nusantara_arm64_address_space_create(&manager,&kernel_space,1u)!=
        NUSANTARA_ARM64_AS_OK||!map_kernel(&kernel_space)){
-        uart_puts("NUSANTARA_PHASE123_FAIL_KERNEL\r
-");halt();
+        uart_puts("NUSANTARA_PHASE123_FAIL_KERNEL\r\n");halt();
     }
     if(nusantara_arm64_process_bootstrap_create(&manager,&process_a,10u,
        elf_a,sizeof(elf_a),USER_STACK_TOP,2u,0u,USER_ENTRY,
@@ -201,16 +191,14 @@ void phase123_main(uintptr_t dtb) {
        elf_b,sizeof(elf_b),USER_STACK_TOP,2u,0u,USER_ENTRY,
        kernel_stack_b,sizeof(kernel_stack_b))!=NUSANTARA_ARM64_PROCESS_BOOTSTRAP_OK||
        !map_kernel(&process_a.address_space)||!map_kernel(&process_b.address_space)){
-        uart_puts("NUSANTARA_PHASE123_FAIL_ELF_CREATE\r
-");halt();
+        uart_puts("NUSANTARA_PHASE123_FAIL_ELF_CREATE\r\n");halt();
     }
     nusantara_os_scheduler_init(&task_scheduler);
     if(nusantara_os_scheduler_add(&task_scheduler,(uintptr_t)process_a.initial_frame,
        0,1u,&task_a_id)!=NUSANTARA_OS_SCHEDULER_OK||
        nusantara_os_scheduler_add(&task_scheduler,(uintptr_t)process_b.initial_frame,
        0,1u,&task_b_id)!=NUSANTARA_OS_SCHEDULER_OK){
-        uart_puts("NUSANTARA_PHASE123_FAIL_TASK_ADD\r
-");halt();
+        uart_puts("NUSANTARA_PHASE123_FAIL_TASK_ADD\r\n");halt();
     }
     for(i=0;i<NUSANTARA_OS_SCHEDULER_MAX_TASKS;i++){
         if(task_scheduler.tasks[i].id==task_a_id)task_a=&task_scheduler.tasks[i];
@@ -223,8 +211,7 @@ void phase123_main(uintptr_t dtb) {
           &binding_a,&process_a)!=NUSANTARA_ARM64_PROCESS_SCHEDULER_OK||
        nusantara_arm64_process_scheduler_attach(&process_scheduler,task_b,
           &binding_b,&process_b)!=NUSANTARA_ARM64_PROCESS_SCHEDULER_OK){
-        uart_puts("NUSANTARA_PHASE123_FAIL_SCHEDULER\r
-");halt();
+        uart_puts("NUSANTARA_PHASE123_FAIL_SCHEDULER\r\n");halt();
     }
     idle_context.frame.elr_el1=(uint64_t)(uintptr_t)phase123_idle;
     idle_context.frame.spsr_el1=NUSANTARA_ARM64_SPSR_EL1H_MASKED;
@@ -235,13 +222,10 @@ void phase123_main(uintptr_t dtb) {
          NUSANTARA_ARM64_PROCESS_SCHEDULER_OK||
        first_frame!=process_a.initial_frame||
        !nusantara_arm64_mmu_enable_el1(process_a.address_space.root_physical)){
-        uart_puts("NUSANTARA_PHASE123_FAIL_START\r
-");halt();
+        uart_puts("NUSANTARA_PHASE123_FAIL_START\r\n");halt();
     }
     (void)first;
-    uart_puts("NUSANTARA_PHASE123_ERET_TO_EL0\r
-");
+    uart_puts("NUSANTARA_PHASE123_ERET_TO_EL0\r\n");
     nusantara_arm64_exception_start_first_task((uintptr_t)first_frame);
-    uart_puts("NUSANTARA_PHASE123_FAIL_ERET_RETURNED\r
-");halt();
+    uart_puts("NUSANTARA_PHASE123_FAIL_ERET_RETURNED\r\n");halt();
 }
