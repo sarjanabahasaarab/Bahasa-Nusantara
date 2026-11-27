@@ -106,6 +106,7 @@ static void make_elf(uint8_t *b,const char *message,size_t message_len,uint16_t 
     put32(b+64,1u);put32(b+68,5u);
     put64(b+72,0x1000u);put64(b+80,USER_ENTRY);put64(b+88,USER_ENTRY);
     put64(b+96,sizeof(code));put64(b+104,sizeof(code));put64(b+112,0x1000u);
+    uart_puts("NUSANTARA_PHASE124_PROGRAM_HEADER_OK\\r\\n");
     for(i=0;i<18u;i++)put32(b+0x1000u+i*4u,code[i]);
     uart_puts("NUSANTARA_PHASE124_CODE_OK\\r\\n");
     uart_puts("NUSANTARA_PHASE124_CODE_COPIED\\r\\n");
