@@ -1,0 +1,33 @@
+name: ARM64 scheduler/syscall adapter — Phase 122
+on:
+  pull_request:
+    paths:
+      - 'src/runtime/os/arch/arm64/process-syscall-adapter.*'
+      - 'src/runtime/os/arch/arm64/process-scheduler.*'
+      - 'src/runtime/os/arch/arm64/user-syscall.*'
+      - 'src/runtime/os/arch/arm64/address-space.*'
+      - 'src/runtime/os/scheduler/scheduler.*'
+      - 'pengujian/os/uji_arm64_process_syscall_adapter_fase122.c'
+      - '.github/workflows/arm64-process-syscall-adapter-phase122.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  scheduler-syscall-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile strict C11 integration contract
+        run: |
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -Isrc/runtime/os/arch/arm64 -Isrc/runtime/os/scheduler \
+            src/runtime/os/scheduler/scheduler.c \
+            src/runtime/os/arch/arm64/mmu.c \
+            src/runtime/os/arch/arm64/address-space.c \
+            src/runtime/os/arch/arm64/process-scheduler.c \
+            src/runtime/os/arch/arm64/process-syscall-adapter.c \
+            src/runtime/os/arch/arm64/user-syscall.c \
+            pengujian/os/uji_arm64_process_syscall_adapter_fase122.c \
+            -o /tmp/nusantara-phase122-scheduler-syscall
+      - name: Run two-process yield, exit and idle handoff contract
+        run: /tmp/nusantara-phase122-scheduler-syscall
