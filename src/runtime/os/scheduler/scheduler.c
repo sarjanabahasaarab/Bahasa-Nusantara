@@ -19,6 +19,7 @@ void nusantara_os_scheduler_init(nusantara_os_scheduler_t *s) {
   s->tasks[i].quantum=0u;s->tasks[i].remaining=0u;s->tasks[i].state=NUSANTARA_OS_TASK_UNUSED;
   s->tasks[i].base_priority=0u;s->tasks[i].effective_priority=0u;
   s->tasks[i].cpu_ticks=0u;s->tasks[i].dispatches=0u;s->tasks[i].preemptions=0u;
+  s->tasks[i].ready_wait_ticks=0u;s->tasks[i].max_ready_wait_ticks=0u;s->tasks[i].ready_wait_events=0u;
  }
  s->count=0u;s->current=0u;s->next_id=1u;s->has_current=0u;
  s->total_ticks=0u;s->context_switches=0u;s->total_preemptions=0u;
@@ -32,6 +33,7 @@ nusantara_os_scheduler_status_t nusantara_os_scheduler_add(nusantara_os_schedule
   s->tasks[i].quantum=q;s->tasks[i].remaining=q;s->tasks[i].state=NUSANTARA_OS_TASK_READY;
   s->tasks[i].base_priority=0u;s->tasks[i].effective_priority=0u;
   s->tasks[i].cpu_ticks=0u;s->tasks[i].dispatches=0u;s->tasks[i].preemptions=0u;
+  s->tasks[i].ready_wait_ticks=0u;s->tasks[i].max_ready_wait_ticks=0u;s->tasks[i].ready_wait_events=0u;
   ++s->count;*id=n;return NUSANTARA_OS_SCHEDULER_OK;
  }
  return NUSANTARA_OS_SCHEDULER_FULL;
@@ -54,6 +56,10 @@ static nusantara_os_task_t *choose_next(nusantara_os_scheduler_t *s) {
   count_up(&s->context_switches);
  }
  s->current=best_i;s->has_current=1u;best->state=NUSANTARA_OS_TASK_RUNNING;best->remaining=best->quantum;
+ if(best->ready_wait_ticks>0u) {
+  if(best->ready_wait_ticks>best->max_ready_wait_ticks)best->max_ready_wait_ticks=best->ready_wait_ticks;
+  count_up(&best->ready_wait_events);best->ready_wait_ticks=0u;
+ }
  count_up(&best->dispatches);return best;
 }
 nusantara_os_scheduler_status_t nusantara_os_scheduler_schedule(nusantara_os_scheduler_t *s,nusantara_os_task_t **next) {
@@ -64,6 +70,8 @@ nusantara_os_scheduler_status_t nusantara_os_scheduler_tick(nusantara_os_schedul
  size_t i;uint32_t highest_ready=0u;int has_higher_ready=0;
  if(!s||!next)return NUSANTARA_OS_SCHEDULER_INVALID_ARGUMENT;
  count_up(&s->total_ticks);
+ for(i=0;i<NUSANTARA_OS_SCHEDULER_MAX_TASKS;++i)
+  if(s->tasks[i].state==NUSANTARA_OS_TASK_READY)count_up(&s->tasks[i].ready_wait_ticks);
  if(!s->has_current||s->current>=NUSANTARA_OS_SCHEDULER_MAX_TASKS||s->tasks[s->current].state!=NUSANTARA_OS_TASK_RUNNING)return nusantara_os_scheduler_schedule(s,next);
  count_up(&s->tasks[s->current].cpu_ticks);
  /* A newly runnable task with strictly higher effective priority preempts immediately. */
