@@ -64,6 +64,13 @@ nusantara_arm64_process_scheduler_status_t nusantara_arm64_process_scheduler_sav
  t->saved_stack_pointer=(uintptr_t)f;b->process->initial_frame=f;
  return NUSANTARA_ARM64_PROCESS_SCHEDULER_OK;
 }
+nusantara_arm64_process_scheduler_status_t nusantara_arm64_process_scheduler_activate_task(
+ nusantara_arm64_process_scheduler_t *s,nusantara_os_task_t *task,
+ nusantara_arm64_exception_frame_t **out){
+ if(!s||!s->initialized||!task||!out)
+  return NUSANTARA_ARM64_PROCESS_SCHEDULER_INVALID_ARGUMENT;
+ return activate(s,task,out);
+}
 nusantara_arm64_process_scheduler_status_t nusantara_arm64_process_scheduler_start(
  nusantara_arm64_process_scheduler_t *s,nusantara_arm64_exception_frame_t **out){
  nusantara_os_task_t *next=0;
