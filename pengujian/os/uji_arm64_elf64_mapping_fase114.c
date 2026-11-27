@@ -133,6 +133,15 @@ int main(void)
     assert(releases==allocations);
     puts("PASS: user-frame allocation failure rolls back the new address space");
 
+    fixture(bytes);reset_pool();allocation_limit=5u;
+    assert(nusantara_arm64_address_space_manager_init(&manager,&ops,0));
+    memset(&space,0,sizeof(space));entry=99u;
+    assert(nusantara_arm64_elf64_load(&manager,&space,5,bytes,sizeof(bytes),&entry)==
+           NUSANTARA_ARM64_ELF64_LOAD_FRAME_FAILURE);
+    assert(entry==0u && manager.count==0u && !space.initialized);
+    assert(releases==allocations);
+    puts("PASS: failure on the second segment releases the first segment and all page tables");
+
     fixture(bytes);reset_pool();allocation_limit=4u;
     assert(nusantara_arm64_address_space_manager_init(&manager,&ops,0));
     memset(&space,0,sizeof(space));entry=99u;
