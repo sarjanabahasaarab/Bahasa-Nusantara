@@ -201,10 +201,11 @@ static int64_t exit_user(void *ctx,int status)
         uart_puts("NUSANTARA_PHASE118_FAIL_FRAME_LEAK\r\n");
         halt();
     }
-    uart_puts("NUSANTARA_PHASE118_WRITE_SYSCALL_OK\r\n");
-    uart_puts("NUSANTARA_PHASE118_EXIT_SYSCALL_OK\r\n");
-    uart_puts("NUSANTARA_PHASE118_PROCESS_RECLAIMED\r\n");
-    uart_puts("NUSANTARA_PHASE118_PASS\r\n");
+    uart_puts("NUSANTARA_PHASE119_INVALID_POINTER_REJECTED\r\n");
+    uart_puts("NUSANTARA_PHASE119_WRITE_SYSCALL_OK\r\n");
+    uart_puts("NUSANTARA_PHASE119_EXIT_SYSCALL_OK\r\n");
+    uart_puts("NUSANTARA_PHASE119_PROCESS_RECLAIMED\r\n");
+    uart_puts("NUSANTARA_PHASE119_PASS\r\n");
     halt();
     return status;
 }
