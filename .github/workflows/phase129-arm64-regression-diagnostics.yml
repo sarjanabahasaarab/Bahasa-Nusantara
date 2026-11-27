@@ -20,6 +20,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y clang lld llvm qemu-system-arm
       - name: Build Phase 105 kernel
         run: bash scripts/build-arm64-phase105-qemu.sh /tmp/phase105/Image
+      - name: Inspect Phase 105 scheduler and BSS layout
+        run: llvm-nm -n -S /tmp/nusantara-phase105-build/nusantara-phase105.elf | grep -E 'scheduler|task_a_stack|task_b_stack|__bss|phase105_boot_stack'
       - name: Boot Phase 105 and capture diagnostics
         run: |
           set +e
