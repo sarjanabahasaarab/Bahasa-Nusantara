@@ -15,7 +15,11 @@ on:
   pull_request:
     paths:
       - 'src/runtime/os/arch/arm64/elf64-loader.*'
+      - 'src/runtime/os/arch/arm64/elf64-load.*'
+      - 'src/runtime/os/arch/arm64/address-space.*'
+      - 'src/runtime/os/arch/arm64/mmu.*'
       - 'pengujian/os/uji_arm64_elf64_loader_fase114.c'
+      - 'pengujian/os/uji_arm64_elf64_mapping_fase114.c'
       - 'docs/os/arm64/PHASE-114-ELF64-LOADER.md'
       - '.github/workflows/arm64-elf64-loader-phase114.yml'
   workflow_dispatch:
