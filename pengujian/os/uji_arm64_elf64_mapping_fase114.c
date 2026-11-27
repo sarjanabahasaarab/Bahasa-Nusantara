@@ -137,8 +137,7 @@ int main(void)
     assert(nusantara_arm64_address_space_manager_init(&manager,&ops,0));
     memset(&space,0,sizeof(space));entry=99u;
     assert(nusantara_arm64_elf64_load(&manager,&space,3,bytes,sizeof(bytes),&entry)==
-           NUSANTARA_ARM64_ELF64_LOAD_FRAME_FAILURE ||
-           !space.initialized);
+           NUSANTARA_ARM64_ELF64_LOAD_MAPPING_FAILURE);
     assert(entry==0u && manager.count==0u && !space.initialized);
     assert(releases==allocations);
     puts("PASS: page-table allocation failure rolls back mapped frames and tables");
