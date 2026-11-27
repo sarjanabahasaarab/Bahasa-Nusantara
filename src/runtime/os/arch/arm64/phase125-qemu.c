@@ -169,19 +169,19 @@ static uint32_t mmio_read32(void *ctx,uintptr_t a){(void)ctx;return *(volatile u
 static void mmio_write32(void *ctx,uintptr_t a,uint32_t v){(void)ctx;*(volatile uint32_t *)a=v;}
 static uint64_t mmio_read64(void *ctx,uintptr_t a){(void)ctx;return *(volatile uint64_t *)a;}
 static void mmio_write64(void *ctx,uintptr_t a,uint64_t v){(void)ctx;*(volatile uint64_t *)a=v;}
-static void platform_barrier(void *ctx){(void)ctx;__asm__ volatile("dsb sy\\n\\tisb":::"memory");}
+static void platform_barrier(void *ctx){(void)ctx;__asm__ volatile("dsb sy\n\tisb":::"memory");}
 static uint64_t timer_read_frequency(void *ctx){uint64_t v;(void)ctx;__asm__ volatile("mrs %0,cntfrq_el0":"=r"(v));return v;}
 static uint64_t timer_read_counter(void *ctx){uint64_t v;(void)ctx;__asm__ volatile("mrs %0,cntpct_el0":"=r"(v));return v;}
 static uint32_t timer_read_control(void *ctx){uint64_t v;(void)ctx;__asm__ volatile("mrs %0,cntp_ctl_el0":"=r"(v));return (uint32_t)v;}
 static void timer_write_tval(void *ctx,int32_t v){(void)ctx;__asm__ volatile("msr cntp_tval_el0,%0"::"r"((uint64_t)(int64_t)v):"memory");}
 static void timer_write_control(void *ctx,uint32_t v){(void)ctx;__asm__ volatile("msr cntp_ctl_el0,%0"::"r"((uint64_t)v):"memory");}
 static void platform_isb(void *ctx){(void)ctx;__asm__ volatile("isb":::"memory");}
-static void cpu_write_sre(void *ctx,uint64_t v){(void)ctx;__asm__ volatile("msr ICC_SRE_EL1,%0\\n\\tisb"::"r"(v):"memory");}
-static void cpu_write_pmr(void *ctx,uint64_t v){(void)ctx;__asm__ volatile("msr ICC_PMR_EL1,%0\\n\\tisb"::"r"(v):"memory");}
-static void cpu_write_bpr1(void *ctx,uint64_t v){(void)ctx;__asm__ volatile("msr ICC_BPR1_EL1,%0\\n\\tisb"::"r"(v):"memory");}
-static void cpu_write_igrpen1(void *ctx,uint64_t v){(void)ctx;__asm__ volatile("msr ICC_IGRPEN1_EL1,%0\\n\\tisb"::"r"(v):"memory");}
+static void cpu_write_sre(void *ctx,uint64_t v){(void)ctx;__asm__ volatile("msr ICC_SRE_EL1,%0\n\tisb"::"r"(v):"memory");}
+static void cpu_write_pmr(void *ctx,uint64_t v){(void)ctx;__asm__ volatile("msr ICC_PMR_EL1,%0\n\tisb"::"r"(v):"memory");}
+static void cpu_write_bpr1(void *ctx,uint64_t v){(void)ctx;__asm__ volatile("msr ICC_BPR1_EL1,%0\n\tisb"::"r"(v):"memory");}
+static void cpu_write_igrpen1(void *ctx,uint64_t v){(void)ctx;__asm__ volatile("msr ICC_IGRPEN1_EL1,%0\n\tisb"::"r"(v):"memory");}
 static uint32_t cpu_read_iar1(void *ctx){uint64_t v;(void)ctx;__asm__ volatile("mrs %0,ICC_IAR1_EL1":"=r"(v));return (uint32_t)v;}
-static void cpu_write_eoir1(void *ctx,uint32_t v){(void)ctx;__asm__ volatile("msr ICC_EOIR1_EL1,%0\\n\\tisb"::"r"((uint64_t)v):"memory");}
+static void cpu_write_eoir1(void *ctx,uint32_t v){(void)ctx;__asm__ volatile("msr ICC_EOIR1_EL1,%0\n\tisb"::"r"((uint64_t)v):"memory");}
 void phase125_main(uintptr_t dtb) {
     const nusantara_arm64_address_space_ops_t page_ops={
         page_allocate,page_resolve,page_release,install_root
