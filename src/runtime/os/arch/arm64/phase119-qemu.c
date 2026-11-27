@@ -210,7 +210,7 @@ static int64_t exit_user(void *ctx,int status)
     return status;
 }
 
-void phase118_main(uintptr_t dtb)
+void phase119_main(uintptr_t dtb)
 {
     const nusantara_arm64_address_space_ops_t page_ops={
         page_allocate,page_resolve,page_release,install_root
