@@ -28,8 +28,8 @@ ld.lld -m aarch64elf -nostdlib -T src/runtime/os/arch/arm64/phase117-image.ld \
   "$BUILD/phase119-qemu.o" "$BUILD/address-space.o" "$BUILD/mmu.o" \
   "$BUILD/mmu-control.o" "$BUILD/exception.o" "$BUILD/elf64-loader.o" \
   "$BUILD/elf64-load.o" "$BUILD/process-bootstrap.o" \
-  "$BUILD/user-syscall.o" "$BUILD/memory.o"
+  "$BUILD/user-syscall.o" "$BUILD/user-memory.o" "$BUILD/memory.o"
 llvm-readelf -h "$BUILD/nusantara-phase119.elf" | grep -Eq 'Machine:.*AArch64'
 llvm-objcopy -O binary "$BUILD/nusantara-phase119.elf" "$OUT"
 test -s "$OUT"
-echo "Phase 118 EL0 syscall image built: $OUT"
+echo "Phase 119 EL0 memory validation image built: $OUT"
