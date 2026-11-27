@@ -1,0 +1,53 @@
+name: ARM64 QEMU two-process EL0 scheduling — Phase 123
+on:
+  pull_request:
+    paths:
+      - 'src/runtime/os/arch/arm64/phase123-*'
+      - 'src/runtime/os/arch/arm64/process-scheduler.*'
+      - 'src/runtime/os/arch/arm64/process-syscall-adapter.*'
+      - 'src/runtime/os/arch/arm64/user-syscall.*'
+      - 'src/runtime/os/arch/arm64/process-bootstrap.*'
+      - 'src/runtime/os/arch/arm64/address-space.*'
+      - 'src/runtime/os/scheduler/scheduler.*'
+      - 'scripts/build-arm64-phase123-qemu.sh'
+      - '.github/workflows/arm64-qemu-multiprocess-phase123.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qemu-two-processes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install AArch64 toolchain and QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang lld llvm qemu-system-arm
+      - name: Build two-process kernel image
+        run: bash scripts/build-arm64-phase123-qemu.sh /tmp/nusantara-phase123/Image
+      - name: Run two independent EL0 processes and verify scheduler handoff
+        shell: bash
+        run: |
+          set +e
+          timeout 15s qemu-system-aarch64 \
+            -machine virt,gic-version=3 -cpu cortex-a57 -smp 1 -m 256M \
+            -nographic -serial stdio -monitor none -nic none \
+            -kernel /tmp/nusantara-phase123/Image -no-reboot -no-shutdown \
+            > /tmp/nusantara-phase123-serial.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/nusantara-phase123-serial.log
+          if [ "$rc" -ne 124 ] && [ "$rc" -ne 0 ]; then
+            echo "Unexpected QEMU exit code: $rc" >&2
+            exit 1
+          fi
+          grep -Fq 'NUSANTARA_PHASE123_BOOT' /tmp/nusantara-phase123-serial.log
+          grep -Fq 'NUSANTARA_PHASE123_ERET_TO_EL0' /tmp/nusantara-phase123-serial.log
+          grep -Fq 'PROCESS-A' /tmp/nusantara-phase123-serial.log
+          grep -Fq 'PROCESS-B' /tmp/nusantara-phase123-serial.log
+          grep -Fq 'NUSANTARA_PHASE123_A_YIELD_TO_B_OK' /tmp/nusantara-phase123-serial.log
+          grep -Fq 'NUSANTARA_PHASE123_B_YIELD_TO_A_OK' /tmp/nusantara-phase123-serial.log
+          grep -Fq 'NUSANTARA_PHASE123_EXIT_AND_REAP_OK' /tmp/nusantara-phase123-serial.log
+          grep -Fq 'NUSANTARA_PHASE123_PASS' /tmp/nusantara-phase123-serial.log
+          if grep -Fq 'NUSANTARA_PHASE123_FAIL' /tmp/nusantara-phase123-serial.log; then exit 1; fi
