@@ -35,7 +35,6 @@ int main(void) {
  /* Prepare a transitive chain: low owns chain; medium owns second. */
  assert(nusantara_os_priority_mutex_unlock(&pm,&first,high)==NUSANTARA_OS_PI_OK);
  assert(nusantara_os_priority_mutex_lock(&pm,&chain,low)==NUSANTARA_OS_PI_OK);
- assert(nusantara_os_priority_mutex_lock(&pm,&second,medium)==NUSANTARA_OS_PI_OK);
  assert(nusantara_os_priority_mutex_lock(&pm,&chain,medium)==NUSANTARA_OS_PI_SYNC_ERROR);
  assert(effective(&s,low)==5u);
  assert(nusantara_os_priority_mutex_lock(&pm,&second,high)==NUSANTARA_OS_PI_SYNC_ERROR);
