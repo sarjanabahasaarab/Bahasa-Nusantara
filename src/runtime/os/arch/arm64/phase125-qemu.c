@@ -121,22 +121,27 @@ static int map_kernel(nusantara_arm64_address_space_t *space) {
              NUSANTARA_ARM64_PAGE_KERNEL_RW,0))return 0;
     {
         const uint64_t device_bases[3]={UART_BASE,UINT64_C(0x08000000),UINT64_C(0x080a0000)};
+        const uint64_t device_sizes[3]={4096u,0x10000u,0x20000u};
         size_t n;
         for(n=0;n<3u;n++){
-            uint64_t *entries=space->mmu.root.entries;
-            const unsigned shifts[3]={39u,30u,21u};unsigned level;
-            for(level=0;level<3u;level++){
-                uint64_t d=entries[(device_bases[n]>>shifts[level])&0x1ffu];
-                nusantara_arm64_page_table_t child;
-                child.entries=0;child.physical_address=d&NUSANTARA_ARM64_PA_MASK;
-                if((d&3u)!=NUSANTARA_ARM64_DESC_TABLE_PAGE||
-                   !space->mmu.allocate_table(space->mmu.allocator_context,&child)||
-                   child.entries==0)return 0;
-                entries=child.entries;
+            uint64_t page;
+            for(page=0;page<device_sizes[n];page+=4096u){
+                uint64_t va=device_bases[n]+page;
+                uint64_t *entries=space->mmu.root.entries;
+                const unsigned shifts[3]={39u,30u,21u};unsigned level;
+                for(level=0;level<3u;level++){
+                    uint64_t d=entries[(va>>shifts[level])&0x1ffu];
+                    nusantara_arm64_page_table_t child;
+                    child.entries=0;child.physical_address=d&NUSANTARA_ARM64_PA_MASK;
+                    if((d&3u)!=NUSANTARA_ARM64_DESC_TABLE_PAGE||
+                       !space->mmu.allocate_table(space->mmu.allocator_context,&child)||
+                       child.entries==0)return 0;
+                    entries=child.entries;
+                }
+                entries[(va>>12)&0x1ffu]=
+                  (entries[(va>>12)&0x1ffu]&~(UINT64_C(7)<<2))|
+                  (UINT64_C(1)<<2);
             }
-            entries[(device_bases[n]>>12)&0x1ffu]=
-              (entries[(device_bases[n]>>12)&0x1ffu]&~(UINT64_C(7)<<2))|
-              (UINT64_C(1)<<2);
         }
     }
     return 1;
