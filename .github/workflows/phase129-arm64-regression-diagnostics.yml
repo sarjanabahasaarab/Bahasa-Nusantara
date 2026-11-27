@@ -1,4 +1,4 @@
-name: NUSANTARA Phase 129 ARM64 scheduler regression diagnostics
+name: NUSANTARA Phase 129 ARM64 scheduler alignment regression guard
 on:
   pull_request:
     paths:
@@ -33,7 +33,8 @@ jobs:
           cat /tmp/phase105.log
           tail -n 80 /tmp/phase105-qemu-debug.log || true
           test "$rc" -eq 124 -o "$rc" -eq 0
-          grep -Fq 'NUSANTARA_PHASE105_BOOT' /tmp/phase105.log
+          grep -Fq 'NUSANTARA_PHASE105_PREEMPTION_OK' /tmp/phase105.log
+          ! grep -Fq 'Taking exception 4 [Data Abort]' /tmp/phase105-qemu-debug.log
       - name: Build Phase 123 kernel
         run: bash scripts/build-arm64-phase123-qemu.sh /tmp/phase123/Image
       - name: Boot Phase 123 and capture diagnostics
@@ -45,4 +46,5 @@ jobs:
           cat /tmp/phase123.log
           tail -n 80 /tmp/phase123-qemu-debug.log || true
           test "$rc" -eq 124 -o "$rc" -eq 0
-          grep -Fq 'NUSANTARA_PHASE123_BOOT' /tmp/phase123.log
+          grep -Fq 'NUSANTARA_PHASE123_PASS' /tmp/phase123.log
+          ! grep -Fq 'Taking exception 4 [Data Abort]' /tmp/phase123-qemu-debug.log
