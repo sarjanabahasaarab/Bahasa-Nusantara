@@ -33,6 +33,10 @@ nusantara_arm64_process_scheduler_status_t nusantara_arm64_process_scheduler_sav
  nusantara_arm64_process_scheduler_t *,nusantara_arm64_exception_frame_t *);
 nusantara_arm64_process_scheduler_status_t nusantara_arm64_process_scheduler_start(
  nusantara_arm64_process_scheduler_t *,nusantara_arm64_exception_frame_t **);
+/* Activate a scheduler-selected task after an asynchronous timer tick. */
+nusantara_arm64_process_scheduler_status_t nusantara_arm64_process_scheduler_activate_task(
+ nusantara_arm64_process_scheduler_t *,nusantara_os_task_t *,
+ nusantara_arm64_exception_frame_t **);
 nusantara_arm64_process_scheduler_status_t nusantara_arm64_process_scheduler_yield(
  nusantara_arm64_process_scheduler_t *,nusantara_arm64_exception_frame_t *,
  nusantara_arm64_exception_frame_t **);
