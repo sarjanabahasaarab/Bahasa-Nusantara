@@ -1,0 +1,42 @@
+name: NUSANTARA Phase 129 ARM64 scheduler regression diagnostics
+on:
+  pull_request:
+    paths:
+      - 'src/runtime/os/scheduler/scheduler.*'
+      - 'src/runtime/os/arch/arm64/phase105-qemu.c'
+      - 'src/runtime/os/arch/arm64/phase123-qemu.c'
+      - 'scripts/build-arm64-phase105-qemu.sh'
+      - 'scripts/build-arm64-phase123-qemu.sh'
+      - '.github/workflows/phase129-arm64-regression-diagnostics.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qemu-diagnostics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ARM64 toolchain and QEMU
+        run: sudo apt-get update && sudo apt-get install -y clang lld llvm qemu-system-arm
+      - name: Build Phase 105 kernel
+        run: bash scripts/build-arm64-phase105-qemu.sh /tmp/phase105/Image
+      - name: Boot Phase 105 and capture diagnostics
+        run: |
+          set +e
+          timeout 8s qemu-system-aarch64 -machine virt,gic-version=3 -cpu cortex-a57 -smp 1 -m 256M -nographic -serial stdio -monitor none -nic none -kernel /tmp/phase105/Image -no-reboot -no-shutdown > /tmp/phase105.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/phase105.log
+          test "$rc" -eq 124 -o "$rc" -eq 0
+          grep -Fq 'NUSANTARA_PHASE105_BOOT' /tmp/phase105.log
+      - name: Build Phase 123 kernel
+        run: bash scripts/build-arm64-phase123-qemu.sh /tmp/phase123/Image
+      - name: Boot Phase 123 and capture diagnostics
+        run: |
+          set +e
+          timeout 8s qemu-system-aarch64 -machine virt,gic-version=3 -cpu cortex-a57 -smp 1 -m 256M -nographic -serial stdio -monitor none -nic none -kernel /tmp/phase123/Image -no-reboot -no-shutdown > /tmp/phase123.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/phase123.log
+          test "$rc" -eq 124 -o "$rc" -eq 0
+          grep -Fq 'NUSANTARA_PHASE123_BOOT' /tmp/phase123.log
