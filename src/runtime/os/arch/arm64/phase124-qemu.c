@@ -84,6 +84,7 @@ static void put64(uint8_t *p,uint64_t v){put32(p,(uint32_t)v);put32(p+4,(uint32_
 
 static void make_elf(uint8_t *b,const char *message,size_t message_len,uint16_t marker) {
     size_t i;
+    uart_puts("NUSANTARA_PHASE124_MAKE_ELF_BEGIN\\r\\n");
     uint32_t code[18]={
         UINT32_C(0xd2800028),UINT32_C(0xd2a00800),UINT32_C(0xf2820000),
         UINT32_C(0xd2800121),UINT32_C(0xd4000001),
@@ -95,6 +96,7 @@ static void make_elf(uint8_t *b,const char *message,size_t message_len,uint16_t 
     };
     code[7]=UINT32_C(0xd280000a)|((uint32_t)marker<<5);
     for(i=0;i<ELF_BYTES;i++)b[i]=0u;
+    uart_puts("NUSANTARA_PHASE124_BUFFER_ZEROED\\r\\n");
     b[0]=0x7fu;b[1]='E';b[2]='L';b[3]='F';b[4]=2u;b[5]=1u;b[6]=1u;
     put16(b+16,2u);put16(b+18,183u);put32(b+20,1u);
     put64(b+24,USER_ENTRY);put64(b+32,64u);
@@ -103,6 +105,7 @@ static void make_elf(uint8_t *b,const char *message,size_t message_len,uint16_t 
     put64(b+72,0x1000u);put64(b+80,USER_ENTRY);put64(b+88,USER_ENTRY);
     put64(b+96,sizeof(code));put64(b+104,sizeof(code));put64(b+112,0x1000u);
     for(i=0;i<18u;i++)put32(b+0x1000u+i*4u,code[i]);
+    uart_puts("NUSANTARA_PHASE124_CODE_COPIED\\r\\n");
     put32(b+120,1u);put32(b+124,6u);
     put64(b+128,0x2000u);put64(b+136,USER_DATA);put64(b+144,USER_DATA);
     put64(b+152,message_len);put64(b+160,message_len);put64(b+168,0x1000u);
