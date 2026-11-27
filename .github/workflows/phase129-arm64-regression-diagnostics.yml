@@ -27,10 +27,11 @@ jobs:
       - name: Boot Phase 105 and capture diagnostics
         run: |
           set +e
-          timeout 8s qemu-system-aarch64 -machine virt,gic-version=3 -cpu cortex-a57 -smp 1 -m 256M -nographic -serial stdio -monitor none -nic none -kernel /tmp/phase105/Image -no-reboot -no-shutdown > /tmp/phase105.log 2>&1
+          timeout 8s qemu-system-aarch64 -machine virt,gic-version=3 -cpu cortex-a57 -smp 1 -m 256M -nographic -serial stdio -monitor none -nic none -kernel /tmp/phase105/Image -no-reboot -no-shutdown -d int -D /tmp/phase105-qemu-debug.log > /tmp/phase105.log 2>&1
           rc=$?
           set -e
           cat /tmp/phase105.log
+          tail -n 80 /tmp/phase105-qemu-debug.log || true
           test "$rc" -eq 124 -o "$rc" -eq 0
           grep -Fq 'NUSANTARA_PHASE105_BOOT' /tmp/phase105.log
       - name: Build Phase 123 kernel
@@ -38,9 +39,10 @@ jobs:
       - name: Boot Phase 123 and capture diagnostics
         run: |
           set +e
-          timeout 8s qemu-system-aarch64 -machine virt,gic-version=3 -cpu cortex-a57 -smp 1 -m 256M -nographic -serial stdio -monitor none -nic none -kernel /tmp/phase123/Image -no-reboot -no-shutdown > /tmp/phase123.log 2>&1
+          timeout 8s qemu-system-aarch64 -machine virt,gic-version=3 -cpu cortex-a57 -smp 1 -m 256M -nographic -serial stdio -monitor none -nic none -kernel /tmp/phase123/Image -no-reboot -no-shutdown -d int -D /tmp/phase123-qemu-debug.log > /tmp/phase123.log 2>&1
           rc=$?
           set -e
           cat /tmp/phase123.log
+          tail -n 80 /tmp/phase123-qemu-debug.log || true
           test "$rc" -eq 124 -o "$rc" -eq 0
           grep -Fq 'NUSANTARA_PHASE123_BOOT' /tmp/phase123.log
