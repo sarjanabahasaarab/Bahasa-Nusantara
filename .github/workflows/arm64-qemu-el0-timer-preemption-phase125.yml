@@ -1,0 +1,54 @@
+name: ARM64 QEMU EL0 process timer preemption — Phase 125
+on:
+  pull_request:
+    paths:
+      - 'src/runtime/os/arch/arm64/phase125-*'
+      - 'src/runtime/os/arch/arm64/process-scheduler.*'
+      - 'src/runtime/os/arch/arm64/irq-scheduler.*'
+      - 'src/runtime/os/arch/arm64/irq-runtime.*'
+      - 'src/runtime/os/arch/arm64/generic_timer.*'
+      - 'src/runtime/os/arch/arm64/gicv3.*'
+      - 'src/runtime/os/scheduler/scheduler.*'
+      - 'pengujian/os/uji_arm64_process_scheduler_fase120.c'
+      - 'scripts/build-arm64-phase125-qemu.sh'
+      - '.github/workflows/arm64-qemu-el0-timer-preemption-phase125.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qemu-el0-timer-preemption:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install AArch64 toolchain and QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang lld llvm qemu-system-arm
+      - name: Build Phase 125 kernel image
+        run: bash scripts/build-arm64-phase125-qemu.sh /tmp/nusantara-phase125/Image
+      - name: Run EL0 processes under real virtual timer interrupts
+        shell: bash
+        run: |
+          set +e
+          timeout 15s qemu-system-aarch64 \
+            -machine virt,gic-version=3 -cpu cortex-a57 -smp 1 -m 256M \
+            -nographic -serial stdio -monitor none -nic none \
+            -kernel /tmp/nusantara-phase125/Image -no-reboot -no-shutdown \
+            > /tmp/nusantara-phase125-serial.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/nusantara-phase125-serial.log
+          if [ "$rc" -ne 124 ] && [ "$rc" -ne 0 ]; then
+            echo "Unexpected QEMU exit code: $rc" >&2
+            exit 1
+          fi
+          grep -Fq 'NUSANTARA_PHASE125_BOOT' /tmp/nusantara-phase125-serial.log
+          grep -Fq 'NUSANTARA_PHASE125_TIMER_ARMED' /tmp/nusantara-phase125-serial.log
+          grep -Fq 'NUSANTARA_PHASE125_TIMER_PREEMPTION_OK' /tmp/nusantara-phase125-serial.log
+          grep -Fq 'NUSANTARA_PHASE125_ADDRESS_SPACE_SWITCH_OK' /tmp/nusantara-phase125-serial.log
+          grep -Fq 'NUSANTARA_PHASE125_PASS' /tmp/nusantara-phase125-serial.log
+          if grep -Fq 'NUSANTARA_PHASE125_FAIL' /tmp/nusantara-phase125-serial.log; then
+            echo "Phase 125 kernel reported failure" >&2
+            exit 1
+          fi

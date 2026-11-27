@@ -20,7 +20,7 @@ int main(void){
  nusantara_arm64_process_bootstrap_t a={0},b={0};
  _Alignas(16) nusantara_arm64_exception_frame_t fa,fb;
  nusantara_arm64_exception_frame_t *selected=0;
- nusantara_os_task_t *ta=0,*tb=0;uint64_t ia=0,ib=0;size_t i;
+ nusantara_os_task_t *ta=0,*tb=0,*next=0;uint64_t ia=0,ib=0;size_t i;
  nusantara_os_scheduler_init(&sched);
  assert(nusantara_arm64_address_space_manager_init(&spaces,&ops,0));
  a.address_space.manager=&spaces;a.address_space.id=1;a.address_space.root_physical=0x1000;a.address_space.initialized=1;
@@ -36,6 +36,17 @@ int main(void){
  assert(nusantara_arm64_process_scheduler_attach(&ps,ta,&ba,&a)==NUSANTARA_ARM64_PROCESS_SCHEDULER_OK);
  assert(nusantara_arm64_process_scheduler_attach(&ps,tb,&bb,&b)==NUSANTARA_ARM64_PROCESS_SCHEDULER_OK);
  assert(nusantara_arm64_process_scheduler_start(&ps,&selected)==NUSANTARA_ARM64_PROCESS_SCHEDULER_OK);
+ assert(selected==&fa&&active_root==0x1000);
+ /* Simulate timer tick rotation and the IRQ-side process activation callback. */
+ assert(nusantara_arm64_process_scheduler_save_frame(&ps,&fa)==NUSANTARA_ARM64_PROCESS_SCHEDULER_OK);
+ assert(nusantara_os_scheduler_tick(&sched,&next)==NUSANTARA_OS_SCHEDULER_OK);
+ assert(next==tb);
+ assert(nusantara_arm64_process_scheduler_activate_task(&ps,next,&selected)==NUSANTARA_ARM64_PROCESS_SCHEDULER_OK);
+ assert(selected==&fb&&active_root==0x2000);
+ assert(nusantara_arm64_process_scheduler_save_frame(&ps,&fb)==NUSANTARA_ARM64_PROCESS_SCHEDULER_OK);
+ assert(nusantara_os_scheduler_tick(&sched,&next)==NUSANTARA_OS_SCHEDULER_OK);
+ assert(next==ta);
+ assert(nusantara_arm64_process_scheduler_activate_task(&ps,next,&selected)==NUSANTARA_ARM64_PROCESS_SCHEDULER_OK);
  assert(selected==&fa&&active_root==0x1000);
  assert(nusantara_arm64_process_scheduler_yield(&ps,&fa,&selected)==NUSANTARA_ARM64_PROCESS_SCHEDULER_OK);
  assert(selected==&fb&&active_root==0x2000);
