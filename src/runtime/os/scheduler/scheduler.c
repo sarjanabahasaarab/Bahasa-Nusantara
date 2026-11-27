@@ -41,7 +41,7 @@ static nusantara_os_task_t *choose_next(nusantara_os_scheduler_t *s) {
  }
  if(s->has_current&&s->current<NUSANTARA_OS_SCHEDULER_MAX_TASKS&&s->tasks[s->current].state==NUSANTARA_OS_TASK_RUNNING){
   nusantara_os_task_t *cur=&s->tasks[s->current];
-  if(!best||cur->effective_priority>=best->effective_priority){cur->remaining=cur->quantum;return cur;}
+  if(!best||cur->effective_priority>best->effective_priority){cur->remaining=cur->quantum;return cur;}
  }
  if(!best)return NULL;
  if(s->has_current&&s->current<NUSANTARA_OS_SCHEDULER_MAX_TASKS&&s->tasks[s->current].state==NUSANTARA_OS_TASK_RUNNING)s->tasks[s->current].state=NUSANTARA_OS_TASK_READY;
