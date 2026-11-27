@@ -52,8 +52,19 @@ nusantara_os_scheduler_status_t nusantara_os_scheduler_schedule(nusantara_os_sch
  t=choose_next(s);if(!t){*next=NULL;return NUSANTARA_OS_SCHEDULER_NO_RUNNABLE_TASK;}*next=t;return NUSANTARA_OS_SCHEDULER_OK;
 }
 nusantara_os_scheduler_status_t nusantara_os_scheduler_tick(nusantara_os_scheduler_t *s,nusantara_os_task_t **next) {
+ size_t i;uint32_t highest_ready=0u;int has_higher_ready=0;
  if(!s||!next)return NUSANTARA_OS_SCHEDULER_INVALID_ARGUMENT;
  if(!s->has_current||s->current>=NUSANTARA_OS_SCHEDULER_MAX_TASKS||s->tasks[s->current].state!=NUSANTARA_OS_TASK_RUNNING)return nusantara_os_scheduler_schedule(s,next);
+ /* A newly runnable task with strictly higher effective priority preempts immediately. */
+ for(i=0;i<NUSANTARA_OS_SCHEDULER_MAX_TASKS;++i) {
+  const nusantara_os_task_t *candidate=&s->tasks[i];
+  if(candidate->state==NUSANTARA_OS_TASK_READY&&
+     (!has_higher_ready||candidate->effective_priority>highest_ready)) {
+   highest_ready=candidate->effective_priority;has_higher_ready=1;
+  }
+ }
+ if(has_higher_ready&&highest_ready>s->tasks[s->current].effective_priority)
+  return nusantara_os_scheduler_schedule(s,next);
  if(s->tasks[s->current].remaining>0u)--s->tasks[s->current].remaining;
  if(s->tasks[s->current].remaining==0u)return nusantara_os_scheduler_schedule(s,next);
  *next=&s->tasks[s->current];return NUSANTARA_OS_SCHEDULER_OK;
