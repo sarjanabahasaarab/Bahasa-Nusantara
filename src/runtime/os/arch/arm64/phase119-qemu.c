@@ -184,21 +184,21 @@ static int64_t exit_user(void *ctx,int status)
 {
     (void)ctx;
     if(status!=0 || write_count!=1u || rejected_count!=1u) {
-        uart_puts("NUSANTARA_PHASE118_FAIL_SYSCALL_RESULT\r\n");
+        uart_puts("NUSANTARA_PHASE119_FAIL_SYSCALL_RESULT\r\n");
         halt();
     }
     if(nusantara_arm64_address_space_switch(&manager,&kernel_space)!=
        NUSANTARA_ARM64_AS_OK) {
-        uart_puts("NUSANTARA_PHASE118_FAIL_KERNEL_ADDRESS_SPACE\r\n");
+        uart_puts("NUSANTARA_PHASE119_FAIL_KERNEL_ADDRESS_SPACE\r\n");
         halt();
     }
     if(nusantara_arm64_process_bootstrap_destroy(&manager,&process)!=
        NUSANTARA_ARM64_AS_OK) {
-        uart_puts("NUSANTARA_PHASE118_FAIL_PROCESS_RECLAIM\r\n");
+        uart_puts("NUSANTARA_PHASE119_FAIL_PROCESS_RECLAIM\r\n");
         halt();
     }
     if(active_pages()!=kernel_space.table_page_count) {
-        uart_puts("NUSANTARA_PHASE118_FAIL_FRAME_LEAK\r\n");
+        uart_puts("NUSANTARA_PHASE119_FAIL_FRAME_LEAK\r\n");
         halt();
     }
     uart_puts("NUSANTARA_PHASE119_INVALID_POINTER_REJECTED\r\n");
@@ -219,31 +219,31 @@ void phase118_main(uintptr_t dtb)
         0,validate_user_range,write_user,exit_user,yield_user
     };
     (void)dtb;
-    uart_puts("NUSANTARA_PHASE118_BOOT\r\n");
+    uart_puts("NUSANTARA_PHASE119_BOOT\r\n");
     make_elf();
     if(!nusantara_arm64_install_exception_vectors() ||
        !nusantara_arm64_address_space_manager_init(&manager,&page_ops,0)) {
-        uart_puts("NUSANTARA_PHASE118_FAIL_INIT\r\n"); halt();
+        uart_puts("NUSANTARA_PHASE119_FAIL_INIT\r\n"); halt();
     }
     if(nusantara_arm64_address_space_create(&manager,&kernel_space,1u)!=
        NUSANTARA_ARM64_AS_OK || !map_kernel(&kernel_space)) {
-        uart_puts("NUSANTARA_PHASE118_FAIL_KERNEL_MAP\r\n"); halt();
+        uart_puts("NUSANTARA_PHASE119_FAIL_KERNEL_MAP\r\n"); halt();
     }
     if(nusantara_arm64_process_bootstrap_create(
         &manager,&process,2u,elf_image,0x2000u+sizeof(user_message)-1u,
         USER_STACK_TOP,USER_STACK_PAGES,0u,USER_ENTRY,
         kernel_stack,sizeof(kernel_stack))!=NUSANTARA_ARM64_PROCESS_BOOTSTRAP_OK) {
-        uart_puts("NUSANTARA_PHASE118_FAIL_ELF_BOOTSTRAP\r\n"); halt();
+        uart_puts("NUSANTARA_PHASE119_FAIL_ELF_BOOTSTRAP\r\n"); halt();
     }
     if(!map_kernel(&process.address_space) ||
        !nusantara_arm64_user_syscall_init(&syscall_ops) ||
        nusantara_arm64_address_space_switch(&manager,&process.address_space)!=
            NUSANTARA_ARM64_AS_OK ||
        !nusantara_arm64_mmu_enable_el1(process.address_space.root_physical)) {
-        uart_puts("NUSANTARA_PHASE118_FAIL_MMU_OR_SYSCALL_INIT\r\n"); halt();
+        uart_puts("NUSANTARA_PHASE119_FAIL_MMU_OR_SYSCALL_INIT\r\n"); halt();
     }
-    uart_puts("NUSANTARA_PHASE118_ERET_TO_EL0\r\n");
+    uart_puts("NUSANTARA_PHASE119_ERET_TO_EL0\r\n");
     nusantara_arm64_exception_start_first_task((uintptr_t)process.initial_frame);
-    uart_puts("NUSANTARA_PHASE118_FAIL_ERET_RETURNED\r\n");
+    uart_puts("NUSANTARA_PHASE119_FAIL_ERET_RETURNED\r\n");
     halt();
 }
