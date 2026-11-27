@@ -1,0 +1,51 @@
+name: ARM64 QEMU private process memory across yield — Phase 124
+on:
+  pull_request:
+    paths:
+      - 'src/runtime/os/arch/arm64/phase124-*'
+      - 'src/runtime/os/arch/arm64/process-scheduler.*'
+      - 'src/runtime/os/arch/arm64/process-syscall-adapter.*'
+      - 'src/runtime/os/arch/arm64/user-syscall.*'
+      - 'src/runtime/os/arch/arm64/process-bootstrap.*'
+      - 'src/runtime/os/arch/arm64/address-space.*'
+      - 'src/runtime/os/scheduler/scheduler.*'
+      - 'scripts/build-arm64-phase124-qemu.sh'
+      - '.github/workflows/arm64-qemu-private-memory-phase124.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qemu-private-memory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install AArch64 toolchain and QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang lld llvm qemu-system-arm
+      - name: Build Phase 124 kernel image
+        run: bash scripts/build-arm64-phase124-qemu.sh /tmp/nusantara-phase124/Image
+      - name: Run two EL0 processes and verify private writable state survives yield
+        shell: bash
+        run: |
+          set +e
+          timeout 15s qemu-system-aarch64 \
+            -machine virt,gic-version=3 -cpu cortex-a57 -smp 1 -m 256M \
+            -nographic -serial stdio -monitor none -nic none \
+            -kernel /tmp/nusantara-phase124/Image -no-reboot -no-shutdown \
+            > /tmp/nusantara-phase124-serial.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/nusantara-phase124-serial.log
+          if [ "$rc" -ne 124 ] && [ "$rc" -ne 0 ]; then
+            echo "Unexpected QEMU exit code: $rc" >&2
+            exit 1
+          fi
+          grep -Fq 'NUSANTARA_PHASE124_BOOT' /tmp/nusantara-phase124-serial.log
+          grep -Fq 'PROCESS-A' /tmp/nusantara-phase124-serial.log
+          grep -Fq 'PROCESS-B' /tmp/nusantara-phase124-serial.log
+          grep -Fq 'NUSANTARA_PHASE124_PRIVATE_DATA_PERSISTS_ACROSS_YIELD' /tmp/nusantara-phase124-serial.log
+          grep -Fq 'NUSANTARA_PHASE124_EXIT_AND_REAP_OK' /tmp/nusantara-phase124-serial.log
+          grep -Fq 'NUSANTARA_PHASE124_PASS' /tmp/nusantara-phase124-serial.log
+          if grep -Fq 'NUSANTARA_PHASE124_FAIL' /tmp/nusantara-phase124-serial.log; then exit 1; fi
