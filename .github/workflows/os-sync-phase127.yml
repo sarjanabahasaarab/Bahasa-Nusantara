@@ -1,0 +1,21 @@
+name: NUSANTARA OS mutex and semaphore contract — Phase 127
+on:
+  pull_request:
+    paths:
+      - 'src/runtime/os/scheduler/sync.*'
+      - 'src/runtime/os/scheduler/wait-queue.*'
+      - 'src/runtime/os/scheduler/scheduler.*'
+      - 'pengujian/os/uji_sync_fase127.c'
+      - '.github/workflows/os-sync-phase127.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sync-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile strict C11 synchronization contract
+        run: cc -std=c11 -Wall -Wextra -Werror -pedantic -Isrc/runtime/os/scheduler src/runtime/os/scheduler/scheduler.c src/runtime/os/scheduler/wait-queue.c src/runtime/os/scheduler/sync.c pengujian/os/uji_sync_fase127.c -o /tmp/uji-sync
+      - name: Run synchronization contract
+        run: /tmp/uji-sync
