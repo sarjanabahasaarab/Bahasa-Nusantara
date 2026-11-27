@@ -95,7 +95,7 @@ static void make_elf(void)
     const uint32_t code[8]={
         UINT32_C(0xd2800028), /* movz x8, #1: write */
         UINT32_C(0xd2a00800), /* movz x0, #0x40, lsl #16 */
-        UINT32_C(0xf2800200), /* movk x0, #0x10 => 0x401000 */
+        UINT32_C(0xf2820000), /* movk x0, #0x1000 => 0x401000 */
         UINT32_C(0xd2800401), /* movz x1, #32 */
         UINT32_C(0xd4000001), /* svc #0 */
         UINT32_C(0xd2800048), /* movz x8, #2: exit */
