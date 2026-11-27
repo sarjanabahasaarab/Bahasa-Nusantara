@@ -102,7 +102,7 @@ static void make_elf(uint8_t *b,const char *message,size_t message_len,uint16_t 
     put32(b+64,1u);put32(b+68,5u);
     put64(b+72,0x1000u);put64(b+80,USER_ENTRY);put64(b+88,USER_ENTRY);
     put64(b+96,sizeof(code));put64(b+104,sizeof(code));put64(b+112,0x1000u);
-    for(i=0;i<14u;i++)put32(b+0x1000u+i*4u,code[i]);
+    for(i=0;i<18u;i++)put32(b+0x1000u+i*4u,code[i]);
     put32(b+120,1u);put32(b+124,6u);
     put64(b+128,0x2000u);put64(b+136,USER_DATA);put64(b+144,USER_DATA);
     put64(b+152,message_len);put64(b+160,message_len);put64(b+168,0x1000u);
@@ -191,8 +191,10 @@ void phase124_main(uintptr_t dtb) {
     (void)dtb;
     uart_puts("NUSANTARA_PHASE124_BOOT\r\n");
     make_elf(elf_a,"PROCESS-A",9u,UINT16_C(0xA123));
+    uart_puts("NUSANTARA_PHASE124_ELF_A_BUILT\\r\\n");
     make_elf(elf_b,"PROCESS-B",9u,UINT16_C(0xB456));
-    uart_puts("NUSANTARA_PHASE124_ELF_BUILT\\r\\n");
+    uart_puts("NUSANTARA_PHASE124_ELF_B_BUILT\\r\\n");
+    uart_puts("NUSANTARA_PHASE124_ELF_BUILT\r\n");
     if(!nusantara_arm64_install_exception_vectors()||
        !nusantara_arm64_address_space_manager_init(&manager,&page_ops,0)){
         uart_puts("NUSANTARA_PHASE124_FAIL_INIT\r\n");halt();
