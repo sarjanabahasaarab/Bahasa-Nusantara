@@ -42,6 +42,8 @@ int main(void)
         NUSANTARA_ARM64_USER_MEMORY_READ));
     assert(!nusantara_arm64_user_memory_validate(&space,UINTPTR_MAX-7u,16u,
         NUSANTARA_ARM64_USER_MEMORY_READ));
+    assert(!nusantara_arm64_user_memory_validate(&space,0x400000u,SIZE_MAX,
+        NUSANTARA_ARM64_USER_MEMORY_READ));
     assert(nusantara_arm64_user_memory_validate(&space,0x500000u,0u,
         NUSANTARA_ARM64_USER_MEMORY_READ));
     assert(!nusantara_arm64_user_memory_validate(&space,0x400000u,4u,0u));
