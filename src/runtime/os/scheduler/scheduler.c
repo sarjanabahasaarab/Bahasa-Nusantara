@@ -92,4 +92,3 @@ nusantara_os_scheduler_status_t nusantara_os_scheduler_reset_effective_prioritie
  return NUSANTARA_OS_SCHEDULER_OK;
 }
 
-/* Phase 129: temporary regression diagnostics are exercised in CI. */
