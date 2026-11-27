@@ -88,11 +88,7 @@ static void put32(uint8_t *p,uint32_t v){p[0]=(uint8_t)v;p[1]=(uint8_t)(v>>8);p[
 static void put64(uint8_t *p,uint64_t v){put32(p,(uint32_t)v);put32(p+4,(uint32_t)(v>>32));}
 
 static void make_elf(uint8_t *b,uint16_t marker) {
-    const uint32_t code[5]={
-        UINT32_C(0xd2820209),UINT32_C(0xf2a00809),
-        UINT32_C(0xd280000a),UINT32_C(0xf900012a),
-        UINT32_C(0x14000000)
-    };
+    const uint32_t loop=UINT32_C(0x14000000);
     size_t i;
     for(i=0;i<ELF_BYTES;i++)b[i]=0u;
     b[0]=0x7fu;b[1]='E';b[2]='L';b[3]='F';b[4]=2u;b[5]=1u;b[6]=1u;
@@ -101,9 +97,8 @@ static void make_elf(uint8_t *b,uint16_t marker) {
     put16(b+52,64u);put16(b+54,56u);put16(b+56,2u);
     put32(b+64,1u);put32(b+68,5u);
     put64(b+72,0x1000u);put64(b+80,USER_ENTRY);put64(b+88,USER_ENTRY);
-    put64(b+96,sizeof(code));put64(b+104,sizeof(code));put64(b+112,0x1000u);
-    for(i=0;i<4u;i++)put32(b+0x1000u+i*4u,code[i]);
-    put32(b+0x1000u+16u,code[4]);
+    put64(b+96,sizeof(loop));put64(b+104,sizeof(loop));put64(b+112,0x1000u);
+    put32(b+0x1000u,loop);
     put32(b+120,1u);put32(b+124,6u);
     put64(b+128,0x2000u);put64(b+136,USER_DATA);put64(b+144,USER_DATA);
     put64(b+152,32u);put64(b+160,32u);put64(b+168,0x1000u);
@@ -116,6 +111,14 @@ static int map_kernel(nusantara_arm64_address_space_t *space) {
              KERNEL_BASE+off,NUSANTARA_ARM64_PAGE_KERNEL_RW,1))return 0;
     if(!nusantara_arm64_mmu_map_page(&space->mmu,UART_BASE,UART_BASE,
           NUSANTARA_ARM64_PAGE_KERNEL_RW,0))return 0;
+    for(off=0;off<0x10000u;off+=4096u)
+        if(!nusantara_arm64_mmu_map_page(&space->mmu,
+             UINT64_C(0x08000000)+off,UINT64_C(0x08000000)+off,
+             NUSANTARA_ARM64_PAGE_KERNEL_RW,0))return 0;
+    for(off=0;off<0x10000u;off+=4096u)
+        if(!nusantara_arm64_mmu_map_page(&space->mmu,
+             UINT64_C(0x080a0000)+off,UINT64_C(0x080a0000)+off,
+             NUSANTARA_ARM64_PAGE_KERNEL_RW,0))return 0;
     for(off=0;off<0x10000u;off+=4096u)
         if(!nusantara_arm64_mmu_map_page(&space->mmu,
              UINT64_C(0x08000000)+off,UINT64_C(0x08000000)+off,
@@ -142,9 +145,9 @@ static int map_kernel(nusantara_arm64_address_space_t *space) {
     return 1;
 }
 static void phase125_success(void) {
-    uart_puts("NUSANTARA_PHASE125_TIMER_PREEMPTION_OK\\r\\n");
-    uart_puts("NUSANTARA_PHASE125_ADDRESS_SPACE_SWITCH_OK\\r\\n");
-    uart_puts("NUSANTARA_PHASE125_PASS\\r\\n");
+    uart_puts("NUSANTARA_PHASE125_TIMER_PREEMPTION_OK\r\n");
+    uart_puts("NUSANTARA_PHASE125_ADDRESS_SPACE_SWITCH_OK\r\n");
+    uart_puts("NUSANTARA_PHASE125_PASS\r\n");
     halt();
 }
 static void task_selected(void *context,const nusantara_os_task_t *task) {
@@ -210,7 +213,7 @@ void phase125_main(uintptr_t dtb) {
     }
     if(nusantara_gicv3_distributor_init(&gic,&mmio,PHASE125_GICD_BASE,100000u)!=NUSANTARA_GICV3_OK||
        nusantara_gicv3_redistributor_wake(&gic,PHASE125_GICR_BASE)!=NUSANTARA_GICV3_OK){
-        uart_puts("NUSANTARA_PHASE125_FAIL_GIC_INIT\\r\\n");halt();
+        uart_puts("NUSANTARA_PHASE125_FAIL_GIC_INIT\r\n");halt();
     }
     cpu_interface.context=0;
     cpu_interface.write_sre_el1=cpu_write_sre;
@@ -223,7 +226,7 @@ void phase125_main(uintptr_t dtb) {
     if(nusantara_gicv3_cpu_interface_enable(&gic,&cpu_interface)!=NUSANTARA_GICV3_OK||
        nusantara_gicv3_enable_ppi(&gic,PHASE125_TIMER_PPI)!=NUSANTARA_GICV3_OK||
        nusantara_arm64_timer_init(&timer,&timer_io)!=NUSANTARA_ARM64_TIMER_OK){
-        uart_puts("NUSANTARA_PHASE125_FAIL_TIMER_INIT\\r\\n");halt();
+        uart_puts("NUSANTARA_PHASE125_FAIL_TIMER_INIT\r\n");halt();
     }
     nusantara_os_scheduler_init(&task_scheduler);
     if(nusantara_os_scheduler_add(&task_scheduler,(uintptr_t)process_a.initial_frame,
@@ -245,16 +248,24 @@ void phase125_main(uintptr_t dtb) {
           &binding_b,&process_b)!=NUSANTARA_ARM64_PROCESS_SCHEDULER_OK){
         uart_puts("NUSANTARA_PHASE125_FAIL_SCHEDULER\r\n");halt();
     }
-    idle_context.frame.elr_el1=(uint64_t)(uintptr_t)phase125_idle;
-    idle_context.frame.spsr_el1=NUSANTARA_ARM64_SPSR_EL1H_MASKED;
     if(nusantara_arm64_process_scheduler_start(&process_scheduler,&first_frame)!=
          NUSANTARA_ARM64_PROCESS_SCHEDULER_OK||
        first_frame!=process_a.initial_frame||
        !nusantara_arm64_mmu_enable_el1(process_a.address_space.root_physical)){
         uart_puts("NUSANTARA_PHASE125_FAIL_START\r\n");halt();
     }
-    (void)first;
+    if(nusantara_arm64_irq_runtime_init(&irq_runtime,&timer,&cpu_interface,
+       &task_scheduler,PHASE125_TIMER_PPI,PHASE125_TIMER_INTERVAL_MS,0,
+       task_selected,0)!=NUSANTARA_ARM64_IRQ_RUNTIME_OK||
+       nusantara_arm64_irq_scheduler_init(&irq_scheduler,&irq_runtime,&task_scheduler)!=
+       NUSANTARA_ARM64_IRQ_SCHEDULER_OK||
+       nusantara_arm64_irq_scheduler_bind_processes(&irq_scheduler,&process_scheduler)!=
+       NUSANTARA_ARM64_IRQ_SCHEDULER_OK||
+       nusantara_arm64_timer_arm_ms(&timer,PHASE125_TIMER_INTERVAL_MS)!=NUSANTARA_ARM64_TIMER_OK){
+        uart_puts("NUSANTARA_PHASE125_FAIL_IRQ_BIND\r\n");halt();
+    }
+    uart_puts("NUSANTARA_PHASE125_TIMER_ARMED\r\n");
     uart_puts("NUSANTARA_PHASE125_ERET_TO_EL0\r\n");
-    nusantara_arm64_exception_start_first_task((uintptr_t)first_frame);
+    (void)nusantara_arm64_irq_scheduler_start_first_task(&irq_scheduler);
     uart_puts("NUSANTARA_PHASE125_FAIL_ERET_RETURNED\r\n");halt();
 }
