@@ -94,14 +94,23 @@ int main(void)
     assert(manager.count==0u && releases==allocations);
     puts("PASS: ELF64 RX segment mapped, file bytes copied, BSS/page tail zeroed");
 
-    fixture(bytes);reset_pool();allocation_limit=4u;
+    fixture(bytes);reset_pool();allocation_limit=1u;
     assert(nusantara_arm64_address_space_manager_init(&manager,&ops,0));
     memset(&space,0,sizeof(space));entry=99u;
     assert(nusantara_arm64_elf64_load(&manager,&space,2,bytes,sizeof(bytes),&entry)==
            NUSANTARA_ARM64_ELF64_LOAD_FRAME_FAILURE);
     assert(entry==0u && manager.count==0u && !space.initialized);
     assert(releases==allocations);
-    puts("PASS: allocation failure rolls back address space and page-table frames");
+    puts("PASS: user-frame allocation failure rolls back the new address space");
+
+    fixture(bytes);reset_pool();allocation_limit=4u;
+    assert(nusantara_arm64_address_space_manager_init(&manager,&ops,0));
+    memset(&space,0,sizeof(space));entry=99u;
+    assert(nusantara_arm64_elf64_load(&manager,&space,3,bytes,sizeof(bytes),&entry)==
+           NUSANTARA_ARM64_ELF64_LOAD_MAPPING_FAILURE);
+    assert(entry==0u && manager.count==0u && !space.initialized);
+    assert(releases==allocations);
+    puts("PASS: page-table allocation failure rolls back mapped frames and tables");
     puts("NUSANTARA_PHASE114_ELF64_MAPPING_PASS");
     return 0;
 }
