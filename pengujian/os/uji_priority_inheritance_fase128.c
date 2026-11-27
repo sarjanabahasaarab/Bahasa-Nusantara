@@ -22,32 +22,31 @@ int main(void) {
  assert(nusantara_os_priority_manager_register(&pm,&first)==NUSANTARA_OS_PI_OK);
  assert(nusantara_os_priority_manager_register(&pm,&second)==NUSANTARA_OS_PI_OK);
  assert(nusantara_os_priority_manager_register(&pm,&chain)==NUSANTARA_OS_PI_OK);
- /* Low owns two mutexes; independent waiters must both contribute. */
  assert(nusantara_os_priority_mutex_lock(&pm,&first,low)==NUSANTARA_OS_PI_OK);
  assert(nusantara_os_priority_mutex_lock(&pm,&second,low)==NUSANTARA_OS_PI_OK);
  assert(nusantara_os_priority_mutex_lock(&pm,&first,high)==NUSANTARA_OS_PI_SYNC_ERROR);
  assert(effective(&s,low)==10u);
  assert(nusantara_os_priority_mutex_lock(&pm,&second,medium)==NUSANTARA_OS_PI_SYNC_ERROR);
  assert(effective(&s,low)==10u);
- /* Releasing the high waiter mutex must retain the medium boost from the other mutex. */
  assert(nusantara_os_priority_mutex_unlock(&pm,&first,low)==NUSANTARA_OS_PI_OK);
  assert(effective(&s,low)==5u);
  assert(nusantara_os_priority_mutex_unlock(&pm,&second,low)==NUSANTARA_OS_PI_OK);
  assert(effective(&s,low)==1u);
- /* Chained inheritance: high waits on medium; medium waits on low. */
+ /* Prepare a transitive chain: low owns chain; medium owns second. */
+ assert(nusantara_os_priority_mutex_unlock(&pm,&first,high)==NUSANTARA_OS_PI_OK);
  assert(nusantara_os_priority_mutex_lock(&pm,&chain,low)==NUSANTARA_OS_PI_OK);
- assert(nusantara_os_priority_mutex_lock(&pm,&first,medium)==NUSANTARA_OS_PI_OK);
+ assert(nusantara_os_priority_mutex_lock(&pm,&second,medium)==NUSANTARA_OS_PI_OK);
  assert(nusantara_os_priority_mutex_lock(&pm,&chain,medium)==NUSANTARA_OS_PI_SYNC_ERROR);
- assert(effective(&s,medium)==5u);
- assert(nusantara_os_priority_mutex_lock(&pm,&first,high)==NUSANTARA_OS_PI_SYNC_ERROR);
+ assert(effective(&s,low)==5u);
+ assert(nusantara_os_priority_mutex_lock(&pm,&second,high)==NUSANTARA_OS_PI_SYNC_ERROR);
  assert(effective(&s,medium)==10u);
  assert(effective(&s,low)==10u);
- assert(nusantara_os_priority_mutex_unlock(&pm,&first,medium)==NUSANTARA_OS_PI_OK);
+ assert(nusantara_os_priority_mutex_unlock(&pm,&second,medium)==NUSANTARA_OS_PI_OK);
  assert(effective(&s,medium)==5u);
  assert(effective(&s,low)==5u);
  assert(nusantara_os_priority_mutex_unlock(&pm,&chain,low)==NUSANTARA_OS_PI_OK);
  assert(effective(&s,low)==1u);
- assert(nusantara_os_priority_mutex_unlock(&pm,&first,high)==NUSANTARA_OS_PI_OK);
+ assert(nusantara_os_priority_mutex_unlock(&pm,&second,high)==NUSANTARA_OS_PI_OK);
  assert(nusantara_os_scheduler_schedule(&s,&next)==NUSANTARA_OS_SCHEDULER_OK);
  assert(next->effective_priority==10u);
  puts("Phase 128: priority inheritance contract tests passed");return 0;
