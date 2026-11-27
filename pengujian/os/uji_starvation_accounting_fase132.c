@@ -21,16 +21,16 @@ int main(void) {
  low_task=nusantara_os_scheduler_find(&s,low);
  assert(low_task&&low_task->ready_wait_ticks==3u);
  assert(low_task->ready_wait_events==0u&&low_task->max_ready_wait_ticks==0u);
+ /* Saturation must hold while the task remains READY. */
+ s.tasks[(size_t)(low_task-s.tasks)].ready_wait_ticks=UINT64_MAX;
+ assert(nusantara_os_scheduler_tick(&s,&next)==NUSANTARA_OS_SCHEDULER_OK);
+ assert(nusantara_os_scheduler_find(&s,low)->ready_wait_ticks==UINT64_MAX);
  /* Once the running task blocks, dispatch records the completed wait interval. */
  assert(nusantara_os_scheduler_block(&s,high)==NUSANTARA_OS_SCHEDULER_OK);
  assert(nusantara_os_scheduler_schedule(&s,&next)==NUSANTARA_OS_SCHEDULER_OK&&next->id==low);
  low_task=nusantara_os_scheduler_find(&s,low);
  assert(low_task->ready_wait_ticks==0u);
- assert(low_task->ready_wait_events==1u&&low_task->max_ready_wait_ticks==3u);
- /* Counter saturation is deterministic and never wraps. */
- s.tasks[(size_t)(low_task-s.tasks)].ready_wait_ticks=UINT64_MAX;
- assert(nusantara_os_scheduler_tick(&s,&next)==NUSANTARA_OS_SCHEDULER_OK);
- assert(nusantara_os_scheduler_find(&s,low)->ready_wait_ticks==UINT64_MAX);
+ assert(low_task->ready_wait_events==1u&&low_task->max_ready_wait_ticks==UINT64_MAX);
  puts("Phase 132: starvation accounting contract tests passed");
  return 0;
 }
