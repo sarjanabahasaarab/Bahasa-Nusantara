@@ -115,7 +115,7 @@ static int map_kernel(nusantara_arm64_address_space_t *space) {
         if(!nusantara_arm64_mmu_map_page(&space->mmu,
              UINT64_C(0x08000000)+off,UINT64_C(0x08000000)+off,
              NUSANTARA_ARM64_PAGE_KERNEL_RW,0))return 0;
-    for(off=0;off<0x10000u;off+=4096u)
+    for(off=0;off<0x20000u;off+=4096u)
         if(!nusantara_arm64_mmu_map_page(&space->mmu,
              UINT64_C(0x080a0000)+off,UINT64_C(0x080a0000)+off,
              NUSANTARA_ARM64_PAGE_KERNEL_RW,0))return 0;
