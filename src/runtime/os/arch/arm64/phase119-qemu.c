@@ -216,7 +216,7 @@ void phase119_main(uintptr_t dtb)
         page_allocate,page_resolve,page_release,install_root
     };
     const nusantara_arm64_user_syscall_ops_t syscall_ops={
-        0,validate_user_range,write_user,exit_user,yield_user
+        0,validate_user_range,write_user,exit_user,yield_user,0,0
     };
     (void)dtb;
     uart_puts("NUSANTARA_PHASE119_BOOT\r\n");
