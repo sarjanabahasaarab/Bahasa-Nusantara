@@ -154,7 +154,7 @@ int main(void)
     fixture(bytes);reset_pool();
     assert(nusantara_arm64_address_space_manager_init(&manager,&ops,0));
     memset(&space,0,sizeof(space));entry=99u;
-    put64(bytes+120+16,0x400800);
+    put64(bytes+120+16,0x400008);
     put64(bytes+120+48,1);
     assert(nusantara_arm64_elf64_load(&manager,&space,4,bytes,sizeof(bytes),&entry)==
            NUSANTARA_ARM64_ELF64_LOAD_INVALID_IMAGE);
