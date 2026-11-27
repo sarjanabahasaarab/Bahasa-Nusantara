@@ -3,6 +3,10 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "process-scheduler.h"
+nusantara_arm64_address_space_status_t nusantara_arm64_process_bootstrap_destroy(
+ nusantara_arm64_address_space_manager_t *manager,nusantara_arm64_process_bootstrap_t *process){
+ (void)manager;(void)process;return NUSANTARA_ARM64_AS_OK;
+}
 static uint64_t active_root;
 static int install_root(void *ctx,uint64_t root){(void)ctx;active_root=root;return 1;}
 static int allocate_page(void *ctx,uint64_t *pa,uint64_t **alias){(void)ctx;(void)pa;(void)alias;return 0;}
