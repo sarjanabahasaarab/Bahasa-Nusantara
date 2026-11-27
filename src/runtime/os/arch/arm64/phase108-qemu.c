@@ -88,7 +88,9 @@ void phase108_main(uintptr_t dtb)
         validate_user_range,
         write_user,
         exit_user,
-        yield_user
+        yield_user,
+        0,
+        0
     };
     nusantara_arm64_exception_frame_t *initial = 0;
     (void)dtb;
