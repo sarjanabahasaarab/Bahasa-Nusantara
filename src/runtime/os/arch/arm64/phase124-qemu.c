@@ -192,6 +192,7 @@ void phase124_main(uintptr_t dtb) {
     uart_puts("NUSANTARA_PHASE124_BOOT\r\n");
     make_elf(elf_a,"PROCESS-A",9u,UINT16_C(0xA123));
     make_elf(elf_b,"PROCESS-B",9u,UINT16_C(0xB456));
+    uart_puts("NUSANTARA_PHASE124_ELF_BUILT\\r\\n");
     if(!nusantara_arm64_install_exception_vectors()||
        !nusantara_arm64_address_space_manager_init(&manager,&page_ops,0)){
         uart_puts("NUSANTARA_PHASE124_FAIL_INIT\r\n");halt();
